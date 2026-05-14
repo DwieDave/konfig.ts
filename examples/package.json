@@ -1,0 +1,23 @@
+{
+	"name": "@konfig.ts/examples",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"01": "bun run 01-branded-refs.ts",
+		"02": "bun run 02-app-of-apps-deps.ts",
+		"03": "bun run 03-images-config.ts",
+		"check": "tsc -p tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"@effect/platform-bun": "catalog:",
+		"@konfig.ts/argocd": "workspace:*",
+		"@konfig.ts/core": "workspace:*",
+		"@konfig.ts/k8s": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:",
+		"typescript": "catalog:"
+	}
+}
