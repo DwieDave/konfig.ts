@@ -10,8 +10,7 @@
 // VolumesR / PullSecretsR. Dep tracking now flows via Effect.gen
 // yielding the upstream `Secret(name)` / `ConfigMap(name)` etc. Keys.
 
-import type { Manifest } from "@konfig.ts/core";
-import type { SecretRef } from "@konfig.ts/core";
+import type { Manifest, SecretRef } from "@konfig.ts/core";
 import { Manifest as M } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
@@ -23,7 +22,6 @@ import type {
 	ServicePort as K8sServicePort,
 } from "./.generated/k8s-types";
 import type { ContainerInput } from "./container";
-import type { EnvVar } from "./env";
 import { Ingress, type IngressTLSInput, Service } from "./network";
 import type { Volume } from "./volume";
 import { CronJob, Deployment } from "./workload";

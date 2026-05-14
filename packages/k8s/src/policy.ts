@@ -57,9 +57,7 @@ export interface PersistentVolumeClaimInput extends NamespacedMeta {
 }
 
 export const PersistentVolumeClaim = {
-	make: (
-		input: PersistentVolumeClaimInput,
-	): Manifest.Manifest<K8sPersistentVolumeClaim> =>
+	make: (input: PersistentVolumeClaimInput): Manifest.Manifest<K8sPersistentVolumeClaim> =>
 		Manifest.make<K8sPersistentVolumeClaim>(() =>
 			Effect.succeed({
 				apiVersion: "v1",

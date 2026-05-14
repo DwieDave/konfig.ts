@@ -5,7 +5,11 @@
 // config + the directory it lives in. Every path in the config is
 // interpreted relative to `configDir`.
 
-import { decodeKonfigConfigEffect, type ResolvedKonfigConfig, type KonfigConfig } from "@konfig.ts/core";
+import {
+	decodeKonfigConfigEffect,
+	type KonfigConfig,
+	type ResolvedKonfigConfig,
+} from "@konfig.ts/core";
 import { Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";

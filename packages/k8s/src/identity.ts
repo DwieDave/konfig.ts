@@ -7,8 +7,8 @@
 // surrounding Effect.gen. The `.ref` is still useful as a typed value
 // when the caller doesn't want to round-trip through Effect.
 
-import { Manifest } from "@konfig.ts/core";
 import type { ConfigMapRef, SecretRef, ServiceAccountRef } from "@konfig.ts/core";
+import { Manifest } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	ConfigMap as K8sConfigMap,

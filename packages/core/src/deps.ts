@@ -84,26 +84,20 @@ export const ConfigMap = <N extends string>(
 ): Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N>> =>
 	Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N>>(`ConfigMap:${name}`);
 
-export const Namespace = <N extends string>(
-	name: N,
-): Context.Service<Need<"Namespace", N>, N> =>
+export const Namespace = <N extends string>(name: N): Context.Service<Need<"Namespace", N>, N> =>
 	Context.Service<Need<"Namespace", N>, N>(`Namespace:${name}`);
 
 export const ServiceAccount = <N extends string>(
 	name: N,
 ): Context.Service<Need<"ServiceAccount", N>, ServiceAccountRef<N>> =>
-	Context.Service<Need<"ServiceAccount", N>, ServiceAccountRef<N>>(
-		`ServiceAccount:${name}`,
-	);
+	Context.Service<Need<"ServiceAccount", N>, ServiceAccountRef<N>>(`ServiceAccount:${name}`);
 
 export const Application = <N extends string>(
 	name: N,
 ): Context.Service<Need<"Application", N>, N> =>
 	Context.Service<Need<"Application", N>, N>(`Application:${name}`);
 
-export const Pvc = <N extends string>(
-	name: N,
-): Context.Service<Need<"Pvc", N>, PvcRef<N>> =>
+export const Pvc = <N extends string>(name: N): Context.Service<Need<"Pvc", N>, PvcRef<N>> =>
 	Context.Service<Need<"Pvc", N>, PvcRef<N>>(`Pvc:${name}`);
 
 // Per-module "this app exists at this tag" handle. The Identifier is
@@ -112,9 +106,7 @@ export const Pvc = <N extends string>(
 // app names must be unique). The Shape is `unknown` here because each
 // caller (the per-app module factory in `@konfig.ts/argocd`) refines it to
 // `Application` via the Service generic.
-export const App = <N extends string, S = unknown>(
-	name: N,
-): Context.Service<Need<"App", N>, S> =>
+export const App = <N extends string, S = unknown>(name: N): Context.Service<Need<"App", N>, S> =>
 	Context.Service<Need<"App", N>, S>(`App:${name}`);
 
 // ---------- Provider helpers ----------
@@ -133,9 +125,7 @@ export const App = <N extends string, S = unknown>(
 // inject the brand. Keeping it inside these helpers means callers
 // never write a cast for their own owned resources.
 
-export const provideSecret = <const N extends string>(
-	name: N,
-): Layer.Layer<Provide<"Secret", N>> =>
+export const provideSecret = <const N extends string>(name: N): Layer.Layer<Provide<"Secret", N>> =>
 	Layer.succeed(Secret(name))(name as unknown as SecretRef<N>);
 
 export const provideConfigMap = <const N extends string>(
@@ -156,7 +146,5 @@ export const provideApplication = <const N extends string>(
 	name: N,
 ): Layer.Layer<Provide<"Application", N>> => Layer.succeed(Application(name))(name);
 
-export const providePvc = <const N extends string>(
-	name: N,
-): Layer.Layer<Provide<"Pvc", N>> =>
+export const providePvc = <const N extends string>(name: N): Layer.Layer<Provide<"Pvc", N>> =>
 	Layer.succeed(Pvc(name))(name as unknown as PvcRef<N>);

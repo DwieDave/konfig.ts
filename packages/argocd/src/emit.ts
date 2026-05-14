@@ -110,5 +110,4 @@ export const serializeApplicationCR = (
 ): string => Yaml.serialize(buildCR(app, target, defaults));
 
 // Standard filename for an Application CR output file.
-export const applicationCRFilename = (app: AnyApp): string =>
-	`Application-${app.name}.yaml`;
+export const applicationCRFilename = (app: AnyApp): string => `Application-${app.name}.yaml`;

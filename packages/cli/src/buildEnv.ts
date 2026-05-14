@@ -1,7 +1,11 @@
 // Render an env's Applications to per-file YAML on disk. Used by
 // `konfig build`, `konfig validate`, and (read-only) `konfig diff`.
 
-import { type AppOfAppsResult, applicationCRFilename, serializeApplicationCR } from "@konfig.ts/argocd";
+import {
+	type AppOfAppsResult,
+	applicationCRFilename,
+	serializeApplicationCR,
+} from "@konfig.ts/argocd";
 import {
 	type AnyRenderError,
 	type Manifest as M,

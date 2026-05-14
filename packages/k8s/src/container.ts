@@ -5,8 +5,7 @@
 // entries. The constructed entries here carry no phantom brand;
 // they're plain records matching `kubernetes-types`.
 
-import type { ServiceAccountRef } from "@konfig.ts/core";
-import type { SecretRef } from "@konfig.ts/core";
+import type { SecretRef, ServiceAccountRef } from "@konfig.ts/core";
 import type { EnvVar } from "./env";
 import type { Volume } from "./volume";
 
@@ -66,6 +65,6 @@ export interface PodSpecInput {
 
 // Typed image-pull secret helper. Caller must obtain the `SecretRef<N>`
 // via `yield* Secret(name)` upstream.
-export const imagePullSecret = (
-	ref: SecretRef<string>,
-): { readonly name: SecretRef<string> } => ({ name: ref });
+export const imagePullSecret = (ref: SecretRef<string>): { readonly name: SecretRef<string> } => ({
+	name: ref,
+});

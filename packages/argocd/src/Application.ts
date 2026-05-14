@@ -29,8 +29,8 @@
 // the env file — any unsatisfied `Need<...>` surfaces as a TS error
 // naming the missing kind+name.
 
-import { Dep } from "@konfig.ts/core";
 import type { AnyRenderError } from "@konfig.ts/core";
+import { Dep } from "@konfig.ts/core";
 import { type Context, Effect, Layer } from "effect";
 
 // Source configuration mirrors ArgoCD Application spec.source.
@@ -140,12 +140,7 @@ export interface ApplicationDefineOptions<Name extends string, Ns extends string
 	readonly provides?: Layer.Layer<Extra>;
 }
 
-export const define = <
-	const Name extends string,
-	const Ns extends string,
-	R,
-	Extra = never,
->(
+export const define = <const Name extends string, const Ns extends string, R, Extra = never>(
 	opts: ApplicationDefineOptions<Name, Ns, R, Extra>,
 ): ApplicationHandle<
 	Name,
@@ -168,9 +163,7 @@ export const define = <
 	// `Dep.Secret("ghcr-pull-secret")` for its own pull secret; that
 	// req is satisfied here, so it doesn't leak into the env's R.
 	const internalLayer =
-		opts.provides !== undefined
-			? Layer.mergeAll(ownsLayer, opts.provides)
-			: ownsLayer;
+		opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer;
 
 	const appLayer = Layer.effect(
 		tag,

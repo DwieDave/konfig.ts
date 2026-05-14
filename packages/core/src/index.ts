@@ -10,11 +10,6 @@
 //   • Stable YAML serializer + structural diff + tsk-config + boundary.
 
 export { boundary } from "./boundary";
-// Yieldable dep Keys — `Dep.Secret(name)` etc. yield the brand and
-// lift the req into the surrounding Effect's R. The brand-name TYPES
-// are re-exported at the top level so consumers can use them without
-// the `Dep.` prefix.
-export * as Dep from "./deps";
 export type {
 	ConfigMapRef,
 	ConfigMapRefName,
@@ -26,6 +21,11 @@ export type {
 	SecretRefName,
 	ServiceAccountRef,
 } from "./deps";
+// Yieldable dep Keys — `Dep.Secret(name)` etc. yield the brand and
+// lift the req into the surrounding Effect's R. The brand-name TYPES
+// are re-exported at the top level so consumers can use them without
+// the `Dep.` prefix.
+export * as Dep from "./deps";
 export {
 	type DiffFormat,
 	type DiffResult,
@@ -42,14 +42,26 @@ export {
 	decodeImagesEffect,
 	decodeImagesSync,
 	EnvImages,
-	imagesFor,
 	ImagesAppMissing,
 	ImagesConfig,
 	ImagesEnvMissing,
+	imagesFor,
 	lookupEnv,
 	lookupEnvEffect,
 	requireImage,
 } from "./images";
+export {
+	CrdConfig,
+	DiffConfig,
+	decodeKonfigConfigEffect,
+	decodeKonfigConfigSync,
+	EnvEntry,
+	HelmConfig,
+	KonfigConfig,
+	OutDir,
+	type ResolvedKonfigConfig,
+	ServicesConfig,
+} from "./konfigConfig";
 export type { EmbedYamlSource, RawYaml } from "./Manifest";
 export * as Manifest from "./Manifest";
 export { RenderContext } from "./RenderContext";
@@ -63,17 +75,5 @@ export {
 	RenderError,
 } from "./RenderError";
 export { render } from "./render";
-export {
-	CrdConfig,
-	DiffConfig,
-	decodeKonfigConfigEffect,
-	decodeKonfigConfigSync,
-	EnvEntry,
-	HelmConfig,
-	OutDir,
-	type ResolvedKonfigConfig,
-	ServicesConfig,
-	KonfigConfig,
-} from "./konfigConfig";
 export { KINDS, type Kind } from "./types";
 export * as Yaml from "./yaml";

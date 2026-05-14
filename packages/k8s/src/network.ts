@@ -3,8 +3,8 @@
 // now declared upstream via `yield* Secret(name)` in the surrounding
 // Effect.gen.
 
-import { Manifest } from "@konfig.ts/core";
 import type { SecretRef } from "@konfig.ts/core";
+import { Manifest } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	Ingress as K8sIngress,

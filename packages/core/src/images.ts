@@ -40,8 +40,7 @@ export class ImagesEnvMissing extends Data.TaggedError("ImagesEnvMissing")<{
 	readonly env: string;
 }> {}
 
-export const lookupEnv = (cfg: ImagesConfig, env: string): EnvImages | undefined =>
-	cfg.envs[env];
+export const lookupEnv = (cfg: ImagesConfig, env: string): EnvImages | undefined => cfg.envs[env];
 
 export const lookupEnvEffect = (
 	cfg: ImagesConfig,
@@ -72,11 +71,7 @@ export class ImagesAppMissing extends Data.TaggedError("ImagesAppMissing")<{
 
 // Lookup helper for env files. `requireImage(prodImages, "web", "prod")`
 // returns the tag or throws if the app isn't declared for that env.
-export const requireImage = (
-	e: EnvImages,
-	app: string,
-	envName: string,
-): string => {
+export const requireImage = (e: EnvImages, app: string, envName: string): string => {
 	const v = e[app];
 	if (v === undefined) {
 		throw new ImagesAppMissing({ env: envName, app });

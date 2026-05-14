@@ -12,8 +12,8 @@
 import type {
 	ConfigMapRef as CMRef,
 	PvcRef as PRef,
-	SecretRef as SRef,
 	ServiceAccountRef as SARef,
+	SecretRef as SRef,
 } from "@konfig.ts/core";
 
 // Re-export the types under their original names.
@@ -33,8 +33,7 @@ export const ConfigMapRef = {
 };
 
 export const ServiceAccountRef = {
-	of: <N extends string>(name: N): ServiceAccountRef<N> =>
-		name as unknown as ServiceAccountRef<N>,
+	of: <N extends string>(name: N): ServiceAccountRef<N> => name as unknown as ServiceAccountRef<N>,
 };
 
 export const PvcRef = {

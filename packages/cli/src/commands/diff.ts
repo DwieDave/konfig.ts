@@ -5,7 +5,13 @@
 // `konfig.json` `diff.baseline`. Exits 0 only when the structural diff
 // (per @konfig.ts/core's `diffFiles`) is empty.
 
-import { type DiffFormat, diffFiles, formatDiff, hasDifferences, RenderContext } from "@konfig.ts/core";
+import {
+	type DiffFormat,
+	diffFiles,
+	formatDiff,
+	hasDifferences,
+	RenderContext,
+} from "@konfig.ts/core";
 import { Console, Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";

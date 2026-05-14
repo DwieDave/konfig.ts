@@ -8,9 +8,9 @@
 
 import { decodeImagesSync, ImagesConfig } from "@konfig.ts/core";
 import { Data, Effect, Schema } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
+import { Argument, Command } from "effect/unstable/cli";
 import { resolveConfig } from "../configResolver";
 
 export class SetUnknownEnv extends Data.TaggedError("SetUnknownEnv")<{
@@ -58,9 +58,7 @@ export const setCommand = Command.make(
 
 			if (!(args.env in current.envs)) {
 				const known = Object.keys(current.envs);
-				yield* Effect.logError(
-					`unknown env '${args.env}'. Known: ${known.join(", ")}`,
-				);
+				yield* Effect.logError(`unknown env '${args.env}'. Known: ${known.join(", ")}`);
 				return yield* Effect.fail(new SetUnknownEnv({ env: args.env, known }));
 			}
 
@@ -88,7 +86,5 @@ export const setCommand = Command.make(
 			yield* Effect.log(`set ${args.env}.${args.app} = ${args.image}`);
 		}),
 ).pipe(
-	Command.withDescription(
-		"Update an image tag in images.json (Schema-validated read + write)",
-	),
+	Command.withDescription("Update an image tag in images.json (Schema-validated read + write)"),
 );

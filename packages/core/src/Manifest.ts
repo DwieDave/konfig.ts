@@ -48,10 +48,7 @@ export const make = <A>(
 // Combine two manifests in parallel. Renders both halves concurrently
 // and tuples the result. The M9 simplification: no R/P aggregation —
 // deps live entirely in the surrounding Effect.gen's R.
-export const combine = <A1, A2>(
-	a: Manifest<A1>,
-	b: Manifest<A2>,
-): Manifest<readonly [A1, A2]> =>
+export const combine = <A1, A2>(a: Manifest<A1>, b: Manifest<A2>): Manifest<readonly [A1, A2]> =>
 	make((ctx) => Effect.all([a.render(ctx), b.render(ctx)], { concurrency: "unbounded" }));
 
 // Concatenate N manifests into a single flat array. Used by Helm
@@ -68,10 +65,7 @@ export const concat = <A>(...manifests: Manifest<A | A[]>[]): Manifest<A[]> =>
 
 // Conditional inclusion — the mkIf analogue. The thunk is only invoked
 // when `cond` is true.
-export const whenever = <A>(
-	cond: boolean,
-	thunk: () => Manifest<A>,
-): Manifest<A | undefined> =>
+export const whenever = <A>(cond: boolean, thunk: () => Manifest<A>): Manifest<A | undefined> =>
 	make((ctx) =>
 		cond
 			? thunk().render(ctx)

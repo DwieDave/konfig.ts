@@ -2,13 +2,6 @@
 
 import { Effect, Layer } from "effect";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import {
-	Application,
-	ConfigMap,
-	Namespace,
-	Secret,
-	ServiceAccount,
-} from "./deps";
 import type {
 	ApplicationReq,
 	ConfigMapRef,
@@ -19,6 +12,7 @@ import type {
 	ServiceAccountRef,
 	ServiceAccountReq,
 } from "./deps";
+import { Application, ConfigMap, Namespace, Secret, ServiceAccount } from "./deps";
 
 describe("deps — yieldable Key constructors", () => {
 	it("Secret(name): yielding lifts SecretReq<N> into R, layer discharges", async () => {
@@ -87,9 +81,7 @@ describe("deps — yieldable Key constructors", () => {
 					Layer.mergeAll(
 						Layer.succeed(ConfigMap("settings"))("settings" as ConfigMapRef<"settings">),
 						Layer.succeed(Namespace("prod"))("prod"),
-						Layer.succeed(ServiceAccount("worker"))(
-							"worker" as ServiceAccountRef<"worker">,
-						),
+						Layer.succeed(ServiceAccount("worker"))("worker" as ServiceAccountRef<"worker">),
 						Layer.succeed(Application("api"))("api"),
 					),
 				),
@@ -114,9 +106,7 @@ describe("deps — yieldable Key constructors", () => {
 			return { a, b };
 		});
 		const result = await Effect.runPromise(
-			prog.pipe(
-				Effect.provide(Layer.succeed(Secret("same"))("same" as SecretRef<"same">)),
-			),
+			prog.pipe(Effect.provide(Layer.succeed(Secret("same"))("same" as SecretRef<"same">))),
 		);
 		expect(result).toEqual({ a: "same", b: "same" });
 	});
