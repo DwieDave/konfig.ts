@@ -1,0 +1,27 @@
+{
+	"name": "@konfig.ts/argocd",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.check.json --noEmit",
+		"test": "bunx vitest run $(rg --files src test -g '*.test.ts')",
+		"lint": "biome check .",
+		"lint:apply": "biome check --write ."
+	},
+	"dependencies": {
+		"@konfig.ts/core": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@effect/vitest": "catalog:",
+		"@types/bun": "catalog:",
+		"fast-check": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}
