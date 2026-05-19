@@ -1,15 +1,6 @@
-// @konfig.ts/core — typesafe Kubernetes manifest primitives.
-//
-// Public surface (post-M9):
-//   • `Manifest<A>` — a renderable resource (just the render Effect; no
-//     more R/P slots).
-//   • `Dep.*` — yieldable `Context.Service` Keys for the five tracked
-//     kinds. Yielding lifts the req into the surrounding Effect's R;
-//     `Layer.succeed(Key, value)` discharges it. The bespoke
-//     `Manifest<A, R, P>` record algebra is gone.
-//   • Stable YAML serializer + structural diff + tsk-config + boundary.
 
 export { boundary } from "./boundary";
+export { brand, coerce } from "./_cast";
 export type {
 	ConfigMapRef,
 	ConfigMapRefName,
@@ -21,10 +12,6 @@ export type {
 	SecretRefName,
 	ServiceAccountRef,
 } from "./deps";
-// Yieldable dep Keys — `Dep.Secret(name)` etc. yield the brand and
-// lift the req into the surrounding Effect's R. The brand-name TYPES
-// are re-exported at the top level so consumers can use them without
-// the `Dep.` prefix.
 export * as Dep from "./deps";
 export {
 	type DiffFormat,

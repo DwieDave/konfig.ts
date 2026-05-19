@@ -1,4 +1,5 @@
-import { BunRuntime, BunServices } from "@effect/platform-bun";
+#!/usr/bin/env node
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect } from "effect";
 import { Command } from "effect/unstable/cli";
 import { buildCommand } from "./commands/build";
@@ -21,4 +22,4 @@ const root = Command.make("konfig", {}, () =>
 	]),
 );
 
-BunRuntime.runMain(Command.run(root, { version: "0.0.1" }).pipe(Effect.provide(BunServices.layer)));
+NodeRuntime.runMain(Command.run(root, { version: "0.0.1" }).pipe(Effect.provide(NodeServices.layer)));

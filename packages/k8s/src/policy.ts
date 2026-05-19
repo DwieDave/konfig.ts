@@ -10,11 +10,6 @@ import type {
 	RoleBinding as K8sRoleBinding,
 } from "./.generated/k8s-types";
 
-// Simple constructors — none of these reference Secrets/ConfigMaps in
-// the FR-4.4 enumerated positions, so they take raw shape and produce
-// a Manifest with Empty R. Anything inside (e.g. PV spec fields) passes
-// through verbatim — kubernetes-types provides the structural shape.
-
 interface NamespacedMeta {
 	readonly name: string;
 	readonly namespace: string;
@@ -27,8 +22,6 @@ interface ClusterMeta {
 	readonly labels?: Readonly<Record<string, string>>;
 	readonly annotations?: Readonly<Record<string, string>>;
 }
-
-// ---------- PersistentVolume ----------
 
 export interface PersistentVolumeInput extends ClusterMeta {
 	readonly spec: K8sPersistentVolume["spec"];
@@ -49,8 +42,6 @@ export const PersistentVolume = {
 			}),
 		),
 };
-
-// ---------- PersistentVolumeClaim ----------
 
 export interface PersistentVolumeClaimInput extends NamespacedMeta {
 	readonly spec: K8sPersistentVolumeClaim["spec"];
@@ -73,8 +64,6 @@ export const PersistentVolumeClaim = {
 		),
 };
 
-// ---------- NetworkPolicy ----------
-
 export interface NetworkPolicyInput extends NamespacedMeta {
 	readonly spec: K8sNetworkPolicy["spec"];
 }
@@ -95,8 +84,6 @@ export const NetworkPolicy = {
 			}),
 		),
 };
-
-// ---------- ClusterRole ----------
 
 export interface ClusterRoleInput extends ClusterMeta {
 	readonly rules?: K8sClusterRole["rules"];
@@ -120,8 +107,6 @@ export const ClusterRole = {
 		),
 };
 
-// ---------- ClusterRoleBinding ----------
-
 export interface ClusterRoleBindingInput extends ClusterMeta {
 	readonly roleRef: K8sClusterRoleBinding["roleRef"];
 	readonly subjects?: K8sClusterRoleBinding["subjects"];
@@ -144,8 +129,6 @@ export const ClusterRoleBinding = {
 		),
 };
 
-// ---------- Role ----------
-
 export interface RoleInput extends NamespacedMeta {
 	readonly rules?: K8sRole["rules"];
 }
@@ -166,8 +149,6 @@ export const Role = {
 			}),
 		),
 };
-
-// ---------- RoleBinding ----------
 
 export interface RoleBindingInput extends NamespacedMeta {
 	readonly roleRef: K8sRoleBinding["roleRef"];

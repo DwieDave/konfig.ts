@@ -1,8 +1,5 @@
 import { Data } from "effect";
 
-// Generic render-time failure. Operators (embedYaml file read, helm template
-// invocation in M6) raise the more specific subclasses; consumers narrow on
-// `_tag`.
 export class RenderError extends Data.TaggedError("RenderError")<{
 	readonly message: string;
 	readonly cause?: unknown;

@@ -1,17 +1,14 @@
 import * as YAML from "yaml";
+import { coerce } from "./_cast";
 
-// Fields stripped before comparison (FR-3.2). These vary between helm CLI
-// builds and don't represent meaningful drift.
 const IGNORED_LABEL_KEYS = new Set(["helm.sh/chart"]);
 const IGNORED_ANNOTATION_KEYS = new Set([
 	"meta.helm.sh/release-name",
 	"meta.helm.sh/release-namespace",
 ]);
-// `app.kubernetes.io/managed-by: Helm` is set by `helm template` regardless of
-// who invoked it; not meaningful for diffing two render pipelines.
 const MANAGED_BY_HELM_LABEL = "app.kubernetes.io/managed-by";
 
-const redactLabelMap = (labels: Record<string, unknown>): Record<string, unknown> => {
+const _redactLabelMap = (labels: Record<string, unknown>): Record<string, unknown> => {
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(labels)) {
 		if (IGNORED_LABEL_KEYS.has(k)) continue;
@@ -21,7 +18,7 @@ const redactLabelMap = (labels: Record<string, unknown>): Record<string, unknown
 	return out;
 };
 
-const redactAnnotationMap = (annotations: Record<string, unknown>): Record<string, unknown> => {
+const _redactAnnotationMap = (annotations: Record<string, unknown>): Record<string, unknown> => {
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(annotations)) {
 		if (IGNORED_ANNOTATION_KEYS.has(k)) continue;
@@ -30,58 +27,61 @@ const redactAnnotationMap = (annotations: Record<string, unknown>): Record<strin
 	return out;
 };
 
-// Recursively redact ignored fields. Doesn't touch order or scalar types;
-// equality compares maps key-set-and-value, not key insertion order.
-export const redact = (value: unknown, parentKey: string | null = null): unknown => {
+export interface RedactInput {
+	readonly value: unknown;
+	readonly parentKey?: string | null;
+}
+export const redact = (input: RedactInput): unknown => {
+	const value = input.value;
+	const parentKey = input.parentKey ?? null;
 	if (Array.isArray(value)) {
-		return value.map((v) => redact(v, null));
+		return value.map((v) => redact({ value: v, parentKey: null }));
 	}
 	if (value !== null && typeof value === "object") {
-		const obj = value as Record<string, unknown>;
+		const obj = coerce<Record<string, unknown>>(value);
 		const out: Record<string, unknown> = {};
 		for (const [k, v] of Object.entries(obj)) {
-			// Drop null/undefined values for diff parity — our YAML serializer
-			// strips them (k8s treats `field: null` and "field absent"
-			// identically) while helm output sometimes preserves explicit
-			// nulls. Normalizing here keeps the structural diff focused on
-			// real differences.
 			if (v === null || v === undefined) continue;
 			if (k === "labels" && parentKey === "metadata" && v !== null && typeof v === "object") {
-				out[k] = redactLabelMap(v as Record<string, unknown>);
+				out[k] = _redactLabelMap(coerce(v));
 				continue;
 			}
 			if (k === "annotations" && parentKey === "metadata" && v !== null && typeof v === "object") {
-				out[k] = redactAnnotationMap(v as Record<string, unknown>);
+				out[k] = _redactAnnotationMap(coerce(v));
 				continue;
 			}
-			out[k] = redact(v, k);
+			out[k] = redact({ value: v, parentKey: k });
 		}
 		return out;
 	}
 	return value;
 };
 
-// Structural deep equality. Maps compare by key-set + recursive value
-// equality (insensitive to insertion order). Lists compare positionally —
-// order is meaningful (env vars, container args).
-export const deepEqual = (a: unknown, b: unknown): boolean => {
+export interface DeepEqualInput {
+	readonly a: unknown;
+	readonly b: unknown;
+}
+export const deepEqual = (input: DeepEqualInput): boolean => {
+	const { a, b } = input;
 	if (a === b) return true;
 	if (a === null || b === null) return false;
 	if (typeof a !== typeof b) return false;
 	if (Array.isArray(a)) {
 		if (!Array.isArray(b) || a.length !== b.length) return false;
-		for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false;
+		for (let i = 0; i < a.length; i++) {
+			if (!deepEqual({ a: a[i], b: b[i] })) return false;
+		}
 		return true;
 	}
 	if (typeof a === "object" && typeof b === "object") {
-		const ka = Object.keys(a as object).sort();
-		const kb = Object.keys(b as object).sort();
+		const ka = Object.keys(coerce<object>(a)).sort();
+		const kb = Object.keys(coerce<object>(b)).sort();
 		if (ka.length !== kb.length) return false;
 		for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return false;
 		for (const k of ka) {
-			if (!deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) {
-				return false;
-			}
+			const av = coerce<Record<string, unknown>>(a)[k];
+			const bv = coerce<Record<string, unknown>>(b)[k];
+			if (!deepEqual({ a: av, b: bv })) return false;
 		}
 		return true;
 	}
@@ -90,8 +90,6 @@ export const deepEqual = (a: unknown, b: unknown): boolean => {
 
 export const parseYaml = (text: string): unknown => YAML.parse(text);
 
-// One per-file result entry. `Same` is included so JSON output can be
-// stable across runs (a tool consumer may want the full list of files).
 export type FileDiff =
 	| { readonly _tag: "Same"; readonly file: string }
 	| { readonly _tag: "MissingLeft"; readonly file: string }
@@ -107,12 +105,12 @@ export interface DiffResult {
 	readonly entries: ReadonlyArray<FileDiff>;
 }
 
-// Compute the diff between two filename→YAML-text maps. Both sides are
-// parsed and redacted first, so the result reflects semantic deltas only.
-export const diffFiles = (
-	left: Readonly<Record<string, string>>,
-	right: Readonly<Record<string, string>>,
-): DiffResult => {
+export interface DiffFilesInput {
+	readonly left: Readonly<Record<string, string>>;
+	readonly right: Readonly<Record<string, string>>;
+}
+export const diffFiles = (input: DiffFilesInput): DiffResult => {
+	const { left, right } = input;
 	const files = Array.from(new Set([...Object.keys(left), ...Object.keys(right)])).sort();
 	const entries: FileDiff[] = [];
 	for (const file of files) {
@@ -126,10 +124,12 @@ export const diffFiles = (
 			entries.push({ _tag: "MissingRight", file });
 			continue;
 		}
-		const l = redact(parseYaml(left[file] ?? ""));
-		const r = redact(parseYaml(right[file] ?? ""));
+		const l = redact({ value: parseYaml(left[file] ?? "") });
+		const r = redact({ value: parseYaml(right[file] ?? "") });
 		entries.push(
-			deepEqual(l, r) ? { _tag: "Same", file } : { _tag: "Changed", file, left: l, right: r },
+			deepEqual({ a: l, b: r })
+				? { _tag: "Same", file }
+				: { _tag: "Changed", file, left: l, right: r },
 		);
 	}
 	return { entries };
@@ -140,9 +140,13 @@ export const hasDifferences = (result: DiffResult): boolean =>
 
 export type DiffFormat = "summary" | "detail" | "json";
 
-// Render a diff result in one of the three FR-3.4 formats. The detail output
-// is intentionally minimal — M4 will pipe through a richer diff renderer.
-export const formatDiff = (result: DiffResult, format: DiffFormat = "summary"): string => {
+export interface FormatDiffInput {
+	readonly result: DiffResult;
+	readonly format?: DiffFormat;
+}
+export const formatDiff = (input: FormatDiffInput): string => {
+	const { result } = input;
+	const format = input.format ?? "summary";
 	if (format === "json") {
 		return JSON.stringify(result, null, 2);
 	}

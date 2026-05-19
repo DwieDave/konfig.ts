@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ConfigMap, Namespace, Secret, ServiceAccount } from "./identity";
 
 const ctx = RenderContext.make("test");
-const run = <A>(eff: Effect.Effect<A, unknown>): Promise<A> =>
+const _run = <A>(eff: Effect.Effect<A, unknown>): Promise<A> =>
 	Effect.runPromise(eff as Effect.Effect<A, never, never>);
 
 describe("identity constructors expose .ref for downstream wiring", () => {
@@ -33,8 +33,8 @@ describe("identity constructors expose .ref for downstream wiring", () => {
 			name: "sops",
 			annotations: { "argocd.argoproj.io/sync-options": "Prune=false" },
 		});
-		const out = await run(render(ns, ctx));
-		const yaml = Yaml.serialize(out);
+		const out = await _run(render({ manifest: ns, ctx }));
+		const yaml = Yaml.serialize({ value: out });
 		expect(yaml).toContain("apiVersion: v1");
 		expect(yaml).toContain("kind: Namespace");
 		expect(yaml).toContain("name: sops");

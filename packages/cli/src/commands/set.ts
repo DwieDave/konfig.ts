@@ -1,13 +1,6 @@
-// M12 — `konfig set <env> <app> <image>`
-//
-// Reads `<root>/images.json`, mutates a single image tag, writes it
-// back through the same Schema gate used by env files at module-load
-// time. CI bumps tags this way instead of touching TS source — no AST
-// mutator needed, and the post-write decode catches anything that
-// would break `konfig validate`.
 
-import { decodeImagesSync, ImagesConfig } from "@konfig.ts/core";
-import { Data, Effect, Schema } from "effect";
+import { decodeImagesEffect, decodeImagesSync, ImagesConfig } from "@konfig.ts/core";
+import { Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import { Argument, Command } from "effect/unstable/cli";
@@ -48,12 +41,11 @@ export const setCommand = Command.make(
 				.pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })));
 
 			const parsed = yield* Effect.try({
+				// oxlint-disable-next-line app/no-banned-type-assertions app/no-type-assertion
 				try: () => JSON.parse(text) as unknown,
 				catch: (cause) => new ImagesFileError({ path: file, cause }),
 			});
 
-			// Schema-decode before mutation so we fail early on a malformed
-			// file rather than corrupting it further.
 			const current = decodeImagesSync(parsed);
 
 			if (!(args.env in current.envs)) {
@@ -69,15 +61,10 @@ export const setCommand = Command.make(
 				},
 			};
 
-			// Re-decode the mutated object as a post-write sanity check.
-			// Catches a hypothetical Schema-evolution slip where the in-memory
-			// shape diverges from `decodeImagesSync`.
-			const decoded = yield* Effect.try({
-				try: () => Schema.decodeUnknownSync(ImagesConfig)(next, { onExcessProperty: "error" }),
-				catch: (cause) => new ImagesFileError({ path: file, cause }),
-			});
+			const decoded = yield* decodeImagesEffect(next).pipe(
+				Effect.mapError((cause) => new ImagesFileError({ path: file, cause })),
+			);
 
-			// 1 tab indent + trailing newline mirrors the in-tree style.
 			const out = `${JSON.stringify(decoded, null, "\t")}\n`;
 			yield* fs
 				.writeFileString(file, out)

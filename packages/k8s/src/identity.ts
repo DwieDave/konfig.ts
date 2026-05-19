@@ -1,11 +1,3 @@
-// Identity resource constructors: each `X.make` returns a Manifest
-// that emits the k8s YAML AND exposes a branded `.ref` for ergonomic
-// wiring into env/volume/pull-secret entries within the same module.
-//
-// M9: the `Single<K, N>` P-tracking on these Manifests is gone — dep
-// tracking happens via `yield* Deps.Secret(name)` etc. in the
-// surrounding Effect.gen. The `.ref` is still useful as a typed value
-// when the caller doesn't want to round-trip through Effect.
 
 import type { ConfigMapRef, SecretRef, ServiceAccountRef } from "@konfig.ts/core";
 import { Manifest } from "@konfig.ts/core";
@@ -26,8 +18,6 @@ type CommonMeta = {
 	readonly labels?: Readonly<Record<string, string>>;
 	readonly annotations?: Readonly<Record<string, string>>;
 };
-
-// ---------- Namespace ----------
 
 export interface NamespaceInput<N extends string> extends CommonMeta {
 	readonly name: N;
@@ -52,8 +42,6 @@ export const Namespace = {
 		return Object.assign(m, { ref: input.name });
 	},
 };
-
-// ---------- ServiceAccount ----------
 
 export interface ServiceAccountInput<N extends string> extends CommonMeta {
 	readonly name: N;
@@ -86,8 +74,6 @@ export const ServiceAccount = {
 	},
 };
 
-// ---------- ConfigMap ----------
-
 export interface ConfigMapInput<N extends string> extends CommonMeta {
 	readonly name: N;
 	readonly namespace: string;
@@ -119,8 +105,6 @@ export const ConfigMap = {
 		return Object.assign(m, { ref: ConfigMapRefValue.of(input.name) });
 	},
 };
-
-// ---------- Secret ----------
 
 export interface SecretInput<N extends string> extends CommonMeta {
 	readonly name: N;

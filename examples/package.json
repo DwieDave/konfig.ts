@@ -10,7 +10,7 @@
 		"check": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
-		"@effect/platform-bun": "catalog:",
+		"@effect/platform-node": "catalog:",
 		"@konfig.ts/argocd": "workspace:*",
 		"@konfig.ts/core": "workspace:*",
 		"@konfig.ts/k8s": "workspace:*",

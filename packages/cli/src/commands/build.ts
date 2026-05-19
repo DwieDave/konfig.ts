@@ -1,8 +1,3 @@
-// T4.7 — `konfig build <env>` command.
-//
-// Resolves konfig.json, evaluates the env's entrypoint, renders every
-// Application to per-file YAML, and writes the tree to
-// `<configDir>/<root>/<outDir.manifests>/<env>/`.
 
 import { RenderContext } from "@konfig.ts/core";
 import { Console, Effect } from "effect";
@@ -20,7 +15,7 @@ export const buildCommand = Command.make(
 			const cfg = yield* resolveConfig();
 			const ctx = RenderContext.make(args.env);
 			yield* Console.log(`Rendering env '${args.env}'...`);
-			const rendered = yield* renderEnv(cfg, args.env, ctx);
+			const rendered = yield* renderEnv({ cfg, envName: args.env, ctx });
 			const written = yield* writeFiles(rendered);
 			yield* Console.log(`Wrote ${written.length} file(s) to ${rendered.outDirAbs}`);
 		}),

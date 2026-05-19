@@ -1,4 +1,3 @@
-// `konfig helm fetch` command — pre-fetch chart tarballs into the local cache.
 
 import { exec as execCb } from "node:child_process";
 import * as fs from "node:fs/promises";
@@ -11,8 +10,7 @@ import { assertHelmVersion } from "../helmVersion";
 
 const exec = promisify(execCb);
 
-// Load chart registry (same convention as crd.ts — shared by both commands).
-const loadChartRegistry = async (
+const _loadChartRegistry = async (
 	chartsDir: string,
 ): Promise<
 	Array<{
@@ -60,13 +58,12 @@ const loadChartRegistry = async (
 				}
 			}
 		} catch {
-			// Skip files that can't be imported
 		}
 	}
 	return entries;
 };
 
-const fetchOne = async (opts: {
+const _fetchOne = async (opts: {
 	repo: string;
 	chart: string;
 	version: string;
@@ -116,14 +113,14 @@ export const helmFetchCommand = Command.make(
 			}
 
 			const registry = yield* Effect.tryPromise({
-				try: () => loadChartRegistry(chartsDir),
+				try: () => _loadChartRegistry(chartsDir),
 				catch: (cause) => new Error(`Failed to load chart registry: ${cause}`),
 			});
 
 			for (const def of registry) {
 				yield* Console.log(`Fetching ${def.chart}@${def.version}...`);
 				yield* Effect.tryPromise({
-					try: () => fetchOne({ repo: def.repo, chart: def.chart, version: def.version, cacheDir }),
+					try: () => _fetchOne({ repo: def.repo, chart: def.chart, version: def.version, cacheDir }),
 					catch: (cause) => new Error(`helm pull failed for ${def.chart}: ${cause}`),
 				});
 			}

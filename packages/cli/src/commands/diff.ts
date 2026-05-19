@@ -1,11 +1,6 @@
-// T4.9 — `konfig diff <env>` command.
-//
-// Renders the env's manifests (purely in-memory) and compares the
-// resulting file tree against the on-disk baseline from
-// `konfig.json` `diff.baseline`. Exits 0 only when the structural diff
-// (per @konfig.ts/core's `diffFiles`) is empty.
 
 import {
+	coerce,
 	type DiffFormat,
 	diffFiles,
 	formatDiff,
@@ -23,12 +18,11 @@ class DiffBaselineMissing extends Data.TaggedError("DiffBaselineMissing")<{
 	readonly env: string;
 }> {}
 
-const readBaseline = (baselineDir: string) =>
+const _readBaseline = (baselineDir: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const path = yield* Path;
 
-		// Walk the tree non-recursively for now: app dir then files in it.
 		const collect = (
 			dir: string,
 		): Effect.Effect<Record<string, string>, never, FileSystem | Path> =>
@@ -72,7 +66,7 @@ export const diffCommand = Command.make(
 				return yield* Effect.fail(new DiffBaselineMissing({ env: args.env }));
 			}
 
-			const rendered = yield* renderEnv(cfg, args.env, ctx);
+			const rendered = yield* renderEnv({ cfg, envName: args.env, ctx });
 
 			// Left: nixidy baseline, right: tsk render. Keys are filenames
 			// relative to each env root.
@@ -82,7 +76,7 @@ export const diffCommand = Command.make(
 				cfg.config.diff.baseline,
 				args.env,
 			);
-			const left = yield* readBaseline(baselineDirAbs);
+			const left = yield* _readBaseline(baselineDirAbs);
 
 			const right: Record<string, string> = {};
 			for (const file of rendered.files) {
@@ -90,9 +84,9 @@ export const diffCommand = Command.make(
 				right[rel] = file.content;
 			}
 
-			const result = diffFiles(left, right);
+			const result = diffFiles({ left, right });
 			if (hasDifferences(result)) {
-				yield* Console.log(formatDiff(result, args.format as DiffFormat));
+				yield* Console.log(formatDiff({ result, format: coerce<DiffFormat>(args.format) }));
 				return yield* Effect.fail(new Error(`Diff non-empty for env '${args.env}'`));
 			}
 			yield* Console.log(`OK — env '${args.env}' matches baseline`);

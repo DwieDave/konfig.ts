@@ -1,4 +1,3 @@
-// T6.3 / T6.4 / T6.5 — `konfig crd extract` and `konfig crd verify` commands.
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -8,9 +7,7 @@ import { resolveCliPaths } from "../cliConfig";
 import { extractCrds, verifyCrds } from "../crd/extract";
 import { assertHelmVersion } from "../helmVersion";
 
-// Load chart definitions from a directory. Each *.ts file must export an
-// object with `_tskHelmRelease: true` (produced by `defineChart`).
-const loadChartRegistry = async (
+const _loadChartRegistry = async (
 	chartsDir: string,
 ): Promise<
 	Array<{
@@ -38,7 +35,6 @@ const loadChartRegistry = async (
 
 	for (const file of files.filter((f) => f.endsWith(".ts") && !f.startsWith("_"))) {
 		try {
-			// Dynamic import — works under Bun which runs TS directly.
 			const mod = await import(path.resolve(chartsDir, file));
 			for (const key of Object.keys(mod)) {
 				const val = mod[key];
@@ -59,13 +55,11 @@ const loadChartRegistry = async (
 				}
 			}
 		} catch {
-			// Skip files that can't be imported at this stage
 		}
 	}
 	return entries;
 };
 
-// `konfig crd extract --release <id>` — T6.3 / `konfig crd extract --all` — T6.4
 export const crdExtractCommand = Command.make(
 	"extract",
 	{
@@ -82,7 +76,7 @@ export const crdExtractCommand = Command.make(
 			yield* assertHelmVersion(minVersion);
 
 			const registry = yield* Effect.tryPromise({
-				try: () => loadChartRegistry(chartsDir),
+				try: () => _loadChartRegistry(chartsDir),
 				catch: (cause) => new Error(`Failed to load chart registry: ${cause}`),
 			});
 
@@ -113,7 +107,6 @@ export const crdExtractCommand = Command.make(
 				});
 				yield* Console.log(`Written to ${path.join(outDir, `${def.id}.ts`)}`);
 			} else if (flags.all) {
-				// All releases — T6.4
 				if (registry.length === 0) {
 					yield* Console.log(`No chart definitions found in ${chartsDir}`);
 					return;
@@ -149,7 +142,7 @@ export const crdVerifyCommand = Command.make("verify", {}, () =>
 		yield* assertHelmVersion(minVersion);
 
 		const registry = yield* Effect.tryPromise({
-			try: () => loadChartRegistry(chartsDir),
+			try: () => _loadChartRegistry(chartsDir),
 			catch: (cause) => new Error(`Failed to load chart registry: ${cause}`),
 		});
 
@@ -170,7 +163,7 @@ export const crdVerifyCommand = Command.make("verify", {}, () =>
 		yield* Console.log(`Verifying ${releases.length} chart(s) against ${outDir}...`);
 
 		const drifted = yield* Effect.tryPromise({
-			try: () => verifyCrds(releases, outDir),
+			try: () => verifyCrds({ releases, committedDir: outDir }),
 			catch: (cause) => new Error(`Verify failed: ${cause}`),
 		});
 

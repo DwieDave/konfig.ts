@@ -8,41 +8,35 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
 		expect(ServiceAccountRef.of("api")).toBe("api");
 	});
 
-	// The six FR-4.4 enforcement points are exercised via `// @ts-expect-error`
-	// here — each line proves that a raw-string literal is rejected where a
-	// branded ref is required. `bun run check` is the gate; if the brand were
-	// dropped, the expect-error would fail to compile.
-
 	it("env-var (secretKeyRef) rejects raw string", async () => {
 		const { secretEnv } = await import("./env");
 		// @ts-expect-error — raw string for `ref` is not assignable to SecretRef.
-		secretEnv("API_KEY", { ref: "raw-string", key: "k" });
-		// Accept-path with branded ref:
-		const env = secretEnv("API_KEY", { ref: SecretRef.of("api-creds"), key: "k" });
+		secretEnv({ name: "API_KEY", ref: "raw-string", key: "k" });
+		const env = secretEnv({ name: "API_KEY", ref: SecretRef.of("api-creds"), key: "k" });
 		expect(env.valueFrom?.secretKeyRef?.name).toBe("api-creds");
 	});
 
 	it("env-var (configMapKeyRef) rejects raw string", async () => {
 		const { configMapEnv } = await import("./env");
 		// @ts-expect-error — raw string for `ref` is not assignable to ConfigMapRef.
-		configMapEnv("CFG", { ref: "raw-string", key: "k" });
-		const env = configMapEnv("CFG", { ref: ConfigMapRef.of("cfg"), key: "k" });
+		configMapEnv({ name: "CFG", ref: "raw-string", key: "k" });
+		const env = configMapEnv({ name: "CFG", ref: ConfigMapRef.of("cfg"), key: "k" });
 		expect(env.valueFrom?.configMapKeyRef?.name).toBe("cfg");
 	});
 
 	it("volume from Secret rejects raw string", async () => {
 		const { volumeFromSecret } = await import("./volume");
 		// @ts-expect-error — raw string for `ref` is not assignable to SecretRef.
-		volumeFromSecret("v", "raw-string");
-		const v = volumeFromSecret("v", SecretRef.of("creds"));
+		volumeFromSecret({ name: "v", ref: "raw-string" });
+		const v = volumeFromSecret({ name: "v", ref: SecretRef.of("creds") });
 		expect(v.secret?.secretName).toBe("creds");
 	});
 
 	it("volume from ConfigMap rejects raw string", async () => {
 		const { volumeFromConfigMap } = await import("./volume");
 		// @ts-expect-error — raw string for `ref` is not assignable to ConfigMapRef.
-		volumeFromConfigMap("v", "raw-string");
-		const v = volumeFromConfigMap("v", ConfigMapRef.of("cfg"));
+		volumeFromConfigMap({ name: "v", ref: "raw-string" });
+		const v = volumeFromConfigMap({ name: "v", ref: ConfigMapRef.of("cfg") });
 		expect(v.configMap?.name).toBe("cfg");
 	});
 
@@ -57,8 +51,8 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
 	it("Ingress TLS rejects raw string", async () => {
 		const { ingressTLS } = await import("./network");
 		// @ts-expect-error — raw string is not assignable to SecretRef.
-		ingressTLS("raw-string");
-		const tls = ingressTLS(SecretRef.of("tls"));
+		ingressTLS({ secretName: "raw-string" });
+		const tls = ingressTLS({ secretName: SecretRef.of("tls") });
 		expect(tls.secretName).toBe("tls");
 	});
 });

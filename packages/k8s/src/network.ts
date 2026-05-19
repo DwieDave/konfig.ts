@@ -1,10 +1,4 @@
-// Service + Ingress resource constructors. M9 dropped the
-// TLS-R-aggregating generics; the Ingress dep on its TLS secret is
-// now declared upstream via `yield* Secret(name)` in the surrounding
-// Effect.gen.
-
-import type { SecretRef } from "@konfig.ts/core";
-import { Manifest } from "@konfig.ts/core";
+import { coerce, Manifest, type SecretRef } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	Ingress as K8sIngress,
@@ -12,8 +6,6 @@ import type {
 	Service as K8sService,
 	ServicePort as K8sServicePort,
 } from "./.generated/k8s-types";
-
-// ---------- Service ----------
 
 export interface ServiceInput {
 	readonly name: string;
@@ -45,7 +37,7 @@ export const Service = {
 			spec: {
 				selector: input.selector,
 				type: input.type,
-				ports: input.ports as never,
+				ports: coerce(input.ports),
 				clusterIP: input.clusterIP,
 				externalName: input.externalName,
 				sessionAffinity: input.sessionAffinity,
@@ -58,10 +50,6 @@ export const Service = {
 	},
 };
 
-// ---------- Ingress ----------
-
-// Typed TLS entry: secretName is a branded `SecretRef<N>` obtained via
-// `yield* Secret(name)` upstream.
 export interface IngressTLSInput {
 	readonly hosts?: ReadonlyArray<string>;
 	readonly secretName: SecretRef<string>;
@@ -91,17 +79,16 @@ export const Ingress = {
 			},
 			spec: {
 				ingressClassName: input.ingressClassName,
-				rules: input.rules as never,
-				tls: input.tls as unknown as K8sIngressTLS[],
-				defaultBackend: input.defaultBackend as never,
+				rules: coerce(input.rules),
+				tls: coerce<K8sIngressTLS[]>(input.tls),
+				defaultBackend: coerce(input.defaultBackend),
 			},
 		};
 		return Manifest.make<K8sIngress>(() => Effect.succeed(resource));
 	},
 };
 
-// Convenience used by the higher-level Workload helpers + by ports.
-export const ingressTLS = (
-	secretName: SecretRef<string>,
-	hosts?: ReadonlyArray<string>,
-): IngressTLSInput => ({ secretName, hosts });
+export const ingressTLS = (input: {
+	readonly secretName: SecretRef<string>;
+	readonly hosts?: ReadonlyArray<string>;
+}): IngressTLSInput => ({ secretName: input.secretName, hosts: input.hosts });

@@ -1,13 +1,3 @@
-// k8s 1.30 OpenAPI types — re-exported from `kubernetes-types`.
-//
-// We import from `kubernetes-types` rather than generating our own
-// codegen output: the package is already pinned at 1.30.0 (matching
-// our cluster), is a transitive dep of `effect`, and saves ~5k LOC of
-// committed codegen artifacts. The `kubernetes-types` namespace shape
-// matches the k8s OpenAPI exactly, so callers get full IntelliSense.
-//
-// Add narrower re-exports here as constructors need them; this file
-// stays small on purpose.
 
 export type {
 	Deployment,

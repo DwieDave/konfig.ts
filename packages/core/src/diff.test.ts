@@ -4,11 +4,13 @@ import { deepEqual, diffFiles, formatDiff, hasDifferences, redact } from "./diff
 describe("redact (FR-3.2)", () => {
 	it("strips helm.sh/chart label", () => {
 		const r = redact({
-			apiVersion: "v1",
-			kind: "Pod",
-			metadata: {
-				name: "p",
-				labels: { app: "x", "helm.sh/chart": "foo-0.1.0" },
+			value: {
+				apiVersion: "v1",
+				kind: "Pod",
+				metadata: {
+					name: "p",
+					labels: { app: "x", "helm.sh/chart": "foo-0.1.0" },
+				},
 			},
 		});
 		expect(r).toEqual({
@@ -20,24 +22,26 @@ describe("redact (FR-3.2)", () => {
 
 	it("strips app.kubernetes.io/managed-by=Helm but keeps non-Helm values", () => {
 		const r = redact({
-			metadata: { labels: { "app.kubernetes.io/managed-by": "Helm", other: "v" } },
+			value: { metadata: { labels: { "app.kubernetes.io/managed-by": "Helm", other: "v" } } },
 		}) as { metadata: { labels: Record<string, string> } };
 		expect(r.metadata.labels["app.kubernetes.io/managed-by"]).toBeUndefined();
 		expect(r.metadata.labels.other).toBe("v");
 
 		const r2 = redact({
-			metadata: { labels: { "app.kubernetes.io/managed-by": "argocd" } },
+			value: { metadata: { labels: { "app.kubernetes.io/managed-by": "argocd" } } },
 		}) as { metadata: { labels: Record<string, string> } };
 		expect(r2.metadata.labels["app.kubernetes.io/managed-by"]).toBe("argocd");
 	});
 
 	it("strips meta.helm.sh/* annotations", () => {
 		const r = redact({
-			metadata: {
-				annotations: {
-					"meta.helm.sh/release-name": "x",
-					"meta.helm.sh/release-namespace": "ns",
-					keep: "v",
+			value: {
+				metadata: {
+					annotations: {
+						"meta.helm.sh/release-name": "x",
+						"meta.helm.sh/release-namespace": "ns",
+						keep: "v",
+					},
 				},
 			},
 		}) as { metadata: { annotations: Record<string, string> } };
@@ -45,10 +49,8 @@ describe("redact (FR-3.2)", () => {
 	});
 
 	it("does NOT strip helm.sh/chart on nested (non-metadata) labels", () => {
-		// Only metadata.labels is redacted. spec.selector.matchLabels.helm.sh/chart
-		// is unusual but the redactor shouldn't reach for it.
 		const r = redact({
-			spec: { selector: { matchLabels: { "helm.sh/chart": "x" } } },
+			value: { spec: { selector: { matchLabels: { "helm.sh/chart": "x" } } } },
 		}) as { spec: { selector: { matchLabels: Record<string, string> } } };
 		expect(r.spec.selector.matchLabels["helm.sh/chart"]).toBe("x");
 	});
@@ -56,13 +58,13 @@ describe("redact (FR-3.2)", () => {
 
 describe("deepEqual", () => {
 	it("treats key order as irrelevant for maps", () => {
-		expect(deepEqual({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true);
+		expect(deepEqual({ a: { a: 1, b: 2 }, b: { b: 2, a: 1 } })).toBe(true);
 	});
 	it("treats list order as meaningful", () => {
-		expect(deepEqual([1, 2, 3], [3, 2, 1])).toBe(false);
+		expect(deepEqual({ a: [1, 2, 3], b: [3, 2, 1] })).toBe(false);
 	});
 	it("string-vs-number is not equal", () => {
-		expect(deepEqual({ x: "1" }, { x: 1 })).toBe(false);
+		expect(deepEqual({ a: { x: "1" }, b: { x: 1 } })).toBe(false);
 	});
 });
 
@@ -78,7 +80,7 @@ describe("diffFiles (FR-3.3)", () => {
 			"Pod-b.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: bee\n",
 			"Pod-c.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: c\n",
 		};
-		const result = diffFiles(left, right);
+		const result = diffFiles({ left, right });
 		const byFile = Object.fromEntries(result.entries.map((e) => [e.file, e._tag]));
 		expect(byFile["Pod-a.yaml"]).toBe("MissingRight");
 		expect(byFile["Pod-c.yaml"]).toBe("MissingLeft");
@@ -95,7 +97,7 @@ describe("diffFiles (FR-3.3)", () => {
 		const right = {
 			"Pod-a.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: a\n  labels:\n    app: x\n",
 		};
-		const r = diffFiles(left, right);
+		const r = diffFiles({ left, right });
 		expect(hasDifferences(r)).toBe(false);
 	});
 });
@@ -104,13 +106,13 @@ describe("formatDiff (FR-3.4)", () => {
 	it("summary lists changed files only", () => {
 		const left = { "Pod-a.yaml": "kind: Pod\nmetadata:\n  name: a\n" };
 		const right = { "Pod-a.yaml": "kind: Pod\nmetadata:\n  name: b\n" };
-		const out = formatDiff(diffFiles(left, right), "summary");
+		const out = formatDiff({ result: diffFiles({ left, right }), format: "summary" });
 		expect(out).toContain("Pod-a.yaml");
 	});
 	it("json is parseable", () => {
 		const left = { "Pod-a.yaml": "kind: Pod\nmetadata:\n  name: a\n" };
 		const right = { "Pod-a.yaml": "kind: Pod\nmetadata:\n  name: b\n" };
-		const out = formatDiff(diffFiles(left, right), "json");
+		const out = formatDiff({ result: diffFiles({ left, right }), format: "json" });
 		expect(() => JSON.parse(out)).not.toThrow();
 	});
 });

@@ -3,8 +3,6 @@ import { Effect } from "effect";
 import type { Any as AnyApp } from "./Application";
 import type { AppOfAppsDefaults, AppOfAppsTarget } from "./AppOfApps";
 
-// The shape of a rendered ArgoCD Application CR.
-// Matches the nixidy-rendered output exactly (see Application-sops-secrets-operator.yaml).
 interface ApplicationCR {
 	readonly apiVersion: "argoproj.io/v1alpha1";
 	readonly kind: "Application";
@@ -28,14 +26,12 @@ interface ApplicationCR {
 	};
 }
 
-// Merge a per-app syncPolicy on top of the AppOfApps defaults. Each
-// field is overridden at the top level (no deep merge of `automated`)
-// — matching nixidy's behavior where per-app overrides replace the
-// corresponding default group atomically.
-const mergeSyncPolicy = (
-	def: AppOfAppsDefaults["syncPolicy"],
-	app: AnyApp["syncPolicy"],
-): AnyApp["syncPolicy"] => {
+interface _MergeSyncPolicyInput {
+	readonly def: AppOfAppsDefaults["syncPolicy"];
+	readonly app: AnyApp["syncPolicy"];
+}
+const _mergeSyncPolicy = (input: _MergeSyncPolicyInput): AnyApp["syncPolicy"] => {
+	const { def, app } = input;
 	if (def === undefined) return app;
 	if (app === undefined) return def;
 	return {
@@ -45,19 +41,17 @@ const mergeSyncPolicy = (
 	};
 };
 
-// Build the CR object from an Application + target/defaults.
-// `app.namespace` is the WORKLOAD namespace (where the rendered manifests
-// run). The CR itself lives in `target.controllerNamespace` (default
-// "argocd" — where the ArgoCD controller watches for `Application` CRs).
-export const buildCR = (
-	app: AnyApp,
-	target: AppOfAppsTarget,
-	defaults: AppOfAppsDefaults,
-): ApplicationCR => {
+export interface BuildCRInput {
+	readonly app: AnyApp;
+	readonly target: AppOfAppsTarget;
+	readonly defaults: AppOfAppsDefaults;
+}
+export const buildCR = (input: BuildCRInput): ApplicationCR => {
+	const { app, target, defaults } = input;
 	const server = defaults.destination?.server ?? "https://kubernetes.default.svc";
 	const path = `${target.rootPath}/${app.name}`;
 	const controllerNamespace = target.controllerNamespace ?? "argocd";
-	const syncPolicy = mergeSyncPolicy(defaults.syncPolicy, app.syncPolicy);
+	const syncPolicy = _mergeSyncPolicy({ def: defaults.syncPolicy, app: app.syncPolicy });
 
 	const hasAnnotations = app.annotations !== undefined && Object.keys(app.annotations).length > 0;
 
@@ -87,27 +81,13 @@ export const buildCR = (
 	};
 };
 
-// Emit one Application CR as a Manifest. M9 dropped the per-Manifest
-// `P = Single<"Application", Name>` tracking — the Application is
-// announced via `Layer.succeed(Dep.Application(name))(name)` in the
-// surrounding module instead.
-export const emitApplicationCR = (
-	app: AnyApp,
-	target: AppOfAppsTarget,
-	defaults: AppOfAppsDefaults,
-): Manifest.Manifest<string> => {
-	const cr = buildCR(app, target, defaults);
-	const yaml = Yaml.serialize(cr);
+export const emitApplicationCR = (input: BuildCRInput): Manifest.Manifest<string> => {
+	const cr = buildCR(input);
+	const yaml = Yaml.serialize({ value: cr });
 	return Manifest.make<string>((_ctx) => Effect.succeed(yaml));
 };
 
-// Serialize one Application CR to a YAML string directly (no Manifest wrapper).
-// The M4 writer uses this to produce `apps/Application-<name>.yaml`.
-export const serializeApplicationCR = (
-	app: AnyApp,
-	target: AppOfAppsTarget,
-	defaults: AppOfAppsDefaults,
-): string => Yaml.serialize(buildCR(app, target, defaults));
+export const serializeApplicationCR = (input: BuildCRInput): string =>
+	Yaml.serialize({ value: buildCR(input) });
 
-// Standard filename for an Application CR output file.
 export const applicationCRFilename = (app: AnyApp): string => `Application-${app.name}.yaml`;

@@ -1,4 +1,3 @@
-// @konfig.ts/argocd — Application + AppOfApps with type-level dep verification.
 
 export type { ArgoSource, BuildMetadata, SyncPolicy } from "./Application";
 export * as Application from "./Application";

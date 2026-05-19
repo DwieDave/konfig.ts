@@ -32,13 +32,8 @@ describe("serializeApplicationCR", () => {
 			annotations: SyncWave(-1),
 		});
 
-		// The target here is only used for metadata: the app's source is already set.
-		// For CR emission we pass target + defaults to reconstruct the path.
-		// But since serializeApplicationCR derives path from target.rootPath + app.name,
-		// we need to ensure they match the nixidy fixture.
-		const yaml = serializeApplicationCR(app, target, defaults);
+		const yaml = serializeApplicationCR({ app, target, defaults });
 
-		// Check the key structural properties match the nixidy fixture.
 		expect(yaml).toContain("apiVersion: argoproj.io/v1alpha1");
 		expect(yaml).toContain("kind: Application");
 		expect(yaml).toContain("name: sops-secrets-operator");
@@ -48,7 +43,6 @@ describe("serializeApplicationCR", () => {
 		expect(yaml).toContain("project: default");
 		expect(yaml).toContain("repoURL: ssh://git@github.com/example/infra.git");
 		expect(yaml).toContain("targetRevision: main");
-		// The path is derived from target.rootPath + app.name (not app.source.path).
 		expect(yaml).toContain("path: ./infra/k8s/manifests/prod/sops-secrets-operator");
 	});
 
@@ -66,7 +60,7 @@ describe("serializeApplicationCR", () => {
 			annotations: SyncWave(1),
 		});
 
-		const yaml = serializeApplicationCR(app, target, defaults);
+		const yaml = serializeApplicationCR({ app, target, defaults });
 		expect(yaml).toContain('argocd.argoproj.io/sync-wave: "1"');
 		expect(yaml).toContain("namespace: prod");
 		expect(yaml).toContain("path: ./infra/k8s/manifests/prod/api");
@@ -84,7 +78,7 @@ describe("serializeApplicationCR", () => {
 			},
 		});
 
-		const yaml = serializeApplicationCR(app, target, defaults);
+		const yaml = serializeApplicationCR({ app, target, defaults });
 		expect(yaml).not.toContain("annotations:");
 		expect(yaml).not.toContain("syncPolicy:");
 	});
@@ -102,7 +96,7 @@ describe("serializeApplicationCR", () => {
 			syncPolicy: { automated: { prune: true, selfHeal: true } },
 		});
 
-		const yaml = serializeApplicationCR(app, target, defaults);
+		const yaml = serializeApplicationCR({ app, target, defaults });
 		expect(yaml).toContain("syncPolicy:");
 		expect(yaml).toContain("prune: true");
 		expect(yaml).toContain("selfHeal: true");

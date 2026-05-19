@@ -1,19 +1,37 @@
 {
 	"name": "@konfig.ts/cli",
 	"version": "0.0.1",
-	"private": true,
+	"description": "konfig CLI — build, validate, diff, and set commands for konfig.ts configurations.",
+	"license": "MIT",
+	"author": "David Stahl-Gruber",
+	"homepage": "https://github.com/PLACEHOLDER/konfig.ts#readme",
+	"bugs": "https://github.com/PLACEHOLDER/konfig.ts/issues",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/PLACEHOLDER/konfig.ts.git",
+		"directory": "packages/cli"
+	},
+	"keywords": ["kubernetes", "k8s", "argocd", "cli", "konfig"],
 	"type": "module",
-	"exports": {
-		".": "./src/index.ts"
+	"bin": {
+		"konfig": "./dist/main.mjs"
+	},
+	"files": ["dist", "README.md", "LICENSE"],
+	"engines": {
+		"node": ">=20"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"scripts": {
-		"build": "tsc -p tsconfig.json",
+		"build": "tsdown ./src/main.ts --format=esm --target=node20 --sourcemap --clean && chmod +x dist/main.mjs",
 		"check": "tsc -p tsconfig.check.json --noEmit",
-		"lint": "biome check .",
-		"lint:apply": "biome check --write ."
+		"lint": "oxlint",
+		"lint:apply": "oxlint --fix",
+		"prepublishOnly": "bun run build"
 	},
 	"dependencies": {
-		"@effect/platform-bun": "catalog:",
+		"@effect/platform-node": "catalog:",
 		"@konfig.ts/argocd": "workspace:*",
 		"@konfig.ts/core": "workspace:*",
 		"@konfig.ts/k8s": "workspace:*",

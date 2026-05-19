@@ -1,8 +1,3 @@
-// Volume — plain record matching k8s `Volume` shape. The phantom R
-// brand moved off this type in M9; callers `yield* Secret(name)` /
-// `yield* ConfigMap(name)` / `yield* Pvc(name)` upstream to lift the
-// requirement before constructing the Volume entry.
-
 import type { ConfigMapRef, PvcRef, SecretRef } from "@konfig.ts/core";
 
 export interface Volume {
@@ -26,46 +21,50 @@ export interface Volume {
 	readonly hostPath?: { readonly path: string; readonly type?: string };
 }
 
-export const volumeFromSecret = (
-	name: string,
-	ref: SecretRef<string>,
-	opts?: { readonly optional?: boolean; readonly defaultMode?: number },
-): Volume => ({
-	name,
-	secret: { secretName: ref, optional: opts?.optional, defaultMode: opts?.defaultMode },
+export interface VolumeFromSecretInput {
+	readonly name: string;
+	readonly ref: SecretRef<string>;
+	readonly optional?: boolean;
+	readonly defaultMode?: number;
+}
+export const volumeFromSecret = (input: VolumeFromSecretInput): Volume => ({
+	name: input.name,
+	secret: { secretName: input.ref, optional: input.optional, defaultMode: input.defaultMode },
 });
 
-export const volumeFromConfigMap = (
-	name: string,
-	ref: ConfigMapRef<string>,
-	opts?: {
-		readonly optional?: boolean;
-		readonly defaultMode?: number;
-		readonly items?: ReadonlyArray<{ readonly key: string; readonly path: string }>;
-	},
-): Volume => ({
-	name,
+export interface VolumeFromConfigMapInput {
+	readonly name: string;
+	readonly ref: ConfigMapRef<string>;
+	readonly optional?: boolean;
+	readonly defaultMode?: number;
+	readonly items?: ReadonlyArray<{ readonly key: string; readonly path: string }>;
+}
+export const volumeFromConfigMap = (input: VolumeFromConfigMapInput): Volume => ({
+	name: input.name,
 	configMap: {
-		name: ref,
-		optional: opts?.optional,
-		defaultMode: opts?.defaultMode,
-		items: opts?.items,
+		name: input.ref,
+		optional: input.optional,
+		defaultMode: input.defaultMode,
+		items: input.items,
 	},
 });
 
-export const emptyDirVolume = (
-	name: string,
-	opts?: { readonly medium?: string; readonly sizeLimit?: string },
-): Volume => ({
-	name,
-	emptyDir: opts ?? {},
+export interface EmptyDirVolumeInput {
+	readonly name: string;
+	readonly medium?: string;
+	readonly sizeLimit?: string;
+}
+export const emptyDirVolume = (input: EmptyDirVolumeInput): Volume => ({
+	name: input.name,
+	emptyDir: { medium: input.medium, sizeLimit: input.sizeLimit },
 });
 
-export const pvcVolume = <N extends string>(
-	name: string,
-	claim: PvcRef<N>,
-	opts?: { readonly readOnly?: boolean },
-): Volume => ({
-	name,
-	persistentVolumeClaim: { claimName: claim, readOnly: opts?.readOnly },
+export interface PvcVolumeInput<N extends string> {
+	readonly name: string;
+	readonly claim: PvcRef<N>;
+	readonly readOnly?: boolean;
+}
+export const pvcVolume = <N extends string>(input: PvcVolumeInput<N>): Volume => ({
+	name: input.name,
+	persistentVolumeClaim: { claimName: input.claim, readOnly: input.readOnly },
 });

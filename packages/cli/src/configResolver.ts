@@ -1,9 +1,3 @@
-// T4.2 — `konfig.json` config resolution.
-//
-// Walks up from `cwd` until it finds a `konfig.json`, decodes it through the
-// strict `decodeKonfigConfigEffect` from `@konfig.ts/core`, and returns the resolved
-// config + the directory it lives in. Every path in the config is
-// interpreted relative to `configDir`.
 
 import {
 	decodeKonfigConfigEffect,
@@ -23,11 +17,7 @@ export class ConfigParseError extends Data.TaggedError("ConfigParseError")<{
 	readonly cause: unknown;
 }> {}
 
-// Walk the parent chain from `start` looking for a `konfig.json`. Returns the
-// absolute path of the first hit, or `ConfigNotFound` if we reach the root.
-// FS errors during the `exists` checks are treated as "not present here" —
-// the walk continues — so missing-permission directories don't abort search.
-const findConfig = (start: string) =>
+const _findConfig = (start: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const path = yield* Path;
@@ -45,16 +35,14 @@ const findConfig = (start: string) =>
 		}
 	});
 
-// Decode the file contents. All failures (read errors, JSON syntax, schema
-// validation) surface as `ConfigParseError` with the underlying cause —
-// callers don't need to disambiguate which step failed.
-const parseConfig = (configPath: string) =>
+const _parseConfig = (configPath: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const text = yield* fs
 			.readFileString(configPath)
 			.pipe(Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause })));
 		const parsed = yield* Effect.try({
+			// oxlint-disable-next-line app/no-banned-type-assertions app/no-type-assertion
 			try: () => JSON.parse(text) as unknown,
 			catch: (cause) => new ConfigParseError({ path: configPath, cause }),
 		});
@@ -63,17 +51,14 @@ const parseConfig = (configPath: string) =>
 		);
 	});
 
-// Public API: resolve the config starting from a directory (defaults to cwd
-// at evaluation time). Returns the validated config plus the directory
-// containing `konfig.json` — consumers join their relative paths against it.
 export const resolveConfig = (
 	from?: string,
 ): Effect.Effect<ResolvedKonfigConfig, ConfigNotFound | ConfigParseError, FileSystem | Path> =>
 	Effect.gen(function* () {
 		const path = yield* Path;
 		const start = from ?? process.cwd();
-		const configPath = yield* findConfig(start);
-		const config: KonfigConfig = yield* parseConfig(configPath);
+		const configPath = yield* _findConfig(start);
+		const config: KonfigConfig = yield* _parseConfig(configPath);
 		const configDir = path.dirname(configPath);
 		return { configDir, config };
 	});

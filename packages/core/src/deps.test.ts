@@ -1,4 +1,3 @@
-// M9 — verify the 5 Key constructors yield + provide + run cleanly.
 
 import { Effect, Layer } from "effect";
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -96,10 +95,6 @@ describe("deps — yieldable Key constructors", () => {
 	});
 
 	it("Two calls with the same name resolve to the same provider value", async () => {
-		// Each `Secret("same")` call constructs a fresh Service object,
-		// but they share the same `key` string ("Secret:same"), and
-		// Context lookup is key-string-based. Both yields read the same
-		// provided value.
 		const prog = Effect.gen(function* () {
 			const a = yield* Secret("same");
 			const b = yield* Secret("same");

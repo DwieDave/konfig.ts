@@ -1,14 +1,3 @@
-// High-level helpers for the common Workload shapes (web + cron).
-// Built only with the surface consumers need today — do not add
-// speculative options. The shape here drives the boilerplate that
-// module code avoids by reusing this.
-//
-// Shared label convention: every workload gets an `app` label that the
-// Service selects on and the Pod template carries.
-//
-// M9: the R-aggregating generics were dropped along with EnvVarsR /
-// VolumesR / PullSecretsR. Dep tracking now flows via Effect.gen
-// yielding the upstream `Secret(name)` / `ConfigMap(name)` etc. Keys.
 
 import type { Manifest, SecretRef } from "@konfig.ts/core";
 import { Manifest as M } from "@konfig.ts/core";
@@ -25,8 +14,6 @@ import type { ContainerInput } from "./container";
 import { Ingress, type IngressTLSInput, Service } from "./network";
 import type { Volume } from "./volume";
 import { CronJob, Deployment } from "./workload";
-
-// ---------- web (Deployment + Service [+ Ingress]) ----------
 
 interface WebInput {
 	readonly name: string;
@@ -60,12 +47,12 @@ export const web = (
 	readonly [K8sDeployment, K8sService] | readonly [K8sDeployment, K8sService, K8sIngress]
 > => {
 	const selectorLabels = { app: input.name };
-	const podLabels = { ...selectorLabels, ...(input.deployment.podLabels ?? {}) };
+	const podLabels = { ...selectorLabels, ...input.deployment.podLabels };
 
 	const deployment = Deployment.make({
 		name: input.name,
 		namespace: input.namespace,
-		labels: { ...selectorLabels, ...(input.labels ?? {}) },
+		labels: { ...selectorLabels, ...input.labels },
 		annotations: input.annotations,
 		replicas: input.deployment.replicas,
 		selector: { matchLabels: selectorLabels },
@@ -83,7 +70,7 @@ export const web = (
 	const service = Service.make({
 		name: input.name,
 		namespace: input.namespace,
-		labels: { ...selectorLabels, ...(input.labels ?? {}) },
+		labels: { ...selectorLabels, ...input.labels },
 		annotations: input.annotations,
 		selector: selectorLabels,
 		type: input.service.type ?? "ClusterIP",
@@ -99,8 +86,8 @@ export const web = (
 	const ingress = Ingress.make({
 		name: input.name,
 		namespace: input.namespace,
-		labels: { ...selectorLabels, ...(input.labels ?? {}) },
-		annotations: { ...(input.annotations ?? {}), ...(input.ingress.annotations ?? {}) },
+		labels: { ...selectorLabels, ...input.labels },
+		annotations: { ...input.annotations, ...input.ingress.annotations },
 		ingressClassName: input.ingress.ingressClassName,
 		rules: input.ingress.rules,
 		tls: input.ingress.tls,
@@ -112,8 +99,6 @@ export const web = (
 		}),
 	);
 };
-
-// ---------- cron (CronJob + ServiceAccount) ----------
 
 interface CronInput {
 	readonly name: string;
@@ -135,10 +120,6 @@ export const cron = (
 ): Manifest.Manifest<readonly [K8sServiceAccount, K8sCronJob]> => {
 	const selectorLabels = { app: input.name };
 
-	// The SA is private to this cron, so we build it inline (not via the
-	// identity helper) — its name is not promoted into the resulting
-	// Manifest's `P`. The CronJob's pod template uses
-	// `serviceAccountName: input.name` directly.
 	const sa: Manifest.Manifest<K8sServiceAccount> = M.make<K8sServiceAccount>(() =>
 		Effect.succeed({
 			apiVersion: "v1",
@@ -146,7 +127,7 @@ export const cron = (
 			metadata: {
 				name: input.name,
 				namespace: input.namespace,
-				labels: { ...selectorLabels, ...(input.labels ?? {}) },
+				labels: { ...selectorLabels, ...input.labels },
 				annotations: input.annotations,
 			},
 		}),
@@ -155,7 +136,7 @@ export const cron = (
 	const cronJob = CronJob.make({
 		name: input.name,
 		namespace: input.namespace,
-		labels: { ...selectorLabels, ...(input.labels ?? {}) },
+		labels: { ...selectorLabels, ...input.labels },
 		annotations: input.annotations,
 		schedule: input.schedule,
 		concurrencyPolicy: input.concurrencyPolicy,

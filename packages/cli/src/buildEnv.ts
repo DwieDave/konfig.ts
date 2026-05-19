@@ -1,5 +1,3 @@
-// Render an env's Applications to per-file YAML on disk. Used by
-// `konfig build`, `konfig validate`, and (read-only) `konfig diff`.
 
 import {
 	type AppOfAppsResult,
@@ -7,6 +5,7 @@ import {
 	serializeApplicationCR,
 } from "@konfig.ts/argocd";
 import {
+	coerce,
 	type AnyRenderError,
 	type Manifest as M,
 	parseYaml,
@@ -29,9 +28,13 @@ export class EnvLoadError extends Data.TaggedError("EnvLoadError")<{
 	readonly cause: unknown;
 }> {}
 
-// Resolve the env entry file's absolute path from the resolved config.
-const resolveEnvEntry = (cfg: ResolvedKonfigConfig, envName: string) =>
+interface _ResolveEnvEntryInput {
+	readonly cfg: ResolvedKonfigConfig;
+	readonly envName: string;
+}
+const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
 	Effect.gen(function* () {
+		const { cfg, envName } = input;
 		const path = yield* Path;
 		const fs = yield* FileSystem;
 
@@ -48,88 +51,76 @@ const resolveEnvEntry = (cfg: ResolvedKonfigConfig, envName: string) =>
 		return entry;
 	});
 
-// Dynamic-import the env file and run its default-exported Effect to get the
-// `AppOfAppsResult`. The env entry exports `default = Effect<AppOfApps...>`.
-const loadEnv = (entry: string) =>
+const _loadEnv = (entry: string) =>
 	Effect.gen(function* () {
 		const mod = yield* Effect.tryPromise({
 			try: () => import(entry),
 			catch: (cause) => new EnvLoadError({ entry, cause }),
 		});
-		const program = (mod as { default?: unknown }).default;
+		const program = coerce<{ default?: unknown }>(mod).default;
 		if (program === undefined) {
 			return yield* Effect.fail(new EnvLoadError({ entry, cause: "default export is missing" }));
 		}
-		// The env entry's default export is an Effect that yields an AppOfAppsResult.
-		const result = yield* program as Effect.Effect<AppOfAppsResult, AnyRenderError>;
+		const result = yield* coerce<Effect.Effect<AppOfAppsResult, AnyRenderError>>(program);
 		return result;
 	});
 
-// One file destined for disk — either a typed k8s resource, raw YAML
-// (from `Helm.release` / `embedYaml`), or an Application CR.
 interface OutputFile {
 	readonly path: string;
 	readonly content: string;
 }
 
-// Split a multi-doc RawYaml content into individual `<Kind>-<name>.yaml`
-// files. Each doc is parsed once to extract kind+name for the filename
-// (via `Yaml.filenameFor` so dots in names are sanitized identically to
-// the typed-resource path below).
-const splitRawYaml = (
-	content: string,
-	dir: string,
-	pathSep: (...parts: string[]) => string,
-): OutputFile[] => {
+interface _SplitRawYamlInput {
+	readonly content: string;
+	readonly dir: string;
+	readonly pathSep: (...parts: string[]) => string;
+}
+const _splitRawYaml = (input: _SplitRawYamlInput): OutputFile[] => {
+	const { content, dir, pathSep } = input;
 	const docs = content.split(/^---$/m);
 	const files: OutputFile[] = [];
 	for (const doc of docs) {
 		const trimmed = doc.trim();
 		if (trimmed.length === 0) continue;
-		const parsed = parseYaml(trimmed) as { kind?: string; metadata?: { name?: string } } | null;
+		const parsed = coerce<{ kind?: string; metadata?: { name?: string } } | null>(
+			parseYaml(trimmed),
+		);
 		if (parsed === null || typeof parsed !== "object") continue;
 		const kind = parsed.kind;
 		const name = parsed.metadata?.name;
 		if (typeof kind !== "string" || typeof name !== "string") continue;
-		// Re-emit through the stable serializer so the on-disk output follows
-		// the FR-2 key-order rules regardless of helm's output ordering.
 		files.push({
 			path: pathSep(dir, Yaml.filenameFor({ kind, metadata: { name } })),
-			content: Yaml.serialize(parsed),
+			content: Yaml.serialize({ value: parsed }),
 		});
 	}
 	return files;
 };
 
-// Render one manifest-tree value (possibly a tuple, possibly RawYaml,
-// possibly a single k8s resource) into one or more OutputFiles under
-// `appDir`. Walks the structure recursively because `combine` produces
-// `readonly [A1, A2]` tuples.
-const collectOutputs = (
-	value: unknown,
-	appDir: string,
-	pathJoin: (...parts: string[]) => string,
-): OutputFile[] => {
+interface _CollectOutputsInput {
+	readonly value: unknown;
+	readonly appDir: string;
+	readonly pathJoin: (...parts: string[]) => string;
+}
+const _collectOutputs = (input: _CollectOutputsInput): OutputFile[] => {
+	const { value, appDir, pathJoin } = input;
 	if (value === null || value === undefined) return [];
 
-	// RawYaml from Helm / embedYaml — may carry multiple docs in `content`.
 	if (
 		typeof value === "object" &&
 		value !== null &&
-		(value as { _tag?: unknown })._tag === "RawYaml"
+		coerce<{ _tag?: unknown }>(value)._tag === "RawYaml"
 	) {
-		const raw = value as { content: string };
-		return splitRawYaml(raw.content, appDir, pathJoin);
+		const raw = coerce<{ content: string }>(value);
+		return _splitRawYaml({ content: raw.content, dir: appDir, pathSep: pathJoin });
 	}
 
-	// Array (RawYaml[] from Helm.release, or readonly tuple from combine).
 	if (Array.isArray(value)) {
-		return value.flatMap((v) => collectOutputs(v, appDir, pathJoin));
+		return value.flatMap((v) => _collectOutputs({ value: v, appDir, pathJoin }));
 	}
 
-	// Typed k8s resource — must have kind + metadata.name.
 	if (typeof value === "object") {
-		const obj = value as { kind?: unknown; metadata?: { name?: unknown } };
+		const obj = coerce<{ kind?: unknown; metadata?: { name?: unknown } }>(value);
 		if (typeof obj.kind === "string" && typeof obj.metadata?.name === "string") {
 			return [
 				{
@@ -137,7 +128,7 @@ const collectOutputs = (
 						appDir,
 						Yaml.filenameFor({ kind: obj.kind, metadata: { name: obj.metadata.name } }),
 					),
-					content: Yaml.serialize(obj),
+					content: Yaml.serialize({ value: obj }),
 				},
 			];
 		}
@@ -152,15 +143,17 @@ export interface RenderedEnv {
 	readonly files: ReadonlyArray<OutputFile>;
 }
 
-// Render one env: load the entrypoint, evaluate it, walk the Application
-// tree, and return the list of files that need to be written. The
-// caller decides whether to write them (build) or compare against an
-// existing tree (diff) or just stop (validate).
-export const renderEnv = (cfg: ResolvedKonfigConfig, envName: string, ctx: RenderContext) =>
+export interface RenderEnvInput {
+	readonly cfg: ResolvedKonfigConfig;
+	readonly envName: string;
+	readonly ctx: RenderContext;
+}
+export const renderEnv = (input: RenderEnvInput) =>
 	Effect.gen(function* () {
+		const { cfg, envName, ctx } = input;
 		const path = yield* Path;
-		const entry = yield* resolveEnvEntry(cfg, envName);
-		const result = yield* loadEnv(entry);
+		const entry = yield* _resolveEnvEntry({ cfg, envName });
+		const result = yield* _loadEnv(entry);
 
 		const outDirAbs = path.join(
 			cfg.configDir,
@@ -173,27 +166,22 @@ export const renderEnv = (cfg: ResolvedKonfigConfig, envName: string, ctx: Rende
 
 		for (const app of result.apps) {
 			const appDir = path.join(outDirAbs, app.name);
-			// The app's manifests render in parallel via Effect.all. M9
-			// dropped the per-Manifest R/P; dep satisfaction is now enforced
-			// by Effect's R at the surrounding `runPromise` call, not by a
-			// type-level constraint on `render`.
 			type AnyManifest = M.Manifest<unknown>;
 			const rendered = yield* Effect.all(
-				app.manifests.map((m) => render(m as AnyManifest, ctx)),
+				app.manifests.map((m) => render({ manifest: coerce<AnyManifest>(m), ctx })),
 				{ concurrency: "unbounded" },
 			);
 			for (const value of rendered) {
-				files.push(...collectOutputs(value, appDir, path.join));
+				files.push(..._collectOutputs({ value, appDir, pathJoin: path.join }));
 			}
 
-			// Per FR-6.5, each Application gets one CR in `apps/`.
 			files.push({
 				path: path.join(appsDirAbs, applicationCRFilename(app)),
-				content: serializeApplicationCR(app, result.target, result.defaults),
+				content: serializeApplicationCR({ app, target: result.target, defaults: result.defaults }),
 			});
 		}
 
-		return { appsDirAbs, outDirAbs, files } as RenderedEnv;
+		return coerce<RenderedEnv>({ appsDirAbs, outDirAbs, files });
 	}).pipe(Effect.scoped);
 
 export class WriteEnvError extends Data.TaggedError("WriteEnvError")<{
@@ -201,8 +189,6 @@ export class WriteEnvError extends Data.TaggedError("WriteEnvError")<{
 	readonly cause: unknown;
 }> {}
 
-// Write `files` to disk, replacing any pre-existing `outDirAbs`. Returns
-// the list of paths written for logging.
 export const writeFiles = (
 	rendered: RenderedEnv,
 ): Effect.Effect<ReadonlyArray<string>, WriteEnvError, FileSystem | Path> =>
@@ -210,8 +196,6 @@ export const writeFiles = (
 		const fs = yield* FileSystem;
 		const path = yield* Path;
 
-		// Wipe the env tree for an idempotent build. Per FR-2.5 the layout is
-		// `<env>/<App>/<Kind>-<name>.yaml`, so removing the env root is safe.
 		const exists = yield* fs.exists(rendered.outDirAbs).pipe(Effect.orElseSucceed(() => false));
 		if (exists) {
 			yield* fs

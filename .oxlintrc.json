@@ -1,0 +1,37 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"jsPlugins": ["./packages/oxc/src/oxlint/index.ts"],
+	"ignorePatterns": [
+		"**/dist/**",
+		"**/node_modules/**",
+		"**/fixtures/**",
+		"**/*.tsbuildinfo",
+		"scripts/**",
+		"scratchpad/**"
+	],
+	"rules": {
+		"app/no-banned-type-assertions": "error",
+		"app/no-comments": "error",
+		"app/no-multiple-function-params": "error",
+		"app/no-switch": "error",
+		"app/no-sync-schema-apis": "error",
+		"app/no-type-assertion": "warn",
+		"app/private-function-prefix": "error"
+	},
+	"overrides": [
+		{
+			"files": ["packages/oxc/src/**/*.ts"],
+			"rules": {
+				"app/no-type-assertion": "off",
+				"app/no-multiple-function-params": "off"
+			}
+		},
+		{
+			"files": ["**/*.test.ts"],
+			"rules": {
+				"app/no-type-assertion": "off",
+				"app/no-multiple-function-params": "off"
+			}
+		}
+	]
+}

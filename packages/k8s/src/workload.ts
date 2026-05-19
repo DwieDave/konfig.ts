@@ -1,10 +1,4 @@
-// Workload constructors (Deployment, StatefulSet, Job, CronJob).
-// M9 dropped the `const Containers/Vols/Pull` generics and the
-// `PodSpecR<PodSpecInput<...>>` R aggregation — dep tracking now flows
-// via `yield* Deps.Secret(name)` etc. in the surrounding Effect.gen,
-// not via phantom brands on the input types.
-
-import { Manifest } from "@konfig.ts/core";
+import { coerce, Manifest } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	CronJob as K8sCronJob,
@@ -14,7 +8,6 @@ import type {
 } from "./.generated/k8s-types";
 import type { PodSpecInput } from "./container";
 
-// Shared metadata shape used by every workload constructor.
 interface WorkloadMeta {
 	readonly name: string;
 	readonly namespace: string;
@@ -32,8 +25,6 @@ interface SelectorAndTemplate {
 		readonly spec: PodSpecInput;
 	};
 }
-
-// ---------- Deployment ----------
 
 export interface DeploymentInput extends WorkloadMeta, SelectorAndTemplate {
 	readonly replicas?: number;
@@ -57,8 +48,8 @@ export const Deployment = {
 			spec: {
 				replicas: input.replicas,
 				selector: input.selector,
-				template: input.template as never,
-				strategy: input.strategy as never,
+				template: coerce(input.template),
+				strategy: coerce(input.strategy),
 				revisionHistoryLimit: input.revisionHistoryLimit,
 				progressDeadlineSeconds: input.progressDeadlineSeconds,
 				minReadySeconds: input.minReadySeconds,
@@ -67,8 +58,6 @@ export const Deployment = {
 		return Manifest.make<K8sDeployment>(() => Effect.succeed(resource));
 	},
 };
-
-// ---------- StatefulSet ----------
 
 export interface StatefulSetInput extends WorkloadMeta, SelectorAndTemplate {
 	readonly replicas?: number;
@@ -92,18 +81,16 @@ export const StatefulSet = {
 			spec: {
 				replicas: input.replicas,
 				selector: input.selector,
-				template: input.template as never,
+				template: coerce(input.template),
 				serviceName: input.serviceName,
-				volumeClaimTemplates: input.volumeClaimTemplates as never,
+				volumeClaimTemplates: coerce(input.volumeClaimTemplates),
 				podManagementPolicy: input.podManagementPolicy,
-				updateStrategy: input.updateStrategy as never,
+				updateStrategy: coerce(input.updateStrategy),
 			},
 		};
 		return Manifest.make<K8sStatefulSet>(() => Effect.succeed(resource));
 	},
 };
-
-// ---------- Job ----------
 
 export interface JobInput extends WorkloadMeta {
 	readonly parallelism?: number;
@@ -139,14 +126,12 @@ export const Job = {
 				activeDeadlineSeconds: input.activeDeadlineSeconds,
 				ttlSecondsAfterFinished: input.ttlSecondsAfterFinished,
 				suspend: input.suspend,
-				template: input.template as never,
+				template: coerce(input.template),
 			},
 		};
 		return Manifest.make<K8sJob>(() => Effect.succeed(resource));
 	},
 };
-
-// ---------- CronJob ----------
 
 export interface CronJobInput extends WorkloadMeta {
 	readonly schedule: string;
@@ -193,7 +178,7 @@ export const CronJob = {
 				failedJobsHistoryLimit: input.failedJobsHistoryLimit,
 				startingDeadlineSeconds: input.startingDeadlineSeconds,
 				suspend: input.suspend,
-				jobTemplate: input.jobTemplate as never,
+				jobTemplate: coerce(input.jobTemplate),
 			},
 		};
 		return Manifest.make<K8sCronJob>(() => Effect.succeed(resource));

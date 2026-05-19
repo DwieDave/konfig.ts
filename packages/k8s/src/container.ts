@@ -1,17 +1,8 @@
-// Container/PodSpec input shapes. M9 dropped the R-aggregating
-// `EnvVarsR`/`VolumesR`/`PullSecretsR`/`PodSpecR` — dep tracking now
-// flows via Effect.gen yielding the upstream Key (`Secret(name)`,
-// `ConfigMap(name)`, etc.) BEFORE constructing the env/volume/pull
-// entries. The constructed entries here carry no phantom brand;
-// they're plain records matching `kubernetes-types`.
 
 import type { SecretRef, ServiceAccountRef } from "@konfig.ts/core";
 import type { EnvVar } from "./env";
 import type { Volume } from "./volume";
 
-// Container input — typed FR-4.4 fields (env), loose for the rest.
-// Everything not enumerated here (resources, probes, lifecycle, ports,
-// args, command, etc.) passes through verbatim to the rendered output.
 export interface ContainerInput {
 	readonly name: string;
 	readonly image: string;
@@ -41,8 +32,6 @@ export interface ContainerInput {
 	readonly stdin?: boolean;
 }
 
-// Pod-spec input — typed containers + volumes + imagePullSecrets +
-// serviceAccountName. Everything else passes through.
 export interface PodSpecInput {
 	readonly containers: ReadonlyArray<ContainerInput>;
 	readonly initContainers?: ReadonlyArray<ContainerInput>;
@@ -63,8 +52,6 @@ export interface PodSpecInput {
 	readonly priorityClassName?: string;
 }
 
-// Typed image-pull secret helper. Caller must obtain the `SecretRef<N>`
-// via `yield* Secret(name)` upstream.
 export const imagePullSecret = (ref: SecretRef<string>): { readonly name: SecretRef<string> } => ({
 	name: ref,
 });
