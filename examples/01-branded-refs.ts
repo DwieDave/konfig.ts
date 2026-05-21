@@ -1,5 +1,5 @@
 
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { RenderContext, Yaml } from "@konfig.ts/core";
 import { Secret, secretEnv, valueEnv, Workload } from "@konfig.ts/k8s";
 import { Effect } from "effect";
@@ -45,9 +45,8 @@ const program = Effect.gen(function* () {
 	const secret = yield* dbCreds.render(ctx);
 	const [deployment, service] = yield* api.render(ctx);
 	for (const r of [secret, deployment, service]) {
-		process.stdout.write(Yaml.serialize({ value: r }));
-		process.stdout.write("---\n");
+		yield* Effect.log(`${Yaml.serialize({ value: r })}---`);
 	}
 });
 
-NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(NodeContext.layer)));
+NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));

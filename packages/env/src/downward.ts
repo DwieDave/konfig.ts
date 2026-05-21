@@ -1,0 +1,42 @@
+import { Config } from "effect";
+import {
+	type EnvClaim,
+	type EntryMarker,
+	type HasEnvClaims,
+	_makeEntry,
+} from "./entry";
+
+export interface DownwardEntry<EnvName extends string>
+	extends Config.Config<string>,
+		EntryMarker<"Downward">,
+		HasEnvClaims {
+	readonly envName: EnvName;
+	readonly fieldPath: string;
+}
+
+export interface DefineDownwardInput<EnvName extends string> {
+	readonly envName: EnvName;
+	readonly fieldPath: string;
+}
+
+export const defineDownward = <const EnvName extends string>(
+	input: DefineDownwardInput<EnvName>,
+): DownwardEntry<EnvName> => {
+	const parser = Config.string(input.envName);
+
+	const envClaims: ReadonlyArray<EnvClaim> = [
+		{ envName: input.envName, label: `Downward(${input.envName})` },
+	];
+
+	return _makeEntry({
+		config: parser,
+		metadata: {
+			_kind: "Downward" as const,
+			envName: input.envName,
+			fieldPath: input.fieldPath,
+			envClaims,
+		},
+	});
+};
+
+export type AnyDownwardEntry = DownwardEntry<string>;

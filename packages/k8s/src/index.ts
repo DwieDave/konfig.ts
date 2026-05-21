@@ -17,13 +17,38 @@ export {
 	Namespace,
 	type NamespaceInput,
 	type NamespaceManifest,
-	Secret,
 	type SecretInput,
 	type SecretManifest,
 	ServiceAccount,
 	type ServiceAccountInput,
 	type ServiceAccountManifest,
 } from "./identity";
+import { Secret as _SecretIdentity } from "./identity";
+import { bindSecret } from "./secretBind";
+import { bindEnvironment } from "./environmentBind";
+export const Secret = { ..._SecretIdentity, bind: bindSecret };
+export const Environment = { bind: bindEnvironment };
+export type {
+	BindSecretInput,
+	DeclaredSecret,
+} from "./secretBind";
+export type {
+	BindEnvironmentInput,
+	DeclaredDownward,
+	DeclaredEnvironment,
+	DeclaredLiteral,
+	DeclaredMember,
+	SecretMemberOptions,
+	SecretMemberOptionsFor,
+	SecretMembersOpts,
+} from "./environmentBind";
+export {
+	type BackendEmitInput,
+	BackendSourceMissing,
+	type SecretBackend,
+} from "./backend";
+export { NativeSecret, type NativeSecretOptions } from "./nativeSecret";
+export { hashSecretValues, type HashSecretValuesInput } from "./podHash";
 export {
 	Ingress,
 	type IngressInput,

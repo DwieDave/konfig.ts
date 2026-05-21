@@ -4,22 +4,22 @@
 	"description": "Kubernetes resource builders (workloads, network, identity, policy, volume, env) for konfig.ts.",
 	"license": "MIT",
 	"author": "David Stahl-Gruber",
-	"homepage": "https://github.com/PLACEHOLDER/konfig.ts#readme",
-	"bugs": "https://github.com/PLACEHOLDER/konfig.ts/issues",
+	"homepage": "https://github.com/DwieDave/konfig.ts#readme",
+	"bugs": "https://github.com/DwieDave/konfig.ts/issues",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/PLACEHOLDER/konfig.ts.git",
+		"url": "git+https://github.com/DwieDave/konfig.ts.git",
 		"directory": "packages/k8s"
 	},
 	"keywords": ["kubernetes", "k8s", "config", "effect", "typescript"],
 	"type": "module",
 	"sideEffects": false,
 	"main": "./dist/index.mjs",
-	"types": "./dist/index.d.mts",
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"source": "./src/index.ts",
-			"types": "./dist/index.d.mts",
+			"types": "./dist/index.d.ts",
 			"import": "./dist/index.mjs"
 		}
 	},
@@ -31,13 +31,13 @@
 		"access": "public",
 		"exports": {
 			".": {
-				"types": "./dist/index.d.mts",
+				"types": "./dist/index.d.ts",
 				"import": "./dist/index.mjs"
 			}
 		}
 	},
 	"scripts": {
-		"build": "tsdown ./src/index.ts --format=esm --target=node20 --dts --sourcemap --clean",
+		"build": "tsdown ./src/index.ts --format=esm --target=node20 --sourcemap --clean --no-dts && tsc -p tsconfig.build.json",
 		"check": "tsc -p tsconfig.check.json --noEmit",
 		"test": "bunx vitest run $(rg --files src -g '*.test.ts')",
 		"lint": "oxlint",
@@ -46,12 +46,14 @@
 	},
 	"dependencies": {
 		"@konfig.ts/core": "workspace:*",
+		"@konfig.ts/env": "workspace:*",
 		"kubernetes-types": "^1.30.0"
 	},
 	"peerDependencies": {
 		"effect": "4.0.0-beta.52"
 	},
 	"devDependencies": {
+		"@effect/platform-node": "catalog:",
 		"@effect/vitest": "catalog:",
 		"@types/bun": "catalog:",
 		"effect": "catalog:",

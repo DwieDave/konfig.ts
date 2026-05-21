@@ -5,6 +5,6 @@
 		"rootDir": "./src",
 		"customConditions": ["source"]
 	},
-	"include": ["./src/**/*.ts"],
+	"include": ["./src/**/*.ts", "./src/.generated/**/*.ts"],
 	"exclude": ["./node_modules/**/*", "./dist/**/*", "./src/**/*.test.ts"]
 }

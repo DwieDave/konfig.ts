@@ -62,9 +62,12 @@ const broken = Effect.gen(function* () {
 // @ts-expect-error  Need<"Secret", "ghcr-pull"> is not assignable to never
 AppOfApps.entrypoint(broken);
 
-Effect.runPromise(checked).then((result) => {
-	process.stdout.write(`AppOfApps "${result.name}" — ${result.apps.length} apps\n`);
+const report = Effect.gen(function* () {
+	const result = yield* checked;
+	yield* Effect.log(`AppOfApps "${result.name}" — ${result.apps.length} apps`);
 	for (const a of result.apps) {
-		process.stdout.write(`  • ${a.namespace}/${a.name}\n`);
+		yield* Effect.log(`  • ${a.namespace}/${a.name}`);
 	}
 });
+
+Effect.runPromise(report);

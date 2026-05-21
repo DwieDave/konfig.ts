@@ -4,11 +4,11 @@
 	"description": "konfig CLI — build, validate, diff, and set commands for konfig.ts configurations.",
 	"license": "MIT",
 	"author": "David Stahl-Gruber",
-	"homepage": "https://github.com/PLACEHOLDER/konfig.ts#readme",
-	"bugs": "https://github.com/PLACEHOLDER/konfig.ts/issues",
+	"homepage": "https://github.com/DwieDave/konfig.ts#readme",
+	"bugs": "https://github.com/DwieDave/konfig.ts/issues",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/PLACEHOLDER/konfig.ts.git",
+		"url": "git+https://github.com/DwieDave/konfig.ts.git",
 		"directory": "packages/cli"
 	},
 	"keywords": ["kubernetes", "k8s", "argocd", "cli", "konfig"],
@@ -24,7 +24,7 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "tsdown ./src/main.ts --format=esm --target=node20 --sourcemap --clean && chmod +x dist/main.mjs",
+		"build": "tsdown ./src/main.ts --format=esm --target=node20 --sourcemap --clean --no-dts && chmod +x dist/main.mjs",
 		"check": "tsc -p tsconfig.check.json --noEmit",
 		"lint": "oxlint",
 		"lint:apply": "oxlint --fix",

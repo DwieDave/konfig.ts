@@ -7,12 +7,18 @@
 		"01": "bun run 01-branded-refs.ts",
 		"02": "bun run 02-app-of-apps-deps.ts",
 		"03": "bun run 03-images-config.ts",
+		"04": "bun run 04-environment.ts",
+		"05": "bun run 05-env-bound.ts",
+		"06": "bun run 06-external-secrets.ts",
+		"07": "bun run 07-restart-on-rotation.ts",
 		"check": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
 		"@effect/platform-node": "catalog:",
 		"@konfig.ts/argocd": "workspace:*",
 		"@konfig.ts/core": "workspace:*",
+		"@konfig.ts/env": "workspace:*",
+		"@konfig.ts/external-secrets": "workspace:*",
 		"@konfig.ts/k8s": "workspace:*",
 		"effect": "catalog:"
 	},

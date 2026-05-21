@@ -1,4 +1,4 @@
-import { Context, Layer } from "effect";
+import { Context, Layer, type Redacted } from "effect";
 import { brand } from "./_cast";
 
 
@@ -34,6 +34,15 @@ export const Secret = <N extends string>(
 	name: N,
 ): Context.Service<Need<"Secret", N>, SecretRef<N>> =>
 	Context.Service<Need<"Secret", N>, SecretRef<N>>(`Secret:${name}`);
+
+export type SecretValuesRecord<K extends string> = {
+	readonly [P in K]: Redacted.Redacted<string>;
+};
+
+export const SecretValues = <N extends string, K extends string = string>(
+	name: N,
+): Context.Service<Need<"SecretValues", N>, SecretValuesRecord<K>> =>
+	Context.Service<Need<"SecretValues", N>, SecretValuesRecord<K>>(`SecretValues:${name}`);
 
 export const ConfigMap = <N extends string>(
 	name: N,
