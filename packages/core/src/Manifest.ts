@@ -26,11 +26,18 @@ const variance: Variance<never> = {
 	_A: (_: never) => _,
 };
 
-export const make = <A>(
-	run: (ctx: RenderContext) => Effect.Effect<A, AnyRenderError, RenderServices>,
-): Manifest<A> => ({
+export type MakeRun<A> = (
+	ctx: RenderContext,
+) => A | Effect.Effect<A, AnyRenderError, RenderServices>;
+
+export const make = <A>(run: MakeRun<A>): Manifest<A> => ({
 	[ManifestTypeId]: coerce<Variance<A>>(variance),
-	render: run,
+	render: (ctx) => {
+		const result = run(ctx);
+		return Effect.isEffect(result)
+			? (result as Effect.Effect<A, AnyRenderError, RenderServices>)
+			: Effect.succeed(result);
+	},
 });
 
 export interface CombineInput<A1, A2> {
