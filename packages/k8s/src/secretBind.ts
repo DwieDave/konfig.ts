@@ -35,6 +35,14 @@ export interface BindSecretInput<
 	readonly source?: SecretSource<K, Manifest.RenderServices>;
 	readonly labels?: Readonly<Record<string, string>>;
 	readonly annotations?: Readonly<Record<string, string>>;
+	/**
+	 * Override the contract's baked-in `namespace` for this bind. Useful
+	 * when the same `defineSecret` declaration is consumed across multiple
+	 * k8s namespaces (e.g. prod / staging / local of the same workload)
+	 * — the runtime read is namespace-independent, but each binding emits
+	 * its manifest into a different namespace.
+	 */
+	readonly namespace?: string;
 }
 
 export const bindSecret = <
@@ -45,6 +53,7 @@ export const bindSecret = <
 	input: BindSecretInput<N, K, E>,
 ): DeclaredSecret<N, K> => {
 	const { secret } = input;
+	const namespace = input.namespace ?? secret.namespace;
 	const ref = SecretRefValue.of(secret.name);
 	const envVars: EnvVar[] = secret.keys.map((key: K) =>
 		secretEnv({ name: secret.env[key], ref, key }),
@@ -56,7 +65,7 @@ export const bindSecret = <
 			? undefined
 			: input.backend.emit({
 					name: secret.name,
-					namespace: secret.namespace,
+					namespace,
 					keys: secret.keys,
 					labels: input.labels,
 					annotations: input.annotations,
@@ -66,7 +75,7 @@ export const bindSecret = <
 	const out: DeclaredSecret<N, K> = {
 		ref,
 		name: secret.name,
-		namespace: secret.namespace,
+		namespace,
 		keys: secret.keys,
 		envVars,
 		manifest,

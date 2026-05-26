@@ -78,4 +78,32 @@ describe("Environment.bind", () => {
 		expect(bound.envVars).toHaveLength(2);
 		expect(bound.members.db.ref).toBe("db-creds");
 	});
+
+	it("namespace override at bind time wins over the contract's declared namespace", () => {
+		const bound = Environment.bind({ env: apiEnv, namespace: "staging" });
+		expect(bound.members.db.namespace).toBe("staging");
+		expect(bound.members.session.namespace).toBe("staging");
+		// envVars are namespace-independent — they only carry the Secret name + key.
+		expect(bound.envVars.map((e) => e.name).sort()).toEqual([
+			"DATABASE_PASSWORD",
+			"DATABASE_URL",
+			"POD_NAME",
+			"PORT",
+			"SESSION_KEY",
+		]);
+	});
+});
+
+describe("Secret.bind namespace override", () => {
+	it("overrides the contract namespace for the manifest binding", () => {
+		const bound = Secret.bind({ secret: dbCreds, namespace: "staging" });
+		expect(bound.namespace).toBe("staging");
+		// envVars carry the secret name + key only — namespace is invisible.
+		expect(bound.envVars).toHaveLength(2);
+	});
+
+	it("falls back to the contract namespace when no override is given", () => {
+		const bound = Secret.bind({ secret: dbCreds });
+		expect(bound.namespace).toBe("prod");
+	});
 });

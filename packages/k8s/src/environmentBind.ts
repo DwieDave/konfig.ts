@@ -72,6 +72,12 @@ export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
 export interface BindEnvironmentInput<M extends Readonly<Record<string, EnvMember>>> {
 	readonly env: Environment<M>;
 	readonly secrets?: SecretMembersOpts<M>;
+	/**
+	 * Override every secret member's namespace for this bind. Useful when
+	 * the bundle is consumed across multiple k8s namespaces (e.g. prod /
+	 * staging / local) without redeclaring each contract.
+	 */
+	readonly namespace?: string;
 }
 
 interface _BindLiteralInput {
@@ -115,6 +121,7 @@ export const bindEnvironment = <const M extends Readonly<Record<string, EnvMembe
 				source: memberOpts?.source,
 				labels: memberOpts?.labels,
 				annotations: memberOpts?.annotations,
+				namespace: input.namespace,
 			});
 			declared[memberKey] = d;
 			envVars.push(...d.envVars);
