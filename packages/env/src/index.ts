@@ -38,3 +38,4 @@ export {
 	SecretSource,
 	SecretSourceError,
 } from "./source";
+export { type EnvironmentShape, environmentLayer } from "./layer";
