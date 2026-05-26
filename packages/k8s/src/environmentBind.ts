@@ -69,9 +69,29 @@ export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
 		: never]?: SecretMemberOptionsFor<M[K]>;
 };
 
+/**
+ * Per-literal value override for bind time. Keyed by member name, typed
+ * to each literal's declared `T`. Useful when a `defineLiteral` is a
+ * runtime contract (carries a `schema: Config.string(envName)` for app
+ * code to yield) but the manifest's emitted value differs per env —
+ * e.g. `CLIENT_URL`, `S3_ENDPOINT`, host/URL literals.
+ */
+export type LiteralMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
+	readonly [K in keyof M as M[K] extends LiteralEntry<infer _EnvName, infer _T>
+		? K
+		: never]?: M[K] extends LiteralEntry<infer _EnvName, infer T> ? T : never;
+};
+
 export interface BindEnvironmentInput<M extends Readonly<Record<string, EnvMember>>> {
 	readonly env: Environment<M>;
 	readonly secrets?: SecretMembersOpts<M>;
+	/**
+	 * Per-literal value override for the manifest's emitted env var. The
+	 * runtime read (via `entry.schema`, if provided) is unchanged —
+	 * overrides only affect what the konfig module writes into the
+	 * Deployment's `env` array.
+	 */
+	readonly literals?: LiteralMembersOpts<M>;
 	/**
 	 * Override every secret member's namespace for this bind. Useful when
 	 * the bundle is consumed across multiple k8s namespaces (e.g. prod /
@@ -82,12 +102,20 @@ export interface BindEnvironmentInput<M extends Readonly<Record<string, EnvMembe
 
 interface _BindLiteralInput {
 	readonly entry: LiteralEntry<string, unknown>;
+	readonly override?: unknown;
 }
-const _bindLiteral = (input: _BindLiteralInput): DeclaredLiteral<string, unknown> => ({
-	envName: input.entry.envName,
-	value: input.entry.value,
-	envVar: { name: input.entry.envName, value: input.entry.serialized },
-});
+const _bindLiteral = (input: _BindLiteralInput): DeclaredLiteral<string, unknown> => {
+	const hasOverride = input.override !== undefined;
+	const value = hasOverride ? input.override : input.entry.value;
+	const serialized = hasOverride
+		? input.entry.serialize(input.override)
+		: input.entry.serialized;
+	return {
+		envName: input.entry.envName,
+		value,
+		envVar: { name: input.entry.envName, value: serialized },
+	};
+};
 
 interface _BindDownwardInput {
 	readonly entry: DownwardEntry<string>;
@@ -131,7 +159,8 @@ export const bindEnvironment = <const M extends Readonly<Record<string, EnvMembe
 					coerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(d.layer),
 				);
 		} else if (entry._kind === "Literal") {
-			const d = _bindLiteral({ entry });
+			const literalOverride = coerce<Record<string, unknown> | undefined>(input.literals)?.[memberKey];
+			const d = _bindLiteral({ entry, override: literalOverride });
 			declared[memberKey] = d;
 			envVars.push(d.envVar);
 		} else {

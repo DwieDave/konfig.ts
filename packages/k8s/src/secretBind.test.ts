@@ -107,3 +107,51 @@ describe("Secret.bind namespace override", () => {
 		expect(bound.namespace).toBe("prod");
 	});
 });
+
+describe("Environment.bind literal value overrides", () => {
+	const clientUrl = defineLiteral({ envName: "CLIENT_URL", value: "" });
+	const replicas = defineLiteral({ envName: "REPLICAS", value: 0 });
+	const env = defineEnvironment({ db: dbCreds, clientUrl, replicas });
+
+	it("a missing override falls back to the declared value", () => {
+		const bound = Environment.bind({ env });
+		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
+		expect(byName.get("CLIENT_URL")?.value).toBe("");
+		expect(byName.get("REPLICAS")?.value).toBe("0");
+	});
+
+	it("a provided override replaces the manifest's emitted env var", () => {
+		const bound = Environment.bind({
+			env,
+			literals: { clientUrl: "https://api.example.com", replicas: 3 },
+		});
+		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
+		expect(byName.get("CLIENT_URL")?.value).toBe("https://api.example.com");
+		expect(byName.get("REPLICAS")?.value).toBe("3");
+	});
+
+	it("the override updates the declared member's value field too", () => {
+		const bound = Environment.bind({ env, literals: { replicas: 3 } });
+		expect(bound.members.replicas.value).toBe(3);
+		expect(bound.members.clientUrl.value).toBe("");
+	});
+
+	it("partial overrides only touch the named members", () => {
+		const bound = Environment.bind({ env, literals: { clientUrl: "https://x" } });
+		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
+		expect(byName.get("CLIENT_URL")?.value).toBe("https://x");
+		expect(byName.get("REPLICAS")?.value).toBe("0");
+	});
+
+	it("custom serialize fn is reused for overrides", () => {
+		const lit = defineLiteral({
+			envName: "LIST",
+			value: ["a"] as ReadonlyArray<string>,
+			serialize: (xs: ReadonlyArray<string>) => xs.join(","),
+		});
+		const e = defineEnvironment({ lit });
+		const bound = Environment.bind({ env: e, literals: { lit: ["a", "b", "c"] } });
+		const entry = bound.envVars.find((v) => v.name === "LIST");
+		expect(entry?.value).toBe("a,b,c");
+	});
+});
