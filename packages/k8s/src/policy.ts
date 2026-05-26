@@ -1,4 +1,4 @@
-import { Manifest } from "@konfig.ts/core";
+import { coerce, Manifest } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	ClusterRole as K8sClusterRole,
@@ -9,6 +9,7 @@ import type {
 	Role as K8sRole,
 	RoleBinding as K8sRoleBinding,
 } from "./.generated/k8s-types";
+import type { PersistentVolumeSpec as K8sPersistentVolumeSpec } from "kubernetes-types/core/v1";
 
 interface NamespacedMeta {
 	readonly name: string;
@@ -23,8 +24,47 @@ interface ClusterMeta {
 	readonly annotations?: Readonly<Record<string, string>>;
 }
 
+/**
+ * Standard k8s PV access modes. Constrained to the four documented
+ * values so a typo (`"ReadWriteonce"`) is a compile-time error.
+ */
+export type PersistentVolumeAccessMode =
+	| "ReadWriteOnce"
+	| "ReadOnlyMany"
+	| "ReadWriteMany"
+	| "ReadWriteOncePod";
+
+export type PersistentVolumeReclaimPolicy = "Retain" | "Recycle" | "Delete";
+
+export type PersistentVolumeMode = "Filesystem" | "Block";
+
+/**
+ * Strict input shape for a `PersistentVolume.spec`. Upstream
+ * `kubernetes-types` types every field as optional (because the
+ * OpenAPI generator emits the entire union), which makes invalid
+ * specs (no capacity, no accessModes, no volume source) compile.
+ * The fields the kube-apiserver actually requires are required here.
+ *
+ * Volume-source fields (`hostPath`, `csi`, `nfs`, `local`, etc.) are
+ * inherited from the upstream `PersistentVolumeSpec` via `Omit` so
+ * users can use whichever source they need. "At least one source"
+ * isn't enforced statically (TS unions over 20+ variants would be
+ * unwieldy) — the kube-apiserver rejects a spec with no source.
+ */
+export interface PersistentVolumeSpecInput
+	extends Omit<
+		K8sPersistentVolumeSpec,
+		"capacity" | "accessModes" | "persistentVolumeReclaimPolicy" | "volumeMode" | "claimRef"
+	> {
+	readonly capacity: { readonly storage: string };
+	readonly accessModes: ReadonlyArray<PersistentVolumeAccessMode>;
+	readonly persistentVolumeReclaimPolicy?: PersistentVolumeReclaimPolicy;
+	readonly volumeMode?: PersistentVolumeMode;
+	readonly claimRef?: { readonly namespace: string; readonly name: string };
+}
+
 export interface PersistentVolumeInput extends ClusterMeta {
-	readonly spec: K8sPersistentVolume["spec"];
+	readonly spec: PersistentVolumeSpecInput;
 }
 
 export const PersistentVolume = {
@@ -38,13 +78,27 @@ export const PersistentVolume = {
 					labels: input.labels,
 					annotations: input.annotations,
 				},
-				spec: input.spec,
+				spec: coerce<K8sPersistentVolume["spec"]>(input.spec),
 			}),
 		),
 };
 
+/**
+ * Strict input shape for a `PersistentVolumeClaim.spec`. Same
+ * rationale as `PersistentVolumeSpecInput` — accessModes + a storage
+ * request are the fields the apiserver requires.
+ */
+export interface PersistentVolumeClaimSpecInput {
+	readonly accessModes: ReadonlyArray<PersistentVolumeAccessMode>;
+	readonly resources: { readonly requests: { readonly storage: string } };
+	readonly storageClassName?: string;
+	readonly volumeMode?: PersistentVolumeMode;
+	readonly volumeName?: string;
+	readonly selector?: { readonly matchLabels?: Readonly<Record<string, string>> };
+}
+
 export interface PersistentVolumeClaimInput extends NamespacedMeta {
-	readonly spec: K8sPersistentVolumeClaim["spec"];
+	readonly spec: PersistentVolumeClaimSpecInput;
 }
 
 export const PersistentVolumeClaim = {
@@ -59,7 +113,7 @@ export const PersistentVolumeClaim = {
 					labels: input.labels,
 					annotations: input.annotations,
 				},
-				spec: input.spec,
+				spec: coerce<K8sPersistentVolumeClaim["spec"]>(input.spec),
 			}),
 		),
 };

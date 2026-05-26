@@ -7,16 +7,22 @@ import type {
 	ServicePort as K8sServicePort,
 } from "./.generated/k8s-types";
 
+/**
+ * Strict input for a `Service`. `selector` and `ports` are required:
+ * a Service with no selector has no endpoints, and one with no ports
+ * is meaningless. ServicePort needs at minimum a `port`; the upstream
+ * `K8sServicePort` only marks `port` as required — names/protocol
+ * defaults match kube-apiserver behaviour.
+ */
 export interface ServiceInput {
 	readonly name: string;
 	readonly namespace: string;
 	readonly labels?: Readonly<Record<string, string>>;
 	readonly annotations?: Readonly<Record<string, string>>;
-	readonly selector?: Readonly<Record<string, string>>;
-	readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer" | "ExternalName";
-	readonly ports?: ReadonlyArray<K8sServicePort>;
+	readonly selector: Readonly<Record<string, string>>;
+	readonly ports: ReadonlyArray<K8sServicePort>;
+	readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer";
 	readonly clusterIP?: string;
-	readonly externalName?: string;
 	readonly sessionAffinity?: string;
 	readonly publishNotReadyAddresses?: boolean;
 	readonly externalTrafficPolicy?: string;
@@ -39,7 +45,6 @@ export const Service = {
 				type: input.type,
 				ports: coerce(input.ports),
 				clusterIP: input.clusterIP,
-				externalName: input.externalName,
 				sessionAffinity: input.sessionAffinity,
 				publishNotReadyAddresses: input.publishNotReadyAddresses,
 				externalTrafficPolicy: input.externalTrafficPolicy,
