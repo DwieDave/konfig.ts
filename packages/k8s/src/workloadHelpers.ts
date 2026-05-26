@@ -6,6 +6,7 @@ import type {
 	CronJob as K8sCronJob,
 	Deployment as K8sDeployment,
 	Ingress as K8sIngress,
+	IngressRule as K8sIngressRule,
 	Service as K8sService,
 	ServiceAccount as K8sServiceAccount,
 	ServicePort as K8sServicePort,
@@ -35,7 +36,7 @@ interface WebInput {
 	};
 	readonly ingress?: {
 		readonly ingressClassName?: string;
-		readonly rules?: ReadonlyArray<unknown>;
+		readonly rules?: ReadonlyArray<K8sIngressRule>;
 		readonly tls?: ReadonlyArray<IngressTLSInput>;
 		readonly annotations?: Readonly<Record<string, string>>;
 	};

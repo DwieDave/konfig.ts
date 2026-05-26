@@ -2,10 +2,12 @@ import { coerce, Manifest, type SecretRef } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	Ingress as K8sIngress,
+	IngressRule as K8sIngressRule,
 	IngressTLS as K8sIngressTLS,
 	Service as K8sService,
 	ServicePort as K8sServicePort,
 } from "./.generated/k8s-types";
+import type { IngressBackend as K8sIngressBackend } from "kubernetes-types/networking/v1";
 
 /**
  * Strict input for a `Service`. `selector` and `ports` are required:
@@ -66,9 +68,9 @@ export interface IngressInput {
 	readonly labels?: Readonly<Record<string, string>>;
 	readonly annotations?: Readonly<Record<string, string>>;
 	readonly ingressClassName?: string;
-	readonly rules?: ReadonlyArray<unknown>;
+	readonly rules?: ReadonlyArray<K8sIngressRule>;
 	readonly tls?: ReadonlyArray<IngressTLSInput>;
-	readonly defaultBackend?: unknown;
+	readonly defaultBackend?: K8sIngressBackend;
 }
 
 export const Ingress = {
