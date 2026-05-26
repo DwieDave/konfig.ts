@@ -68,7 +68,7 @@ describe("defineSecret", () => {
 
 	it.effect("missing env var surfaces as ConfigError", () =>
 		Effect.gen(function* () {
-			const r = yield* Effect.exit(dbCreds.asEffect());
+			const r = yield* Effect.exit(dbCreds);
 			expect(r._tag).toBe("Failure");
 		}).pipe(
 			Effect.provide(
