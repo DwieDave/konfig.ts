@@ -1,5 +1,6 @@
 import { coerce, type Manifest, type RenderError } from "@konfig.ts/core";
 import type {
+	AnyEnvironment,
 	DownwardEntry,
 	EnvMember,
 	Environment,
@@ -24,11 +25,14 @@ export interface DeclaredDownward<EnvName extends string> {
 	readonly envVar: EnvVar;
 }
 
-export type DeclaredMember<A extends EnvMember> = A extends SecretEntry<
-	infer N,
-	infer K,
-	infer _E
->
+/**
+ * Per-member declared shape produced by `Environment.bind`. Mirrors the
+ * structure of the bundle: secrets give `DeclaredSecret`, literals
+ * `DeclaredLiteral`, downwards `DeclaredDownward`, and nested
+ * `Environment` members give a `members` sub-record with the same
+ * recursive shape.
+ */
+export type DeclaredMember<A extends EnvMember> = A extends SecretEntry<infer N, infer K, infer _E>
 	? [N, K] extends [string, string]
 		? DeclaredSecret<N, K>
 		: never
@@ -40,7 +44,9 @@ export type DeclaredMember<A extends EnvMember> = A extends SecretEntry<
 			? [EnvName] extends [string]
 				? DeclaredDownward<EnvName>
 				: never
-			: never;
+			: A extends Environment<infer SubM>
+				? { readonly [K in keyof SubM]: DeclaredMember<SubM[K]> }
+				: never;
 
 export interface DeclaredEnvironment<M extends Readonly<Record<string, EnvMember>>> {
 	readonly envVars: ReadonlyArray<EnvVar>;
@@ -63,10 +69,22 @@ export type SecretMemberOptionsFor<A> = A extends SecretEntry<infer N, infer K, 
 		: never
 	: never;
 
+/**
+ * Recursive per-member secret options. For a secret member, the option
+ * matches its `SecretMemberOptionsFor`; for a nested `Environment`
+ * member, the option is `SecretMembersOpts<SubM>` — the same shape
+ * applied to the nested bundle.
+ */
 export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
 	readonly [K in keyof M as M[K] extends SecretEntry<infer _N, infer _K, infer _E>
 		? K
-		: never]?: SecretMemberOptionsFor<M[K]>;
+		: M[K] extends Environment<infer _SubM>
+			? K
+			: never]?: M[K] extends SecretEntry<infer _N, infer _K, infer _E>
+		? SecretMemberOptionsFor<M[K]>
+		: M[K] extends Environment<infer SubM>
+			? SecretMembersOpts<SubM>
+			: never;
 };
 
 /**
@@ -75,11 +93,20 @@ export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
  * runtime contract (carries a `schema: Config.string(envName)` for app
  * code to yield) but the manifest's emitted value differs per env —
  * e.g. `CLIENT_URL`, `S3_ENDPOINT`, host/URL literals.
+ *
+ * Recurses on nested `Environment` members — pass `{group: {host: "x"}}`
+ * to override a literal nested inside a sub-bundle.
  */
 export type LiteralMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
 	readonly [K in keyof M as M[K] extends LiteralEntry<infer _EnvName, infer _T>
 		? K
-		: never]?: M[K] extends LiteralEntry<infer _EnvName, infer T> ? T : never;
+		: M[K] extends Environment<infer _SubM>
+			? K
+			: never]?: M[K] extends LiteralEntry<infer _EnvName, infer T>
+		? T
+		: M[K] extends Environment<infer SubM>
+			? LiteralMembersOpts<SubM>
+			: never;
 };
 
 export interface BindEnvironmentInput<M extends Readonly<Record<string, EnvMember>>> {
@@ -95,7 +122,8 @@ export interface BindEnvironmentInput<M extends Readonly<Record<string, EnvMembe
 	/**
 	 * Override every secret member's namespace for this bind. Useful when
 	 * the bundle is consumed across multiple k8s namespaces (e.g. prod /
-	 * staging / local) without redeclaring each contract.
+	 * staging / local) without redeclaring each contract. Recurses into
+	 * nested `Environment` members.
 	 */
 	readonly namespace?: string;
 }
@@ -132,17 +160,20 @@ const _bindDownward = (input: _BindDownwardInput): DeclaredDownward<string> => (
 export const bindEnvironment = <const M extends Readonly<Record<string, EnvMember>>>(
 	input: BindEnvironmentInput<M>,
 ): DeclaredEnvironment<M> => {
-	const { env, secrets } = input;
+	const { env } = input;
 	const declared: Record<string, unknown> = {};
 	const envVars: EnvVar[] = [];
 	const manifests: Manifest.Manifest<unknown>[] = [];
 	const valuesLayers: Layer.Layer<unknown, RenderError, Manifest.RenderServices>[] = [];
-	const opts = coerce<Record<string, SecretMemberOptions<string, string> | undefined>>(secrets);
+	const secretsOpts = coerce<Record<string, unknown> | undefined>(input.secrets);
+	const literalsOpts = coerce<Record<string, unknown> | undefined>(input.literals);
 
 	for (const memberKey of Object.keys(env.members)) {
 		const entry = coerce<EnvMember>(env.members[memberKey]);
 		if (entry._kind === "Secret") {
-			const memberOpts = opts?.[memberKey];
+			const memberOpts = coerce<SecretMemberOptions<string, string> | undefined>(
+				secretsOpts?.[memberKey],
+			);
 			const d = bindSecret({
 				secret: entry,
 				backend: memberOpts?.backend,
@@ -159,14 +190,33 @@ export const bindEnvironment = <const M extends Readonly<Record<string, EnvMembe
 					coerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(d.layer),
 				);
 		} else if (entry._kind === "Literal") {
-			const literalOverride = coerce<Record<string, unknown> | undefined>(input.literals)?.[memberKey];
-			const d = _bindLiteral({ entry, override: literalOverride });
+			const d = _bindLiteral({ entry, override: literalsOpts?.[memberKey] });
 			declared[memberKey] = d;
 			envVars.push(d.envVar);
-		} else {
+		} else if (entry._kind === "Downward") {
 			const d = _bindDownward({ entry });
 			declared[memberKey] = d;
 			envVars.push(d.envVar);
+		} else {
+			// Nested Environment — recurse with the matching sub-overrides.
+			const subEnv = coerce<AnyEnvironment>(entry);
+			const sub = bindEnvironment({
+				env: subEnv,
+				secrets: coerce<SecretMembersOpts<Readonly<Record<string, EnvMember>>>>(
+					secretsOpts?.[memberKey] ?? {},
+				),
+				literals: coerce<LiteralMembersOpts<Readonly<Record<string, EnvMember>>>>(
+					literalsOpts?.[memberKey] ?? {},
+				),
+				namespace: input.namespace,
+			});
+			// Recursive declared sub-record matches DeclaredMember<Environment<...>>.
+			declared[memberKey] = sub.members;
+			envVars.push(...sub.envVars);
+			manifests.push(...sub.manifests);
+			valuesLayers.push(
+				coerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(sub.valuesLayer),
+			);
 		}
 	}
 

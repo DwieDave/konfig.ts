@@ -1,4 +1,5 @@
 export {
+	type AnyEnvironment,
 	type EnvMember,
 	type Environment,
 	type MemberValue,

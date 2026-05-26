@@ -108,6 +108,58 @@ describe("Secret.bind namespace override", () => {
 	});
 });
 
+describe("Environment.bind nested groups", () => {
+	const dbHost = defineLiteral({ envName: "DB_HOST", value: "" });
+	const dbPort = defineLiteral({ envName: "DB_PORT", value: 0 });
+	const apiPort = defineLiteral({ envName: "API_PORT", value: 8080 });
+
+	const apiEnv = defineEnvironment({
+		db: defineEnvironment({
+			creds: dbCreds,
+			host: dbHost,
+			port: dbPort,
+		}),
+		api: apiPort,
+	});
+
+	it("recurses into nested Environment members and flattens envVars", () => {
+		const bound = Environment.bind({ env: apiEnv });
+		const names = bound.envVars.map((e) => e.name).sort();
+		expect(names).toEqual([
+			"API_PORT",
+			"DATABASE_PASSWORD",
+			"DATABASE_URL",
+			"DB_HOST",
+			"DB_PORT",
+		]);
+	});
+
+	it("exposes nested declared members as a sub-record", () => {
+		const bound = Environment.bind({ env: apiEnv });
+		expect(bound.members.db.creds.ref).toBe("db-creds");
+		expect(bound.members.db.host.value).toBe("");
+		expect(bound.members.db.port.value).toBe(0);
+		expect(bound.members.api.value).toBe(8080);
+	});
+
+	it("nested literal overrides apply to the nested envVar", () => {
+		const bound = Environment.bind({
+			env: apiEnv,
+			literals: {
+				db: { host: "db.prod.svc", port: 5432 },
+			},
+		});
+		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
+		expect(byName.get("DB_HOST")?.value).toBe("db.prod.svc");
+		expect(byName.get("DB_PORT")?.value).toBe("5432");
+	});
+
+	it("top-level namespace override applies to nested secrets", () => {
+		const bound = Environment.bind({ env: apiEnv, namespace: "staging" });
+		expect(bound.members.db.creds.namespace).toBe("staging");
+	});
+});
+
 describe("Environment.bind literal value overrides", () => {
 	const clientUrl = defineLiteral({ envName: "CLIENT_URL", value: "" });
 	const replicas = defineLiteral({ envName: "REPLICAS", value: 0 });
