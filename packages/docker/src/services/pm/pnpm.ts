@@ -1,0 +1,15 @@
+import type { NodeModulesLayout, PackageManager } from "../PackageManager";
+
+export interface PnpmOptions {
+	readonly layout: NodeModulesLayout;
+}
+
+export const pnpm = (opts: PnpmOptions): PackageManager => ({
+	_tag: "Pnpm",
+	lockfileNames: ["pnpm-lock.yaml", "pnpm-workspace.yaml"],
+	auxFiles: [".npmrc"],
+	installCommand: ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"],
+	nodeModulesLayout: opts.layout,
+	depsImage: ({ runtimeImage }) => runtimeImage,
+	prependDepsRuns: (version) => [`corepack enable pnpm && corepack prepare pnpm@${version} --activate`],
+});

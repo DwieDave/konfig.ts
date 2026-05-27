@@ -20,9 +20,9 @@
 	},
 	"scripts": {
 		"konfig": "bun packages/cli/src/main.ts",
-		"build": "bun run --cwd packages/core build && bun run --cwd packages/env build && bun run --cwd packages/k8s build && bun run --cwd packages/external-secrets build && bun run --cwd packages/sealed-secrets build && bun run --cwd packages/sops build && bun run --cwd packages/argocd build && bun run --cwd packages/cli build",
-		"check": "bun run --cwd packages/core check && bun run --cwd packages/env check && bun run --cwd packages/k8s check && bun run --cwd packages/external-secrets check && bun run --cwd packages/sealed-secrets check && bun run --cwd packages/sops check && bun run --cwd packages/argocd check && bun run --cwd packages/cli check",
-		"test": "bun run --cwd packages/core test && bun run --cwd packages/env test && bun run --cwd packages/k8s test && bun run --cwd packages/external-secrets test && bun run --cwd packages/sealed-secrets test && bun run --cwd packages/sops test && bun run --cwd packages/argocd test",
+		"build": "bun run --cwd packages/core build && bun run --cwd packages/env build && bun run --cwd packages/k8s build && bun run --cwd packages/external-secrets build && bun run --cwd packages/sealed-secrets build && bun run --cwd packages/sops build && bun run --cwd packages/argocd build && bun run --cwd packages/docker build && bun run --cwd packages/cli build",
+		"check": "bun run --cwd packages/core check && bun run --cwd packages/env check && bun run --cwd packages/k8s check && bun run --cwd packages/external-secrets check && bun run --cwd packages/sealed-secrets check && bun run --cwd packages/sops check && bun run --cwd packages/argocd check && bun run --cwd packages/docker check && bun run --cwd packages/cli check",
+		"test": "bun run --cwd packages/core test && bun run --cwd packages/env test && bun run --cwd packages/k8s test && bun run --cwd packages/external-secrets test && bun run --cwd packages/sealed-secrets test && bun run --cwd packages/sops test && bun run --cwd packages/argocd test && bun run --cwd packages/docker test",
 		"lint": "oxlint",
 		"lint:apply": "oxlint --fix"
 	},
