@@ -9,6 +9,7 @@ export const pnpm = (opts: PnpmOptions): PackageManager => ({
 	lockfileNames: ["pnpm-lock.yaml", "pnpm-workspace.yaml"],
 	auxFiles: [".npmrc"],
 	installCommand: ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"],
+	productionFlag: ["--prod"],
 	nodeModulesLayout: opts.layout,
 	depsImage: ({ runtimeImage }) => runtimeImage,
 	prependDepsRuns: (version) => [`corepack enable pnpm && corepack prepare pnpm@${version} --activate`],

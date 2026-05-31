@@ -314,6 +314,44 @@ const baseStage = (img: ImageRef): Stage => ({
 	instructions: [],
 });
 
+/**
+ * `prod-deps` stage — only emitted when `spec.runner.production === true`.
+ * Identical shape to {@link depsStage} but appends the package manager's
+ * `productionFlag` to the install command so `devDependencies` are
+ * skipped. The runner then copies its `node_modules/` from this stage
+ * instead of `builder`, dropping typescript / @types / lint / test
+ * tooling from the runtime image.
+ */
+const prodDepsStage = (ctx: LowerContext, pm: PmContext): Stage => {
+	const rootFiles: ReadonlyArray<string> = [
+		"package.json",
+		...pm.pmImpl.lockfileNames,
+		...pm.pmImpl.auxFiles,
+	];
+	const instructions: Instruction[] = [{ _tag: "Copy", src: rootFiles, dst: "./" }];
+	if (ctx.hasPatchesDir) {
+		instructions.push({ _tag: "Copy", src: ["patches"], dst: "./patches" });
+	}
+	for (const ws of ctx.allWorkspaces) {
+		instructions.push({
+			_tag: "Copy",
+			src: [`${ws.relDir}/package.json`],
+			dst: `./${ws.relDir}/`,
+		});
+	}
+	for (const r of pm.pmImpl.prependDepsRuns(pm.pmVersion)) {
+		instructions.push({ _tag: "Run", cmd: r });
+	}
+	const cmd = [...pm.pmImpl.installCommand, ...pm.pmImpl.productionFlag].join(" ");
+	instructions.push({ _tag: "Run", cmd });
+	return {
+		name: "prod-deps",
+		from: { _tag: "FromStage", stage: "base" },
+		workdir: "/app",
+		instructions,
+	};
+};
+
 const depsStage = (ctx: LowerContext, pm: PmContext): Stage => {
 	const rootFiles: ReadonlyArray<string> = [
 		"package.json",
@@ -426,15 +464,22 @@ const runnerStage = (
 	if (envInstr) instructions.push(envInstr);
 	instructions.push(...exposeToInstructions(runner.expose));
 	const expandedCopy = expandWorkspaceSourceAll(runner.copy, ctx.closure, ctx.target);
+	// When the runner uses a custom base image (e.g. nginx:alpine for a
+	// static SPA), DON'T auto-copy `/app/node_modules` or workspace
+	// sources — the alternate base may not even have an `/app` dir and
+	// the caller is supplying everything explicitly via `runner.copy`.
+	const usesCustomBase = runner.baseImage !== undefined;
 	// When the runner pulls in any workspace source, also pull in the root
 	// node_modules so workspace:* symlinks (and bun's "bun"/"source" export
-	// condition) resolve at runtime.
+	// condition) resolve at runtime. When `runner.production === true`
+	// the node_modules comes from the slim `prod-deps` stage instead of
+	// `builder` so dev deps are excluded from the final image.
 	const usesWorkspaceSource = expandedCopy.some((c) => c._tag === "WorkspaceSource");
-	if (usesWorkspaceSource) {
+	if (usesWorkspaceSource && !usesCustomBase) {
 		const chown = user.chown ? { chown: user.chown } : {};
 		instructions.push({
 			_tag: "Copy",
-			from: "builder",
+			from: runner.production ? "prod-deps" : "builder",
 			src: ["/app/node_modules"],
 			dst: "/app/node_modules",
 			...chown,
@@ -480,9 +525,16 @@ const runnerStage = (
 	if (runner.entrypoint) instructions.push({ _tag: "Entrypoint", argv: runner.entrypoint });
 	if (user.user) instructions.push(user.user);
 	instructions.push({ _tag: "Cmd", argv: runner.cmd });
+	const fromIR = runner.baseImage
+		? ({
+				_tag: "FromImage" as const,
+				image: runner.baseImage.image,
+				tag: runner.baseImage.tag,
+			})
+		: ({ _tag: "FromStage" as const, stage: "base" });
 	return {
 		name: "runner",
-		from: { _tag: "FromStage", stage: "base" },
+		from: fromIR,
 		...(platformAtomToIR(runner.platform) ? { platform: platformAtomToIR(runner.platform) } : {}),
 		workdir: runner.workdir,
 		instructions,
@@ -547,10 +599,16 @@ export interface BuildIRInput {
 export const buildIR = (input: BuildIRInput): DockerfileBundle => {
 	const { spec, ctx, pm } = input;
 	const base = baseStage(pm.runtimeImage);
-	const prod: Dockerfile = {
-		args: [],
-		stages: [base, depsStage(ctx, pm), builderStage(spec, ctx, pm), runnerStage(spec, ctx, pm)],
-	};
+	const prodStages: Stage[] = [
+		base,
+		depsStage(ctx, pm),
+		builderStage(spec, ctx, pm),
+	];
+	if (spec.runner.production) {
+		prodStages.push(prodDepsStage(ctx, pm));
+	}
+	prodStages.push(runnerStage(spec, ctx, pm));
+	const prod: Dockerfile = { args: [], stages: prodStages };
 	if (!spec.dev) return { prod };
 	const dev: Dockerfile = { args: [], stages: [base, devStage(spec, ctx, pm)] };
 	return { prod, dev };

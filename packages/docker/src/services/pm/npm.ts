@@ -5,6 +5,7 @@ export const npm: PackageManager = {
 	lockfileNames: ["package-lock.json"],
 	auxFiles: [".npmrc"],
 	installCommand: ["npm", "ci", "--ignore-scripts"],
+	productionFlag: ["--omit=dev"],
 	nodeModulesLayout: "isolated",
 	depsImage: ({ runtimeImage }) => runtimeImage,
 	prependDepsRuns: () => [],

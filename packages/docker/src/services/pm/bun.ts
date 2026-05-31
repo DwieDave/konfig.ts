@@ -5,6 +5,7 @@ export const bun: PackageManager = {
 	lockfileNames: ["bun.lock"],
 	auxFiles: ["bunfig.toml"],
 	installCommand: ["bun", "install", "--ignore-scripts"],
+	productionFlag: ["--production"],
 	nodeModulesLayout: "isolated",
 	depsImage: ({ runtimeImage }) => runtimeImage,
 	prependDepsRuns: () => [],

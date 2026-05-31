@@ -105,6 +105,32 @@ export const RunnerSpec = Schema.Struct({
 	user: Schema.optionalKey(UserAtom),
 	healthcheck: Schema.optionalKey(HealthcheckAtom),
 	platform: Schema.optionalKey(PlatformAtom),
+	/**
+	 * Emit a separate `prod-deps` stage that runs
+	 * `<install-command> <productionFlag>` (e.g. `bun install
+	 * --production`) so the runner gets a `node_modules/` tree without
+	 * `devDependencies`. Cuts image size when the workload doesn't need
+	 * typescript / @types / linters / test runners at runtime.
+	 *
+	 * Defaults to `false` (runner copies `node_modules` from the
+	 * `builder` stage, i.e. includes dev deps).
+	 */
+	production: Schema.optionalKey(Schema.Boolean),
+	/**
+	 * Override the runner stage's base image. Defaults to the
+	 * configured `runtime` image (e.g. `oven/bun:1.3.11-alpine`). Set
+	 * this when the runtime image of the build (where `tsc` / `vite`
+	 * etc. ran) is not what should serve at runtime — e.g. a Vite SPA
+	 * built with bun but served by `nginx:1.29-alpine`.
+	 *
+	 * When set, the runner does NOT auto-copy `/app/node_modules` or
+	 * workspace sources — the caller is responsible for listing every
+	 * needed COPY via `runner.copy` (typically a few
+	 * `Docker.copy.path({ from: "builder", src, dst })` instructions).
+	 */
+	baseImage: Schema.optionalKey(
+		Schema.Struct({ image: Schema.String, tag: Schema.String }),
+	),
 });
 export type RunnerSpec = typeof RunnerSpec.Type;
 

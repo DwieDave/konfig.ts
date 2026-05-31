@@ -15,6 +15,15 @@ export interface PackageManager {
 	readonly lockfileNames: ReadonlyArray<string>;
 	readonly auxFiles: ReadonlyArray<string>;
 	readonly installCommand: ReadonlyArray<string>;
+	/**
+	 * Argv tokens to append to {@link installCommand} to skip
+	 * `devDependencies`. Used by the `prod-deps` stage emitted when
+	 * `RunnerSpec.production === true`.
+	 *   bun  → ["--production"]
+	 *   npm  → ["--omit=dev"]
+	 *   pnpm → ["--prod"]
+	 */
+	readonly productionFlag: ReadonlyArray<string>;
 	readonly nodeModulesLayout: NodeModulesLayout;
 	readonly depsImage: (input: DepsImageInput) => ImageRef;
 	/**
