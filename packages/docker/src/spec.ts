@@ -131,6 +131,17 @@ export const RunnerSpec = Schema.Struct({
 	baseImage: Schema.optionalKey(
 		Schema.Struct({ image: Schema.String, tag: Schema.String }),
 	),
+	/**
+	 * Paths under the runner image to delete after all COPY instructions
+	 * (including `node_modules/`) have run. Use this to strip transitive
+	 * deps that a workspace doesn't actually need at runtime but are
+	 * pulled in via shared workspaces (e.g. `node_modules/sharp` from a
+	 * peer image-processing helper that this CronJob never invokes).
+	 *
+	 * Each entry becomes a single `RUN rm -rf <path>` line. Absolute
+	 * paths are passed verbatim.
+	 */
+	removePaths: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type RunnerSpec = typeof RunnerSpec.Type;
 

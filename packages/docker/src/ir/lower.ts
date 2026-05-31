@@ -493,6 +493,12 @@ const runnerStage = (
 		}
 		instructions.push(instr);
 	}
+	if (runner.removePaths && runner.removePaths.length > 0) {
+		const escaped = runner.removePaths
+			.map((p) => (p.includes(" ") ? `'${p}'` : p))
+			.join(" ");
+		instructions.push({ _tag: "Run", cmd: `rm -rf ${escaped}` });
+	}
 	if (runner.healthcheck) {
 		if (runner.healthcheck._tag === "HealthcheckHttpGet") {
 			const hc = runner.healthcheck;
