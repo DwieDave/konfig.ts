@@ -322,7 +322,7 @@ const baseStage = (img: ImageRef): Stage => ({
  * instead of `builder`, dropping typescript / @types / lint / test
  * tooling from the runtime image.
  */
-const prodDepsStage = (ctx: LowerContext, pm: PmContext): Stage => {
+const prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
 	const rootFiles: ReadonlyArray<string> = [
 		"package.json",
 		...pm.pmImpl.lockfileNames,
@@ -332,7 +332,42 @@ const prodDepsStage = (ctx: LowerContext, pm: PmContext): Stage => {
 	if (ctx.hasPatchesDir) {
 		instructions.push({ _tag: "Copy", src: ["patches"], dst: "./patches" });
 	}
-	for (const ws of ctx.allWorkspaces) {
+	// Restrict the root `package.json`'s `workspaces` array to ONLY the
+	// closure (target + transitive workspace deps) before running install.
+	// Without this, `bun install` (and equivalents) resolve every
+	// workspace listed in the original `workspaces` field — which in a
+	// monorepo means pulling react / tanstack / typesafe-i18n into a
+	// CronJob image, ts-node into a static SPA, and so on.
+	//
+	// Mutating the root package.json is done with the package manager's
+	// own runtime (bun / node) so we don't need jq/sed in the base image.
+	const closureRelDirs = ctx.closure.map((ws) => ws.relDir).sort();
+	// Script uses DOUBLE quotes throughout so it can be wrapped in a
+	// shell single-quoted string in the Dockerfile without conflicts.
+	// Also wipes root `devDependencies` — `--production` only SKIPS
+	// installing them but still needs to RESOLVE them (find workspace
+	// package or version). When non-closure workspaces have been
+	// removed, root devDependencies like `@konfig.ts/argocd:
+	// workspace:*` would error out as "Workspace dependency not found".
+	const rewriteScript =
+		`const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json","utf-8"));` +
+		` p.workspaces=${JSON.stringify(closureRelDirs)};` +
+		` delete p.devDependencies;` +
+		` fs.writeFileSync("package.json", JSON.stringify(p,null,2));`;
+	const runtimeBin = pm.pmKind === "Bun" ? "bun" : "node";
+	instructions.push({ _tag: "Run", cmd: `${runtimeBin} -e '${rewriteScript}'` });
+	// Drop the lockfile after restricting `workspaces` — it encodes the
+	// FULL workspace graph and would otherwise fail validation against
+	// the smaller set ("Workspace dependency X not found" / "lockfile is
+	// frozen"). Re-resolving from the trimmed package.json is safe in a
+	// build stage; versions float only within whatever semver each
+	// workspace's package.json already permits.
+	const lockfileTokens = pm.pmImpl.lockfileNames.join(" ");
+	instructions.push({ _tag: "Run", cmd: `rm -f ${lockfileTokens}` });
+	// Copy ONLY the closure's package.json files. Non-closure workspaces
+	// were stripped from `workspaces` above so omitting their package.json
+	// is safe — install resolves nothing for them.
+	for (const ws of ctx.closure) {
 		instructions.push({
 			_tag: "Copy",
 			src: [`${ws.relDir}/package.json`],
@@ -344,6 +379,15 @@ const prodDepsStage = (ctx: LowerContext, pm: PmContext): Stage => {
 	}
 	const cmd = [...pm.pmImpl.installCommand, ...pm.pmImpl.productionFlag].join(" ");
 	instructions.push({ _tag: "Run", cmd });
+	// Apply removePaths AFTER install so paths are gone before the runner
+	// COPY happens. `rm` in the runner only emits deletion markers on top
+	// of the data layer and doesn't reduce image size.
+	if (spec.runner.removePaths && spec.runner.removePaths.length > 0) {
+		const escaped = spec.runner.removePaths
+			.map((p) => (p.includes(" ") ? `'${p}'` : p))
+			.join(" ");
+		instructions.push({ _tag: "Run", cmd: `rm -rf ${escaped}` });
+	}
 	return {
 		name: "prod-deps",
 		from: { _tag: "FromStage", stage: "base" },
@@ -493,12 +537,9 @@ const runnerStage = (
 		}
 		instructions.push(instr);
 	}
-	if (runner.removePaths && runner.removePaths.length > 0) {
-		const escaped = runner.removePaths
-			.map((p) => (p.includes(" ") ? `'${p}'` : p))
-			.join(" ");
-		instructions.push({ _tag: "Run", cmd: `rm -rf ${escaped}` });
-	}
+	// runner.removePaths is applied IN the source stage (prod-deps or
+	// builder) so the deletion shrinks layer size — NOT here in the
+	// runner stage. See prodDepsStage / builderStage.
 	if (runner.healthcheck) {
 		if (runner.healthcheck._tag === "HealthcheckHttpGet") {
 			const hc = runner.healthcheck;
@@ -611,7 +652,7 @@ export const buildIR = (input: BuildIRInput): DockerfileBundle => {
 		builderStage(spec, ctx, pm),
 	];
 	if (spec.runner.production) {
-		prodStages.push(prodDepsStage(ctx, pm));
+		prodStages.push(prodDepsStage(spec, ctx, pm));
 	}
 	prodStages.push(runnerStage(spec, ctx, pm));
 	const prod: Dockerfile = { args: [], stages: prodStages };
