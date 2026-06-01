@@ -1,4 +1,4 @@
-import { defineDownward, defineEnvironment, defineLiteral, defineSecret } from "@konfig.ts/env";
+import { defineDownward, defineEnvironment, defineLiteral, defineSecret, SecretSource } from "@konfig.ts/env";
 import { describe, expect, it } from "vitest";
 import { Environment, Secret } from "./index";
 
@@ -16,6 +16,16 @@ const sessionKey = defineSecret({
 
 const port = defineLiteral({ envName: "PORT", value: 8080 });
 const podName = defineDownward({ envName: "POD_NAME", fieldPath: "metadata.name" });
+
+// Reusable source-only opts — every secret member must supply a backend
+// or a source, so tests that only care about envVars / namespace use a
+// throwaway literal source.
+const dbCredsOpts = {
+	source: SecretSource.literal({ data: { url: "u", password: "p" } }),
+} as const;
+const sessionKeyOpts = {
+	source: SecretSource.literal({ data: { value: "s" } }),
+} as const;
 
 describe("Secret.bind", () => {
 	it("produces a typed ref and envVars per key", () => {
@@ -44,28 +54,29 @@ describe("Environment.bind", () => {
 		port,
 		pod: podName,
 	});
+	const apiSecrets = { db: dbCredsOpts, session: sessionKeyOpts } as const;
 
 	it("walks every member and concatenates envVars", () => {
-		const bound = Environment.bind({ env: apiEnv });
+		const bound = Environment.bind({ env: apiEnv, secrets: apiSecrets });
 		const names = bound.envVars.map((e) => e.name).sort();
 		expect(names).toEqual(["DATABASE_PASSWORD", "DATABASE_URL", "POD_NAME", "PORT", "SESSION_KEY"]);
 	});
 
 	it("literal members produce { name, value }", () => {
-		const bound = Environment.bind({ env: apiEnv });
+		const bound = Environment.bind({ env: apiEnv, secrets: apiSecrets });
 		const portEntry = bound.envVars.find((e) => e.name === "PORT");
 		expect(portEntry?.value).toBe("8080");
 		expect(portEntry?.valueFrom).toBeUndefined();
 	});
 
 	it("downward members produce a fieldRef envVar", () => {
-		const bound = Environment.bind({ env: apiEnv });
+		const bound = Environment.bind({ env: apiEnv, secrets: apiSecrets });
 		const pod = bound.envVars.find((e) => e.name === "POD_NAME");
 		expect(pod?.valueFrom?.fieldRef?.fieldPath).toBe("metadata.name");
 	});
 
 	it("exposes declared per-member handles via .members", () => {
-		const bound = Environment.bind({ env: apiEnv });
+		const bound = Environment.bind({ env: apiEnv, secrets: apiSecrets });
 		expect(bound.members.db.ref).toBe("db-creds");
 		expect(bound.members.session.ref).toBe("session-key");
 		expect(bound.members.port.value).toBe(8080);
@@ -74,13 +85,17 @@ describe("Environment.bind", () => {
 
 	it("works with a single-member bundle", () => {
 		const env = defineEnvironment({ db: dbCreds });
-		const bound = Environment.bind({ env });
+		const bound = Environment.bind({ env, secrets: { db: dbCredsOpts } });
 		expect(bound.envVars).toHaveLength(2);
 		expect(bound.members.db.ref).toBe("db-creds");
 	});
 
 	it("namespace override at bind time wins over the contract's declared namespace", () => {
-		const bound = Environment.bind({ env: apiEnv, namespace: "staging" });
+		const bound = Environment.bind({
+			env: apiEnv,
+			secrets: apiSecrets,
+			namespace: "staging",
+		});
 		expect(bound.members.db.namespace).toBe("staging");
 		expect(bound.members.session.namespace).toBe("staging");
 		// envVars are namespace-independent — they only carry the Secret name + key.
@@ -121,9 +136,10 @@ describe("Environment.bind nested groups", () => {
 		}),
 		api: apiPort,
 	});
+	const apiSecrets = { db: { creds: dbCredsOpts } } as const;
 
 	it("recurses into nested Environment members and flattens envVars", () => {
-		const bound = Environment.bind({ env: apiEnv });
+		const bound = Environment.bind({ env: apiEnv, secrets: apiSecrets });
 		const names = bound.envVars.map((e) => e.name).sort();
 		expect(names).toEqual([
 			"API_PORT",
@@ -135,7 +151,7 @@ describe("Environment.bind nested groups", () => {
 	});
 
 	it("exposes nested declared members as a sub-record", () => {
-		const bound = Environment.bind({ env: apiEnv });
+		const bound = Environment.bind({ env: apiEnv, secrets: apiSecrets });
 		expect(bound.members.db.creds.ref).toBe("db-creds");
 		expect(bound.members.db.host.value).toBe("");
 		expect(bound.members.db.port.value).toBe(0);
@@ -145,6 +161,7 @@ describe("Environment.bind nested groups", () => {
 	it("nested literal overrides apply to the nested envVar", () => {
 		const bound = Environment.bind({
 			env: apiEnv,
+			secrets: apiSecrets,
 			literals: {
 				db: { host: "db.prod.svc", port: 5432 },
 			},
@@ -155,7 +172,11 @@ describe("Environment.bind nested groups", () => {
 	});
 
 	it("top-level namespace override applies to nested secrets", () => {
-		const bound = Environment.bind({ env: apiEnv, namespace: "staging" });
+		const bound = Environment.bind({
+			env: apiEnv,
+			secrets: apiSecrets,
+			namespace: "staging",
+		});
 		expect(bound.members.db.creds.namespace).toBe("staging");
 	});
 });
@@ -164,9 +185,10 @@ describe("Environment.bind literal value overrides", () => {
 	const clientUrl = defineLiteral({ envName: "CLIENT_URL", value: "" });
 	const replicas = defineLiteral({ envName: "REPLICAS", value: 0 });
 	const env = defineEnvironment({ db: dbCreds, clientUrl, replicas });
+	const envSecrets = { db: dbCredsOpts } as const;
 
 	it("a missing override falls back to the declared value", () => {
-		const bound = Environment.bind({ env });
+		const bound = Environment.bind({ env, secrets: envSecrets });
 		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
 		expect(byName.get("CLIENT_URL")?.value).toBe("");
 		expect(byName.get("REPLICAS")?.value).toBe("0");
@@ -175,6 +197,7 @@ describe("Environment.bind literal value overrides", () => {
 	it("a provided override replaces the manifest's emitted env var", () => {
 		const bound = Environment.bind({
 			env,
+			secrets: envSecrets,
 			literals: { clientUrl: "https://api.example.com", replicas: 3 },
 		});
 		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
@@ -183,15 +206,31 @@ describe("Environment.bind literal value overrides", () => {
 	});
 
 	it("the override updates the declared member's value field too", () => {
-		const bound = Environment.bind({ env, literals: { replicas: 3 } });
+		const bound = Environment.bind({
+			env,
+			secrets: envSecrets,
+			literals: { replicas: 3 },
+		});
 		expect(bound.members.replicas.value).toBe(3);
 		expect(bound.members.clientUrl.value).toBe("");
 	});
 
 	it("partial overrides only touch the named members", () => {
-		const bound = Environment.bind({ env, literals: { clientUrl: "https://x" } });
+		const bound = Environment.bind({
+			env,
+			secrets: envSecrets,
+			literals: { clientUrl: "https://x" },
+		});
 		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
 		expect(byName.get("CLIENT_URL")?.value).toBe("https://x");
+		expect(byName.get("REPLICAS")?.value).toBe("0");
+	});
+
+	it("a literal-only bundle binds without a secrets field", () => {
+		const litOnly = defineEnvironment({ clientUrl, replicas });
+		const bound = Environment.bind({ env: litOnly });
+		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
+		expect(byName.get("CLIENT_URL")?.value).toBe("");
 		expect(byName.get("REPLICAS")?.value).toBe("0");
 	});
 

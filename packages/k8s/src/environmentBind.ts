@@ -56,12 +56,34 @@ export interface DeclaredEnvironment<M extends Readonly<Record<string, EnvMember
 	readonly valuesLayer: Layer.Layer<unknown, RenderError, Manifest.RenderServices>;
 }
 
-export interface SecretMemberOptions<N extends string, K extends string> {
-	readonly backend?: SecretBackend<N, K>;
-	readonly source?: SecretSource<K, Manifest.RenderServices>;
+interface _SecretMemberOptionsBase {
 	readonly labels?: Readonly<Record<string, string>>;
 	readonly annotations?: Readonly<Record<string, string>>;
 }
+
+interface _SecretMemberWithBackend<N extends string, K extends string>
+	extends _SecretMemberOptionsBase {
+	readonly backend: SecretBackend<N, K>;
+	readonly source?: SecretSource<K, Manifest.RenderServices>;
+}
+
+interface _SecretMemberWithSource<N extends string, K extends string>
+	extends _SecretMemberOptionsBase {
+	readonly backend?: SecretBackend<N, K>;
+	readonly source: SecretSource<K, Manifest.RenderServices>;
+}
+
+/**
+ * Per-secret-member options at bind time. At least one of `backend`
+ * (emit the in-cluster Secret manifest) or `source` (provide values to
+ * the in-process `SecretValues` layer for tests / local renders) must
+ * be supplied — a `defineSecret` declaration without either is a hole
+ * that produces `secretKeyRef` envVars pointing at a Secret nothing
+ * else creates.
+ */
+export type SecretMemberOptions<N extends string, K extends string> =
+	| _SecretMemberWithBackend<N, K>
+	| _SecretMemberWithSource<N, K>;
 
 export type SecretMemberOptionsFor<A> = A extends SecretEntry<infer N, infer K, infer _E>
 	? [N, K] extends [string, string]
@@ -70,17 +92,41 @@ export type SecretMemberOptionsFor<A> = A extends SecretEntry<infer N, infer K, 
 	: never;
 
 /**
+ * True iff `M` (recursively, via nested `Environment` members)
+ * contains at least one `SecretEntry`. Used to flip `secrets` between
+ * required (any secrets present) and optional (literals/downwards
+ * only) on `BindEnvironmentInput`.
+ */
+export type HasSecrets<M extends Readonly<Record<string, EnvMember>>> = true extends {
+	readonly [K in keyof M]: M[K] extends SecretEntry<infer _N, infer _K, infer _E>
+		? true
+		: M[K] extends Environment<infer Sub>
+			? HasSecrets<Sub>
+			: false;
+}[keyof M]
+	? true
+	: false;
+
+/**
  * Recursive per-member secret options. For a secret member, the option
- * matches its `SecretMemberOptionsFor`; for a nested `Environment`
- * member, the option is `SecretMembersOpts<SubM>` — the same shape
- * applied to the nested bundle.
+ * matches its `SecretMemberOptionsFor` and is required. For a nested
+ * `Environment` member that itself contains secrets, the option is
+ * `SecretMembersOpts<SubM>` and is also required. Nested environments
+ * with no secrets are omitted entirely (no key needed).
+ *
+ * Together with `HasSecrets`, this enforces at compile time that every
+ * `defineSecret` reachable from the bundle is acknowledged at bind
+ * time — adding a new secret to the env contract forces every call
+ * site to update.
  */
 export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
 	readonly [K in keyof M as M[K] extends SecretEntry<infer _N, infer _K, infer _E>
 		? K
-		: M[K] extends Environment<infer _SubM>
-			? K
-			: never]?: M[K] extends SecretEntry<infer _N, infer _K, infer _E>
+		: M[K] extends Environment<infer SubM>
+			? HasSecrets<SubM> extends true
+				? K
+				: never
+			: never]: M[K] extends SecretEntry<infer _N, infer _K, infer _E>
 		? SecretMemberOptionsFor<M[K]>
 		: M[K] extends Environment<infer SubM>
 			? SecretMembersOpts<SubM>
@@ -109,9 +155,8 @@ export type LiteralMembersOpts<M extends Readonly<Record<string, EnvMember>>> = 
 			: never;
 };
 
-export interface BindEnvironmentInput<M extends Readonly<Record<string, EnvMember>>> {
+interface _BindEnvironmentInputBase<M extends Readonly<Record<string, EnvMember>>> {
 	readonly env: Environment<M>;
-	readonly secrets?: SecretMembersOpts<M>;
 	/**
 	 * Per-literal value override for the manifest's emitted env var. The
 	 * runtime read (via `entry.schema`, if provided) is unchanged —
@@ -127,6 +172,20 @@ export interface BindEnvironmentInput<M extends Readonly<Record<string, EnvMembe
 	 */
 	readonly namespace?: string;
 }
+
+/**
+ * `secrets` flips between required and optional based on whether `M`
+ * actually contains any secrets. A bundle of literals/downwards only
+ * has nothing to bind, so `secrets` stays optional. A bundle with even
+ * one `defineSecret` (directly or nested) forces the caller to supply
+ * every secret member — and for each member, either a `backend` or a
+ * `source` (see `SecretMemberOptions`).
+ */
+export type BindEnvironmentInput<M extends Readonly<Record<string, EnvMember>>> =
+	_BindEnvironmentInputBase<M> &
+		(HasSecrets<M> extends true
+			? { readonly secrets: SecretMembersOpts<M> }
+			: { readonly secrets?: SecretMembersOpts<M> });
 
 interface _BindLiteralInput {
 	readonly entry: LiteralEntry<string, unknown>;

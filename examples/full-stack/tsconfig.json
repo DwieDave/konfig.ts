@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"types": ["bun"],
+		"strict": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"isolatedModules": true,
+		"lib": ["ESNext"],
+		"allowImportingTsExtensions": true,
+		"customConditions": ["source"]
+	},
+	"include": [
+		"infra/**/*.ts",
+		"apps/**/docker.ts",
+		"shared/**/*.ts"
+	]
+}

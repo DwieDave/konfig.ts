@@ -1,0 +1,26 @@
+{
+	"name": "@konfig.ts/example-full-stack",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check": "tsc -p tsconfig.json --noEmit",
+		"build": "bun ../../packages/cli/src/main.ts build prod",
+		"build:staging": "bun ../../packages/cli/src/main.ts build staging",
+		"docker:diff": "bun ../../packages/cli/src/main.ts docker diff apps/api && bun ../../packages/cli/src/main.ts docker diff apps/worker",
+		"docker:write": "bun ../../packages/cli/src/main.ts docker write apps/api --force && bun ../../packages/cli/src/main.ts docker write apps/worker --force"
+	},
+	"dependencies": {
+		"@example/env-contracts": "workspace:*",
+		"@konfig.ts/argocd": "workspace:*",
+		"@konfig.ts/core": "workspace:*",
+		"@konfig.ts/env": "workspace:*",
+		"@konfig.ts/k8s": "workspace:*",
+		"@konfig.ts/sops": "workspace:*",
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:",
+		"typescript": "catalog:"
+	}
+}

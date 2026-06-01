@@ -4,6 +4,7 @@ import {
 	defineEnvironment,
 	defineLiteral,
 	defineSecret,
+	SecretSource,
 } from "@konfig.ts/env";
 import { Environment, Workload } from "@konfig.ts/k8s";
 import { RenderContext, Yaml } from "@konfig.ts/core";
@@ -31,7 +32,24 @@ const apiEnv = defineEnvironment({
 	pod: podName,
 });
 
-const apiEnvK8s = Environment.bind({ env: apiEnv });
+// Environment.bind enforces that every secret in apiEnv is provided
+// here — adding a new defineSecret to the bundle forces this call to
+// supply either a `backend` or a `source` for it. The source-only path
+// is what test/local renders use; production renders pair the source
+// with a `backend` so a Secret manifest is emitted (see example 05).
+const apiEnvK8s = Environment.bind({
+	env: apiEnv,
+	secrets: {
+		db: {
+			source: SecretSource.literal({
+				data: { url: "postgres://localhost/api", password: "hunter2" },
+			}),
+		},
+		session: {
+			source: SecretSource.literal({ data: { value: "sig" } }),
+		},
+	},
+});
 
 const api = Workload.web({
 	name: "api",

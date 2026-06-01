@@ -38,6 +38,7 @@ export type {
 	DeclaredEnvironment,
 	DeclaredLiteral,
 	DeclaredMember,
+	HasSecrets,
 	SecretMemberOptions,
 	SecretMemberOptionsFor,
 	SecretMembersOpts,

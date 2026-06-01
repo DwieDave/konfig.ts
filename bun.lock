@@ -27,6 +27,57 @@
         "typescript": "catalog:",
       },
     },
+    "examples/full-stack": {
+      "name": "@konfig.ts/example-full-stack",
+      "version": "0.0.1",
+      "dependencies": {
+        "@example/env-contracts": "workspace:*",
+        "@konfig.ts/argocd": "workspace:*",
+        "@konfig.ts/core": "workspace:*",
+        "@konfig.ts/env": "workspace:*",
+        "@konfig.ts/k8s": "workspace:*",
+        "@konfig.ts/sops": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "examples/full-stack/apps/api": {
+      "name": "@example/api",
+      "version": "0.0.1",
+      "dependencies": {
+        "@example/env-contracts": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@konfig.ts/docker": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "examples/full-stack/apps/worker": {
+      "name": "@example/worker",
+      "version": "0.0.1",
+      "dependencies": {
+        "@example/env-contracts": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@konfig.ts/docker": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "examples/full-stack/shared/env-contracts": {
+      "name": "@example/env-contracts",
+      "version": "0.0.1",
+      "dependencies": {
+        "@konfig.ts/env": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "packages/argocd": {
       "name": "@konfig.ts/argocd",
       "version": "0.0.1",
@@ -253,6 +304,12 @@
 
     "@emnapi/wasi-threads": ["@emnapi/wasi-threads@1.2.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w=="],
 
+    "@example/api": ["@example/api@workspace:examples/full-stack/apps/api"],
+
+    "@example/env-contracts": ["@example/env-contracts@workspace:examples/full-stack/shared/env-contracts"],
+
+    "@example/worker": ["@example/worker@workspace:examples/full-stack/apps/worker"],
+
     "@ioredis/commands": ["@ioredis/commands@1.5.1", "", {}, "sha512-JH8ZL/ywcJyR9MmJ5BNqZllXNZQqQbnVZOqpPQqE1vHiFgAw4NHbvE0FOduNU8IX9babitBT46571OnPTT0Zcw=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
@@ -274,6 +331,8 @@
     "@konfig.ts/docker": ["@konfig.ts/docker@workspace:packages/docker"],
 
     "@konfig.ts/env": ["@konfig.ts/env@workspace:packages/env"],
+
+    "@konfig.ts/example-full-stack": ["@konfig.ts/example-full-stack@workspace:examples/full-stack"],
 
     "@konfig.ts/examples": ["@konfig.ts/examples@workspace:examples"],
 
