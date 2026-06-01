@@ -27,6 +27,68 @@ const sops = Application.make({
 
 `Application.make` infers `R` and `P` from the tuple of manifests — no manual annotation needed.
 
+### `Module.fixedNs` / `Module.dynamicNs` — wrapper-builder factories
+
+Building per-module wrappers (`defineKeycloak`, `defineApi`, etc.) by hand means writing a generic decl on every option interface and every define function, plus an `as Name` cast or `LiteralName<Name>` forward. `Module` packages that into a factory: the wrapper author writes no generics, and the literal `name` (and `namespace`, where applicable) still flows through to the resulting `ApplicationHandle<...>` for konfig's dependency tracking.
+
+**Fixed namespace** — for modules whose namespace is part of their identity (e.g. `cert-manager` always installs into `cert-manager`):
+
+```ts
+import { Module, SyncWave } from "@konfig.ts/argocd";
+import { Helm, Namespace } from "@konfig.ts/k8s";
+
+export const defineSopsOperator = Module.fixedNs({
+  namespace: "sops",
+  annotations: SyncWave(-1),
+  build: ({ namespace }, opts: { readonly resources?: ResourceLimits }) => [
+    Namespace.make({ name: namespace }),
+    Helm.release({ chart: "sops-secrets-operator", values: { resources: opts.resources } }),
+  ],
+});
+```
+
+Call sites need no generic decl either:
+
+```ts
+const sops = defineSopsOperator({
+  name: "sops-secrets-operator",        // literal preserved through to ApplicationHandle<"sops-secrets-operator", ...>
+  source: src("sops-secrets-operator"),
+});
+
+const sopsStaging = defineSopsOperator({
+  name: "sops-secrets-operator-staging",  // different literal, different dep-graph slot
+  source: src("sops-secrets-operator-staging"),
+});
+```
+
+Passing a bare `string` for `name` is rejected at compile time with a descriptive error from `Application.LiteralName`.
+
+**Dynamic namespace** — for modules whose namespace is chosen per instance (e.g. an `api` module that ships into different env namespaces):
+
+```ts
+export const defineApi = Module.dynamicNs({
+  annotations: SyncWave(1),
+  build: ({ name, namespace }, opts: { readonly image: string; readonly host: string }) =>
+    Effect.gen(function* () {
+      // ... build manifests using opts.image, opts.host, etc.
+      return [/* manifests */];
+    }),
+});
+
+// call site:
+const api = defineApi({
+  name: "api",
+  namespace: "prod",                    // literal namespace — preserved
+  source: src("api"),
+  image: e.api,
+  host: cluster.domain,
+});
+```
+
+The `build` callback can return either a synchronous `ReadonlyArray<unknown>` or an `Effect<readonly unknown[], AnyRenderError, R>`. Effect-based builds get their `R` propagated into the resulting `ApplicationHandle`'s requirements.
+
+`Module` is non-opinionated about orchestration: it provides the literal-tracking and the build callback contract, and stays out of how envs / suffixes / source paths are derived. Users compose those policies in their own env files.
+
 ### `AppOfApps.make`
 
 ```ts
@@ -77,6 +139,10 @@ const filename = applicationCRFilename(app);
 |---|---|
 | `Application<R, P>` | The typed Application node |
 | `Application.make(opts)` | Aggregate R/P from manifests |
+| `Application.define(opts)` | Build an `ApplicationHandle` whose `.layer` provides `Provide<"App" \| "Application" \| "Namespace", ...>` |
+| `Application.LiteralName<T>` | Brand that resolves to `T` if it's a string literal, or a branded error type if `T` widened to `string` |
+| `Module.fixedNs(config)` | Factory: typed wrapper with a baked-in namespace, zero generics at the call site |
+| `Module.dynamicNs(config)` | Factory: typed wrapper with a per-instance namespace, zero generics at the call site |
 | `AppOfApps.make(opts)` | Verify dep graph at the call site; return `AppOfAppsResult` |
 | `AppOfAppsResult` | Runtime shape passed to the renderer |
 | `MissingDeps<Apps>` | Type-level union of `RequiredDep` tags not covered by siblings (`never` when satisfied) |

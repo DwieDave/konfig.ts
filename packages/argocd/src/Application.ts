@@ -50,6 +50,30 @@ export interface Application {
 
 export type Any = Application;
 
+/**
+ * Resolves to `T` if it is a string literal (or template-literal pattern),
+ * and to a branded error type if it is the bare `string` widening. Use as
+ * the field type on Application name/namespace slots and any wrapper that
+ * forwards them.
+ *
+ * konfig's dependency graph keys every `Provide<"App", Name>` /
+ * `Provide<"Application", Name>` slot by literal `Name`. A wrapper that
+ * accidentally lets `Name` widen to `string` collapses every app into the
+ * same slot and silently masks unmet deps. This makes that regression a
+ * compile error at the call site — always fix the wrapper, never relax
+ * the constraint.
+ *
+ * Forwarding pattern (no casts needed):
+ *   export const defineX = <const Name extends string>(
+ *     opts: { appName: Application.LiteralName<Name>; ... },
+ *   ) => Application.define({ name: opts.appName, ... });
+ */
+export type LiteralName<T extends string> = string extends T
+	? {
+			readonly _konfig_error: "Application name/namespace must be a string literal. Make the wrapper generic (`<const Name extends string>`) and forward via `Application.LiteralName<Name>`.";
+		}
+	: T;
+
 export interface ApplicationMakeOptions {
 	readonly name: string;
 	readonly namespace: string;
@@ -82,11 +106,13 @@ export interface ApplicationDefineOptions<Name extends string, Ns extends string
 	readonly syncPolicy?: SyncPolicy;
 	readonly buildMetadata?: BuildMetadata;
 	readonly annotations?: Readonly<Record<string, string>>;
-	readonly build: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>;
+	readonly build:
+		| Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
+		| (() => ReadonlyArray<unknown>);
 	readonly provides?: Layer.Layer<Extra>;
 }
 
-export const define = <const Name extends string, const Ns extends string, R, Extra = never>(
+export const define = <const Name extends string, const Ns extends string, R = never, Extra = never>(
 	opts: ApplicationDefineOptions<Name, Ns, R, Extra>,
 ): ApplicationHandle<
 	Name,
@@ -106,9 +132,15 @@ export const define = <const Name extends string, const Ns extends string, R, Ex
 	const internalLayer =
 		opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer;
 
+	const buildEffect: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> = Effect.isEffect(
+		opts.build,
+	)
+		? opts.build
+		: Effect.sync(opts.build);
+
 	const appLayer = Layer.effect(
 		tag,
-		opts.build.pipe(
+		buildEffect.pipe(
 			Effect.map((manifests) =>
 				make({
 					name: opts.name,
