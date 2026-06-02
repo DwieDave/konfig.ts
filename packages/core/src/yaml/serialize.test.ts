@@ -132,6 +132,74 @@ describe("serialize — round-trip (FR-2.7, NFR-4.3)", () => {
 	});
 });
 
+describe("serialize — YAML 1.1 reader safety (kubectl/go-yaml parity)", () => {
+	// kubectl and go-yaml parse manifests with YAML 1.1 semantics, where unquoted
+	// yes/no/on/off/y/n (and case variants) are coerced to booleans. The emitter
+	// must quote such string values so they survive a 1.1 reader as strings.
+	const norway = [
+		"no",
+		"No",
+		"NO",
+		"yes",
+		"Yes",
+		"YES",
+		"on",
+		"On",
+		"ON",
+		"off",
+		"Off",
+		"OFF",
+		"y",
+		"Y",
+		"n",
+		"N",
+	];
+
+	it("argocd-redis args round-trip under a YAML 1.1 parser (regression)", () => {
+		const value = {
+			apiVersion: "apps/v1",
+			kind: "Deployment",
+			metadata: { name: "argocd-redis" },
+			spec: {
+				template: {
+					spec: {
+						containers: [
+							{
+								name: "redis",
+								args: ["--save", "", "--appendonly", "no", "--requirepass $(REDIS_PASSWORD)"],
+							},
+						],
+					},
+				},
+			},
+		};
+		const out = serialize({ value });
+		const parsed = YAML.parse(out, { version: "1.1" }) as {
+			spec: { template: { spec: { containers: { args: unknown[] }[] } } };
+		};
+		const args = parsed.spec.template.spec.containers[0]?.args;
+		expect(args).toEqual([
+			"--save",
+			"",
+			"--appendonly",
+			"no",
+			"--requirepass $(REDIS_PASSWORD)",
+		]);
+		for (const a of args ?? []) expect(typeof a).toBe("string");
+	});
+
+	it("YAML 1.1 bool-coercible strings remain strings (Norway problem property)", () => {
+		fc.assert(
+			fc.property(fc.constantFrom(...norway), (s) => {
+				const out = serialize({ value: { v: s, list: [s] } });
+				const back = YAML.parse(out, { version: "1.1" }) as { v: unknown; list: unknown[] };
+				expect(back.v).toBe(s);
+				expect(back.list[0]).toBe(s);
+			}),
+		);
+	});
+});
+
 describe("serialize — null stripping (helm parity)", () => {
 	it("drops object keys whose value is null", () => {
 		const out = serialize({

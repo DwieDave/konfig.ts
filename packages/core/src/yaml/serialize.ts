@@ -62,6 +62,9 @@ export const serialize = (input: SerializeInput): string => {
 		defaultStringType: "PLAIN",
 		defaultKeyType: "PLAIN",
 		nullStr: "null",
+		// Emit YAML safe under 1.1 readers (kubectl/go-yaml). Forces plain strings
+		// like "no"/"yes"/"on"/"off" to be quoted so they aren't coerced to bools.
+		version: "1.1",
 	});
 	const lf = raw.replace(/\r\n/g, "\n").replace(/\s+$/g, "");
 	return (input.trailingNewline ?? true) ? `${lf}\n` : lf;
