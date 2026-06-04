@@ -1,5 +1,4 @@
 import { AppOfApps } from "@konfig.ts/argocd";
-import { Effect, Layer } from "effect";
 import { cluster } from "../cluster";
 import { defineApi } from "../modules/api";
 import { defineImagePulls } from "../modules/image-pulls";
@@ -10,14 +9,11 @@ import { defineWorker } from "../modules/worker";
 /**
  * Production env composition.
  *
- * Yields every module configured for prod and composes via
- * `AppOfApps.make`. The interesting part is the `Layer.provideMerge`
- * chain at the bottom — it threads the providers (sopsOperator,
- * imagePulls, postgres) ahead of the consumers (api, worker).
- *
- * If any consumer's Dep.Secret/Dep.Namespace need is unprovided, the
- * type system flags it at `AppOfApps.entrypoint`. See `broken.ts` for
- * a worked example.
+ * Lists every module once, in dependency order (providers first). The
+ * type-level dep check still fires at `AppOfApps.entrypoint`: forgetting
+ * `imagePulls` — or putting `api`/`worker` before it — leaves
+ * `Need<"Secret", "ghcr-pull">` in the residual and fails to compile.
+ * See `broken.ts` for a worked example.
  */
 
 const branch = "main";
@@ -46,32 +42,10 @@ const worker = defineWorker({
 	sopsBase,
 });
 
-const program = Effect.gen(function* () {
-	const sopsApp = yield* sopsOperator;
-	const pullsApp = yield* imagePulls;
-	const pgApp = yield* postgres;
-	const apiApp = yield* api;
-	const workerApp = yield* worker;
-	return AppOfApps.make({
-		target: {
-			repoURL: cluster.repositoryUrl,
-			branch,
-			rootPath,
-		},
+export default AppOfApps.entrypoint(
+	AppOfApps.fromModules({
+		target: { repoURL: cluster.repositoryUrl, branch, rootPath },
 		defaults: { destination: { server: "https://kubernetes.default.svc" } },
-		apps: [sopsApp, pullsApp, pgApp, apiApp, workerApp],
-	});
-}).pipe(
-	Effect.provide(
-		Layer.mergeAll(
-			api.layer,
-			worker.layer,
-		).pipe(
-			Layer.provideMerge(
-				Layer.mergeAll(sopsOperator.layer, imagePulls.layer, postgres.layer),
-			),
-		),
-	),
+		modules: [sopsOperator, imagePulls, postgres, api, worker],
+	}),
 );
-
-export default AppOfApps.entrypoint(program);

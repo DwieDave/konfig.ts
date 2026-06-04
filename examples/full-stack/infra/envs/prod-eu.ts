@@ -8,7 +8,6 @@
  * directory becomes `./infra/k8s/manifests/prod-eu/eu-west-1/`.
  */
 import { AppOfApps } from "@konfig.ts/argocd";
-import { Effect, Layer } from "effect";
 import { cluster, clusters } from "../cluster";
 import { defineApi } from "../modules/api";
 import { defineImagePulls } from "../modules/image-pulls";
@@ -43,25 +42,10 @@ const worker = defineWorker({
 	sopsBase,
 });
 
-const program = Effect.gen(function* () {
-	const sopsApp = yield* sopsOperator;
-	const pullsApp = yield* imagePulls;
-	const pgApp = yield* postgres;
-	const apiApp = yield* api;
-	const workerApp = yield* worker;
-	return AppOfApps.make({
+export default AppOfApps.entrypoint(
+	AppOfApps.fromModules({
 		target: { repoURL: cluster.repositoryUrl, branch, rootPath },
 		defaults: { destination: { server: "https://kubernetes.default.svc" } },
-		apps: [sopsApp, pullsApp, pgApp, apiApp, workerApp],
-	});
-}).pipe(
-	Effect.provide(
-		Layer.mergeAll(api.layer, worker.layer).pipe(
-			Layer.provideMerge(
-				Layer.mergeAll(sopsOperator.layer, imagePulls.layer, postgres.layer),
-			),
-		),
-	),
+		modules: [sopsOperator, imagePulls, postgres, api, worker],
+	}),
 );
-
-export default AppOfApps.entrypoint(program);
