@@ -2,7 +2,7 @@ import { coerce } from "@konfig.ts/core";
 import type { SecretSource } from "@konfig.ts/env";
 import { SecretSourceError } from "@konfig.ts/env";
 import { Effect, Redacted, type Scope } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { ChildProcessSpawner } from "./_unstable";
 import { sopsExtract } from "./sops";
 
 export interface SopsSourceInput<K extends string> {

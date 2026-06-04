@@ -1,12 +1,12 @@
+import * as crypto from "node:crypto";
 import { Config, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
-import { ChildProcess } from "effect/unstable/process";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { ChildProcess, ChildProcessSpawner } from "./_unstable";
 import * as YAML from "yaml";
 import { coerce } from "./_cast";
 import { type Manifest, make, type RawYaml } from "./Manifest";
-import { HelmRenderError } from "./RenderError";
+import { HelmDigestMismatch, HelmRenderError } from "./RenderError";
 
 const CLUSTER_SCOPED_KINDS: ReadonlySet<string> = new Set([
 	"APIService",
@@ -92,6 +92,40 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): RawYaml[] => {
 	return results;
 };
 
+const _normalizeDigest = (digest: string): string =>
+	digest.startsWith("sha256:") ? digest : `sha256:${digest}`;
+
+const _hashFile = (filePath: string) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		const bytes = yield* fs.readFile(filePath);
+		const hash = crypto.createHash("sha256").update(bytes).digest("hex");
+		return `sha256:${hash}`;
+	});
+
+interface _VerifyDigestInput {
+	readonly opts: HelmReleaseOptions;
+	readonly cachedTgz: string;
+}
+
+const _verifyDigest = (input: _VerifyDigestInput) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem;
+		const expected = _normalizeDigest(input.opts.digest);
+		const actual = yield* _hashFile(input.cachedTgz);
+		if (expected !== actual) {
+			yield* fs.remove(input.cachedTgz).pipe(Effect.ignore);
+			return yield* Effect.fail(
+				new HelmDigestMismatch({
+					chart: input.opts.chart,
+					version: input.opts.version,
+					expected,
+					actual,
+				}),
+			);
+		}
+	});
+
 interface _EnsureCachedTarballInput {
 	readonly opts: HelmReleaseOptions;
 	readonly cacheDir: string;
@@ -105,7 +139,10 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
 		const path = yield* Path;
 
 		const cacheExists = yield* fs.exists(cachedTgz);
-		if (cacheExists) return;
+		if (cacheExists) {
+			yield* _verifyDigest({ opts, cachedTgz });
+			return;
+		}
 
 		const beforeFiles = new Set(
 			yield* fs.readDirectory(cacheDir).pipe(Effect.orElseSucceed((): string[] => [])),
@@ -134,6 +171,7 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
 		if (candidates.length > 0) {
 			yield* fs.rename(path.join(cacheDir, candidates[0] ?? ""), cachedTgz);
 		}
+		yield* _verifyDigest({ opts, cachedTgz });
 	});
 
 export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {

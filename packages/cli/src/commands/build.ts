@@ -1,7 +1,7 @@
 
 import { RenderContext } from "@konfig.ts/core";
 import { Console, Effect } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "../_unstable";
 import { renderEnv, writeFiles } from "../buildEnv";
 import { resolveConfig } from "../configResolver";
 

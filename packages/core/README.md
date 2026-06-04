@@ -1,104 +1,162 @@
 # @konfig.ts/core
 
-Typesafe Kubernetes manifest primitives — the type algebra and YAML
-serialization layer that `@konfig.ts/k8s` and `@konfig.ts/argocd` build on.
+The Kubernetes-agnostic primitives that the rest of konfig.ts builds on:
+the `Manifest<A>` carrier, the `Dep.*` kinds that drive compile-time
+dependency tracking, a stable YAML serializer, structural diff, an Effect
+`Schema` boundary helper, and the `Helm.release` integration.
 
-## Surface
+Higher-level surfaces — workloads, services, env contracts, ArgoCD
+Application aggregation — live in `@konfig.ts/k8s`, `@konfig.ts/env`,
+and `@konfig.ts/argocd`.
 
-### `Manifest<A, R, P>`
+## `Manifest<A>` — the carrier
 
-The unit of composition. `A` is the produced value, `R` is the per-kind
-set of named resources the manifest **requires**, `P` is the set it
-**provides**. Tracked kinds: `Secret`, `ConfigMap`, `Namespace`,
-`ServiceAccount`, `Application`.
+A `Manifest<A>` is a thunk from a `RenderContext` to an Effect that
+produces an `A`:
 
 ```ts
-import { Manifest, render, RenderContext } from "@konfig.ts/core";
-
-const m = Manifest.embedYaml(
-  { literal: "apiVersion: v1\nkind: Secret\n..." },
-  { Secret: "shared-secret" as const },
-);
-
-// `render` only accepts Manifest<A, Empty, P> — undischarged Rs fail to
-// compile.
-await Effect.runPromise(render(m, RenderContext.make("prod")));
+interface Manifest<A> {
+  readonly render: (
+    ctx: RenderContext,
+  ) => Effect.Effect<A, AnyRenderError, RenderServices>;
+}
 ```
 
-Operators (all in the `Manifest` namespace):
+`RenderServices` is `FileSystem | Path | ChildProcessSpawner | Scope`.
+Errors are a tagged union: `RenderError`, `EmbedYamlReadError`,
+`BoundaryDecodeError`, `HelmVersionTooLow`, `HelmRenderError`,
+`HelmDigestMismatch`, `CrdExtractError`.
 
-| Op | Behavior |
+Constructors:
+
+| Op | Behaviour |
 |---|---|
-| `make(run)` | Low-level constructor — most code uses higher-level ops. |
-| `combine(a, b)` | Union R/P and subtract one side from the other. |
-| `assume(kind, name)(m)` | Type-level discharge of one requirement. |
-| `provide(kind, name)(m)` | Type-level addition to a manifest's `P`. |
-| `whenever(cond, thunk)` | Conditional inclusion (the `mkIf` analogue). |
-| `embedYaml(source, P)` | Pass through verbatim YAML (file or literal). |
+| `Manifest.make(run)` | Lift a `ctx → A \| Effect<A>` into a Manifest. |
+| `Manifest.combine({ a, b })` | Render `a` and `b` concurrently into a tuple. |
+| `Manifest.concat(...ms)` | Flatten an array of Manifests into one. |
+| `Manifest.whenever({ cond, thunk })` | Optional inclusion. |
+| `Manifest.embedYaml(source)` | Pass through verbatim YAML (file or literal). |
 
-### Type algebra
+The `Manifest<A>` itself is not where dependency-tracking happens — it
+just carries data and effect failures. The compile-time graph lives
+one level up; see below.
 
-| Type | Meaning |
-|---|---|
-| `Kind` | The five tracked kinds. |
-| `Deps` | Per-kind record of name unions. |
-| `Empty` | Unit element — `never` for every kind. |
-| `Subtract<R, P>` | Per-kind `Exclude<R[K], P[K]>`. |
-| `Combine<R1, P1, R2, P2>` | `{ R: Subtract<R1∪R2, P1∪P2>; P: P1∪P2 }`. |
-| `Single<K, N>` | A `Deps` with `N` only on kind `K`. |
+## Where the type-safety lives
 
-### Stable YAML — `Yaml.serialize(value)`
+konfig's dep-graph claim has two boundaries:
 
-Output rules (FR-2):
+1. **`AppOfApps.entrypoint(program)`** in `@konfig.ts/argocd`. Every
+   `Application.define({...})` produces an Effect `Layer.Layer<Out, _, In>`
+   that propagates the `Dep.Provide<K, N>` it produces in `Out` and the
+   `Dep.Need<K, N>` it consumes in `In`. Compose with `Layer.provideMerge`,
+   pass to `entrypoint`, and TypeScript checks `In === never`. A missing
+   provider is a compile error — see
+   [`examples/full-stack/infra/envs/broken.ts`](../../examples/full-stack/infra/envs/broken.ts).
+
+2. **`Environment.bind({ env, secrets })`** in `@konfig.ts/env`. The
+   bundle's secret atoms describe `{ envName, secret, key }` triples; the
+   `bind` checks at the type level that every secret has a backend, the
+   backend's `keys` set matches the bundle's keys, and a `requiresSource`
+   backend has a `source` of the right key shape.
+
+Inside a single `Application.define({ build })` Effect, dep tracking is
+declarative: when you `yield* Dep.Secret("ghcr-pull")` to obtain a
+`SecretRef<"ghcr-pull">`, you add the `Need` to the requirements. Forget
+to yield, and nothing complains — the system catches misses at
+composition, not inside an Application's body.
+
+## `Dep.*` — tracked kinds
+
+```ts
+import { Dep } from "@konfig.ts/core";
+```
+
+| Kind | Service | Provided value |
+|---|---|---|
+| `Dep.App<Name>(name)` | `Need<"App", Name>` | `Application` record |
+| `Dep.Application<Name>(name)` | `Need<"Application", Name>` | `Name` literal |
+| `Dep.Namespace<Name>(name)` | `Need<"Namespace", Name>` | `Name` literal |
+| `Dep.Secret<Name>(name)` | `Need<"Secret", Name>` | `SecretRef<Name>` brand |
+| `Dep.SecretValues<Name, K>(name)` | `Need<"SecretValues", Name>` | `{ readonly [k in K]: Redacted<string> }` |
+| `Dep.ConfigMap<Name>(name)` | `Need<"ConfigMap", Name>` | `ConfigMapRef<Name>` brand |
+| `Dep.ServiceAccount<Name>(name)` | `Need<"ServiceAccount", Name>` | `ServiceAccountRef<Name>` brand |
+| `Dep.Pvc<Name>(name)` | `Need<"Pvc", Name>` | `PvcRef<Name>` brand |
+
+For each kind there's a matching `provideX` helper (`provideSecret`,
+`provideNamespace`, …) that emits a `Layer.Layer<Provide<K, N>>`.
+
+`brand(value)` and `coerce(value)` from `@konfig.ts/core` are escape
+hatches. `brand` is fine — it's a nominal-typing primitive for the `*Ref`
+types. `coerce` is the unchecked cast; prefer the schema boundary below.
+
+## Stable YAML — `Yaml.serialize({ value })`
+
+Output rules:
 
 - Top-level keys ordered: `apiVersion`, `kind`, `metadata`, `spec`,
   `status`, then alphabetical.
-- `metadata` keys (top-level only): `name`, `namespace`, `labels`,
-  `annotations`, then alphabetical.
-- All other map keys: alphabetical.
+- Inside `metadata`: `name`, `namespace`, `labels`, `annotations`, then
+  alphabetical.
+- Every other map: alphabetical.
 - Lists preserve insertion order.
 - LF endings, 2-space indent, single trailing newline.
+- YAML 1.1 explicit (kubectl/ArgoCD compatibility).
 
-`Yaml.filenameFor(resource)` returns `<Kind>-<metadata.name>.yaml`.
+`Yaml.filenameFor(resource)` returns `<Kind>-<metadata.name>.yaml` —
+deterministic per-resource filenames for ArgoCD-friendly diffs.
 
-### Structural diff — `diffFiles(left, right)`
+## Structural diff — `diffFiles({ left, right })`
 
-Compares two `{ filename: yaml-text }` maps. Each file is parsed and
-redacted (helm-emitted volatility stripped per FR-3.2) before deep
-equality. Maps compare key-set-and-value (order-insensitive); lists
-compare positionally.
+Each file's YAML is parsed and redacted (Helm-volatile metadata stripped)
+before deep-equality. Output is `Map<filename, FileDiff>`, formatted via
+`formatDiff(result, "summary" | "detail" | "json")`. Today's diff is
+two-way only and treats each file as a single document; richer per-doc
+and anchor-aware diffing is on the roadmap.
 
-Output formatters: `formatDiff(result, "summary" | "detail" | "json")`.
+## `Helm.release({...})`
 
-### Schema boundary — `boundary(schema)`
+Calls `helm pull` and `helm template`, lifts each emitted YAML document
+as a `RawYaml` Manifest under the parent Application. SHA-256 of the
+`.tgz` is verified against `opts.digest` after pull **and** on every
+cache hit — flipping a byte in a cached tarball fails the next render
+with `HelmDigestMismatch`.
 
-Wraps `Schema.decodeUnknownEffect` to produce a tagged
-`BoundaryDecodeError` instead of the raw `SchemaError`. Use at the
-seams where untyped input enters a module:
+`opts.digest` must include the `sha256:` prefix; the cache file name
+includes the first 12 hex digits, but the verifier compares the full
+hash.
+
+## Boundary decode — `boundary({ schema, label })`
+
+Wraps `Schema.decodeUnknownEffect` so that any decode failure becomes
+a `BoundaryDecodeError` with `schema: label`. Use at the seams where
+untyped input enters a module:
 
 ```ts
-const cfg = yield* boundary(ApiOptions, "api")(input);
+const decodeApiOptions = boundary({ schema: ApiOptions, label: "api" });
+const cfg = yield* decodeApiOptions(input);
 ```
+
+Every place that previously did `coerce<T>(YAML.parse(stdout))` over
+untrusted external output is now expected to use this helper.
 
 ## Layout
 
 ```
 src/
 ├── index.ts              barrel
-├── types.ts              Kind, Deps, Empty, Subtract, Combine
-├── Manifest.ts           Manifest interface + combine/assume/provide/whenever/embedYaml
-├── render.ts             render entrypoint (gated on R=Empty)
-├── RenderContext.ts      threaded through every render
-├── RenderError.ts        RenderError + EmbedYamlReadError + BoundaryDecodeError
-├── boundary.ts           Schema.decode wrapper
+├── _cast.ts              brand + coerce (escape hatch)
+├── boundary.ts           Schema.decode wrapper → BoundaryDecodeError
+├── deps.ts               Dep.* kinds + provide* helpers
 ├── diff.ts               structural diff + redaction
+├── Helm.ts               Helm.release with digest verification
+├── images.ts             ImagesConfig + decoders
+├── konfigConfig.ts       KonfigConfig schema (top-level config)
+├── Manifest.ts           Manifest interface + combinators
+├── render.ts             render entrypoint
+├── RenderContext.ts      threaded through every render
+├── RenderError.ts        tagged error union
+├── types.ts              Kind enum (legacy; superseded by Dep.*)
 └── yaml/
     ├── index.ts
     └── serialize.ts      stable YAML serializer + filenameFor
 ```
-
-## Status
-
-M2 of the `konfig-typesafe-k8s` workflow. Constructors for real Kubernetes
-resources land in `@konfig.ts/k8s` (M5); ArgoCD `Application` aggregation lands
-in `@konfig.ts/argocd` (M3); CLI in `@konfig.ts/cli` (M4+).

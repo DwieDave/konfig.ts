@@ -179,4 +179,25 @@ describe("SealedSecrets.backend", () => {
 			expect(yaml).toContain("encryptedData:");
 		}).pipe(Effect.provide(NodeServices.layer)),
 	);
+
+	it.effect("BoundaryDecodeError if kubeseal stdout doesn't match SealedSecret schema", () =>
+		Effect.gen(function* () {
+			const sink: SpawnerSink = {};
+			const malformed = `apiVersion: bitnami.com/v1alpha1\nkind: NotASealedSecret\nmetadata:\n  name: x\n  namespace: y\nspec:\n  encryptedData:\n    k: v\n`;
+			const bound = Secret.bind({
+				secret: dbCreds,
+				backend: SealedSecrets.backend({ scope: "strict", certPath: "/tmp/c.pem" }),
+				source: SecretSource.literal({ data: { url: "u", password: "p" } }),
+			});
+			const exit = yield* Effect.exit(
+				bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink, malformed))),
+			);
+			expect(Exit.isFailure(exit)).toBe(true);
+			if (Exit.isFailure(exit)) {
+				const text = JSON.stringify(exit.cause);
+				expect(text).toContain("BoundaryDecodeError");
+				expect(text).toContain("SealedSecret");
+			}
+		}).pipe(Effect.provide(NodeServices.layer)),
+	);
 });

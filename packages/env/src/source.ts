@@ -1,6 +1,5 @@
 import { Config, Data, Effect, type Scope, Redacted } from "effect";
-import { ChildProcess } from "effect/unstable/process";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { ChildProcess, ChildProcessSpawner } from "./_unstable";
 
 export class SecretSourceError extends Data.TaggedError("SecretSourceError")<{
 	readonly source: string;

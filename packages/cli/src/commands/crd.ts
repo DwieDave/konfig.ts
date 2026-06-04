@@ -1,64 +1,10 @@
-
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { Console, Effect, Option } from "effect";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "../_unstable";
+import { loadChartRegistry } from "../chartRegistry";
 import { resolveCliPaths } from "../cliConfig";
-import { extractCrds, verifyCrds } from "../crd/extract";
+import { extractCrdsEffect, verifyCrdsEffect } from "../crd/extract";
 import { assertHelmVersion } from "../helmVersion";
-
-const _loadChartRegistry = async (
-	chartsDir: string,
-): Promise<
-	Array<{
-		id: string;
-		repo: string;
-		chart: string;
-		version: string;
-		digest: string;
-	}>
-> => {
-	const entries: Array<{
-		id: string;
-		repo: string;
-		chart: string;
-		version: string;
-		digest: string;
-	}> = [];
-
-	let files: string[];
-	try {
-		files = await fs.readdir(chartsDir);
-	} catch {
-		return entries;
-	}
-
-	for (const file of files.filter((f) => f.endsWith(".ts") && !f.startsWith("_"))) {
-		try {
-			const mod = await import(path.resolve(chartsDir, file));
-			for (const key of Object.keys(mod)) {
-				const val = mod[key];
-				if (
-					val &&
-					typeof val === "object" &&
-					"_tskHelmRelease" in val &&
-					val._tskHelmRelease === true
-				) {
-					entries.push({
-						id: String(val.id ?? file.replace(/\.ts$/, "")),
-						repo: String(val.repo ?? ""),
-						chart: String(val.chart ?? ""),
-						version: String(val.version ?? ""),
-						digest: String(val.digest ?? ""),
-					});
-					break;
-				}
-			}
-		} catch {
-		}
-	}
-	return entries;
-};
 
 export const crdExtractCommand = Command.make(
 	"extract",
@@ -76,14 +22,13 @@ export const crdExtractCommand = Command.make(
 			yield* assertHelmVersion(minVersion);
 
 			const registry = yield* Effect.tryPromise({
-				try: () => _loadChartRegistry(chartsDir),
+				try: () => loadChartRegistry(chartsDir),
 				catch: (cause) => new Error(`Failed to load chart registry: ${cause}`),
 			});
 
 			const releaseId = Option.getOrUndefined(flags.release);
 
 			if (releaseId !== undefined) {
-				// Single release — T6.3
 				const def = registry.find((r) => r.id === releaseId);
 				if (!def) {
 					yield* Console.error(
@@ -93,17 +38,13 @@ export const crdExtractCommand = Command.make(
 					return;
 				}
 				yield* Console.log(`Extracting CRDs for ${def.chart}@${def.version}...`);
-				yield* Effect.tryPromise({
-					try: () =>
-						extractCrds({
-							repo: def.repo,
-							chart: def.chart,
-							version: def.version,
-							id: def.id,
-							outDir,
-							cacheDir,
-						}),
-					catch: (cause) => new Error(`CRD extraction failed: ${cause}`),
+				yield* extractCrdsEffect({
+					repo: def.repo,
+					chart: def.chart,
+					version: def.version,
+					id: def.id,
+					outDir,
+					cacheDir,
 				});
 				yield* Console.log(`Written to ${path.join(outDir, `${def.id}.ts`)}`);
 			} else if (flags.all) {
@@ -113,17 +54,13 @@ export const crdExtractCommand = Command.make(
 				}
 				for (const def of registry) {
 					yield* Console.log(`Extracting CRDs for ${def.chart}@${def.version}...`);
-					yield* Effect.tryPromise({
-						try: () =>
-							extractCrds({
-								repo: def.repo,
-								chart: def.chart,
-								version: def.version,
-								id: def.id,
-								outDir,
-								cacheDir,
-							}),
-						catch: (cause) => new Error(`CRD extraction failed for ${def.id}: ${cause}`),
+					yield* extractCrdsEffect({
+						repo: def.repo,
+						chart: def.chart,
+						version: def.version,
+						id: def.id,
+						outDir,
+						cacheDir,
 					});
 				}
 				yield* Console.log(`Done. Generated files in ${outDir}`);
@@ -134,7 +71,6 @@ export const crdExtractCommand = Command.make(
 		}),
 ).pipe(Command.withDescription("Extract CRD TypeScript types from Helm charts"));
 
-// `konfig crd verify` — T6.5
 export const crdVerifyCommand = Command.make("verify", {}, () =>
 	Effect.gen(function* () {
 		const { cacheDir, outDir, chartsDir, minVersion } = yield* resolveCliPaths;
@@ -142,7 +78,7 @@ export const crdVerifyCommand = Command.make("verify", {}, () =>
 		yield* assertHelmVersion(minVersion);
 
 		const registry = yield* Effect.tryPromise({
-			try: () => _loadChartRegistry(chartsDir),
+			try: () => loadChartRegistry(chartsDir),
 			catch: (cause) => new Error(`Failed to load chart registry: ${cause}`),
 		});
 
@@ -162,10 +98,7 @@ export const crdVerifyCommand = Command.make("verify", {}, () =>
 
 		yield* Console.log(`Verifying ${releases.length} chart(s) against ${outDir}...`);
 
-		const drifted = yield* Effect.tryPromise({
-			try: () => verifyCrds({ releases, committedDir: outDir }),
-			catch: (cause) => new Error(`Verify failed: ${cause}`),
-		});
+		const drifted = yield* verifyCrdsEffect({ releases, committedDir: outDir });
 
 		if (drifted.length > 0) {
 			yield* Console.error(`CRD drift detected in: ${drifted.join(", ")}`);

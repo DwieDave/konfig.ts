@@ -26,6 +26,7 @@
 	"scripts": {
 		"build": "tsdown ./src/main.ts --format=esm --target=node20 --sourcemap --clean --no-dts && chmod +x dist/main.mjs",
 		"check": "tsc -p tsconfig.check.json --noEmit",
+		"test": "bunx vitest run $(rg --files src -g '*.test.ts')",
 		"lint": "oxlint",
 		"lint:apply": "oxlint --fix",
 		"prepublishOnly": "bun run build"
@@ -42,8 +43,10 @@
 		"yaml": "catalog:"
 	},
 	"devDependencies": {
+		"@effect/vitest": "catalog:",
 		"@types/bun": "catalog:",
 		"@types/semver": "^7.5.8",
-		"typescript": "catalog:"
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	}
 }

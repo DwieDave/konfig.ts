@@ -3,7 +3,7 @@ import { decodeImagesEffect, decodeImagesSync, ImagesConfig } from "@konfig.ts/c
 import { Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "../_unstable";
 import { resolveConfig } from "../configResolver";
 
 export class SetUnknownEnv extends Data.TaggedError("SetUnknownEnv")<{

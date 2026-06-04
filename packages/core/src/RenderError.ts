@@ -26,6 +26,17 @@ export class HelmRenderError extends Data.TaggedError("HelmRenderError")<{
 	readonly cause: unknown;
 }> {}
 
+export class HelmDigestMismatch extends Data.TaggedError("HelmDigestMismatch")<{
+	readonly chart: string;
+	readonly version: string;
+	readonly expected: string;
+	readonly actual: string;
+}> {
+	get message(): string {
+		return `Helm chart ${this.chart}@${this.version} digest mismatch: expected ${this.expected}, got ${this.actual}`;
+	}
+}
+
 export class CrdExtractError extends Data.TaggedError("CrdExtractError")<{
 	readonly chart: string;
 	readonly cause: unknown;
@@ -37,4 +48,5 @@ export type AnyRenderError =
 	| BoundaryDecodeError
 	| HelmVersionTooLow
 	| HelmRenderError
+	| HelmDigestMismatch
 	| CrdExtractError;

@@ -19,7 +19,7 @@ import {
 import { Console, Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "../_unstable";
 
 void deepEqual;
 void parseYaml;

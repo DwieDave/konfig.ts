@@ -10,7 +10,7 @@ import {
 import { Console, Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "../_unstable";
 import { renderEnv } from "../buildEnv";
 import { resolveConfig } from "../configResolver";
 

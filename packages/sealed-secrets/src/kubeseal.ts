@@ -1,9 +1,14 @@
-import { coerce } from "@konfig.ts/core";
+import { boundary } from "@konfig.ts/core";
 import { Data, Effect, Stream } from "effect";
-import { ChildProcess } from "effect/unstable/process";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { ChildProcess, ChildProcessSpawner } from "./_unstable";
 import * as YAML from "yaml";
-import type { SealedSecret, SealedSecretScope } from "./crd";
+import type { SealedSecretScope } from "./crd";
+import { SealedSecretSchema } from "./schema";
+
+const _decodeSealedSecret = boundary({
+	schema: SealedSecretSchema,
+	label: "SealedSecret",
+});
 
 export class KubesealCertMissing extends Data.TaggedError("KubesealCertMissing")<{
 	readonly hint: string;
@@ -58,8 +63,8 @@ export const runKubeseal = (input: RunKubesealInput) =>
 			.string(cmd)
 			.pipe(Effect.mapError((cause) => new KubesealInvocationError({ cause })));
 		const parsed = yield* Effect.try({
-			try: () => YAML.parse(stdout),
+			try: () => YAML.parse(stdout) as unknown,
 			catch: (cause) => new KubesealParseError({ output: stdout, cause }),
 		});
-		return coerce<SealedSecret>(parsed);
+		return yield* _decodeSealedSecret(parsed);
 	}).pipe(Effect.scoped);

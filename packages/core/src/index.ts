@@ -57,10 +57,10 @@ export {
 	BoundaryDecodeError,
 	CrdExtractError,
 	EmbedYamlReadError,
+	HelmDigestMismatch,
 	HelmRenderError,
 	HelmVersionTooLow,
 	RenderError,
 } from "./RenderError";
 export { render } from "./render";
-export { KINDS, type Kind } from "./types";
 export * as Yaml from "./yaml";

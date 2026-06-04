@@ -4,7 +4,7 @@ import { FileSystem } from "effect/FileSystem";
 import { coerce } from "./_cast";
 import type { Path } from "effect/Path";
 import type * as Scope from "effect/Scope";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { ChildProcessSpawner } from "./_unstable";
 import type { RenderContext } from "./RenderContext";
 import { type AnyRenderError, EmbedYamlReadError } from "./RenderError";
 

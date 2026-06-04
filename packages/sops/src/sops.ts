@@ -1,7 +1,6 @@
 import { coerce } from "@konfig.ts/core";
 import { Data, Effect, Stream } from "effect";
-import { ChildProcess } from "effect/unstable/process";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { ChildProcess, ChildProcessSpawner } from "./_unstable";
 import type { SopsRecipients } from "./crd";
 
 export class SopsInvocationError extends Data.TaggedError("SopsInvocationError")<{

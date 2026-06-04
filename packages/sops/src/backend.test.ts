@@ -103,7 +103,7 @@ describe("Sops.backend (case B: konfig source → SopsSecret CR)", () => {
 			const sink: Sink = { calls: [] };
 			const bound = Secret.bind({
 				secret: dbCreds,
-				backend: Sops.backend({ recipients: { age: ["age1stubrecipient"] } }),
+				backend: Sops.backend({ recipients: { age: ["age1stub00000000000000000000000000000000000000000000000000ends"] } }),
 				source: SecretSource.literal({ data: { url: "u", password: "p" } }),
 			});
 			const rendered = coerce<SopsSecret>(
@@ -118,7 +118,7 @@ describe("Sops.backend (case B: konfig source → SopsSecret CR)", () => {
 			expect(call?.cmd).toBe("sops");
 			expect(call?.args).toContain("--encrypt");
 			expect(call?.args).toContain("--age");
-			expect(call?.args).toContain("age1stubrecipient");
+			expect(call?.args).toContain("age1stub00000000000000000000000000000000000000000000000000ends");
 			expect(call?.stdin).toContain("kind: SopsSecret");
 			expect(call?.stdin).toContain("url: u");
 		}).pipe(Effect.provide(NodeServices.layer)),
@@ -209,6 +209,87 @@ describe("Sops.source error handling", () => {
 				bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink, respond))),
 			);
 			expect(Exit.isFailure(exit)).toBe(true);
+		}).pipe(Effect.provide(NodeServices.layer)),
+	);
+});
+
+describe("Sops.backend recipient input boundary", () => {
+	const VALID_OUTPUT = SOPS_ENCRYPT_OUTPUT;
+	const validAge = "age1stub00000000000000000000000000000000000000000000000000ends";
+
+	it.effect("rejects age recipient containing a comma (smuggled second key)", () =>
+		Effect.gen(function* () {
+			const sink: Sink = { calls: [] };
+			const bound = Secret.bind({
+				secret: dbCreds,
+				backend: Sops.backend({
+					recipients: {
+						age: [`${validAge},age1injected${"0".repeat(50)}leak`],
+					},
+				}),
+				source: SecretSource.literal({ data: { url: "u", password: "p" } }),
+			});
+			const exit = yield* Effect.exit(
+				bound.manifest!.render(ctx).pipe(
+					Effect.provide(_makeStubSpawner(sink, () => VALID_OUTPUT)),
+				),
+			);
+			expect(Exit.isFailure(exit)).toBe(true);
+			if (Exit.isFailure(exit)) {
+				const text = JSON.stringify(exit.cause);
+				expect(text).toContain("SopsRecipients");
+				expect(text).toContain("BoundaryDecodeError");
+			}
+		}).pipe(Effect.provide(NodeServices.layer)),
+	);
+
+	it.effect("rejects age recipient with shell metachars (semicolon)", () =>
+		Effect.gen(function* () {
+			const sink: Sink = { calls: [] };
+			const bound = Secret.bind({
+				secret: dbCreds,
+				backend: Sops.backend({
+					recipients: { age: [`${validAge}; rm -rf /`] },
+				}),
+				source: SecretSource.literal({ data: { url: "u", password: "p" } }),
+			});
+			const exit = yield* Effect.exit(
+				bound.manifest!.render(ctx).pipe(
+					Effect.provide(_makeStubSpawner(sink, () => VALID_OUTPUT)),
+				),
+			);
+			expect(Exit.isFailure(exit)).toBe(true);
+		}).pipe(Effect.provide(NodeServices.layer)),
+	);
+});
+
+describe("Sops.backend schema boundary", () => {
+	const MALFORMED_OUTPUT = `
+apiVersion: wrong/v1
+kind: NotASopsSecret
+metadata:
+  name: db-creds
+`.trim();
+
+	it.effect("BoundaryDecodeError if sops stdout doesn't match SopsSecret schema", () =>
+		Effect.gen(function* () {
+			const sink: Sink = { calls: [] };
+			const bound = Secret.bind({
+				secret: dbCreds,
+				backend: Sops.backend({ recipients: { age: ["age1stub00000000000000000000000000000000000000000000000000ends"] } }),
+				source: SecretSource.literal({ data: { url: "u", password: "p" } }),
+			});
+			const exit = yield* Effect.exit(
+				bound.manifest!.render(ctx).pipe(
+					Effect.provide(_makeStubSpawner(sink, () => MALFORMED_OUTPUT)),
+				),
+			);
+			expect(Exit.isFailure(exit)).toBe(true);
+			if (Exit.isFailure(exit)) {
+				const text = JSON.stringify(exit.cause);
+				expect(text).toContain("BoundaryDecodeError");
+				expect(text).toContain("SopsSecret");
+			}
 		}).pipe(Effect.provide(NodeServices.layer)),
 	);
 });

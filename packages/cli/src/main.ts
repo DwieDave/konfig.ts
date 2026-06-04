@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "./_unstable";
 import { buildCommand } from "./commands/build";
 import { crdCommand } from "./commands/crd";
 import { diffCommand } from "./commands/diff";

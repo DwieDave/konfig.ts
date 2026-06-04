@@ -114,15 +114,18 @@
         "yaml": "catalog:",
       },
       "devDependencies": {
+        "@effect/vitest": "catalog:",
         "@types/bun": "catalog:",
         "@types/semver": "^7.5.8",
         "typescript": "catalog:",
+        "vitest": "catalog:",
       },
     },
     "packages/core": {
       "name": "@konfig.ts/core",
       "version": "0.0.1",
       "devDependencies": {
+        "@effect/platform-node": "catalog:",
         "@effect/vitest": "catalog:",
         "@types/bun": "catalog:",
         "effect": "catalog:",

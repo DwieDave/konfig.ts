@@ -1,11 +1,22 @@
-import { coerce, Manifest, RenderError, Yaml } from "@konfig.ts/core";
+import { boundary, Manifest, RenderError, Yaml } from "@konfig.ts/core";
 import type { SecretSource } from "@konfig.ts/env";
 import { BackendSourceMissing, type BackendEmitInput, type SecretBackend } from "@konfig.ts/k8s";
 import { Effect, Redacted } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import * as YAML from "yaml";
 import type { SopsRecipients, SopsSecret } from "./crd";
+import { SopsRecipientsSchema, SopsSecretSchema } from "./schema";
 import { sopsEncryptStdin } from "./sops";
+
+const _decodeSopsSecret = boundary({
+	schema: SopsSecretSchema,
+	label: "SopsSecret",
+});
+
+const _decodeRecipients = boundary({
+	schema: SopsRecipientsSchema,
+	label: "SopsRecipients",
+});
 
 export interface SopsBackendOptions {
 	readonly recipients: SopsRecipients;
@@ -56,9 +67,10 @@ const _emit = <N extends string, K extends string>(
 				},
 			};
 			const yaml = Yaml.serialize({ value: plainCR });
+			const recipients = yield* _decodeRecipients(input.opts.recipients);
 			const encryptedYaml = yield* sopsEncryptStdin({
 				plaintextYaml: yaml,
-				recipients: input.opts.recipients,
+				recipients,
 			}).pipe(
 				Effect.mapError(
 					(cause) =>
@@ -68,7 +80,15 @@ const _emit = <N extends string, K extends string>(
 						}),
 				),
 			);
-			return coerce<SopsSecret>(YAML.parse(encryptedYaml));
+			const parsed = yield* Effect.try({
+				try: () => YAML.parse(encryptedYaml) as unknown,
+				catch: (cause) =>
+					new RenderError({
+						message: `Sops(${input.base.namespace}/${input.base.name}): sops stdout was not valid YAML`,
+						cause,
+					}),
+			});
+			return yield* _decodeSopsSecret(parsed);
 		}),
 	);
 
@@ -94,7 +114,15 @@ const _passthrough = <N extends string, K extends string>(
 							}),
 					),
 				);
-			return coerce<SopsSecret>(YAML.parse(contents));
+			const parsed = yield* Effect.try({
+				try: () => YAML.parse(contents) as unknown,
+				catch: (cause) =>
+					new RenderError({
+						message: `Sops.passthrough(${input.base.namespace}/${input.base.name}): file ${input.file} was not valid YAML`,
+						cause,
+					}),
+			});
+			return yield* _decodeSopsSecret(parsed);
 		}),
 	);
 
