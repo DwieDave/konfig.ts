@@ -57,9 +57,7 @@ the env var name happens in exactly one place.
 **SOPS-encrypted secrets.** `Sops.passthrough` reads pre-encrypted
 SopsSecret yaml under `infra/secrets/` and emits it verbatim. For
 re-encrypt-on-render flows, swap `Sops.passthrough({ file })` for
-`Sops.backend({ recipients })` + `Sops.source({ file, keys })` — the
-empacthub `sopsBind` helper in `infra/konfig/modules/_helpers.ts` does
-exactly that.
+`Sops.backend({ recipients })` + `Sops.source({ file, keys })`
 
 **Helm via `Helm.release`.** Both `sops-operator` and `postgres` lift a
 Helm chart into the manifest stream. The release options (`repo`,
