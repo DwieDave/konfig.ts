@@ -22,8 +22,7 @@
 		{
 			"files": ["packages/oxc/src/**/*.ts"],
 			"rules": {
-				"app/no-type-assertion": "off",
-				"app/no-multiple-function-params": "off"
+				"app/no-type-assertion": "off"
 			}
 		},
 		{

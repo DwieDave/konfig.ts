@@ -147,15 +147,13 @@ describe("Sops.passthrough (case C)", () => {
 });
 
 describe("Sops.source (case A: sops source → SealedSecrets backend)", () => {
-	it.effect("decrypts per-key via sops --extract, feeds kubeseal", () =>
+	it.effect("decrypts the file once and plucks every requested key from the parsed plaintext", () =>
 		Effect.gen(function* () {
 			const sink: Sink = { calls: [] };
 			const respond = (cmd: Command): string => {
 				if (!isStandardCommand(cmd)) return "";
 				if (cmd.command === "sops") {
-					const extractArg = cmd.args[cmd.args.indexOf("--extract") + 1] ?? "";
-					if (extractArg.includes("url")) return "u-from-sops";
-					if (extractArg.includes("password")) return "p-from-sops";
+					return "url: u-from-sops\npassword: p-from-sops\n";
 				}
 				if (cmd.command === "kubeseal") return KUBESEAL_OUTPUT;
 				return "";
@@ -175,9 +173,11 @@ describe("Sops.source (case A: sops source → SealedSecrets backend)", () => {
 			expect(yaml).toContain("kind: SealedSecret");
 
 			const sopsCalls = sink.calls.filter((c) => c.cmd === "sops");
-			expect(sopsCalls).toHaveLength(2);
+			// ONE decrypt call per file regardless of how many keys — the
+			// plaintext is plucked from the in-memory parse.
+			expect(sopsCalls).toHaveLength(1);
 			expect(sopsCalls[0]?.args).toContain("--decrypt");
-			expect(sopsCalls[0]?.args).toContain("--extract");
+			expect(sopsCalls[0]?.args).not.toContain("--extract");
 			expect(sopsCalls[0]?.args).toContain("/tmp/db-creds.enc.yaml");
 
 			const kubesealCall = sink.calls.find((c) => c.cmd === "kubeseal");

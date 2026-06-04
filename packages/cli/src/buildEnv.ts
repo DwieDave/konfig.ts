@@ -167,24 +167,40 @@ export const renderEnv = (input: RenderEnvInput) =>
 			...(ctx.cluster !== undefined ? [ctx.cluster] : []),
 		);
 		const appsDirAbs = path.join(outDirAbs, result.name);
-		const files: OutputFile[] = [];
+		type AnyManifest = M.Manifest<unknown>;
 
-		for (const app of result.apps) {
-			const appDir = path.join(outDirAbs, app.name);
-			type AnyManifest = M.Manifest<unknown>;
-			const rendered = yield* Effect.all(
-				app.manifests.map((m) => render({ manifest: unsafeCoerce<AnyManifest>(m, "app.manifests holds Manifest<unknown> by Application contract"), ctx })),
-				{ concurrency: "unbounded" },
-			);
-			for (const value of rendered) {
-				files.push(..._collectOutputs({ value, appDir, pathJoin: path.join }));
-			}
-
-			files.push({
-				path: path.join(appsDirAbs, applicationCRFilename(app)),
-				content: serializeApplicationCR({ app, target: result.target, defaults: result.defaults }),
-			});
-		}
+		// Render every app's manifests in parallel — each Application's
+		// build Effect already spawns helm/sops concurrently, so the
+		// inter-app concurrency layer multiplies the wall-time win on cold
+		// caches without affecting cache-hit cost. Bounded at 4 to keep the
+		// helm/sops subprocess count manageable.
+		const perAppFiles = yield* Effect.all(
+			result.apps.map((app) =>
+				Effect.gen(function* () {
+					const appDir = path.join(outDirAbs, app.name);
+					const rendered = yield* Effect.all(
+						app.manifests.map((m) =>
+							render({
+								manifest: unsafeCoerce<AnyManifest>(m, "app.manifests holds Manifest<unknown> by Application contract"),
+								ctx,
+							}),
+						),
+						{ concurrency: "unbounded" },
+					);
+					const out: OutputFile[] = [];
+					for (const value of rendered) {
+						out.push(..._collectOutputs({ value, appDir, pathJoin: path.join }));
+					}
+					out.push({
+						path: path.join(appsDirAbs, applicationCRFilename(app)),
+						content: serializeApplicationCR({ app, target: result.target, defaults: result.defaults }),
+					});
+					return out;
+				}),
+			),
+			{ concurrency: 4 },
+		);
+		const files: OutputFile[] = perAppFiles.flat();
 
 		return unsafeCoerce<RenderedEnv>({ appsDirAbs, outDirAbs, files }, "shape matches RenderedEnv exactly; mutable file[] widened to readonly");
 	}).pipe(Effect.scoped);
