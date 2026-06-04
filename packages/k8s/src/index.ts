@@ -1,6 +1,29 @@
 
 export * as K8s from "./.generated/k8s-types";
-export { type ContainerInput, imagePullSecret, type PodSpecInput } from "./container";
+export {
+	type ContainerInput,
+	type ContainerSpec,
+	defineContainer,
+	type DefineContainerInput,
+	imagePullSecret,
+	type PodSpecInput,
+} from "./container";
+export {
+	type ContainerPort,
+	type ContainerProtocol,
+	type ExecAction,
+	type GrpcAction,
+	type HttpGetAction,
+	type HttpHeader,
+	type NamesOf,
+	port,
+	type PortInput,
+	type PortName,
+	portRef,
+	type ProbeTarget,
+	type ServicePortSpec,
+	type TcpSocketAction,
+} from "./ports";
 
 export {
 	configMapEnv,
@@ -53,6 +76,8 @@ export {
 export { NativeSecret, type NativeSecretOptions } from "./nativeSecret";
 export { hashSecretValues, type HashSecretValuesInput } from "./podHash";
 export {
+	type DefinedServiceInput,
+	definedService,
 	Ingress,
 	type IngressInput,
 	type IngressTLSInput,
