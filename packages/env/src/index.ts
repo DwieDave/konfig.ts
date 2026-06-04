@@ -40,3 +40,4 @@ export {
 	SecretSourceError,
 } from "./source";
 export { type EnvironmentShape, environmentLayer } from "./layer";
+export { runtime } from "./runtime";

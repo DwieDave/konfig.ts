@@ -24,6 +24,7 @@ export const PackageManagerAtom = Schema.TaggedUnion({
 	BunPm: {},
 	NpmPm: {},
 	PnpmPm: {},
+	YarnPm: { variant: Schema.optionalKey(Schema.Literals(["classic", "berry"])) },
 });
 export type PackageManagerAtom = typeof PackageManagerAtom.Type;
 

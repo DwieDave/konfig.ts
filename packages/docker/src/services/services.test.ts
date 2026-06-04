@@ -27,6 +27,7 @@ describe("PackageManager bun", () => {
 			  "layout": "isolated",
 			  "lockfiles": [
 			    "bun.lock",
+			    "bun.lockb",
 			  ],
 			  "prepend": [],
 			  "tag": "Bun",
@@ -84,6 +85,7 @@ describe("PackageManager pnpm", () => {
 		}).toMatchInlineSnapshot(`
 			{
 			  "aux": [
+			    "pnpm-workspace.yaml",
 			    ".npmrc",
 			  ],
 			  "install": [
@@ -95,7 +97,6 @@ describe("PackageManager pnpm", () => {
 			  "layout": "isolated",
 			  "lockfiles": [
 			    "pnpm-lock.yaml",
-			    "pnpm-workspace.yaml",
 			  ],
 			  "prepend": [
 			    "corepack enable pnpm && corepack prepare pnpm@9.7.0 --activate",

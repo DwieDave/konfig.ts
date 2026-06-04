@@ -81,6 +81,29 @@ Built for the workload shapes consumers need today — not speculative.
 with derived labels (`app: <name>`). `Workload.cron(...)` composes
 CronJob + ServiceAccount (the SA is private to the cron).
 
+## Secret rotation — build-time hash vs runtime Reloader
+
+konfig provides two complementary stories for restarting pods when a
+Secret or ConfigMap they consume changes:
+
+- **Build time** (`hashSecretValues` / `pod-hash` annotation). A SHA of
+  the secret material lives on the pod spec; re-rendering after a
+  rotation produces a new hash, so the Deployment's pod template
+  changes and Kubernetes rolls. Fast feedback, deterministic — but only
+  fires when konfig re-renders.
+
+- **Runtime** (`Workload.web({ reloader: "stakater" })`). Emits
+  `reloader.stakater.com/auto: "true"` on the Deployment so
+  [Stakater Reloader](https://github.com/stakater/Reloader) watches
+  every referenced Secret/ConfigMap and patches the workload when the
+  in-cluster object changes. Pair with `ExternalSecrets` or a
+  controller that updates Secrets out-of-band.
+
+Pick build-time hashes for stateless render → apply pipelines; pick
+Reloader when secrets rotate independently of CI. They compose — a
+config-managed Secret with `reloader: "stakater"` rolls on both
+re-render and on out-of-band updates.
+
 ## Secret backends — `SecretBackend<N, K>`
 
 `SecretBackend` is the contract Sops / SealedSecrets / ExternalSecrets

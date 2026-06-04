@@ -31,6 +31,14 @@ export const HelmConfig = Schema.Struct({
 });
 export type HelmConfig = typeof HelmConfig.Type;
 
+export const ClusterSpec = Schema.Struct({
+	registry: Schema.optionalKey(Schema.String),
+	ingressClass: Schema.optionalKey(Schema.String),
+	storageClass: Schema.optionalKey(Schema.String),
+	repositoryUrl: Schema.optionalKey(Schema.String),
+});
+export type ClusterSpec = typeof ClusterSpec.Type;
+
 export const DiffConfig = Schema.Struct({
 	baseline: Schema.String,
 });
@@ -59,6 +67,7 @@ export const KonfigConfig = Schema.Struct({
 	),
 	diff: Schema.optionalKey(DiffConfig),
 	services: Schema.optionalKey(ServicesConfig),
+	clusters: Schema.optionalKey(Schema.Record(Schema.String, ClusterSpec)),
 });
 export type KonfigConfig = typeof KonfigConfig.Type;
 

@@ -23,11 +23,12 @@ export {
 	type ServiceAccountInput,
 	type ServiceAccountManifest,
 } from "./identity";
+import { runtime as envRuntime } from "@konfig.ts/env";
 import { Secret as _SecretIdentity } from "./identity";
 import { bindSecret } from "./secretBind";
 import { bindEnvironment } from "./environmentBind";
 export const Secret = { ..._SecretIdentity, bind: bindSecret };
-export const Environment = { bind: bindEnvironment };
+export const Environment = { bind: bindEnvironment, runtime: envRuntime };
 export type {
 	BindSecretInput,
 	DeclaredSecret,

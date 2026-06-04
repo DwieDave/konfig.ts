@@ -11,7 +11,7 @@ export interface DepsImageInput {
 export type NodeModulesLayout = "isolated" | "hoisted";
 
 export interface PackageManager {
-	readonly _tag: "Bun" | "Npm" | "Pnpm";
+	readonly _tag: "Bun" | "Npm" | "Pnpm" | "Yarn";
 	readonly lockfileNames: ReadonlyArray<string>;
 	readonly auxFiles: ReadonlyArray<string>;
 	readonly installCommand: ReadonlyArray<string>;

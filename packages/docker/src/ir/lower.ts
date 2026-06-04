@@ -14,6 +14,7 @@ import type { ImageRef, PackageManager, NodeModulesLayout } from "../services/Pa
 import { bun as bunPm } from "../services/pm/bun";
 import { npm as npmPm } from "../services/pm/npm";
 import { pnpm as pnpmPm } from "../services/pm/pnpm";
+import { yarn as yarnPm } from "../services/pm/yarn";
 import type { Runtime } from "../services/Runtime";
 import { bun as bunRuntime } from "../services/runtime/bun";
 import { node as nodeRuntime } from "../services/runtime/node";
@@ -73,7 +74,7 @@ export const prepareContext = (
 
 /* ──────────────────────────── resolution ──────────────────────────── */
 
-type PmKind = "Bun" | "Npm" | "Pnpm";
+type PmKind = "Bun" | "Npm" | "Pnpm" | "Yarn";
 type RuntimeKind = "Bun" | "Node";
 
 const specPmKind = (s: DockerSpec): PmKind | undefined => {
@@ -84,6 +85,8 @@ const specPmKind = (s: DockerSpec): PmKind | undefined => {
 			return "Npm";
 		case "PnpmPm":
 			return "Pnpm";
+		case "YarnPm":
+			return "Yarn";
 		default:
 			return undefined;
 	}
@@ -102,10 +105,16 @@ const specRuntimeKind = (s: DockerSpec): RuntimeKind | undefined => {
 
 const defaultRuntimeFor = (pm: PmKind): RuntimeKind => (pm === "Bun" ? "Bun" : "Node");
 
-const pmImpl = (kind: PmKind, layout: NodeModulesLayout): PackageManager => {
+interface PmImplOpts {
+	readonly layout: NodeModulesLayout;
+	readonly yarnVariant: "classic" | "berry";
+}
+
+const pmImpl = (kind: PmKind, opts: PmImplOpts): PackageManager => {
 	if (kind === "Bun") return bunPm;
 	if (kind === "Npm") return npmPm;
-	return pnpmPm({ layout });
+	if (kind === "Yarn") return yarnPm({ variant: opts.yarnVariant });
+	return pnpmPm({ layout: opts.layout });
 };
 
 const runtimeImpl = (kind: RuntimeKind): Runtime => (kind === "Bun" ? bunRuntime : nodeRuntime);
@@ -289,7 +298,10 @@ const resolveDefaults = (
 				}),
 			);
 		}
-		const pm = pmImpl(pmKind, ctx.detectedPm.pnpmLayout ?? "isolated");
+		const pm = pmImpl(pmKind, {
+			layout: ctx.detectedPm.pnpmLayout ?? "isolated",
+			yarnVariant: ctx.detectedPm.yarnVariant ?? "classic",
+		});
 		const runtime = runtimeImpl(runtimeKind);
 		const runtimeImage = runtime.imageRef({ version: runtimeVersion, alpine });
 		const depsImage = pm.depsImage({ runtimeImage, pmVersion });
@@ -322,10 +334,15 @@ const baseStage = (img: ImageRef): Stage => ({
  * instead of `builder`, dropping typescript / @types / lint / test
  * tooling from the runtime image.
  */
+const _lockfilesToCopy = (ctx: LowerContext, pm: PmContext): ReadonlyArray<string> =>
+	ctx.detectedPm.presentLockfiles.length > 0
+		? ctx.detectedPm.presentLockfiles
+		: pm.pmImpl.lockfileNames;
+
 const prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
 	const rootFiles: ReadonlyArray<string> = [
 		"package.json",
-		...pm.pmImpl.lockfileNames,
+		..._lockfilesToCopy(ctx, pm),
 		...pm.pmImpl.auxFiles,
 	];
 	const instructions: Instruction[] = [{ _tag: "Copy", src: rootFiles, dst: "./" }];
@@ -362,7 +379,7 @@ const prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stag
 	// frozen"). Re-resolving from the trimmed package.json is safe in a
 	// build stage; versions float only within whatever semver each
 	// workspace's package.json already permits.
-	const lockfileTokens = pm.pmImpl.lockfileNames.join(" ");
+	const lockfileTokens = _lockfilesToCopy(ctx, pm).join(" ");
 	instructions.push({ _tag: "Run", cmd: `rm -f ${lockfileTokens}` });
 	// Copy ONLY the closure's package.json files. Non-closure workspaces
 	// were stripped from `workspaces` above so omitting their package.json
@@ -399,7 +416,7 @@ const prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stag
 const depsStage = (ctx: LowerContext, pm: PmContext): Stage => {
 	const rootFiles: ReadonlyArray<string> = [
 		"package.json",
-		...pm.pmImpl.lockfileNames,
+		..._lockfilesToCopy(ctx, pm),
 		...pm.pmImpl.auxFiles,
 	];
 	const instructions: Instruction[] = [
@@ -595,7 +612,7 @@ const devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => 
 	if (!dev) throw new Error("devStage called without spec.dev");
 	const rootFiles: ReadonlyArray<string> = [
 		"package.json",
-		...pm.pmImpl.lockfileNames,
+		..._lockfilesToCopy(ctx, pm),
 		...pm.pmImpl.auxFiles,
 	];
 	const instructions: Instruction[] = [

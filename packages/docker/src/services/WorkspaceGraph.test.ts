@@ -115,6 +115,26 @@ describe("detectPm", () => {
 			expect(pm.pnpmLayout).toBe("hoisted");
 		}).pipe(Effect.provide(NodeServices.layer)),
 	);
+
+	it.effect("yarn-classic: kind=Yarn, variant=classic from yarn@1 corepack pin", () =>
+		Effect.gen(function* () {
+			const root = yield* findRoot(`${FIXTURES}yarn-classic`);
+			const pm = yield* detectPm(root);
+			expect(pm.kind).toBe("Yarn");
+			expect(pm.version).toBe("1.22.22");
+			expect(pm.yarnVariant).toBe("classic");
+		}).pipe(Effect.provide(NodeServices.layer)),
+	);
+
+	it.effect("yarn-berry: variant=berry from yarn@4 corepack pin + .yarnrc.yml", () =>
+		Effect.gen(function* () {
+			const root = yield* findRoot(`${FIXTURES}yarn-berry`);
+			const pm = yield* detectPm(root);
+			expect(pm.kind).toBe("Yarn");
+			expect(pm.version).toBe("4.5.0");
+			expect(pm.yarnVariant).toBe("berry");
+		}).pipe(Effect.provide(NodeServices.layer)),
+	);
 });
 
 describe("closureOf", () => {

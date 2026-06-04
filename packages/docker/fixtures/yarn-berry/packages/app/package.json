@@ -1,0 +1,10 @@
+{
+	"name": "@fix/app",
+	"version": "0.0.0",
+	"dependencies": {
+		"@fix/util": "workspace:*"
+	},
+	"scripts": {
+		"build": "echo build"
+	}
+}

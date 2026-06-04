@@ -16,11 +16,63 @@ import { Ingress, type IngressTLSInput, Service } from "./network";
 import type { Volume } from "./volume";
 import { CronJob, Deployment } from "./workload";
 
+/**
+ * Reloader integration shorthand. konfig's secret-hash annotations
+ * cover *build-time* rotation (re-render → new hash → rolling update).
+ * Stakater's Reloader covers *runtime* rotation (operator watches
+ * mounted Secrets/ConfigMaps and patches the workload to restart
+ * pods on change). Pick:
+ *
+ *  - `"off"` (default) — no Reloader annotation. Pair with build-time
+ *    hashes if you accept the redeploy-on-edit model.
+ *  - `"stakater"` — emit `reloader.stakater.com/auto: "true"`. Reloader
+ *    watches every Secret/ConfigMap referenced by the pod spec.
+ *  - `"stakater-strict"` — emit `reloader.stakater.com/auto: "true"`
+ *    plus `reloader.stakater.com/match: "true"`, restricting watch
+ *    to objects with the matching annotation set on them.
+ *  - `{ secrets, configMaps }` — explicit per-resource lists, emitted
+ *    as `secret.reloader.stakater.com/reload` /
+ *    `configmap.reloader.stakater.com/reload` (comma-joined).
+ *
+ * See packages/k8s/README.md for the trade-off between build-time
+ * hashes and runtime reloader.
+ */
+export type ReloaderOption =
+	| "off"
+	| "stakater"
+	| "stakater-strict"
+	| {
+			readonly secrets?: ReadonlyArray<string>;
+			readonly configMaps?: ReadonlyArray<string>;
+	  };
+
+const _reloaderAnnotations = (
+	opt: ReloaderOption | undefined,
+): Readonly<Record<string, string>> => {
+	if (opt === undefined || opt === "off") return {};
+	if (opt === "stakater") return { "reloader.stakater.com/auto": "true" };
+	if (opt === "stakater-strict")
+		return {
+			"reloader.stakater.com/auto": "true",
+			"reloader.stakater.com/match": "true",
+		};
+	const out: Record<string, string> = {};
+	if (opt.secrets && opt.secrets.length > 0) {
+		out["secret.reloader.stakater.com/reload"] = opt.secrets.join(",");
+	}
+	if (opt.configMaps && opt.configMaps.length > 0) {
+		out["configmap.reloader.stakater.com/reload"] = opt.configMaps.join(",");
+	}
+	return out;
+};
+
 interface WebInput {
 	readonly name: string;
 	readonly namespace: string;
 	readonly labels?: Readonly<Record<string, string>>;
 	readonly annotations?: Readonly<Record<string, string>>;
+	/** Pod-restart-on-rotation integration. See `ReloaderOption`. */
+	readonly reloader?: ReloaderOption;
 	readonly deployment: {
 		readonly replicas?: number;
 		readonly containers: ReadonlyArray<ContainerInput>;
@@ -50,11 +102,12 @@ export const web = (
 	const selectorLabels = { app: input.name };
 	const podLabels = { ...selectorLabels, ...input.deployment.podLabels };
 
+	const reloaderAnns = _reloaderAnnotations(input.reloader);
 	const deployment = Deployment.make({
 		name: input.name,
 		namespace: input.namespace,
 		labels: { ...selectorLabels, ...input.labels },
-		annotations: input.annotations,
+		annotations: { ...input.annotations, ...reloaderAnns },
 		replicas: input.deployment.replicas,
 		selector: { matchLabels: selectorLabels },
 		template: {

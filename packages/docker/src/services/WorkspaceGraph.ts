@@ -34,10 +34,22 @@ export interface Workspace {
 	readonly hasBuildScript: boolean;
 }
 
+export type DetectedPmKind = "Bun" | "Npm" | "Pnpm" | "Yarn";
+export type YarnVariant = "classic" | "berry";
+
 export interface DetectedPm {
-	readonly kind: "Bun" | "Npm" | "Pnpm";
+	readonly kind: DetectedPmKind;
 	readonly version: string | undefined;
 	readonly pnpmLayout?: NodeModulesLayout;
+	/** For yarn detection: "classic" if .yarnrc.yml is absent, "berry" otherwise. Undefined for non-yarn. */
+	readonly yarnVariant?: YarnVariant;
+	/**
+	 * Lockfile filenames that actually exist in the workspace root.
+	 * Bun has two formats (text `bun.lock`, binary `bun.lockb`) — the
+	 * Dockerfile lowering needs the one that exists, not all possibilities.
+	 * Empty if corepack named the PM but no lockfile was found on disk.
+	 */
+	readonly presentLockfiles: ReadonlyArray<string>;
 }
 
 /* ──────────────────────────── findRoot ──────────────────────────── */
@@ -224,7 +236,7 @@ export const allWorkspaces = (
 
 const parseCorepackField = (
 	pm: string,
-): { kind: "Bun" | "Npm" | "Pnpm"; version: string } | undefined => {
+): { kind: DetectedPmKind; version: string } | undefined => {
 	const at = pm.lastIndexOf("@");
 	if (at < 0) return undefined;
 	const name = pm.slice(0, at);
@@ -232,15 +244,32 @@ const parseCorepackField = (
 	if (name === "bun") return { kind: "Bun", version };
 	if (name === "npm") return { kind: "Npm", version };
 	if (name === "pnpm") return { kind: "Pnpm", version };
+	if (name === "yarn") return { kind: "Yarn", version };
 	return undefined;
 };
 
-const PM_LOCKFILES: ReadonlyArray<{ kind: "Bun" | "Npm" | "Pnpm"; file: string }> = [
+const PM_LOCKFILES: ReadonlyArray<{ kind: DetectedPmKind; file: string }> = [
 	{ kind: "Bun", file: "bun.lock" },
 	{ kind: "Bun", file: "bun.lockb" },
 	{ kind: "Pnpm", file: "pnpm-lock.yaml" },
 	{ kind: "Npm", file: "package-lock.json" },
+	{ kind: "Yarn", file: "yarn.lock" },
 ];
+
+const detectYarnVariant = (
+	root: RootDir,
+	fs: FileSystem,
+	p: Path,
+	corepackVersion?: string,
+): Effect.Effect<YarnVariant, never> =>
+	Effect.gen(function* () {
+		if (corepackVersion && !corepackVersion.startsWith("1.")) return "berry";
+		const yarnrcExists = yield* fs
+			.exists(p.join(root, ".yarnrc.yml"))
+			.pipe(Effect.orElseSucceed(() => false));
+		if (yarnrcExists) return "berry";
+		return "classic";
+	});
 
 const detectPnpmLayout = (
 	root: RootDir,
@@ -267,7 +296,7 @@ export const detectPm = (
 		const p = yield* Path;
 		const pkg = yield* readPkgJsonIfExists(fs, p, root);
 		const corepack = pkg?.packageManager ? parseCorepackField(pkg.packageManager) : undefined;
-		const presentLockfiles: Array<{ kind: "Bun" | "Npm" | "Pnpm"; file: string }> = [];
+		const presentLockfiles: Array<{ kind: DetectedPmKind; file: string }> = [];
 		for (const entry of PM_LOCKFILES) {
 			const ex = yield* fs
 				.exists(p.join(root, entry.file))
@@ -277,10 +306,19 @@ export const detectPm = (
 		// Corepack wins.
 		if (corepack) {
 			const layout = corepack.kind === "Pnpm" ? yield* detectPnpmLayout(root, fs, p) : undefined;
+			const yarnVariant =
+				corepack.kind === "Yarn"
+					? yield* detectYarnVariant(root, fs, p, corepack.version)
+					: undefined;
+			const present = presentLockfiles
+				.filter((l) => l.kind === corepack.kind)
+				.map((l) => l.file);
 			return {
 				kind: corepack.kind,
 				version: corepack.version,
+				presentLockfiles: present,
 				...(layout ? { pnpmLayout: layout } : {}),
+				...(yarnVariant ? { yarnVariant } : {}),
 			};
 		}
 		const kinds = new Set(presentLockfiles.map((l) => l.kind));
@@ -301,7 +339,15 @@ export const detectPm = (
 		}
 		const kind = [...kinds][0]!;
 		const layout = kind === "Pnpm" ? yield* detectPnpmLayout(root, fs, p) : undefined;
-		return { kind, version: undefined, ...(layout ? { pnpmLayout: layout } : {}) };
+		const yarnVariant = kind === "Yarn" ? yield* detectYarnVariant(root, fs, p) : undefined;
+		const present = presentLockfiles.filter((l) => l.kind === kind).map((l) => l.file);
+		return {
+			kind,
+			version: undefined,
+			presentLockfiles: present,
+			...(layout ? { pnpmLayout: layout } : {}),
+			...(yarnVariant ? { yarnVariant } : {}),
+		};
 	});
 
 /* ──────────────────────────── closureOf ──────────────────────────── */

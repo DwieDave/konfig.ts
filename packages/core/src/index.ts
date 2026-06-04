@@ -17,12 +17,15 @@ export {
 	type DiffFormat,
 	type DiffResult,
 	deepEqual,
+	type DocDiff,
 	diffFiles,
 	type FileDiff,
 	formatDiff,
 	hasDifferences,
 	parseYaml,
+	parseYamlAll,
 	redact,
+	type RedactOptions,
 } from "./diff";
 export * as Helm from "./Helm";
 export {
@@ -38,6 +41,7 @@ export {
 	requireImage,
 } from "./images";
 export {
+	ClusterSpec,
 	CrdConfig,
 	DiffConfig,
 	decodeKonfigConfigEffect,
