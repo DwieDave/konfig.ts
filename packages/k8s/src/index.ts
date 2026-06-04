@@ -47,6 +47,7 @@ export type {
 export {
 	type BackendEmitInput,
 	BackendSourceMissing,
+	type BackendTag,
 	type SecretBackend,
 } from "./backend";
 export { NativeSecret, type NativeSecretOptions } from "./nativeSecret";

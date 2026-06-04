@@ -6,6 +6,9 @@
 		"composite": false,
 		"declaration": false,
 		"declarationMap": false,
-		"sourceMap": false
-	}
+		"sourceMap": false,
+		"rootDir": "."
+	},
+	"include": ["./src/**/*.ts", "./test-types/**/*.ts"],
+	"exclude": ["./node_modules/**/*", "./dist/**/*", "./src/**/*.test.ts"]
 }
