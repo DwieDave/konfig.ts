@@ -122,3 +122,21 @@ export {
 } from "./workload";
 
 export * as Workload from "./workloadHelpers";
+export {
+	type SelectorBundle,
+	type SelectorBundleLabels,
+	selector,
+} from "./selector";
+export {
+	type BundledDeploymentInput,
+	type BundledEgressRule,
+	type BundledIngressRule,
+	type BundledNetworkPolicyInput,
+	type BundledPeer,
+	type BundledServiceInput,
+	bundledDeployment,
+	bundledNetworkPolicy,
+	bundledService,
+	type PodSetResourcesInput,
+	podSetResources,
+} from "./podSet";
