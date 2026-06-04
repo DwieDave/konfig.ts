@@ -10,8 +10,7 @@ export type EnvironmentShape<M extends Readonly<Record<string, EnvMember>>> = {
 	readonly [K in keyof M]: MemberValue<M[K]>;
 };
 
-// oxlint-disable-next-line app/no-type-assertion
-const _coerce = <T>(value: unknown): T => value as T;
+import { unsafeCoerce } from "@konfig.ts/core";
 
 /**
  * Lift an `Environment` bundle into a service `Layer` so the app's
@@ -34,4 +33,10 @@ export const environmentLayer = <Self, M extends Readonly<Record<string, EnvMemb
 	tag: Context.Service<Self, EnvironmentShape<M>>,
 	env: Environment<M>,
 ): Layer.Layer<Self> =>
-	Layer.effect(tag, _coerce<Effect.Effect<EnvironmentShape<M>>>(env));
+	Layer.effect(
+		tag,
+		unsafeCoerce<Effect.Effect<EnvironmentShape<M>>>(
+			env,
+			"Environment<M> extends Config<EnvironmentShape<M>>, and Config is structurally a no-deps Effect — Layer.effect accepts it",
+		),
+	);

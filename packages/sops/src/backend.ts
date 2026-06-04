@@ -1,6 +1,9 @@
 import { boundary, Manifest, RenderError, Yaml } from "@konfig.ts/core";
 import type { SecretSource } from "@konfig.ts/env";
 import { BackendSourceMissing, type BackendEmitInput, type SecretBackend } from "@konfig.ts/k8s";
+// BackendSourceMissing is kept as a defensive throw — the type system now
+// rejects `Sops.backend()` without `source` at compile time, but if a caller
+// uses `coerce` to bypass that, runtime catches the hole.
 import { Effect, Redacted } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import * as YAML from "yaml";
@@ -132,7 +135,7 @@ export const Sops = {
 	source: SopsSource.source,
 	backend: <N extends string, K extends string>(
 		opts: SopsBackendOptions,
-	): SecretBackend<N, K> => ({
+	): SecretBackend<N, K, true> => ({
 		_tag: "Sops",
 		requiresSource: true,
 		emit: (input: BackendEmitInput<N, K>) => {
@@ -144,7 +147,7 @@ export const Sops = {
 	}),
 	passthrough: <N extends string, K extends string>(opts: {
 		readonly file: string;
-	}): SecretBackend<N, K> => ({
+	}): SecretBackend<N, K, false> => ({
 		_tag: "Sops.passthrough",
 		requiresSource: false,
 		emit: (input: BackendEmitInput<N, K>) => _passthrough({ base: input, file: opts.file }),

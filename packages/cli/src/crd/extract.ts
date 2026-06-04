@@ -1,4 +1,4 @@
-import { coerce, CrdExtractError } from "@konfig.ts/core";
+import { CrdExtractError, unsafeCoerce } from "@konfig.ts/core";
 import { Data, Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -89,18 +89,19 @@ const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
 	}
 
 	const crds: CrdDocument[] = [];
+	const reason = "raw parsed YAML — every read is validated by an explicit kind/typeof check";
 	for (const doc of docs) {
-		const d = coerce<Record<string, unknown>>(doc);
+		const d = unsafeCoerce<Record<string, unknown>>(doc, reason);
 		if (d.kind !== "CustomResourceDefinition") continue;
-		const meta = coerce<Record<string, unknown> | undefined>(d.metadata);
-		const spec = coerce<Record<string, unknown> | undefined>(d.spec);
+		const meta = unsafeCoerce<Record<string, unknown> | undefined>(d.metadata, reason);
+		const spec = unsafeCoerce<Record<string, unknown> | undefined>(d.spec, reason);
 		if (!meta || !spec) continue;
 
 		const crdName = String(meta.name ?? "");
 		if (!crdName) continue;
 
 		const group = String(spec.group ?? "");
-		const versions = coerce<Array<Record<string, unknown>> | undefined>(spec.versions);
+		const versions = unsafeCoerce<Array<Record<string, unknown>> | undefined>(spec.versions, reason);
 		if (!versions?.length) continue;
 
 		const versionNames: string[] = [];
@@ -110,8 +111,8 @@ const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
 			const vName = String(v.name ?? "");
 			if (vName) versionNames.push(vName);
 			if (!schema) {
-				const validation = coerce<Record<string, unknown> | undefined>(v.schema);
-				const openAPI = coerce<Record<string, unknown> | undefined>(validation?.openAPIV3Schema);
+				const validation = unsafeCoerce<Record<string, unknown> | undefined>(v.schema, reason);
+				const openAPI = unsafeCoerce<Record<string, unknown> | undefined>(validation?.openAPIV3Schema, reason);
 				if (openAPI) schema = openAPI;
 			}
 		}
@@ -140,7 +141,7 @@ const _generateCrdTs = (crd: CrdDocument) =>
 
 		let compiledTypes: string;
 		try {
-			compiledTypes = await compile(coerce<Parameters<typeof compile>[0]>(crd.schema), inputType, {
+			compiledTypes = await compile(unsafeCoerce<Parameters<typeof compile>[0]>(crd.schema, "json-schema-to-typescript's input type is structurally a JSON Schema object"), inputType, {
 				bannerComment: "",
 				additionalProperties: false,
 				enableConstEnums: false,

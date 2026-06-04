@@ -59,7 +59,7 @@ const _emit = <N extends string, K extends string>(
 export const ExternalSecrets = {
 	backend: <N extends string, K extends string>(
 		opts: ExternalSecretsBackendOptions<K>,
-	): SecretBackend<N, K> => ({
+	): SecretBackend<N, K, false> => ({
 		_tag: "ExternalSecrets",
 		requiresSource: false,
 		emit: (input: BackendEmitInput<N, K>) => _emit({ base: input, opts }),

@@ -70,3 +70,23 @@ const _emptyDb = Environment.bind({
   },
 });
 void _emptyDb;
+
+// (4) `db` uses a backend with `RequiresSource: true` (Sops.backend) but
+// no `source` — the discriminated SecretMemberOptions makes `source`
+// mandatory at the type level when the backend declares it.
+const sopsBackend = Sops.backend({
+  recipients: {
+    age: ["age1demo000000000000000000000000000000000000000000000000000example"],
+  },
+});
+const _missingSource = Environment.bind({
+  env: apiEnv,
+  namespace: "app",
+  secrets: {
+    // @ts-expect-error Property 'source' is missing for a requiresSource backend
+    db: { backend: sopsBackend },
+    s3: { backend: s3Backend },
+    jwt: { backend: jwtBackend },
+  },
+});
+void _missingSource;

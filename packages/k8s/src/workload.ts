@@ -1,4 +1,4 @@
-import { coerce, Manifest } from "@konfig.ts/core";
+import { Manifest, unsafeCoerce } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	CronJob as K8sCronJob,
@@ -48,8 +48,8 @@ export const Deployment = {
 			spec: {
 				replicas: input.replicas,
 				selector: input.selector,
-				template: coerce(input.template),
-				strategy: coerce(input.strategy),
+				template: unsafeCoerce(input.template, "konfig PodSpecInput is structurally a K8s PodTemplateSpec body; brand-checked fields lower at construction"),
+				strategy: unsafeCoerce(input.strategy, "DeploymentStrategy is escape-hatch unknown; lift to K8s type for serialization"),
 				revisionHistoryLimit: input.revisionHistoryLimit,
 				progressDeadlineSeconds: input.progressDeadlineSeconds,
 				minReadySeconds: input.minReadySeconds,
@@ -81,11 +81,11 @@ export const StatefulSet = {
 			spec: {
 				replicas: input.replicas,
 				selector: input.selector,
-				template: coerce(input.template),
+				template: unsafeCoerce(input.template, "konfig PodSpecInput is structurally a K8s PodTemplateSpec body; brand-checked fields lower at construction"),
 				serviceName: input.serviceName,
-				volumeClaimTemplates: coerce(input.volumeClaimTemplates),
+				volumeClaimTemplates: unsafeCoerce(input.volumeClaimTemplates, "StatefulSet volumeClaimTemplates is escape-hatch unknown; lift to K8s type"),
 				podManagementPolicy: input.podManagementPolicy,
-				updateStrategy: coerce(input.updateStrategy),
+				updateStrategy: unsafeCoerce(input.updateStrategy, "StatefulSetUpdateStrategy is escape-hatch unknown"),
 			},
 		};
 		return Manifest.make<K8sStatefulSet>(() => Effect.succeed(resource));
@@ -126,7 +126,7 @@ export const Job = {
 				activeDeadlineSeconds: input.activeDeadlineSeconds,
 				ttlSecondsAfterFinished: input.ttlSecondsAfterFinished,
 				suspend: input.suspend,
-				template: coerce(input.template),
+				template: unsafeCoerce(input.template, "konfig PodSpecInput is structurally a K8s PodTemplateSpec body; brand-checked fields lower at construction"),
 			},
 		};
 		return Manifest.make<K8sJob>(() => Effect.succeed(resource));
@@ -178,7 +178,7 @@ export const CronJob = {
 				failedJobsHistoryLimit: input.failedJobsHistoryLimit,
 				startingDeadlineSeconds: input.startingDeadlineSeconds,
 				suspend: input.suspend,
-				jobTemplate: coerce(input.jobTemplate),
+				jobTemplate: unsafeCoerce(input.jobTemplate, "konfig CronJob jobTemplate is structurally a K8s JobTemplateSpec body"),
 			},
 		};
 		return Manifest.make<K8sCronJob>(() => Effect.succeed(resource));

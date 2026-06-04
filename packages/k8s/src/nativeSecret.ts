@@ -59,7 +59,7 @@ const _emit = <N extends string, K extends string>(
 export const NativeSecret = {
 	backend: <N extends string, K extends string>(
 		opts?: NativeSecretOptions,
-	): SecretBackend<N, K> => {
+	): SecretBackend<N, K, true> => {
 		const resolvedOpts = opts ?? {};
 		return {
 			_tag: "NativeSecret",

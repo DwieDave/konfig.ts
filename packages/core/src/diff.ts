@@ -1,5 +1,5 @@
 import * as YAML from "yaml";
-import { coerce } from "./_cast";
+import { unsafeCoerce } from "./_cast";
 
 const IGNORED_LABEL_KEYS = new Set(["helm.sh/chart"]);
 const IGNORED_ANNOTATION_KEYS = new Set([
@@ -38,16 +38,16 @@ export const redact = (input: RedactInput): unknown => {
 		return value.map((v) => redact({ value: v, parentKey: null }));
 	}
 	if (value !== null && typeof value === "object") {
-		const obj = coerce<Record<string, unknown>>(value);
+		const obj = unsafeCoerce<Record<string, unknown>>(value, "typeof === object && !Array.isArray && !== null narrowed above");
 		const out: Record<string, unknown> = {};
 		for (const [k, v] of Object.entries(obj)) {
 			if (v === null || v === undefined) continue;
 			if (k === "labels" && parentKey === "metadata" && v !== null && typeof v === "object") {
-				out[k] = _redactLabelMap(coerce(v));
+				out[k] = _redactLabelMap(unsafeCoerce(v, "metadata.labels is Record<string, string>"));
 				continue;
 			}
 			if (k === "annotations" && parentKey === "metadata" && v !== null && typeof v === "object") {
-				out[k] = _redactAnnotationMap(coerce(v));
+				out[k] = _redactAnnotationMap(unsafeCoerce(v, "metadata.annotations is Record<string, string>"));
 				continue;
 			}
 			out[k] = redact({ value: v, parentKey: k });
@@ -74,13 +74,13 @@ export const deepEqual = (input: DeepEqualInput): boolean => {
 		return true;
 	}
 	if (typeof a === "object" && typeof b === "object") {
-		const ka = Object.keys(coerce<object>(a)).sort();
-		const kb = Object.keys(coerce<object>(b)).sort();
+		const ka = Object.keys(unsafeCoerce<object>(a, "typeof === object branch")).sort();
+		const kb = Object.keys(unsafeCoerce<object>(b, "typeof === object branch")).sort();
 		if (ka.length !== kb.length) return false;
 		for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return false;
 		for (const k of ka) {
-			const av = coerce<Record<string, unknown>>(a)[k];
-			const bv = coerce<Record<string, unknown>>(b)[k];
+			const av = unsafeCoerce<Record<string, unknown>>(a, "typeof === object branch")[k];
+			const bv = unsafeCoerce<Record<string, unknown>>(b, "typeof === object branch")[k];
 			if (!deepEqual({ a: av, b: bv })) return false;
 		}
 		return true;

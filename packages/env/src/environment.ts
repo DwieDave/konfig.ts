@@ -6,9 +6,9 @@ import {
 	EnvNameCollision,
 	_makeEntry,
 } from "./entry";
-import type { AnyDownwardEntry } from "./downward";
-import type { AnyLiteralEntry } from "./literal";
-import type { AnySecretEntry } from "./secret";
+import type { AnyDownwardEntry, DownwardEntry } from "./downward";
+import type { AnyLiteralEntry, LiteralEntry } from "./literal";
+import type { AnySecretEntry, SecretEntry } from "./secret";
 
 /**
  * Union of every kind that can be a member of a `defineEnvironment`.
@@ -66,8 +66,60 @@ const _collectClaims = (
 	return out;
 };
 
+/**
+ * Compile-time envName collision check (best-effort, complements the
+ * runtime throw).
+ *
+ * Each member exposes a union of the envNames it claims. For every
+ * key K in M, we compare K's envName union against the union claimed
+ * by all *other* members; a non-empty intersection means a collision.
+ * The check stops at the top-level members of M — nested `Environment`
+ * members are not walked into here. The runtime `_collectClaims`
+ * catches every collision, including cross-nesting ones; the type
+ * check is just the early-warning layer.
+ */
+type _EnvNamesOfMember<E> = E extends SecretEntry<
+	infer _N,
+	infer _K,
+	infer Envs
+>
+	? Envs extends Readonly<Record<string, infer V extends string>>
+		? V
+		: never
+	: E extends LiteralEntry<infer EnvName, infer _T>
+		? EnvName
+		: E extends DownwardEntry<infer EnvName>
+			? EnvName
+			: never;
+
+type _OthersEnvNames<
+	M extends Readonly<Record<string, EnvMember>>,
+	K extends keyof M,
+> = {
+	[Other in keyof M]: Other extends K ? never : _EnvNamesOfMember<M[Other]>;
+}[keyof M];
+
+type _CollisionForKey<
+	M extends Readonly<Record<string, EnvMember>>,
+	K extends keyof M,
+> = Extract<_EnvNamesOfMember<M[K]>, _OthersEnvNames<M, K>>;
+
+type _AnyCollision<M extends Readonly<Record<string, EnvMember>>> = {
+	[K in keyof M]: _CollisionForKey<M, K>;
+}[keyof M];
+
+type _EnvNameCollisionError<Name extends string> = {
+	readonly _konfig_error: `defineEnvironment: envName "${Name}" is claimed by multiple members`;
+};
+
+type _CheckCollisions<M extends Readonly<Record<string, EnvMember>>> = [
+	_AnyCollision<M>,
+] extends [never]
+	? M
+	: _EnvNameCollisionError<Extract<_AnyCollision<M>, string>>;
+
 export const defineEnvironment = <const M extends Readonly<Record<string, EnvMember>>>(
-	members: M,
+	members: M & _CheckCollisions<M>,
 ): Environment<M> => {
 	const envClaims = _collectClaims(members);
 

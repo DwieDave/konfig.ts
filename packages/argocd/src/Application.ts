@@ -1,6 +1,28 @@
 
-import { coerce, type AnyRenderError, Dep } from "@konfig.ts/core";
+import { type AnyRenderError, Dep, unsafeCoerce } from "@konfig.ts/core";
 import { type Context, Effect, Layer } from "effect";
+
+/**
+ * Mutate-attach a `layer` field to an Effect Context.Tag so that both
+ * `yield* handle` (consume the service) and `handle.layer` (provide it
+ * into a parent Layer) work off the same object reference. The single
+ * unsafe cast in the dep-graph machinery lives here — keep it tested
+ * (`Application.test.ts`) so Effect Context internals can move without
+ * breaking every define* factory.
+ */
+const _attachLayerToTag = <
+	Tag extends object,
+	Out,
+	Err,
+	In,
+>(
+	tag: Tag,
+	layer: Layer.Layer<Out, Err, In>,
+): Tag & { readonly layer: Layer.Layer<Out, Err, In> } =>
+	unsafeCoerce<Tag & { readonly layer: Layer.Layer<Out, Err, In> }>(
+		Object.assign(tag, { layer }),
+		"Effect Context.Tag is callable + extensible; Object.assign mutates in place and the cast widens the public type",
+	);
 
 export interface ArgoSource {
 	readonly repoURL: string;
@@ -100,8 +122,8 @@ export interface ApplicationHandle<Name extends string, Out, In>
 }
 
 export interface ApplicationDefineOptions<Name extends string, Ns extends string, R, Extra> {
-	readonly name: Name;
-	readonly namespace: Ns;
+	readonly name: LiteralName<Name>;
+	readonly namespace: LiteralName<Ns>;
 	readonly source: ArgoSource;
 	readonly syncPolicy?: SyncPolicy;
 	readonly buildMetadata?: BuildMetadata;
@@ -122,11 +144,13 @@ export const define = <const Name extends string, const Ns extends string, R = n
 	| Extra,
 	Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
 > => {
-	const tag = Dep.App<Name, Application>(opts.name);
+	const name = opts.name as Name;
+	const namespace = opts.namespace as Ns;
+	const tag = Dep.App<Name, Application>(name);
 
 	const ownsLayer = Layer.mergeAll(
-		Layer.succeed(Dep.Application(opts.name))(opts.name),
-		Layer.succeed(Dep.Namespace(opts.namespace))(opts.namespace),
+		Layer.succeed(Dep.Application(name))(name),
+		Layer.succeed(Dep.Namespace(namespace))(namespace),
 	);
 
 	const internalLayer =
@@ -143,8 +167,8 @@ export const define = <const Name extends string, const Ns extends string, R = n
 		buildEffect.pipe(
 			Effect.map((manifests) =>
 				make({
-					name: opts.name,
-					namespace: opts.namespace,
+					name,
+					namespace,
 					manifests,
 					source: opts.source,
 					syncPolicy: opts.syncPolicy,
@@ -160,14 +184,12 @@ export const define = <const Name extends string, const Ns extends string, R = n
 			? Layer.mergeAll(appLayer, ownsLayer, opts.provides)
 			: Layer.mergeAll(appLayer, ownsLayer);
 
-	return coerce<
-		ApplicationHandle<
-			Name,
-			| Dep.Provide<"App", Name>
-			| Dep.Provide<"Application", Name>
-			| Dep.Provide<"Namespace", Ns>
-			| Extra,
-			Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
-		>
-	>(Object.assign(tag, { layer }));
+	return unsafeCoerce<ApplicationHandle<
+		Name,
+		| Dep.Provide<"App", Name>
+		| Dep.Provide<"Application", Name>
+		| Dep.Provide<"Namespace", Ns>
+		| Extra,
+		Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
+	>>(_attachLayerToTag(tag, layer), "narrow generic ApplicationHandle from the attachLayerToTag helper's loose Tag arg");
 };

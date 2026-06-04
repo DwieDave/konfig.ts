@@ -1,4 +1,4 @@
-import { coerce, Manifest, type SecretRef } from "@konfig.ts/core";
+import { Manifest, type SecretRef, unsafeCoerce } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	Ingress as K8sIngress,
@@ -45,7 +45,7 @@ export const Service = {
 			spec: {
 				selector: input.selector,
 				type: input.type,
-				ports: coerce(input.ports),
+				ports: unsafeCoerce(input.ports, "input.ports is the user-typed Service spec; K8s ServicePort allows the same fields"),
 				clusterIP: input.clusterIP,
 				sessionAffinity: input.sessionAffinity,
 				publishNotReadyAddresses: input.publishNotReadyAddresses,
@@ -86,9 +86,9 @@ export const Ingress = {
 			},
 			spec: {
 				ingressClassName: input.ingressClassName,
-				rules: coerce(input.rules),
-				tls: coerce<K8sIngressTLS[]>(input.tls),
-				defaultBackend: coerce(input.defaultBackend),
+				rules: unsafeCoerce(input.rules, "user-supplied Ingress rules; widening from our convenience type to the K8s type"),
+				tls: unsafeCoerce<K8sIngressTLS[]>(input.tls, "ingressTLS helper produces K8sIngressTLS with branded secretName"),
+				defaultBackend: unsafeCoerce(input.defaultBackend, "user-supplied IngressBackend; structural match to K8s type"),
 			},
 		};
 		return Manifest.make<K8sIngress>(() => Effect.succeed(resource));

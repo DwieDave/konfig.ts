@@ -5,13 +5,13 @@ import {
 	serializeApplicationCR,
 } from "@konfig.ts/argocd";
 import {
-	coerce,
 	type AnyRenderError,
 	type Manifest as M,
 	parseYaml,
 	type RenderContext,
 	type ResolvedKonfigConfig,
 	render,
+	unsafeCoerce,
 	Yaml,
 } from "@konfig.ts/core";
 import { Data, Effect } from "effect";
@@ -57,11 +57,14 @@ const _loadEnv = (entry: string) =>
 			try: () => import(entry),
 			catch: (cause) => new EnvLoadError({ entry, cause }),
 		});
-		const program = coerce<{ default?: unknown }>(mod).default;
+		const program = unsafeCoerce<{ default?: unknown }>(mod, "imported module is a plain JS object").default;
 		if (program === undefined) {
 			return yield* Effect.fail(new EnvLoadError({ entry, cause: "default export is missing" }));
 		}
-		const result = yield* coerce<Effect.Effect<AppOfAppsResult, AnyRenderError>>(program);
+		const result = yield* unsafeCoerce<Effect.Effect<AppOfAppsResult, AnyRenderError>>(
+			program,
+			"env entry default export is the program Effect — contract documented in core/README.md",
+		);
 		return result;
 	});
 
@@ -82,8 +85,9 @@ const _splitRawYaml = (input: _SplitRawYamlInput): OutputFile[] => {
 	for (const doc of docs) {
 		const trimmed = doc.trim();
 		if (trimmed.length === 0) continue;
-		const parsed = coerce<{ kind?: string; metadata?: { name?: string } } | null>(
+		const parsed = unsafeCoerce<{ kind?: string; metadata?: { name?: string } } | null>(
 			parseYaml(trimmed),
+			"parsed YAML — runtime typeof check below filters to the kind/metadata.name shape",
 		);
 		if (parsed === null || typeof parsed !== "object") continue;
 		const kind = parsed.kind;
@@ -109,9 +113,9 @@ const _collectOutputs = (input: _CollectOutputsInput): OutputFile[] => {
 	if (
 		typeof value === "object" &&
 		value !== null &&
-		coerce<{ _tag?: unknown }>(value)._tag === "RawYaml"
+		unsafeCoerce<{ _tag?: unknown }>(value, "narrowed to object above; reading optional _tag")._tag === "RawYaml"
 	) {
-		const raw = coerce<{ content: string }>(value);
+		const raw = unsafeCoerce<{ content: string }>(value, "RawYaml _tag implies the content field");
 		return _splitRawYaml({ content: raw.content, dir: appDir, pathSep: pathJoin });
 	}
 
@@ -120,7 +124,7 @@ const _collectOutputs = (input: _CollectOutputsInput): OutputFile[] => {
 	}
 
 	if (typeof value === "object") {
-		const obj = coerce<{ kind?: unknown; metadata?: { name?: unknown } }>(value);
+		const obj = unsafeCoerce<{ kind?: unknown; metadata?: { name?: unknown } }>(value, "narrowed to object above; probing kind/metadata.name");
 		if (typeof obj.kind === "string" && typeof obj.metadata?.name === "string") {
 			return [
 				{
@@ -168,7 +172,7 @@ export const renderEnv = (input: RenderEnvInput) =>
 			const appDir = path.join(outDirAbs, app.name);
 			type AnyManifest = M.Manifest<unknown>;
 			const rendered = yield* Effect.all(
-				app.manifests.map((m) => render({ manifest: coerce<AnyManifest>(m), ctx })),
+				app.manifests.map((m) => render({ manifest: unsafeCoerce<AnyManifest>(m, "app.manifests holds Manifest<unknown> by Application contract"), ctx })),
 				{ concurrency: "unbounded" },
 			);
 			for (const value of rendered) {
@@ -181,7 +185,7 @@ export const renderEnv = (input: RenderEnvInput) =>
 			});
 		}
 
-		return coerce<RenderedEnv>({ appsDirAbs, outDirAbs, files });
+		return unsafeCoerce<RenderedEnv>({ appsDirAbs, outDirAbs, files }, "shape matches RenderedEnv exactly; mutable file[] widened to readonly");
 	}).pipe(Effect.scoped);
 
 export class WriteEnvError extends Data.TaggedError("WriteEnvError")<{

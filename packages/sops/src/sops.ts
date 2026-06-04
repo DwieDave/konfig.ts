@@ -1,4 +1,4 @@
-import { coerce } from "@konfig.ts/core";
+import { unsafeCoerce } from "@konfig.ts/core";
 import { Data, Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "./_unstable";
 import type { SopsRecipients } from "./crd";
@@ -84,7 +84,7 @@ export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
 			"/dev/stdin",
 		];
 		const cmd = ChildProcess.make("sops", args, {
-			stdin: Stream.succeed(coerce<Uint8Array>(encoded)),
+			stdin: Stream.succeed(unsafeCoerce<Uint8Array>(encoded, "TextEncoder.encode returns Uint8Array — Stream.succeed's inferred type is wider")),
 		});
 		return yield* spawner
 			.string(cmd)

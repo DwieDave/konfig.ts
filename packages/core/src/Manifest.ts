@@ -1,7 +1,7 @@
 
 import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
-import { coerce } from "./_cast";
+import { unsafeCoerce } from "./_cast";
 import type { Path } from "effect/Path";
 import type * as Scope from "effect/Scope";
 import type { ChildProcessSpawner } from "./_unstable";
@@ -31,7 +31,7 @@ export type MakeRun<A> = (
 ) => A | Effect.Effect<A, AnyRenderError, RenderServices>;
 
 export const make = <A>(run: MakeRun<A>): Manifest<A> => ({
-	[ManifestTypeId]: coerce<Variance<A>>(variance),
+	[ManifestTypeId]: unsafeCoerce<Variance<A>>(variance, "phantom variance witness — A only appears in covariant position"),
 	render: (ctx) => {
 		const result = run(ctx);
 		return Effect.isEffect(result)
@@ -54,7 +54,11 @@ export const concat = <A>(...manifests: Manifest<A | A[]>[]): Manifest<A[]> =>
 			{ concurrency: "unbounded" },
 		).pipe(
 			Effect.map((results) =>
-				results.flatMap((r) => (Array.isArray(r) ? coerce<A[]>(r) : [coerce<A>(r)])),
+				results.flatMap((r) =>
+					Array.isArray(r)
+						? unsafeCoerce<A[]>(r, "Array.isArray narrowed; element type is A by render contract")
+						: [unsafeCoerce<A>(r, "non-array branch carries a single A")],
+				),
 			),
 		),
 	);
@@ -67,8 +71,9 @@ export const whenever = <A>(input: WheneverInput<A>): Manifest<A | undefined> =>
 	make((ctx) =>
 		input.cond
 			? input.thunk().render(ctx)
-			: coerce<Effect.Effect<A | undefined, AnyRenderError, RenderServices>>(
+			: unsafeCoerce<Effect.Effect<A | undefined, AnyRenderError, RenderServices>>(
 					Effect.succeed(undefined),
+					"undefined branch — A is the type seen by the consumer when cond=false",
 				),
 	);
 

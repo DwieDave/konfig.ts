@@ -85,18 +85,18 @@ export const fixedNs = <const Ns extends string, Opts = Record<never, never>, R 
 		args: { readonly name: LiteralName<Name>; readonly source: ArgoSource } & Opts,
 	) => {
 		const { name, source, ...rest } = args as unknown as {
-			name: Name;
+			name: LiteralName<Name>;
 			source: ArgoSource;
 		} & Opts;
 		return define<Name, Ns, R, Extra>({
 			name,
-			namespace,
+			namespace: namespace as LiteralName<Ns>,
 			source,
 			...(syncPolicy !== undefined ? { syncPolicy } : {}),
 			...(annotations !== undefined ? { annotations } : {}),
 			...(buildMetadata !== undefined ? { buildMetadata } : {}),
 			...(provides !== undefined ? { provides } : {}),
-			build: liftBuild(build({ name, namespace }, rest as Opts)),
+			build: liftBuild(build({ name: name as Name, namespace }, rest as Opts)),
 		});
 	};
 };
@@ -150,8 +150,8 @@ export const dynamicNs = <Opts = Record<never, never>, R = never, Extra = never>
 		} & Opts,
 	) => {
 		const { name, namespace, source, ...rest } = args as unknown as {
-			name: Name;
-			namespace: Ns;
+			name: LiteralName<Name>;
+			namespace: LiteralName<Ns>;
 			source: ArgoSource;
 		} & Opts;
 		return define<Name, Ns, R, Extra>({
@@ -162,7 +162,7 @@ export const dynamicNs = <Opts = Record<never, never>, R = never, Extra = never>
 			...(annotations !== undefined ? { annotations } : {}),
 			...(buildMetadata !== undefined ? { buildMetadata } : {}),
 			...(provides !== undefined ? { provides } : {}),
-			build: liftBuild(build({ name, namespace }, rest as Opts)),
+			build: liftBuild(build({ name: name as Name, namespace: namespace as Ns }, rest as Opts)),
 		});
 	};
 };

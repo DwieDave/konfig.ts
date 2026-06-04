@@ -1,4 +1,4 @@
-import { coerce } from "@konfig.ts/core";
+import { unsafeCoerce } from "@konfig.ts/core";
 import type { SecretSource } from "@konfig.ts/env";
 import { SecretSourceError } from "@konfig.ts/env";
 import { Effect, Redacted, type Scope } from "effect";
@@ -28,7 +28,10 @@ const _source = <const K extends string>(
 			);
 			out[key] = Redacted.make(value);
 		}
-		return coerce<{ readonly [P in K]: Redacted.Redacted<string> }>(out);
+		return unsafeCoerce<{ readonly [P in K]: Redacted.Redacted<string> }>(
+			out,
+			"out was populated by iterating over input.keys: ReadonlyArray<K>, so every K is present",
+		);
 	});
 	return { _tag: "SecretSource", keys: input.keys, resolve };
 };

@@ -203,7 +203,7 @@
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/env": "workspace:*",
-        "kubernetes-types": "^1.30.0",
+        "kubernetes-types": "1.30.0",
       },
       "devDependencies": {
         "@effect/platform-node": "catalog:",

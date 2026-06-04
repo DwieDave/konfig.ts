@@ -1,11 +1,10 @@
 
 import {
-	coerce,
 	type DiffFormat,
 	diffFiles,
 	formatDiff,
 	hasDifferences,
-	RenderContext,
+	unsafeCoerce,
 } from "@konfig.ts/core";
 import { Console, Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
@@ -13,6 +12,7 @@ import { Path } from "effect/Path";
 import { Argument, Command, Flag } from "../_unstable";
 import { renderEnv } from "../buildEnv";
 import { resolveConfig } from "../configResolver";
+import { renderContextFlags, renderContextFromFlags } from "../renderContextFlags";
 
 class DiffBaselineMissing extends Data.TaggedError("DiffBaselineMissing")<{
 	readonly env: string;
@@ -55,11 +55,12 @@ export const diffCommand = Command.make(
 			Flag.withDescription("Output format"),
 			Flag.withDefault("summary" as const),
 		),
+		...renderContextFlags,
 	},
 	(args) =>
 		Effect.gen(function* () {
 			const cfg = yield* resolveConfig();
-			const ctx = RenderContext.make(args.env);
+			const ctx = renderContextFromFlags(args.env, args);
 			const path = yield* Path;
 
 			if (cfg.config.diff === undefined) {
@@ -86,7 +87,7 @@ export const diffCommand = Command.make(
 
 			const result = diffFiles({ left, right });
 			if (hasDifferences(result)) {
-				yield* Console.log(formatDiff({ result, format: coerce<DiffFormat>(args.format) }));
+				yield* Console.log(formatDiff({ result, format: unsafeCoerce<DiffFormat>(args.format, "Flag.choice narrows args.format to the same union as DiffFormat") }));
 				return yield* Effect.fail(new Error(`Diff non-empty for env '${args.env}'`));
 			}
 			yield* Console.log(`OK — env '${args.env}' matches baseline`);

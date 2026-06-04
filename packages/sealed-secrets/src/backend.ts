@@ -72,7 +72,7 @@ const _emit = <N extends string, K extends string>(
 export const SealedSecrets = {
 	backend: <N extends string, K extends string>(
 		opts?: SealedSecretsBackendOptions,
-	): SecretBackend<N, K> => {
+	): SecretBackend<N, K, true> => {
 		const resolvedOpts = opts ?? {};
 		return {
 			_tag: "SealedSecrets",

@@ -1,4 +1,4 @@
-import { coerce, Manifest } from "@konfig.ts/core";
+import { Manifest, unsafeCoerce } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	ClusterRole as K8sClusterRole,
@@ -78,7 +78,7 @@ export const PersistentVolume = {
 					labels: input.labels,
 					annotations: input.annotations,
 				},
-				spec: coerce<K8sPersistentVolume["spec"]>(input.spec),
+				spec: unsafeCoerce<K8sPersistentVolume["spec"]>(input.spec, "user-supplied PV spec; structural match to the K8s type"),
 			}),
 		),
 };
@@ -113,7 +113,7 @@ export const PersistentVolumeClaim = {
 					labels: input.labels,
 					annotations: input.annotations,
 				},
-				spec: coerce<K8sPersistentVolumeClaim["spec"]>(input.spec),
+				spec: unsafeCoerce<K8sPersistentVolumeClaim["spec"]>(input.spec, "user-supplied PVC spec; structural match to the K8s type"),
 			}),
 		),
 };

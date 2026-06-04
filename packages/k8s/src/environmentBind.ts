@@ -1,4 +1,4 @@
-import { coerce, type Manifest, type RenderError } from "@konfig.ts/core";
+import { type Manifest, type RenderError, unsafeCoerce } from "@konfig.ts/core";
 import type {
 	AnyEnvironment,
 	DownwardEntry,
@@ -61,29 +61,36 @@ interface _SecretMemberOptionsBase {
 	readonly annotations?: Readonly<Record<string, string>>;
 }
 
-interface _SecretMemberWithBackend<N extends string, K extends string>
+interface _SecretMemberBackendRequiresSource<N extends string, K extends string>
 	extends _SecretMemberOptionsBase {
-	readonly backend: SecretBackend<N, K>;
+	readonly backend: SecretBackend<N, K, true>;
+	readonly source: SecretSource<K, Manifest.RenderServices>;
+}
+
+interface _SecretMemberBackendOptionalSource<N extends string, K extends string>
+	extends _SecretMemberOptionsBase {
+	readonly backend: SecretBackend<N, K, false>;
 	readonly source?: SecretSource<K, Manifest.RenderServices>;
 }
 
-interface _SecretMemberWithSource<N extends string, K extends string>
+interface _SecretMemberSourceOnly<N extends string, K extends string>
 	extends _SecretMemberOptionsBase {
-	readonly backend?: SecretBackend<N, K>;
+	readonly backend?: undefined;
 	readonly source: SecretSource<K, Manifest.RenderServices>;
 }
 
 /**
- * Per-secret-member options at bind time. At least one of `backend`
- * (emit the in-cluster Secret manifest) or `source` (provide values to
- * the in-process `SecretValues` layer for tests / local renders) must
- * be supplied — a `defineSecret` declaration without either is a hole
- * that produces `secretKeyRef` envVars pointing at a Secret nothing
- * else creates.
+ * Per-secret-member options at bind time. Backends with `RequiresSource: true`
+ * (`Sops.backend`, `SealedSecrets.backend`, `NativeSecret.backend`) make
+ * `source` mandatory at the type level. Backends with `false`
+ * (`ExternalSecrets.backend`, `Sops.passthrough`) make it optional. With no
+ * backend, `source` becomes mandatory — used to feed the in-process
+ * `SecretValues` layer for tests / local renders.
  */
 export type SecretMemberOptions<N extends string, K extends string> =
-	| _SecretMemberWithBackend<N, K>
-	| _SecretMemberWithSource<N, K>;
+	| _SecretMemberBackendRequiresSource<N, K>
+	| _SecretMemberBackendOptionalSource<N, K>
+	| _SecretMemberSourceOnly<N, K>;
 
 export type SecretMemberOptionsFor<A> = A extends SecretEntry<infer N, infer K, infer _E>
 	? [N, K] extends [string, string]
@@ -224,14 +231,15 @@ export const bindEnvironment = <const M extends Readonly<Record<string, EnvMembe
 	const envVars: EnvVar[] = [];
 	const manifests: Manifest.Manifest<unknown>[] = [];
 	const valuesLayers: Layer.Layer<unknown, RenderError, Manifest.RenderServices>[] = [];
-	const secretsOpts = coerce<Record<string, unknown> | undefined>(input.secrets);
-	const literalsOpts = coerce<Record<string, unknown> | undefined>(input.literals);
+	const secretsOpts = unsafeCoerce<Record<string, unknown> | undefined>(input.secrets, "discriminated union from BindEnvironmentInput; iterate keys at runtime");
+	const literalsOpts = unsafeCoerce<Record<string, unknown> | undefined>(input.literals, "discriminated union from BindEnvironmentInput; iterate keys at runtime");
 
 	for (const memberKey of Object.keys(env.members)) {
-		const entry = coerce<EnvMember>(env.members[memberKey]);
+		const entry = unsafeCoerce<EnvMember>(env.members[memberKey], "env.members values are EnvMember by construction");
 		if (entry._kind === "Secret") {
-			const memberOpts = coerce<SecretMemberOptions<string, string> | undefined>(
+			const memberOpts = unsafeCoerce<SecretMemberOptions<string, string> | undefined>(
 				secretsOpts?.[memberKey],
+				"SecretMembersOpts<M> shape — runtime key lookup against the typed input",
 			);
 			const d = bindSecret({
 				secret: entry,
@@ -246,7 +254,10 @@ export const bindEnvironment = <const M extends Readonly<Record<string, EnvMembe
 			if (d.manifest !== undefined) manifests.push(d.manifest);
 			if (d.layer !== undefined)
 				valuesLayers.push(
-					coerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(d.layer),
+					unsafeCoerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(
+						d.layer,
+						"DeclaredSecret.layer is Layer<Provide<SecretValues, N>, ...>; widen to unknown for the heterogeneous Layer.mergeAll",
+					),
 				);
 		} else if (entry._kind === "Literal") {
 			const d = _bindLiteral({ entry, override: literalsOpts?.[memberKey] });
@@ -258,14 +269,16 @@ export const bindEnvironment = <const M extends Readonly<Record<string, EnvMembe
 			envVars.push(d.envVar);
 		} else {
 			// Nested Environment — recurse with the matching sub-overrides.
-			const subEnv = coerce<AnyEnvironment>(entry);
+			const subEnv = unsafeCoerce<AnyEnvironment>(entry, "_kind branch narrowed to nested Environment");
 			const sub = bindEnvironment({
 				env: subEnv,
-				secrets: coerce<SecretMembersOpts<Readonly<Record<string, EnvMember>>>>(
+				secrets: unsafeCoerce<SecretMembersOpts<Readonly<Record<string, EnvMember>>>>(
 					secretsOpts?.[memberKey] ?? {},
+					"sub-record from SecretMembersOpts<M> — type is checked at the outer call site",
 				),
-				literals: coerce<LiteralMembersOpts<Readonly<Record<string, EnvMember>>>>(
+				literals: unsafeCoerce<LiteralMembersOpts<Readonly<Record<string, EnvMember>>>>(
 					literalsOpts?.[memberKey] ?? {},
+					"sub-record from LiteralMembersOpts<M> — type is checked at the outer call site",
 				),
 				namespace: input.namespace,
 			});
@@ -274,21 +287,28 @@ export const bindEnvironment = <const M extends Readonly<Record<string, EnvMembe
 			envVars.push(...sub.envVars);
 			manifests.push(...sub.manifests);
 			valuesLayers.push(
-				coerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(sub.valuesLayer),
+				unsafeCoerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(
+					sub.valuesLayer,
+					"valuesLayer aggregate over the recursive merge",
+				),
 			);
 		}
 	}
 
-	const valuesLayer = coerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(
+	const valuesLayer = unsafeCoerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(
 		valuesLayers.length === 0
 			? Layer.empty
 			: Layer.mergeAll(valuesLayers[0]!, ...valuesLayers.slice(1)),
+		"merged Layer over a heterogeneous list of per-secret value layers",
 	);
 
 	return {
 		envVars,
 		manifests,
-		members: coerce<{ readonly [K in keyof M]: DeclaredMember<M[K]> }>(declared),
+		members: unsafeCoerce<{ readonly [K in keyof M]: DeclaredMember<M[K]> }>(
+			declared,
+			"declared populated by iterating env.members; each key maps to its DeclaredMember<M[K]>",
+		),
 		valuesLayer,
 	};
 };

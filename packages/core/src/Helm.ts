@@ -4,7 +4,7 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import { ChildProcess, ChildProcessSpawner } from "./_unstable";
 import * as YAML from "yaml";
-import { coerce } from "./_cast";
+import { unsafeCoerce } from "./_cast";
 import { type Manifest, make, type RawYaml } from "./Manifest";
 import { HelmDigestMismatch, HelmRenderError } from "./RenderError";
 
@@ -62,10 +62,13 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): RawYaml[] => {
 		let content = `---\n${trimmed}\n`;
 		if (namespace !== undefined) {
 			try {
-				const parsed = coerce<{
+				const parsed = unsafeCoerce<{
 					kind?: string;
 					metadata?: { namespace?: string };
-				} | null>(YAML.parse(trimmed));
+				} | null>(
+					YAML.parse(trimmed),
+					"parsed YAML shape probed via runtime typeof checks below",
+				);
 				if (
 					parsed !== null &&
 					typeof parsed === "object" &&
