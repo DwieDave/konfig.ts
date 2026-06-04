@@ -40,6 +40,9 @@ const _wrong: typeof dbCreds.ref = Secret.make({
 	stringData: {},
 }).ref;
 
+// @ts-expect-error  keys are in the type — only "url" was declared on dbCreds
+secretEnv({ name: "DATABASE_PASSWORD", ref: dbCreds.ref, key: "passowrd" });
+
 const program = Effect.gen(function* () {
 	const ctx = RenderContext.make("prod");
 	const secret = yield* dbCreds.render(ctx);

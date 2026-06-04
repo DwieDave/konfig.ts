@@ -30,13 +30,21 @@ export const valueEnv = (input: ValueEnvInput): EnvVar => ({
 	value: input.value,
 });
 
-export interface SecretEnvInput {
+export interface SecretEnvInput<N extends string, K extends string> {
 	readonly name: string;
-	readonly ref: SecretRef<string>;
-	readonly key: string;
+	readonly ref: SecretRef<N, K>;
+	/**
+	 * Constrained to the keys carried by `ref`. `NoInfer` locks `K` to
+	 * whatever the ref declares, so the typo `key: "passowrd"` fails at
+	 * compile time when the ref's K is `"url" | "username" | "password"`.
+	 * Refs constructed with the default `K = string` accept any string.
+	 */
+	readonly key: NoInfer<K>;
 	readonly optional?: boolean;
 }
-export const secretEnv = (input: SecretEnvInput): EnvVar => ({
+export const secretEnv = <N extends string, K extends string = string>(
+	input: SecretEnvInput<N, K>,
+): EnvVar => ({
 	name: input.name,
 	valueFrom: {
 		secretKeyRef: { name: input.ref, key: input.key, optional: input.optional },

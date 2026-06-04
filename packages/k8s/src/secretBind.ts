@@ -6,7 +6,7 @@ import { type EnvVar, secretEnv } from "./env";
 import { SecretRef as SecretRefValue } from "./refs";
 
 export interface DeclaredSecret<N extends string, K extends string> {
-	readonly ref: SecretRef<N>;
+	readonly ref: SecretRef<N, K>;
 	readonly name: N;
 	readonly namespace: string;
 	readonly keys: ReadonlyArray<K>;
@@ -54,7 +54,7 @@ export const bindSecret = <
 ): DeclaredSecret<N, K> => {
 	const { secret } = input;
 	const namespace = input.namespace ?? secret.namespace;
-	const ref = SecretRefValue.of(secret.name);
+	const ref = SecretRefValue.of<N, K>(secret.name);
 	const envVars: EnvVar[] = secret.keys.map((key: K) =>
 		secretEnv({ name: secret.env[key], ref, key }),
 	);

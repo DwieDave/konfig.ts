@@ -9,6 +9,7 @@ export type {
 	PvcRef,
 	PvcRefName,
 	SecretRef,
+	SecretRefKeys,
 	SecretRefName,
 	ServiceAccountRef,
 } from "./deps";

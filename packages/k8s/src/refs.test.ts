@@ -16,6 +16,15 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
 		expect(env.valueFrom?.secretKeyRef?.name).toBe("api-creds");
 	});
 
+	it("env-var with a keyed SecretRef rejects keys not in the declared union", async () => {
+		const { secretEnv } = await import("./env");
+		const ref = SecretRef.of<"db-creds", "url" | "password">("db-creds");
+		// @ts-expect-error — "passowrd" is not in "url" | "password".
+		secretEnv({ name: "DATABASE_PASSWORD", ref, key: "passowrd" });
+		const env = secretEnv({ name: "DATABASE_PASSWORD", ref, key: "password" });
+		expect(env.valueFrom?.secretKeyRef?.key).toBe("password");
+	});
+
 	it("env-var (configMapKeyRef) rejects raw string", async () => {
 		const { configMapEnv } = await import("./env");
 		// @ts-expect-error — raw string for `ref` is not assignable to ConfigMapRef.
