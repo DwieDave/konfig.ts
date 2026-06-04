@@ -28,7 +28,7 @@ export const defineSopsOperator = (opts: SopsOperatorOptions) =>
 				repo: "https://isindir.github.io/sops-secrets-operator/",
 				chart: "sops-secrets-operator",
 				version: "0.19.0",
-				digest: "sha256:90b7Q2hJ91EDrwNJv0vY6iIfztdhLnur0i5SBJCTjXQ",
+				digest: "sha256:e2a1cd7ef2c6fd53aad8fa49a1080d425c3648177a87fc20d5f9f6133cbb8e54",
 				namespace: "sops",
 				extraOpts: ["--include-crds"],
 				values: {

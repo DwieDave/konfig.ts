@@ -1,15 +1,25 @@
 /**
  * Dummy worker entrypoint — pulls a batch every 5s, no-op in this demo.
  *
- * Consumes the same DATABASE_URL as the api via the shared
- * `dbCreds` secret declared in @example/env-contracts.
+ * `workerEnv` (from @example/env-contracts) is the same bundle that
+ * drives `Environment.bind` in `infra/modules/worker.ts`; consuming it
+ * via `Environment.runtime(workerEnv)` keeps the contract symmetric.
  */
-const batchSize = Number(process.env.BATCH_SIZE ?? 100);
-const podName = process.env.POD_NAME ?? "local";
+import { workerEnv } from "@example/env-contracts";
+import { Environment } from "@konfig.ts/k8s";
+import { Effect } from "effect";
+
+const config = await Effect.runPromise(Environment.runtime(workerEnv));
+
+const batchSize = config.worker.batchSize;
+const concurrency = config.worker.concurrency;
+const podName = config.runtime.podName;
 
 const tick = async () => {
-	console.log(`[${podName}] tick — would process ${batchSize} rows`);
+	console.log(
+		`[${podName}] tick — would process ${batchSize} rows (concurrency=${concurrency})`,
+	);
 };
 
-console.log(`worker starting (pod=${podName}, batch=${batchSize})`);
+console.log(`worker starting (pod=${podName}, batch=${batchSize}, concurrency=${concurrency})`);
 setInterval(tick, 5_000);

@@ -32,7 +32,7 @@ export const definePostgres = (opts: PostgresOptions) =>
 				chart: "postgresql",
 				releaseName: "postgres",
 				version: "16.0.0",
-				digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				digest: "sha256:483dc159c5fb377c29026d363153cc904a7f77109d524881eed64098637b9bd4",
 				namespace: "app",
 				values: {
 					auth: {

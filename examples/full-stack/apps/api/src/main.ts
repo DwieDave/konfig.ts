@@ -1,13 +1,25 @@
 /**
  * Dummy API entrypoint.
  *
- * Reads the same env vars that `apiEnv` (from @example/env-contracts)
- * declares at the manifest level — that's the point of env-contracts:
- * one declaration covers both the runtime config decoder and the k8s
- * Deployment env block.
+ * One declaration covers both manifest emission and runtime decode:
+ * `apiEnv` (from @example/env-contracts) drives both `Environment.bind`
+ * in `infra/modules/api.ts` (which generates the Deployment's env block
+ * + Secret manifests) AND `Environment.runtime(apiEnv)` here (which
+ * reads the same env vars at process start and decodes them into the
+ * typed record below).
+ *
+ * Add a new `defineLiteral` to the bundle and both sides surface it
+ * automatically; rename one and the typechecker flags both call sites.
  */
-const port = Number(process.env.HTTP_PORT ?? 8080);
-const podName = process.env.POD_NAME ?? "local";
+import { apiEnv } from "@example/env-contracts";
+import { Environment } from "@konfig.ts/k8s";
+import { Effect, Redacted } from "effect";
+
+const config = await Effect.runPromise(Environment.runtime(apiEnv));
+
+const port = config.http.port;
+const podName = config.runtime.podName;
+const logLevel = config.http.logLevel;
 
 Bun.serve({
 	port,
@@ -19,10 +31,11 @@ Bun.serve({
 		return Response.json({
 			service: "api",
 			pod: podName,
-			db: process.env.DATABASE_URL ? "configured" : "missing",
-			s3: process.env.S3_ACCESS_KEY_ID ? "configured" : "missing",
+			logLevel,
+			db: Redacted.value(config.db.url) ? "configured" : "missing",
+			s3: Redacted.value(config.s3.accessKeyId) ? "configured" : "missing",
 		});
 	},
 });
 
-console.log(`api listening on :${port} (pod=${podName})`);
+console.log(`api listening on :${port} (pod=${podName}, logLevel=${logLevel})`);
