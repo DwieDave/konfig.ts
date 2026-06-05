@@ -30,6 +30,7 @@
 		"lint:apply": "oxlint --fix"
 	},
 	"devDependencies": {
+		"@effect/language-service": "^0.86.2",
 		"oxlint": "^1.40.0",
 		"tsdown": "^0.22.0",
 		"typescript": "catalog:"

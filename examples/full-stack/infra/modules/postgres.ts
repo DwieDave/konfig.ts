@@ -1,7 +1,6 @@
 import { Application } from "@konfig.ts/argocd";
 import { Helm } from "@konfig.ts/core";
 import { Namespace } from "@konfig.ts/k8s";
-import { Effect } from "effect";
 
 export interface PostgresOptions {
 	readonly source: Application.ArgoSource;
@@ -24,7 +23,7 @@ export const definePostgres = (opts: PostgresOptions) =>
 		namespace: "app",
 		source: opts.source,
 		annotations: { "argocd.argoproj.io/sync-wave": "-1" },
-		build: Effect.gen(function* () {
+		build: () => {
 			const ns = Namespace.make({ name: "app" });
 
 			const release = Helm.release({
@@ -54,5 +53,5 @@ export const definePostgres = (opts: PostgresOptions) =>
 			});
 
 			return [ns, release];
-		}),
+		},
 	});

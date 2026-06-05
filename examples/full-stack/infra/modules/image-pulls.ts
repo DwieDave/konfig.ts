@@ -3,7 +3,6 @@ import { Dep } from "@konfig.ts/core";
 import { Secret } from "@konfig.ts/k8s";
 import { Sops } from "@konfig.ts/sops";
 import { ghcrPull } from "@example/env-contracts";
-import { Effect } from "effect";
 
 export interface ImagePullsOptions {
 	readonly source: Application.ArgoSource;
@@ -31,7 +30,7 @@ export const defineImagePulls = (opts: ImagePullsOptions) =>
 		source: opts.source,
 		annotations: { "argocd.argoproj.io/sync-wave": "-1" },
 		provides: Dep.provideSecret("ghcr-pull"),
-		build: Effect.gen(function* () {
+		build: () => {
 			const bound = Secret.bind({
 				secret: ghcrPull,
 				backend: Sops.passthrough({
@@ -39,5 +38,5 @@ export const defineImagePulls = (opts: ImagePullsOptions) =>
 				}),
 			});
 			return bound.manifest === undefined ? [] : [bound.manifest];
-		}),
+		},
 	});

@@ -1,16 +1,9 @@
-import { Application } from "@konfig.ts/argocd";
-import {
-	Container,
-	Deployment,
-	NetworkPolicy,
-	Port,
-	Service,
-} from "@konfig.ts/k8s";
-import { Effect } from "effect";
-import { apiPods, redisCachePods, workerPods } from "../podSets";
+import { Application } from "@konfig.ts/argocd"
+import { Container, Deployment, NetworkPolicy, Port, Service } from "@konfig.ts/k8s"
+import { apiPods, redisCachePods, workerPods } from "../podSets"
 
 export interface RedisCacheOptions {
-	readonly source: Application.ArgoSource;
+  readonly source: Application.ArgoSource
 }
 
 /**
@@ -42,50 +35,50 @@ export interface RedisCacheOptions {
  * containers, so no `Dep.Image` is required.
  */
 export const defineRedisCache = (opts: RedisCacheOptions) =>
-	Application.define({
-		name: "redis-cache",
-		namespace: "app",
-		source: opts.source,
-		build: Effect.gen(function* () {
-			const redisContainer = Container.define({
-				name: "redis",
-				image: "docker.io/library/redis:7-alpine",
-				ports: [Port.make({ name: "redis", containerPort: 6379 })],
-				readinessProbe: {
-					tcpSocket: { port: Port.ref("redis") },
-					periodSeconds: 5,
-				},
-			});
+  Application.define({
+    name: "redis-cache",
+    namespace: "app",
+    source: opts.source,
+    build: () => {
+      const redisContainer = Container.define({
+        name: "redis",
+        image: "docker.io/library/redis:7-alpine",
+        ports: [Port.make({ name: "redis", containerPort: 6379 })],
+        readinessProbe: {
+          tcpSocket: { port: Port.ref("redis") },
+          periodSeconds: 5
+        }
+      })
 
-			const deployment = Deployment.fromPodSet({
-				name: "redis-cache",
-				namespace: "app",
-				podSet: redisCachePods,
-				replicas: 1,
-				template: { spec: { containers: [redisContainer] } },
-			});
+      const deployment = Deployment.fromPodSet({
+        name: "redis-cache",
+        namespace: "app",
+        podSet: redisCachePods,
+        replicas: 1,
+        template: { spec: { containers: [redisContainer] } }
+      })
 
-			const service = Service.fromContainer({
-				name: "redis-cache",
-				namespace: "app",
-				selector: redisCachePods.labels,
-				forContainer: redisContainer,
-				ports: [{ port: 6379, targetPort: Port.ref("redis") }],
-			});
+      const service = Service.fromContainer({
+        name: "redis-cache",
+        namespace: "app",
+        selector: redisCachePods.labels,
+        forContainer: redisContainer,
+        ports: [{ port: 6379, targetPort: Port.ref("redis") }]
+      })
 
-			const netpol = NetworkPolicy.fromPodSet({
-				name: "redis-cache-ingress",
-				namespace: "app",
-				podSet: redisCachePods,
-				policyTypes: ["Ingress"],
-				ingress: [
-					{
-						from: [{ podSet: apiPods }, { podSet: workerPods }],
-						ports: [{ port: 6379, protocol: "TCP" }],
-					},
-				],
-			});
+      const netpol = NetworkPolicy.fromPodSet({
+        name: "redis-cache-ingress",
+        namespace: "app",
+        podSet: redisCachePods,
+        policyTypes: ["Ingress"],
+        ingress: [
+          {
+            from: [{ podSet: apiPods }, { podSet: workerPods }],
+            ports: [{ port: 6379, protocol: "TCP" }]
+          }
+        ]
+      })
 
-			return [deployment, service, netpol];
-		}),
-	});
+      return [deployment, service, netpol]
+    }
+  })

@@ -11,7 +11,8 @@
 		"isolatedModules": true,
 		"lib": ["ESNext"],
 		"allowImportingTsExtensions": true,
-		"customConditions": ["source"]
+		"customConditions": ["source"],
+		"plugins": [{ "name": "@effect/language-service" }]
 	},
 	"include": [
 		"infra/**/*.ts",

@@ -5,6 +5,7 @@
     "": {
       "name": "konfig.ts",
       "devDependencies": {
+        "@effect/language-service": "^0.86.2",
         "oxlint": "^1.40.0",
         "tsdown": "^0.22.0",
         "typescript": "catalog:",
@@ -294,6 +295,8 @@
     "@babel/parser": ["@babel/parser@8.0.0-rc.4", "", { "dependencies": { "@babel/types": "^8.0.0-rc.4" }, "bin": "./bin/babel-parser.js" }, "sha512-0S/1yefMa15N4i2v3t8Fw9pgMHhf2gF6Lc1UEXI96Ls6FNAjqvHHZouZ2ZS/deqLhbMFtmfVeFac6iTsvFbLwA=="],
 
     "@babel/types": ["@babel/types@8.0.0-rc.5", "", { "dependencies": { "@babel/helper-string-parser": "^8.0.0-rc.5", "@babel/helper-validator-identifier": "^8.0.0-rc.5" } }, "sha512-JeSVu/m8x/zpp4CLjYHVNXuhEyOkhPXuxM8YOXjh6L4LlvQNKuUNOTo5KdBuKAcTDHw8DquToTaEkhsBqPXOaA=="],
+
+    "@effect/language-service": ["@effect/language-service@0.86.2", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-SaPln+8srOqDJDUwNTDmP5e+IYpEDr9+1epGznnsLqu8xvo6VnxyWARdeLpqvZJlb0Pgy9ca7ppqvvdWbHPXAg=="],
 
     "@effect/platform-node": ["@effect/platform-node@4.0.0-beta.70", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.70", "mime": "^4.1.0", "undici": "^8.2.0" }, "peerDependencies": { "effect": "^4.0.0-beta.70", "ioredis": "^5.7.0" } }, "sha512-Ls1WtLaO2CbcO8jHtZRRi6eZa4YOJZ9KXm6udMvwhjV/XhqdsT6AzmcXbc1hINbKgvRcik6qM/441YEaBMYoqw=="],
 

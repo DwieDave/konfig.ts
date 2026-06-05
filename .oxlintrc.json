@@ -16,6 +16,7 @@
 		"app/no-switch": "error",
 		"app/no-sync-schema-apis": "error",
 		"app/no-type-assertion": "warn",
+		"app/no-yieldless-effect-gen": "error",
 		"app/private-function-prefix": "error"
 	},
 	"overrides": [

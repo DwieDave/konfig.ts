@@ -4,6 +4,7 @@ import { noMultipleFunctionParams } from "./rules/no-multiple-function-params.ts
 import { noSwitch } from "./rules/no-switch.ts";
 import { noSyncSchemaApis } from "./rules/no-sync-schema-apis.ts";
 import { noTypeAssertion } from "./rules/no-type-assertion.ts";
+import { noYieldlessEffectGen } from "./rules/no-yieldless-effect-gen.ts";
 import { privateFunctionPrefix } from "./rules/private-function-prefix.ts";
 import type { Plugin } from "./types.ts";
 
@@ -16,6 +17,7 @@ const plugin: Plugin = {
 		"no-switch": noSwitch,
 		"no-sync-schema-apis": noSyncSchemaApis,
 		"no-type-assertion": noTypeAssertion,
+		"no-yieldless-effect-gen": noYieldlessEffectGen,
 		"private-function-prefix": privateFunctionPrefix,
 	},
 };

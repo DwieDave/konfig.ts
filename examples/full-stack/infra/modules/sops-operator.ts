@@ -1,7 +1,6 @@
 import { Application } from "@konfig.ts/argocd";
 import { Helm } from "@konfig.ts/core";
 import { Namespace } from "@konfig.ts/k8s";
-import { Effect } from "effect";
 
 export interface SopsOperatorOptions {
 	readonly source: Application.ArgoSource;
@@ -22,7 +21,7 @@ export const defineSopsOperator = (opts: SopsOperatorOptions) =>
 		namespace: "sops",
 		source: opts.source,
 		annotations: { "argocd.argoproj.io/sync-wave": "-2" },
-		build: Effect.gen(function* () {
+		build: () => {
 			const ns = Namespace.make({ name: "sops" });
 			const release = Helm.release({
 				repo: "https://isindir.github.io/sops-secrets-operator/",
@@ -39,5 +38,5 @@ export const defineSopsOperator = (opts: SopsOperatorOptions) =>
 				},
 			});
 			return [ns, release];
-		}),
+		},
 	});
