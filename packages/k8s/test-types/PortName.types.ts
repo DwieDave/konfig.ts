@@ -26,7 +26,7 @@ const api = defineContainer({
 		port({ name: "metrics", containerPort: 9090 }),
 	],
 });
-type _ApiSpec = Expect<Equal<typeof api, ContainerSpec<"http" | "metrics">>>;
+type _ApiSpec = Expect<Equal<typeof api, ContainerSpec<"http" | "metrics", never>>>;
 
 // 3 · Probe port — declared name OK.
 const okProbe = defineContainer({

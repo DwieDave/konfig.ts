@@ -5,6 +5,9 @@ export {
 	type ContainerSpec,
 	defineContainer,
 	type DefineContainerInput,
+	type DefinedPod,
+	type DefinePodInput,
+	definePod,
 	imagePullSecret,
 	type PodSpecInput,
 } from "./container";
@@ -105,8 +108,12 @@ export type { ConfigMapRefName, PvcRefName, SecretRefName } from "./refs";
 export { ConfigMapRef, PvcRef, SecretRef, ServiceAccountRef } from "./refs";
 export {
 	emptyDirVolume,
+	mountRef,
 	pvcVolume,
 	type Volume,
+	type VolumeMount,
+	type VolumeName,
+	type VolumeNamesOf,
 	volumeFromConfigMap,
 	volumeFromSecret,
 } from "./volume";
