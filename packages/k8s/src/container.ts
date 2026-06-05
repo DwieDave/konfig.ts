@@ -1,5 +1,5 @@
 
-import type { SecretRef, ServiceAccountRef } from "@konfig.ts/core";
+import type { BuiltImageRef, SecretRef, ServiceAccountRef } from "@konfig.ts/core";
 import type {
 	Container as K8sContainer,
 	PodSpec as K8sPodSpec,
@@ -30,7 +30,15 @@ import type { Volume, VolumeMount, VolumeNamesOf } from "./volume";
  * link that captures the literal name union for cross-reference checks.
  */
 export interface ContainerInput extends Omit<K8sContainer, "env" | "image" | "ports"> {
-	readonly image: string;
+	/**
+	 * Container image. Accepts a raw string (escape hatch for vendor
+	 * images: `ghcr.io/bitnami/postgresql:16.0.0`) or a `BuiltImageRef<App>`
+	 * produced by `Dep.builtImageRef` / `Dep.provideImage`. The branded
+	 * path ties the workload into the dep graph — a workload referencing
+	 * an image whose build module isn't in the composition fails at
+	 * `AppOfApps.entrypoint`.
+	 */
+	readonly image: string | BuiltImageRef<string>;
 	readonly env?: ReadonlyArray<EnvVar>;
 	readonly ports?: ReadonlyArray<ContainerPort | { readonly containerPort: number; readonly name?: string; readonly protocol?: "TCP" | "UDP" | "SCTP" }>;
 }

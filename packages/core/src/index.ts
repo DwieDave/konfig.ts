@@ -2,6 +2,8 @@
 export { boundary } from "./boundary";
 export { brand, coerce, unsafeCoerce } from "./_cast";
 export type {
+	BuiltImageRef,
+	BuiltImageRefApp,
 	ConfigMapRef,
 	ConfigMapRefKeys,
 	ConfigMapRefName,
