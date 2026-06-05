@@ -63,9 +63,10 @@ export interface ContainerSpec<Ports extends string = string, Mounts extends str
 export interface DefineContainerInput<
 	Ports extends ReadonlyArray<ContainerPort<string>>,
 	Mounts extends ReadonlyArray<VolumeMount<string>>,
+	Envs extends ReadonlyArray<EnvVar<string>>,
 > extends Omit<
 		ContainerInput,
-		"ports" | "readinessProbe" | "livenessProbe" | "startupProbe" | "volumeMounts"
+		"ports" | "readinessProbe" | "livenessProbe" | "startupProbe" | "volumeMounts" | "env"
 	> {
 	readonly name: string;
 	readonly image: string;
@@ -74,27 +75,67 @@ export interface DefineContainerInput<
 	readonly livenessProbe?: ProbeTarget<NamesOf<Ports>>;
 	readonly startupProbe?: ProbeTarget<NamesOf<Ports>>;
 	readonly volumeMounts?: Mounts;
+	readonly env?: Envs & EnvDupCheck<Envs>;
 }
 
 type MountNamesOf<M extends ReadonlyArray<VolumeMount<string>>> = {
 	readonly [I in keyof M]: M[I] extends VolumeMount<infer N> ? N : never;
 }[number];
 
+type _EnvNameOf<X> = X extends EnvVar<infer N> ? N : never;
+
+/**
+ * Union of any literal env-var names that appear more than once in `Envs`.
+ * Computes the intersection of pairwise names — if `Envs[I]` and `Envs[J]`
+ * share a literal name (i ≠ j), that name leaks into the union. Empty
+ * when every name is unique.
+ */
+type DuplicateEnvNames<Envs extends ReadonlyArray<EnvVar<string>>> = {
+	[I in keyof Envs]: {
+		[J in keyof Envs]: J extends I
+			? never
+			: _EnvNameOf<Envs[I]> & _EnvNameOf<Envs[J]> extends never
+				? never
+				: _EnvNameOf<Envs[I]> & _EnvNameOf<Envs[J]>;
+	}[number];
+}[number];
+
+/**
+ * Empty (`unknown`) when `Envs` has no duplicate names; otherwise an
+ * inline object type whose required `_konfig_duplicate_env_names`
+ * property carries a template-literal hint sentence. Intersected with
+ * the `env` slot, an unmet property surfaces the sentence inline in the
+ * TS error — far more discoverable than a runtime "last-wins" surprise.
+ */
+type EnvDupCheck<Envs extends ReadonlyArray<EnvVar<string>>> =
+	[DuplicateEnvNames<Envs>] extends [never]
+		? unknown
+		: {
+				readonly _konfig_duplicate_env_names: `Duplicate env name(s): "${DuplicateEnvNames<Envs>}". K8s silently last-wins; rename one of the colliding entries or remove the manual valueEnv that shadows another producer.`;
+			};
+
 /**
  * Strongly-typed container builder. Captures the union of named ports
- * (from `port({ name, ... })`) as `Ports`, and the union of mounted
- * volume names (from `mountRef(...)`) as the container's Mounts
- * phantom. The phantoms travel on `ContainerSpec`; `definePod` checks
- * the container's Mounts against the pod's declared volume names.
+ * (from `port({ name, ... })`) as `Ports`, the union of mounted volume
+ * names (from `mountRef(...)`) as `Mounts`, and validates that the
+ * `env` list has no duplicate env-var names. The first two phantoms
+ * travel on `ContainerSpec`; `definePod` checks the container's Mounts
+ * against the pod's declared volume names.
  *
- * With no volumeMounts, Mounts is `never` — the container makes no
- * volume claims and slots into any pod.
+ * Duplicate env names are caught at the call site via a template-literal
+ * error message — see `EnvDupCheck`. K8s' last-wins semantics for env
+ * collisions are invisible at runtime; surfacing them at compile time
+ * is the win.
+ *
+ * With no volumeMounts and no env, all phantoms collapse to `never` —
+ * the container makes no volume / no name claims and slots in anywhere.
  */
 export const defineContainer = <
 	const Ports extends ReadonlyArray<ContainerPort<string>>,
 	const Mounts extends ReadonlyArray<VolumeMount<string>> = readonly [],
+	const Envs extends ReadonlyArray<EnvVar<string>> = readonly [],
 >(
-	input: DefineContainerInput<Ports, Mounts>,
+	input: DefineContainerInput<Ports, Mounts, Envs>,
 ): ContainerSpec<NamesOf<Ports>, MountNamesOf<Mounts>> => {
 	type P = NamesOf<Ports>;
 	type M = MountNamesOf<Mounts>;
@@ -105,6 +146,7 @@ export const defineContainer = <
 		livenessProbe: input.livenessProbe,
 		startupProbe: input.startupProbe,
 		volumeMounts: input.volumeMounts as unknown as ReadonlyArray<VolumeMount<M>>,
+		env: input.env as unknown as ReadonlyArray<EnvVar<string>> | undefined,
 	};
 	return out;
 };

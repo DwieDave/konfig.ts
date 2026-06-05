@@ -1,7 +1,13 @@
 import type { ConfigMapRef, SecretRef } from "@konfig.ts/core";
 
-export interface EnvVar {
-	readonly name: string;
+/**
+ * Container env-var entry. The phantom `N` records the literal env-var
+ * name at the type level so `defineContainer` can detect duplicates
+ * across the entry list. The default `N = string` preserves existing
+ * loose-typed call sites.
+ */
+export interface EnvVar<N extends string = string> {
+	readonly name: N;
 	readonly value?: string;
 	readonly valueFrom?: EnvVarSource;
 }
@@ -21,17 +27,17 @@ export interface EnvVarSource {
 	readonly resourceFieldRef?: { readonly containerName?: string; readonly resource: string };
 }
 
-export interface ValueEnvInput {
-	readonly name: string;
+export interface ValueEnvInput<N extends string> {
+	readonly name: N;
 	readonly value: string;
 }
-export const valueEnv = (input: ValueEnvInput): EnvVar => ({
+export const valueEnv = <const N extends string>(input: ValueEnvInput<N>): EnvVar<N> => ({
 	name: input.name,
 	value: input.value,
 });
 
-export interface SecretEnvInput<N extends string, K extends string> {
-	readonly name: string;
+export interface SecretEnvInput<EnvName extends string, N extends string, K extends string> {
+	readonly name: EnvName;
 	readonly ref: SecretRef<N, K>;
 	/**
 	 * Constrained to the keys carried by `ref`. `NoInfer` locks `K` to
@@ -42,17 +48,21 @@ export interface SecretEnvInput<N extends string, K extends string> {
 	readonly key: NoInfer<K>;
 	readonly optional?: boolean;
 }
-export const secretEnv = <N extends string, K extends string = string>(
-	input: SecretEnvInput<N, K>,
-): EnvVar => ({
+export const secretEnv = <
+	const EnvName extends string,
+	N extends string,
+	K extends string = string,
+>(
+	input: SecretEnvInput<EnvName, N, K>,
+): EnvVar<EnvName> => ({
 	name: input.name,
 	valueFrom: {
 		secretKeyRef: { name: input.ref, key: input.key, optional: input.optional },
 	},
 });
 
-export interface ConfigMapEnvInput<N extends string, K extends string> {
-	readonly name: string;
+export interface ConfigMapEnvInput<EnvName extends string, N extends string, K extends string> {
+	readonly name: EnvName;
 	readonly ref: ConfigMapRef<N, K>;
 	/**
 	 * Constrained to the keys carried by `ref`. `NoInfer` locks `K` to
@@ -63,17 +73,21 @@ export interface ConfigMapEnvInput<N extends string, K extends string> {
 	readonly key: NoInfer<K>;
 	readonly optional?: boolean;
 }
-export const configMapEnv = <N extends string, K extends string = string>(
-	input: ConfigMapEnvInput<N, K>,
-): EnvVar => ({
+export const configMapEnv = <
+	const EnvName extends string,
+	N extends string,
+	K extends string = string,
+>(
+	input: ConfigMapEnvInput<EnvName, N, K>,
+): EnvVar<EnvName> => ({
 	name: input.name,
 	valueFrom: {
 		configMapKeyRef: { name: input.ref, key: input.key, optional: input.optional },
 	},
 });
 
-export const rawEnv = (entry: {
-	readonly name: string;
+export const rawEnv = <const N extends string>(entry: {
+	readonly name: N;
 	readonly value?: string;
 	readonly valueFrom?: EnvVarSource;
-}): EnvVar => entry;
+}): EnvVar<N> => entry;
