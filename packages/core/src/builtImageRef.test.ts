@@ -1,10 +1,10 @@
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { builtImageRef, Image, provideImage } from "./deps";
+import { BuiltImageRef, Image, provideImage } from "./deps";
 
 describe("BuiltImageRef + Dep.Image", () => {
-	it("builtImageRef stringifies as 'registry/app:tag'", () => {
-		const ref = builtImageRef({ app: "api", registry: "ghcr.io/example", tag: "1.0.0" });
+	it("BuiltImageRef.of stringifies as 'registry/app:tag'", () => {
+		const ref = BuiltImageRef.of({ app: "api", registry: "ghcr.io/example", tag: "1.0.0" });
 		expect(ref).toBe("ghcr.io/example/api:1.0.0");
 	});
 

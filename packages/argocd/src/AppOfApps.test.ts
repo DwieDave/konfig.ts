@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Application, AppOfApps, SyncWave } from "./index";
+import { Application, AppOfApps, Sync } from "./index";
 
 const target: AppOfApps.AppOfAppsTarget = {
 	repoURL: "ssh://git@github.com/example/infra.git",
@@ -25,7 +25,7 @@ describe("Application.make", () => {
 			manifests: [],
 			source: _appSource("sops-secrets-operator"),
 			syncPolicy: { automated: { prune: false, selfHeal: false } },
-			annotations: SyncWave(-1),
+			annotations: Sync.wave(-1),
 		});
 
 		expect(app.name).toBe("sops-secrets-operator");

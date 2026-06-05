@@ -167,15 +167,19 @@ export const Ingress = {
 			spec: {
 				ingressClassName: input.ingressClassName,
 				rules: unsafeCoerce(input.rules, "user-supplied Ingress rules; widening from our convenience type to the K8s type"),
-				tls: unsafeCoerce<K8sIngressTLS[]>(input.tls, "ingressTLS helper produces K8sIngressTLS with branded secretName"),
+				tls: unsafeCoerce<K8sIngressTLS[]>(input.tls, "Ingress.tls produces K8sIngressTLS with branded secretName"),
 				defaultBackend: unsafeCoerce(input.defaultBackend, "user-supplied IngressBackend; structural match to K8s type"),
 			},
 		};
 		return Manifest.make<K8sIngress>(() => Effect.succeed(resource));
 	},
+	/**
+	 * TLS entry constructor for `Ingress.make({ tls: [...] })`. Takes a
+	 * branded `SecretRef` so the secret's name can't widen to a raw
+	 * string at the call site.
+	 */
+	tls: (input: {
+		readonly secretName: SecretRef<string>;
+		readonly hosts?: ReadonlyArray<string>;
+	}): IngressTLSInput => ({ secretName: input.secretName, hosts: input.hosts }),
 };
-
-export const ingressTLS = (input: {
-	readonly secretName: SecretRef<string>;
-	readonly hosts?: ReadonlyArray<string>;
-}): IngressTLSInput => ({ secretName: input.secretName, hosts: input.hosts });

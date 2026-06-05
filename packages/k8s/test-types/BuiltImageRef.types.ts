@@ -12,8 +12,8 @@ type Expect<T extends true> = T;
 type Equal<X, Y> =
 	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 
-// 1 · DepNS.builtImageRef brands the app literal.
-const apiImage = DepNS.builtImageRef({
+// 1 · BuiltImageRef.of brands the app literal.
+const apiImage = DepNS.BuiltImageRef.of({
 	app: "api",
 	registry: "ghcr.io/example",
 	tag: "1.0.0",

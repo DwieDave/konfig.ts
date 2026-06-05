@@ -3,7 +3,7 @@ import {
 	Application,
 	type AppOfApps,
 	applicationCRFilename,
-	SyncWave,
+	Sync,
 	serializeApplicationCR,
 } from "./index";
 
@@ -29,7 +29,7 @@ describe("serializeApplicationCR", () => {
 				path: "./infra/k8s/manifests/prod/sops-secrets-operator",
 			},
 			syncPolicy: { automated: { prune: false, selfHeal: false } },
-			annotations: SyncWave(-1),
+			annotations: Sync.wave(-1),
 		});
 
 		const yaml = serializeApplicationCR({ app, target, defaults });
@@ -57,7 +57,7 @@ describe("serializeApplicationCR", () => {
 				path: "./infra/k8s/manifests/prod/api",
 			},
 			syncPolicy: { automated: { prune: false, selfHeal: false } },
-			annotations: SyncWave(1),
+			annotations: Sync.wave(1),
 		});
 
 		const yaml = serializeApplicationCR({ app, target, defaults });

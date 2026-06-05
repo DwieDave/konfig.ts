@@ -17,4 +17,4 @@ export {
 	serializeApplicationCR,
 } from "./emit";
 export type { HookPhase } from "./sync";
-export { Hook, SyncOptions, SyncWave } from "./sync";
+export { Sync } from "./sync";

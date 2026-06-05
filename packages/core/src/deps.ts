@@ -142,14 +142,23 @@ const _fullRef = <App extends string>(input: _ImageRefInput<App>): BuiltImageRef
 	brand<BuiltImageRef<App>>(`${input.registry}/${input.app}:${input.tag}`);
 
 /**
- * Construct a `BuiltImageRef<App>` from registry + app + tag. The
- * literal `app` is captured in the brand so a workload's
+ * `BuiltImageRef` value namespace.
+ *
+ *   const apiImage = BuiltImageRef.of({
+ *     app: "api",
+ *     registry: "ghcr.io/example",
+ *     tag: "1.0.0",
+ *   });
+ *
+ * `BuiltImageRef.of` constructs the brand from registry + app + tag.
+ * The literal `app` is captured in the brand so a workload's
  * `Dep.Need<"Image", App>` matches only the build module that
  * provides this exact app.
  */
-export const builtImageRef = <const App extends string>(
-	input: _ImageRefInput<App>,
-): BuiltImageRef<App> => _fullRef(input);
+export const BuiltImageRef = {
+	of: <const App extends string>(input: _ImageRefInput<App>): BuiltImageRef<App> =>
+		_fullRef(input),
+};
 
 /**
  * Layer providing `Dep.Image(App)` for downstream consumers. Combine

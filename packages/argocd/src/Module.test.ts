@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { Application, Module, SyncWave } from "./index";
+import { Application, Module, Sync } from "./index";
 
 const source: Application.ArgoSource = {
 	repoURL: "ssh://git@github.com/example/infra.git",
@@ -22,7 +22,7 @@ const runHandle = <Name extends string, Out, In>(
 describe("Module.fixedNs", () => {
 	const defineSops = Module.fixedNs({
 		namespace: "sops",
-		annotations: SyncWave(-1),
+		annotations: Sync.wave(-1),
 		build: ({ name, namespace }, opts: { readonly note?: string }) => [
 			{ kind: "ServiceAccount", name, namespace, note: opts.note },
 		],
@@ -82,7 +82,7 @@ describe("Module.fixedNs", () => {
 
 describe("Module.dynamicNs", () => {
 	const defineApi = Module.dynamicNs({
-		annotations: SyncWave(1),
+		annotations: Sync.wave(1),
 		build: ({ name, namespace }, opts: { readonly image: string }) => [
 			{ kind: "Deployment", name, namespace, image: opts.image },
 		],

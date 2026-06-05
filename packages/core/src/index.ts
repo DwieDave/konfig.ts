@@ -2,7 +2,6 @@
 export { boundary } from "./boundary";
 export { brand, coerce, unsafeCoerce } from "./_cast";
 export type {
-	BuiltImageRef,
 	BuiltImageRefApp,
 	ConfigMapRef,
 	ConfigMapRefKeys,
@@ -18,6 +17,7 @@ export type {
 	ServiceAccountRef,
 } from "./deps";
 export * as Dep from "./deps";
+export { BuiltImageRef } from "./deps";
 export {
 	type DiffFormat,
 	type DiffResult,

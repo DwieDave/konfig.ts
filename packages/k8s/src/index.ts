@@ -8,7 +8,7 @@ export {
 	type DefinedPod,
 	type DefinePodInput,
 	definePod,
-	imagePullSecret,
+	Pod,
 	type PodSpecInput,
 } from "./container";
 export {
@@ -82,7 +82,6 @@ export {
 	Ingress,
 	type IngressInput,
 	type IngressTLSInput,
-	ingressTLS,
 	Service,
 	type ServiceFromContainerInput,
 	type ServiceFromPodSetInput,

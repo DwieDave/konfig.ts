@@ -63,7 +63,7 @@ export interface FixedNsModuleConfig<Ns extends string, Opts, R, Extra> {
  * ```ts
  * export const defineSopsOperator = Module.fixedNs({
  *   namespace: "sops",
- *   annotations: SyncWave(-1),
+ *   annotations: Sync.wave(-1),
  *   build: ({ namespace }, opts: { resources?: ResourceLimits }) => [
  *     Namespace.make({ name: namespace }),
  *     Helm.release({ ... }),
@@ -122,7 +122,7 @@ export interface DynamicNsModuleConfig<Opts, R, Extra> {
  *
  * ```ts
  * export const defineApi = Module.dynamicNs({
- *   annotations: SyncWave(1),
+ *   annotations: Sync.wave(1),
  *   build: ({ name, namespace }, opts: ApiInstanceOpts) => Effect.gen(function*() {
  *     return [ ... manifests built using opts.image, opts.host, ... ];
  *   }),

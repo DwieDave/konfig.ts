@@ -236,6 +236,17 @@ export interface PodSpecInput
 	readonly serviceAccountName?: ServiceAccountRef<string> | string;
 }
 
-export const imagePullSecret = (ref: SecretRef<string>): { readonly name: SecretRef<string> } => ({
-	name: ref,
-});
+/**
+ * `Pod` value namespace.
+ *
+ *   imagePullSecrets: [Pod.imagePullSecret(ghcrRef)],
+ *
+ * Atomic constructors for sub-fields of `PodSpec` that need brand
+ * checking. Today: `imagePullSecret(ref)` returns the `{ name: SecretRef }`
+ * entry consumed by Deployment / StatefulSet / Job / CronJob workloads.
+ */
+export const Pod = {
+	imagePullSecret: (ref: SecretRef<string>): { readonly name: SecretRef<string> } => ({
+		name: ref,
+	}),
+};

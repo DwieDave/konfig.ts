@@ -113,19 +113,19 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
 		expect(v.configMap?.name).toBe("cfg");
 	});
 
-	it("imagePullSecret rejects raw string", async () => {
-		const { imagePullSecret } = await import("./container");
+	it("Pod.imagePullSecret rejects raw string", async () => {
+		const { Pod } = await import("./container");
 		// @ts-expect-error — raw string is not assignable to SecretRef.
-		imagePullSecret("raw-string");
-		const ips = imagePullSecret(SecretRef.of("ghcr-pull"));
+		Pod.imagePullSecret("raw-string");
+		const ips = Pod.imagePullSecret(SecretRef.of("ghcr-pull"));
 		expect(ips.name).toBe("ghcr-pull");
 	});
 
-	it("Ingress TLS rejects raw string", async () => {
-		const { ingressTLS } = await import("./network");
+	it("Ingress.tls rejects raw string", async () => {
+		const { Ingress } = await import("./network");
 		// @ts-expect-error — raw string is not assignable to SecretRef.
-		ingressTLS({ secretName: "raw-string" });
-		const tls = ingressTLS({ secretName: SecretRef.of("tls") });
+		Ingress.tls({ secretName: "raw-string" });
+		const tls = Ingress.tls({ secretName: SecretRef.of("tls") });
 		expect(tls.secretName).toBe("tls");
 	});
 });
