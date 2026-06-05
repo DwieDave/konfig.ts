@@ -24,8 +24,15 @@ declare const PvcRefBrand: unique symbol;
 export type SecretRef<N extends string, K extends string = string> = string & {
 	readonly [SecretRefBrand]: { readonly name: N; readonly keys: K };
 };
-export type ConfigMapRef<N extends string> = string & {
-	readonly [ConfigMapRefBrand]: N;
+/**
+ * Nominal reference to a named ConfigMap. `N` brands the metadata name;
+ * `K` (defaults to `string`) brands the union of declared data keys, so
+ * `configMapEnv({ ref, key })` can constrain `key` to keys that actually
+ * exist on the map. Producers (e.g. `ConfigMap.make`) populate `K` from
+ * the literal `data` (or `binaryData`) record keys.
+ */
+export type ConfigMapRef<N extends string, K extends string = string> = string & {
+	readonly [ConfigMapRefBrand]: { readonly name: N; readonly keys: K };
 };
 export type ServiceAccountRef<N extends string> = string & {
 	readonly [ServiceAccountRefBrand]: N;
@@ -36,7 +43,8 @@ export type PvcRef<N extends string> = string & {
 
 export type SecretRefName<R> = R extends SecretRef<infer N, infer _K> ? N : never;
 export type SecretRefKeys<R> = R extends SecretRef<infer _N, infer K> ? K : never;
-export type ConfigMapRefName<R> = R extends ConfigMapRef<infer N> ? N : never;
+export type ConfigMapRefName<R> = R extends ConfigMapRef<infer N, infer _K> ? N : never;
+export type ConfigMapRefKeys<R> = R extends ConfigMapRef<infer _N, infer K> ? K : never;
 export type PvcRefName<R> = R extends PvcRef<infer N> ? N : never;
 
 export const Secret = <N extends string, K extends string = string>(
@@ -53,10 +61,10 @@ export const SecretValues = <N extends string, K extends string = string>(
 ): Context.Service<Need<"SecretValues", N>, SecretValuesRecord<K>> =>
 	Context.Service<Need<"SecretValues", N>, SecretValuesRecord<K>>(`SecretValues:${name}`);
 
-export const ConfigMap = <N extends string>(
+export const ConfigMap = <N extends string, K extends string = string>(
 	name: N,
-): Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N>> =>
-	Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N>>(`ConfigMap:${name}`);
+): Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N, K>> =>
+	Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N, K>>(`ConfigMap:${name}`);
 
 export const Namespace = <N extends string>(name: N): Context.Service<Need<"Namespace", N>, N> =>
 	Context.Service<Need<"Namespace", N>, N>(`Namespace:${name}`);
@@ -82,10 +90,10 @@ export const provideSecret = <const N extends string, const K extends string = s
 ): Layer.Layer<Provide<"Secret", N>> =>
 	Layer.succeed(Secret<N, K>(name))(brand<SecretRef<N, K>>(name));
 
-export const provideConfigMap = <const N extends string>(
+export const provideConfigMap = <const N extends string, const K extends string = string>(
 	name: N,
 ): Layer.Layer<Provide<"ConfigMap", N>> =>
-	Layer.succeed(ConfigMap(name))(brand<ConfigMapRef<N>>(name));
+	Layer.succeed(ConfigMap<N, K>(name))(brand<ConfigMapRef<N, K>>(name));
 
 export const provideNamespace = <const N extends string>(
 	name: N,

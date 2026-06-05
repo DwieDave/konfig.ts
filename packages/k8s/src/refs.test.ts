@@ -33,6 +33,15 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
 		expect(env.valueFrom?.configMapKeyRef?.name).toBe("cfg");
 	});
 
+	it("env-var with a keyed ConfigMapRef rejects keys not in the declared union", async () => {
+		const { configMapEnv } = await import("./env");
+		const ref = ConfigMapRef.of<"app-config", "HOST" | "PORT">("app-config");
+		// @ts-expect-error — "PROT" is not in "HOST" | "PORT".
+		configMapEnv({ name: "DB_PORT", ref, key: "PROT" });
+		const env = configMapEnv({ name: "DB_PORT", ref, key: "PORT" });
+		expect(env.valueFrom?.configMapKeyRef?.key).toBe("PORT");
+	});
+
 	it("volume from Secret rejects raw string", async () => {
 		const { volumeFromSecret } = await import("./volume");
 		// @ts-expect-error — raw string for `ref` is not assignable to SecretRef.

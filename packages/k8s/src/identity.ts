@@ -74,20 +74,23 @@ export const ServiceAccount = {
 	},
 };
 
-export interface ConfigMapInput<N extends string> extends CommonMeta {
+export interface ConfigMapInput<N extends string, K extends string = string> extends CommonMeta {
 	readonly name: N;
 	readonly namespace: string;
-	readonly data?: Readonly<Record<string, string>>;
-	readonly binaryData?: Readonly<Record<string, string>>;
+	readonly data?: Readonly<Record<K, string>>;
+	readonly binaryData?: Readonly<Record<K, string>>;
 	readonly immutable?: boolean;
 }
 
-export interface ConfigMapManifest<N extends string> extends Manifest.Manifest<K8sConfigMap> {
-	readonly ref: ConfigMapRef<N>;
+export interface ConfigMapManifest<N extends string, K extends string = string>
+	extends Manifest.Manifest<K8sConfigMap> {
+	readonly ref: ConfigMapRef<N, K>;
 }
 
 export const ConfigMap = {
-	make: <N extends string>(input: ConfigMapInput<N>): ConfigMapManifest<N> => {
+	make: <const N extends string, const K extends string = string>(
+		input: ConfigMapInput<N, K>,
+	): ConfigMapManifest<N, K> => {
 		const resource: K8sConfigMap = {
 			apiVersion: "v1",
 			kind: "ConfigMap",
@@ -102,7 +105,7 @@ export const ConfigMap = {
 			immutable: input.immutable,
 		};
 		const m = Manifest.make<K8sConfigMap>(() => Effect.succeed(resource));
-		return Object.assign(m, { ref: ConfigMapRefValue.of(input.name) });
+		return Object.assign(m, { ref: ConfigMapRefValue.of<N, K>(input.name) });
 	},
 };
 

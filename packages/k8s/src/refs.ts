@@ -7,10 +7,16 @@ import {
 } from "@konfig.ts/core";
 
 export type SecretRef<N extends string = string, K extends string = string> = SRef<N, K>;
-export type ConfigMapRef<N extends string = string> = CMRef<N>;
+export type ConfigMapRef<N extends string = string, K extends string = string> = CMRef<N, K>;
 export type ServiceAccountRef<N extends string = string> = SARef<N>;
 export type PvcRef<N extends string = string> = PRef<N>;
-export type { ConfigMapRefName, PvcRefName, SecretRefKeys, SecretRefName } from "@konfig.ts/core";
+export type {
+	ConfigMapRefKeys,
+	ConfigMapRefName,
+	PvcRefName,
+	SecretRefKeys,
+	SecretRefName,
+} from "@konfig.ts/core";
 
 export const SecretRef = {
 	of: <N extends string, K extends string = string>(name: N): SecretRef<N, K> =>
@@ -18,7 +24,8 @@ export const SecretRef = {
 };
 
 export const ConfigMapRef = {
-	of: <N extends string>(name: N): ConfigMapRef<N> => brand<ConfigMapRef<N>>(name),
+	of: <N extends string, K extends string = string>(name: N): ConfigMapRef<N, K> =>
+		brand<ConfigMapRef<N, K>>(name),
 };
 
 export const ServiceAccountRef = {

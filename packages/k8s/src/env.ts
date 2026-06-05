@@ -51,13 +51,21 @@ export const secretEnv = <N extends string, K extends string = string>(
 	},
 });
 
-export interface ConfigMapEnvInput {
+export interface ConfigMapEnvInput<N extends string, K extends string> {
 	readonly name: string;
-	readonly ref: ConfigMapRef<string>;
-	readonly key: string;
+	readonly ref: ConfigMapRef<N, K>;
+	/**
+	 * Constrained to the keys carried by `ref`. `NoInfer` locks `K` to
+	 * whatever the ref declares — typos like `key: "passwrod"` fail at
+	 * compile time when the ref's K is `"HOST" | "PORT" | "LOG_LEVEL"`.
+	 * Refs constructed with the default `K = string` accept any string.
+	 */
+	readonly key: NoInfer<K>;
 	readonly optional?: boolean;
 }
-export const configMapEnv = (input: ConfigMapEnvInput): EnvVar => ({
+export const configMapEnv = <N extends string, K extends string = string>(
+	input: ConfigMapEnvInput<N, K>,
+): EnvVar => ({
 	name: input.name,
 	valueFrom: {
 		configMapKeyRef: { name: input.ref, key: input.key, optional: input.optional },

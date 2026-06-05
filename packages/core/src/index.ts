@@ -3,6 +3,7 @@ export { boundary } from "./boundary";
 export { brand, coerce, unsafeCoerce } from "./_cast";
 export type {
 	ConfigMapRef,
+	ConfigMapRefKeys,
 	ConfigMapRefName,
 	Need,
 	Provide,
