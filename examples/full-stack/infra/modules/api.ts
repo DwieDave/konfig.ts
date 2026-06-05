@@ -1,15 +1,6 @@
 import { Application } from "@konfig.ts/argocd";
 import { Dep } from "@konfig.ts/core";
-import {
-	configMapEnv,
-	defineContainer,
-	Environment,
-	port,
-	portRef,
-	Workload,
-	secretEnvForPod,
-	valueEnv,
-} from "@konfig.ts/k8s";
+import { defineContainer, Environment, EnvVar, Port, Workload } from "@konfig.ts/k8s";
 import { Sops } from "@konfig.ts/sops";
 import { apiEnv } from "@example/env-contracts";
 import { Effect } from "effect";
@@ -32,14 +23,15 @@ export interface ApiOptions {
  *     as a `_konfig_unsatisfied` hint at `AppOfApps.entrypoint`.
  *   - `defineContainer({ ports, env })` brands the port-name union
  *     ("http") and validates the env list for duplicate names. A typo'd
- *     `portRef(...)` on the readiness probe is a compile error; a
+ *     `Port.ref(...)` on the readiness probe is a compile error; a
  *     duplicate env name surfaces a human-readable hint inline.
- *   - `secretEnvForPod({ podNamespace: "app", ref })` rejects refs whose
- *     namespace doesn't match — the db-creds Secret lives in "app", so
- *     a cross-namespace mistake fails at type-check time, not at pod
+ *   - `EnvVar.fromSecretForPod({ podNamespace: "app", ref })` rejects refs
+ *     whose namespace doesn't match — the db-creds Secret lives in "app",
+ *     so a cross-namespace mistake fails at type-check time, not at pod
  *     startup with "secret not found".
  *   - `Environment.bind` still produces the same SopsSecret manifest +
- *     envVars; we splice in `valueEnv`/`secretEnvForPod` extras and the
+ *     envVars; we splice in extras via `EnvVar.value` /
+ *     `EnvVar.fromSecretForPod` / `EnvVar.fromConfigMap`, and the
  *     duplicate-detection guards us against shadowing one of bind's
  *     names by accident.
  */
@@ -77,30 +69,30 @@ export const defineApi = (opts: ApiOptions) =>
 			const apiContainer = defineContainer({
 				name: "api",
 				image: apiImage,
-				ports: [port({ name: "http", containerPort: 8080 })],
+				ports: [Port.make({ name: "http", containerPort: 8080 })],
 				env: [
 					...bound.envVars,
-					// secretEnvForPod ties the db ref's namespace ("app") to this
-					// pod's namespace. Crossing namespaces is a compile error.
-					secretEnvForPod({
+					// EnvVar.fromSecretForPod ties the db ref's namespace ("app")
+					// to this pod's namespace. Crossing namespaces is a compile error.
+					EnvVar.fromSecretForPod({
 						name: "DATABASE_URL_PRIMARY",
 						ref: bound.members.db.ref,
 						key: "url",
 						podNamespace: "app",
 					}),
-					// configMapEnv with a typed ref: `key` is constrained to
-					// the keys declared on featureFlags ("NEW_UI" | "BETA_DASHBOARD"
+					// EnvVar.fromConfigMap with a typed ref: `key` is constrained
+					// to the keys declared on featureFlags ("NEW_UI" | "BETA_DASHBOARD"
 					// | "DARK_MODE"). Renaming a key in feature-flags.ts breaks
 					// this call site at compile time.
-					configMapEnv({
+					EnvVar.fromConfigMap({
 						name: "FEATURE_NEW_UI",
 						ref: featureFlags.ref,
 						key: "NEW_UI",
 					}),
-					valueEnv({ name: "API_NAME", value: "api" }),
+					EnvVar.value({ name: "API_NAME", value: "api" }),
 				],
 				readinessProbe: {
-					httpGet: { path: "/healthz", port: portRef("http") },
+					httpGet: { path: "/healthz", port: Port.ref("http") },
 					periodSeconds: 5,
 				},
 			});
@@ -114,7 +106,7 @@ export const defineApi = (opts: ApiOptions) =>
 					containers: [apiContainer],
 				},
 				service: {
-					ports: [{ port: 80, targetPort: portRef("http") }],
+					ports: [{ port: 80, targetPort: Port.ref("http") }],
 				},
 			});
 

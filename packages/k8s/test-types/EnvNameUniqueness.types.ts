@@ -3,17 +3,17 @@
 // surfacing them at the call site replaces a silent runtime bug with
 // a `_konfig_duplicate_env_names` hint sentence.
 
-import { defineContainer, port, valueEnv } from "@konfig.ts/k8s";
+import { defineContainer, EnvVar, Port } from "@konfig.ts/k8s";
 
 // 1 · Happy path — three distinct env names.
 const _good = defineContainer({
 	name: "api",
 	image: "ghcr.io/example/api:1.0.0",
-	ports: [port({ name: "http", containerPort: 8080 })],
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
 	env: [
-		valueEnv({ name: "PORT", value: "8080" }),
-		valueEnv({ name: "LOG_LEVEL", value: "info" }),
-		valueEnv({ name: "DB_URL", value: "postgres://..." }),
+		EnvVar.value({ name: "PORT", value: "8080" }),
+		EnvVar.value({ name: "LOG_LEVEL", value: "info" }),
+		EnvVar.value({ name: "DB_URL", value: "postgres://..." }),
 	],
 });
 
@@ -22,12 +22,12 @@ const _good = defineContainer({
 const _dup = defineContainer({
 	name: "api",
 	image: "x",
-	ports: [port({ name: "http", containerPort: 8080 })],
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
 	// @ts-expect-error - _konfig_duplicate_env_names: "PORT" declared twice.
 	env: [
-		valueEnv({ name: "PORT", value: "8080" }),
-		valueEnv({ name: "LOG_LEVEL", value: "info" }),
-		valueEnv({ name: "PORT", value: "9090" }),
+		EnvVar.value({ name: "PORT", value: "8080" }),
+		EnvVar.value({ name: "LOG_LEVEL", value: "info" }),
+		EnvVar.value({ name: "PORT", value: "9090" }),
 	],
 });
 
@@ -36,13 +36,13 @@ const _dup = defineContainer({
 const _dups = defineContainer({
 	name: "api",
 	image: "x",
-	ports: [port({ name: "http", containerPort: 8080 })],
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
 	// @ts-expect-error - _konfig_duplicate_env_names: "PORT" and "LOG_LEVEL" each twice.
 	env: [
-		valueEnv({ name: "PORT", value: "8080" }),
-		valueEnv({ name: "LOG_LEVEL", value: "info" }),
-		valueEnv({ name: "PORT", value: "9090" }),
-		valueEnv({ name: "LOG_LEVEL", value: "debug" }),
+		EnvVar.value({ name: "PORT", value: "8080" }),
+		EnvVar.value({ name: "LOG_LEVEL", value: "info" }),
+		EnvVar.value({ name: "PORT", value: "9090" }),
+		EnvVar.value({ name: "LOG_LEVEL", value: "debug" }),
 	],
 });
 
@@ -50,13 +50,13 @@ const _dups = defineContainer({
 const _empty = defineContainer({
 	name: "api",
 	image: "x",
-	ports: [port({ name: "http", containerPort: 8080 })],
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
 });
 
 const _emptyArr = defineContainer({
 	name: "api",
 	image: "x",
-	ports: [port({ name: "http", containerPort: 8080 })],
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
 	env: [],
 });
 

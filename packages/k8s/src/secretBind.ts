@@ -2,7 +2,7 @@ import { Dep, type Manifest, RenderError, type SecretRef } from "@konfig.ts/core
 import type { SecretEntry, SecretSource } from "@konfig.ts/env";
 import { type Context, type Layer, Layer as L, Effect } from "effect";
 import type { SecretBackend } from "./backend";
-import { type EnvVar, secretEnv } from "./env";
+import { EnvVar } from "./env";
 import { SecretRef as SecretRefValue } from "./refs";
 
 export interface DeclaredSecret<N extends string, K extends string, Ns extends string = string> {
@@ -62,7 +62,7 @@ export const bindSecret = <
 	const namespace = (input.namespace ?? secret.namespace) as Ns;
 	const ref = SecretRefValue.of<N, K, Ns>(secret.name);
 	const envVars: EnvVar[] = secret.keys.map((key: K) =>
-		secretEnv({ name: secret.env[key], ref, key }),
+		EnvVar.fromSecret({ name: secret.env[key], ref, key }),
 	);
 	const refLayer = Dep.provideSecret(secret.name);
 

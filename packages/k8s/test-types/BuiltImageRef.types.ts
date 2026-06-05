@@ -5,7 +5,7 @@
 
 import type { BuiltImageRef, BuiltImageRefApp, Dep } from "@konfig.ts/core";
 import { Dep as DepNS } from "@konfig.ts/core";
-import { defineContainer, port } from "@konfig.ts/k8s";
+import { defineContainer, Port } from "@konfig.ts/k8s";
 import { Effect } from "effect";
 
 type Expect<T extends true> = T;
@@ -30,13 +30,13 @@ type _ApiLayerOut = Expect<
 const _branded = defineContainer({
 	name: "api",
 	image: apiImage,
-	ports: [port({ name: "http", containerPort: 8080 })],
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
 });
 
 const _raw = defineContainer({
 	name: "postgres",
 	image: "docker.io/bitnami/postgresql:16.0.0",
-	ports: [port({ name: "tcp", containerPort: 5432 })],
+	ports: [Port.make({ name: "tcp", containerPort: 5432 })],
 });
 
 // 4 · Cross-app brand mismatch — assigning an "api" ref where the

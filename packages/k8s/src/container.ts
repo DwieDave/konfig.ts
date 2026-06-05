@@ -15,8 +15,9 @@ import type { Volume, VolumeMount, VolumeNamesOf } from "./volume";
 
 /**
  * Container input — extends the full K8s Container API. Konfig's
- * branded helpers (`secretEnv`, `configMapEnv`) produce `EnvVar`
- * instances whose runtime shape matches `K8sEnvVar`; the override
+ * branded helpers (`EnvVar.value`, `EnvVar.fromSecret`,
+ * `EnvVar.fromConfigMap`) produce `EnvVar` instances whose runtime
+ * shape matches `K8sEnvVar`; the override
  * here narrows the field to readonly + the branded helper output so
  * `secretKeyRef.name` carries its `SecretRef<N>` brand at construction
  * time.
@@ -25,7 +26,7 @@ import type { Volume, VolumeMount, VolumeNamesOf } from "./volume";
  * higher-level controllers that default it; konfig wants every
  * container to have an explicit image).
  *
- * `ports[i].name` accepts the branded `PortName<string>` from `port(...)`
+ * `ports[i].name` accepts the branded `PortName<string>` from `Port.make(...)`
  * as well as a raw string; the typed builder `defineContainer` is the
  * link that captures the literal name union for cross-reference checks.
  */
@@ -75,9 +76,9 @@ export interface ContainerInput
  * declared via `port({ name, containerPort })` as a phantom type
  * parameter, then constrains every probe's `port` field to that union.
  *
- * Pair with `definedService({ forContainer })` in `network.ts` to link
- * a Service's `targetPort` to the same union — a typo or undeclared
- * port name is a compile error.
+ * Pair with `Service.fromContainer({ forContainer })` in `network.ts`
+ * to link a Service's `targetPort` to the same union — a typo or
+ * undeclared port name is a compile error.
  */
 export interface ContainerSpec<Ports extends string = string, Mounts extends string = string>
 	extends Omit<

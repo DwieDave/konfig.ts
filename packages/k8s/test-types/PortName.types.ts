@@ -4,7 +4,7 @@
 // A mistyped probe port or `targetPort` fails at compile time.
 
 import type { ContainerSpec, NamesOf } from "@konfig.ts/k8s";
-import { defineContainer, definedService, port, portRef } from "@konfig.ts/k8s";
+import { defineContainer, definedService, Port } from "@konfig.ts/k8s";
 
 type Expect<T extends true> = T;
 type Equal<X, Y> =
@@ -12,8 +12,8 @@ type Equal<X, Y> =
 
 // 1 · `NamesOf` extracts the union of literal port names.
 type PortsTuple = readonly [
-	ReturnType<typeof port<"http">>,
-	ReturnType<typeof port<"metrics">>,
+	ReturnType<typeof Port.make<"http">>,
+	ReturnType<typeof Port.make<"metrics">>,
 ];
 type _Names = Expect<Equal<NamesOf<PortsTuple>, "http" | "metrics">>;
 
@@ -22,8 +22,8 @@ const api = defineContainer({
 	name: "api",
 	image: "x",
 	ports: [
-		port({ name: "http", containerPort: 8080 }),
-		port({ name: "metrics", containerPort: 9090 }),
+		Port.make({ name: "http", containerPort: 8080 }),
+		Port.make({ name: "metrics", containerPort: 9090 }),
 	],
 });
 type _ApiSpec = Expect<Equal<typeof api, ContainerSpec<"http" | "metrics", never>>>;
@@ -32,8 +32,8 @@ type _ApiSpec = Expect<Equal<typeof api, ContainerSpec<"http" | "metrics", never
 const okProbe = defineContainer({
 	name: "api",
 	image: "x",
-	ports: [port({ name: "http", containerPort: 8080 })],
-	readinessProbe: { httpGet: { path: "/h", port: portRef("http") } },
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
+	readinessProbe: { httpGet: { path: "/h", port: Port.ref("http") } },
 });
 void okProbe;
 
@@ -41,10 +41,10 @@ void okProbe;
 const badProbe = defineContainer({
 	name: "api",
 	image: "x",
-	ports: [port({ name: "http", containerPort: 8080 })],
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
 	readinessProbe: {
 		// @ts-expect-error - "grpc" is not in declared port names ("http").
-		httpGet: { path: "/h", port: portRef("grpc") },
+		httpGet: { path: "/h", port: Port.ref("grpc") },
 	},
 });
 void badProbe;
@@ -53,7 +53,7 @@ void badProbe;
 const numericProbe = defineContainer({
 	name: "api",
 	image: "x",
-	ports: [port({ name: "http", containerPort: 8080 })],
+	ports: [Port.make({ name: "http", containerPort: 8080 })],
 	readinessProbe: { httpGet: { path: "/h", port: 8080 } },
 });
 void numericProbe;
@@ -64,7 +64,7 @@ const _okSvc = definedService({
 	namespace: "default",
 	selector: { app: "api" },
 	forContainer: api,
-	ports: [{ port: 80, targetPort: portRef("http") }],
+	ports: [{ port: 80, targetPort: Port.ref("http") }],
 });
 
 // 7 · `definedService` — targetPort with an undeclared name fails.
@@ -75,7 +75,7 @@ const _badSvc = definedService({
 	forContainer: api,
 	ports: [
 		// @ts-expect-error - "admin" is not in api's declared port names ("http" | "metrics").
-		{ port: 80, targetPort: portRef("admin") },
+		{ port: 80, targetPort: Port.ref("admin") },
 	],
 });
 

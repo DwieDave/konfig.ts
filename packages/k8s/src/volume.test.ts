@@ -1,32 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { defineContainer, definePod } from "./container";
-import { port } from "./ports";
-import { emptyDirVolume, mountRef } from "./volume";
+import { Port } from "./ports";
+import { Volume } from "./volume";
 
-describe("emptyDirVolume / mountRef", () => {
+describe("Volume.empty / Volume.mountRef", () => {
 	it("brands the volume name; underlying value is the literal string", () => {
-		const v = emptyDirVolume({ name: "config" });
+		const v = Volume.empty({ name: "config" });
 		expect(v.name).toBe("config");
 		expect(v.emptyDir).toBeDefined();
 	});
 
-	it("mountRef returns the bare string at runtime", () => {
-		expect(mountRef("config")).toBe("config");
+	it("Volume.mountRef returns the bare string at runtime", () => {
+		expect(Volume.mountRef("config")).toBe("config");
 	});
 });
 
 describe("definePod", () => {
 	it("wires container volumeMounts to declared volumes by name", () => {
 		const pod = definePod({
-			volumes: [emptyDirVolume({ name: "config" }), emptyDirVolume({ name: "data" })],
+			volumes: [Volume.empty({ name: "config" }), Volume.empty({ name: "data" })],
 			containers: [
 				defineContainer({
 					name: "app",
 					image: "ghcr.io/example/app:1.0.0",
-					ports: [port({ name: "http", containerPort: 8080 })],
+					ports: [Port.make({ name: "http", containerPort: 8080 })],
 					volumeMounts: [
-						{ name: mountRef("config"), mountPath: "/etc/conf" },
-						{ name: mountRef("data"), mountPath: "/var/data" },
+						{ name: Volume.mountRef("config"), mountPath: "/etc/conf" },
+						{ name: Volume.mountRef("data"), mountPath: "/var/data" },
 					],
 				}),
 			],
@@ -46,7 +46,7 @@ describe("definePod", () => {
 				defineContainer({
 					name: "app",
 					image: "x",
-					ports: [port({ name: "http", containerPort: 8080 })],
+					ports: [Port.make({ name: "http", containerPort: 8080 })],
 				}),
 			],
 		});
@@ -56,21 +56,21 @@ describe("definePod", () => {
 
 	it("supports initContainers under the same mount-name constraint", () => {
 		const pod = definePod({
-			volumes: [emptyDirVolume({ name: "data" })],
+			volumes: [Volume.empty({ name: "data" })],
 			initContainers: [
 				defineContainer({
 					name: "init",
 					image: "busybox",
 					ports: [],
-					volumeMounts: [{ name: mountRef("data"), mountPath: "/seed" }],
+					volumeMounts: [{ name: Volume.mountRef("data"), mountPath: "/seed" }],
 				}),
 			],
 			containers: [
 				defineContainer({
 					name: "app",
 					image: "x",
-					ports: [port({ name: "http", containerPort: 8080 })],
-					volumeMounts: [{ name: mountRef("data"), mountPath: "/var/data" }],
+					ports: [Port.make({ name: "http", containerPort: 8080 })],
+					volumeMounts: [{ name: Volume.mountRef("data"), mountPath: "/var/data" }],
 				}),
 			],
 		});

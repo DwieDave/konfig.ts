@@ -11,7 +11,7 @@ import type {
 	NetworkPolicyEgressRule as K8sNetworkPolicyEgressRule,
 	NetworkPolicyIngressRule as K8sNetworkPolicyIngressRule,
 } from "kubernetes-types/networking/v1";
-import type { SelectorBundle } from "./selector";
+import type { Selector } from "./selector";
 import { Deployment } from "./workload";
 import { Service } from "./network";
 import { NetworkPolicy } from "./policy";
@@ -24,13 +24,13 @@ interface CommonMeta {
 }
 
 /**
- * Deployment built from a SelectorBundle. The bundle's labels become
+ * Deployment built from a Selector. The bundle's labels become
  * both the Deployment's `spec.selector.matchLabels` and the pod
  * template's `metadata.labels` — coherent by construction.
  */
 export interface BundledDeploymentInput<L extends Readonly<Record<string, string>>>
 	extends CommonMeta {
-	readonly podSet: SelectorBundle<L>;
+	readonly podSet: Selector<L>;
 	readonly replicas?: number;
 	readonly template: {
 		readonly metadata?: {
@@ -69,13 +69,13 @@ export const bundledDeployment = <L extends Readonly<Record<string, string>>>(
 	});
 
 /**
- * Service built from a SelectorBundle. The bundle's labels populate
+ * Service built from a Selector. The bundle's labels populate
  * `spec.selector` — drift versus the bundled Deployment is impossible
  * once both consume the same `podSet`.
  */
 export interface BundledServiceInput<L extends Readonly<Record<string, string>>>
 	extends CommonMeta {
-	readonly podSet: SelectorBundle<L>;
+	readonly podSet: Selector<L>;
 	readonly ports: ReadonlyArray<K8sServicePort>;
 	readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer";
 	readonly clusterIP?: string;
@@ -104,21 +104,21 @@ export const bundledService = <L extends Readonly<Record<string, string>>>(
 	});
 
 /**
- * NetworkPolicy built from SelectorBundles. The owning pod set
+ * NetworkPolicy built from Selectors. The owning pod set
  * (`podSet`) drives `spec.podSelector`; ingress/egress peer rules
  * accept further bundles via `from[].podSet` / `to[].podSet`. Peer
  * bundles need not match the owning bundle.
  */
 export interface BundledNetworkPolicyInput<L extends Readonly<Record<string, string>>>
 	extends CommonMeta {
-	readonly podSet: SelectorBundle<L>;
+	readonly podSet: Selector<L>;
 	readonly policyTypes?: ReadonlyArray<"Ingress" | "Egress">;
 	readonly ingress?: ReadonlyArray<BundledIngressRule>;
 	readonly egress?: ReadonlyArray<BundledEgressRule>;
 }
 
 export interface BundledPeer {
-	readonly podSet?: SelectorBundle<Readonly<Record<string, string>>>;
+	readonly podSet?: Selector<Readonly<Record<string, string>>>;
 	readonly namespaceSelector?: { readonly matchLabels?: Readonly<Record<string, string>> };
 	readonly ipBlock?: { readonly cidr: string; readonly except?: ReadonlyArray<string> };
 }
@@ -173,11 +173,11 @@ export const bundledNetworkPolicy = <L extends Readonly<Record<string, string>>>
 
 /**
  * Umbrella helper: emit a coherent Deployment + Service + (optional)
- * NetworkPolicy from a single SelectorBundle. Every resource derives
+ * NetworkPolicy from a single Selector. Every resource derives
  * its selector from `podSet`, so the trio cannot drift.
  */
 export interface PodSetResourcesInput<L extends Readonly<Record<string, string>>> {
-	readonly podSet: SelectorBundle<L>;
+	readonly podSet: Selector<L>;
 	readonly deployment: Omit<BundledDeploymentInput<L>, "podSet">;
 	readonly service?: Omit<BundledServiceInput<L>, "podSet">;
 	readonly netPol?: Omit<BundledNetworkPolicyInput<L>, "podSet">;

@@ -19,24 +19,22 @@ export {
 	type HttpGetAction,
 	type HttpHeader,
 	type NamesOf,
-	port,
+	Port,
 	type PortInput,
 	type PortName,
-	portRef,
 	type ProbeTarget,
 	type ServicePortSpec,
 	type TcpSocketAction,
 } from "./ports";
 
 export {
-	configMapEnv,
-	type EnvVar,
+	type ConfigMapEnvInput,
+	EnvVar,
 	type EnvVarSource,
-	rawEnv,
-	secretEnv,
-	secretEnvForPod,
+	type RawEnvInput,
 	type SecretEnvForPodInput,
-	valueEnv,
+	type SecretEnvInput,
+	type ValueEnvInput,
 } from "./env";
 export {
 	ConfigMap,
@@ -108,16 +106,15 @@ export {
 } from "./policy";
 export type { ConfigMapRefName, PvcRefName, SecretRefName } from "./refs";
 export { ConfigMapRef, PvcRef, SecretRef, ServiceAccountRef } from "./refs";
-export {
-	emptyDirVolume,
-	mountRef,
-	pvcVolume,
-	type Volume,
-	type VolumeMount,
-	type VolumeName,
-	type VolumeNamesOf,
-	volumeFromConfigMap,
-	volumeFromSecret,
+export { Volume } from "./volume";
+export type {
+	EmptyVolumeInput,
+	VolumeFromConfigMapInput,
+	VolumeFromPvcInput,
+	VolumeFromSecretInput,
+	VolumeMount,
+	VolumeName,
+	VolumeNamesOf,
 } from "./volume";
 export {
 	CronJob,
@@ -131,11 +128,8 @@ export {
 } from "./workload";
 
 export * as Workload from "./workloadHelpers";
-export {
-	type SelectorBundle,
-	type SelectorBundleLabels,
-	selector,
-} from "./selector";
+export { Selector } from "./selector";
+export type { SelectorLabels } from "./selector";
 export {
 	type BundledDeploymentInput,
 	type BundledEgressRule,

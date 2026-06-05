@@ -1,7 +1,7 @@
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { RenderContext, Yaml } from "@konfig.ts/core";
-import { Secret, secretEnv, valueEnv, Workload } from "@konfig.ts/k8s";
+import { EnvVar, Secret, Workload } from "@konfig.ts/k8s";
 import { Effect } from "effect";
 
 const dbCreds = Secret.make({
@@ -21,8 +21,8 @@ const api = Workload.web({
 				image: "ghcr.io/example/api:1.0",
 				ports: [{ containerPort: 8080 }],
 				env: [
-					valueEnv({ name: "PORT", value: "8080" }),
-					secretEnv({ name: "DATABASE_URL", ref: dbCreds.ref, key: "url" }),
+					EnvVar.value({ name: "PORT", value: "8080" }),
+					EnvVar.fromSecret({ name: "DATABASE_URL", ref: dbCreds.ref, key: "url" }),
 				],
 			},
 		],
@@ -31,7 +31,7 @@ const api = Workload.web({
 });
 
 // @ts-expect-error  raw string is not a SecretRef — rejected at signature
-secretEnv({ name: "FOO", ref: "db-creds", key: "url" });
+EnvVar.fromSecret({ name: "FOO", ref: "db-creds", key: "url" });
 
 // @ts-expect-error  names are in the type — a ref to "other" can't be
 const _wrong: typeof dbCreds.ref = Secret.make({
@@ -41,7 +41,7 @@ const _wrong: typeof dbCreds.ref = Secret.make({
 }).ref;
 
 // @ts-expect-error  keys are in the type — only "url" was declared on dbCreds
-secretEnv({ name: "DATABASE_PASSWORD", ref: dbCreds.ref, key: "passowrd" });
+EnvVar.fromSecret({ name: "DATABASE_PASSWORD", ref: dbCreds.ref, key: "passowrd" });
 
 const program = Effect.gen(function* () {
 	const ctx = RenderContext.make("prod");

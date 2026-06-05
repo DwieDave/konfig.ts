@@ -2,7 +2,7 @@ import { brand } from "@konfig.ts/core";
 
 /**
  * Branded port name — a string carrying the literal `N` in its type.
- * Constructed by `port({ name, containerPort })` and `portRef(name)`.
+ * Constructed by `Port.make({ name, containerPort })` and `Port.ref(name)`.
  * The brand lets probes and Service `targetPort` constrain their
  * `port` field to a member of the container's declared port-name union
  * rather than `string`.
@@ -33,27 +33,28 @@ export interface PortInput<N extends string> {
 }
 
 /**
- * Construct a named container port. The literal `name` is captured in
- * the returned `ContainerPort<N>` brand so consumers like
- * `defineContainer` can infer the port-name union and constrain
- * cross-references (probes, Service.targetPort).
- */
-export const port = <const N extends string>(input: PortInput<N>): ContainerPort<N> => ({
-	containerPort: input.containerPort,
-	name: _portName(input.name),
-	protocol: input.protocol,
-	hostPort: input.hostPort,
-	hostIP: input.hostIP,
-});
-
-/**
- * Reference an existing named port. Used in probe targets and
- * Service.targetPort to point at a port declared on a container.
+ * `Port` value namespace.
  *
- *   readinessProbe: { httpGet: { port: portRef("http") } }
- *   service: { ports: [{ port: 80, targetPort: portRef("http") }] }
+ *   ports: [Port.make({ name: "http", containerPort: 8080 })],
+ *   readinessProbe: { httpGet: { port: Port.ref("http") } },
+ *
+ * - `Port.make(input)` constructs a named container port; the literal
+ *   `name` is captured in the returned `ContainerPort<N>` brand so
+ *   `defineContainer` can infer the port-name union and constrain
+ *   cross-references (probes, Service.targetPort).
+ * - `Port.ref(name)` returns the brand alone, for probe targets and
+ *   `targetPort` references that need to name an existing declared port.
  */
-export const portRef = <const N extends string>(name: N): PortName<N> => _portName(name);
+export const Port = {
+	make: <const N extends string>(input: PortInput<N>): ContainerPort<N> => ({
+		containerPort: input.containerPort,
+		name: _portName(input.name),
+		protocol: input.protocol,
+		hostPort: input.hostPort,
+		hostIP: input.hostIP,
+	}),
+	ref: <const N extends string>(name: N): PortName<N> => _portName(name),
+};
 
 export interface HttpHeader {
 	readonly name: string;
@@ -108,8 +109,8 @@ export type NamesOf<P extends ReadonlyArray<unknown>> = {
 /**
  * Service-port input bound to a container's port-name union. `targetPort`
  * accepts a bare number or a `PortName<Ports>`. The `Ports` parameter is
- * locked by `forContainer` on `definedService`; use `portRef(name)` to
- * reference declared ports.
+ * locked by `forContainer` on `Service.fromContainer`; use `Port.ref(name)`
+ * to reference declared ports.
  */
 export interface ServicePortSpec<Ports extends string> {
 	readonly name?: string;

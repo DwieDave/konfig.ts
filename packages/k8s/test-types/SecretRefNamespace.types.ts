@@ -1,10 +1,10 @@
 // Compile-time assertions for cross-namespace coherence on SecretRef.
-// `secretEnvForPod({ podNamespace, ref, ... })` rejects a ref whose
+// `EnvVar.fromSecretForPod({ podNamespace, ref, ... })` rejects a ref whose
 // namespace slot doesn't match the pod's, eliminating the
 // "secret exists, pod can't read it" CrashLoopBackOff at deploy time.
 
 import type { SecretRef, SecretRefNamespace } from "@konfig.ts/core";
-import { Secret, SecretRef as SecretRefValue, secretEnvForPod } from "@konfig.ts/k8s";
+import { EnvVar, Secret, SecretRef as SecretRefValue } from "@konfig.ts/k8s";
 
 type Expect<T extends true> = T;
 type Equal<X, Y> =
@@ -28,7 +28,7 @@ type MonRef = typeof monitoringCreds.ref;
 type _MonNs = Expect<Equal<SecretRefNamespace<MonRef>, "monitoring">>;
 
 // 2 · Happy path — pod in "app", ref from a Secret in "app".
-const _ok = secretEnvForPod({
+const _ok = EnvVar.fromSecretForPod({
 	name: "DATABASE_URL",
 	ref: dbCreds.ref,
 	key: "url",
@@ -36,7 +36,7 @@ const _ok = secretEnvForPod({
 });
 
 // 3 · BROKEN — pod in "app", ref from a Secret in "monitoring".
-const _crossNs = secretEnvForPod({
+const _crossNs = EnvVar.fromSecretForPod({
 	name: "GRAFANA_TOKEN",
 	// @ts-expect-error - SecretRef<*, *, "monitoring"> not assignable to SecretRef<*, *, "app">.
 	ref: monitoringCreds.ref,
@@ -45,7 +45,7 @@ const _crossNs = secretEnvForPod({
 });
 
 // 4 · BROKEN — pod in "monitoring", ref from a Secret in "app".
-const _backwards = secretEnvForPod({
+const _backwards = EnvVar.fromSecretForPod({
 	name: "DB_URL",
 	// @ts-expect-error - SecretRef<*, *, "app"> not assignable to SecretRef<*, *, "monitoring">.
 	ref: dbCreds.ref,
@@ -55,7 +55,7 @@ const _backwards = secretEnvForPod({
 
 // 5 · Escape hatch — explicit opt-in for cross-namespace.
 const escaped = SecretRefValue.unsafeReNamespace(monitoringCreds.ref);
-const _escapeOk = secretEnvForPod({
+const _escapeOk = EnvVar.fromSecretForPod({
 	name: "GRAFANA_TOKEN",
 	ref: escaped,
 	key: "token",
@@ -64,7 +64,7 @@ const _escapeOk = secretEnvForPod({
 
 // 6 · Key narrowing still works across the extension. Typo'd key
 //     is caught regardless of namespace.
-const _keyTypo = secretEnvForPod({
+const _keyTypo = EnvVar.fromSecretForPod({
 	name: "DATABASE_PASSWORD",
 	ref: dbCreds.ref,
 	// @ts-expect-error - "passowrd" is not in "url" | "password".
@@ -78,7 +78,7 @@ const _keyTypo = secretEnvForPod({
 //     case requires the same escape hatch as a legitimate
 //     cross-namespace ref.
 const opaque: SecretRef<"opaque"> = "opaque" as SecretRef<"opaque">;
-const _anyPod = secretEnvForPod({
+const _anyPod = EnvVar.fromSecretForPod({
 	name: "OPAQUE",
 	ref: SecretRefValue.unsafeReNamespace(opaque),
 	key: "anything",

@@ -4,7 +4,7 @@ import type { ConfigMapRef, PvcRef, SecretRef } from "@konfig.ts/core";
 /**
  * Branded volume name — a string carrying the literal `N` in its
  * phantom. Constructed by the volume factories
- * (`emptyDirVolume`, `volumeFromSecret`, …) and `mountRef`. Lets
+ * (`Volume.empty`, `Volume.fromSecret`, …) and `Volume.mountRef`. Lets
  * `VolumeMount<Mounts>` and `definePod` constrain a container's
  * `volumeMounts[i].name` to volumes that the pod actually declares.
  */
@@ -15,16 +15,6 @@ export type VolumeName<N extends string> = string & {
 
 const _volumeName = <const N extends string>(name: N): VolumeName<N> =>
 	brand<VolumeName<N>>(name);
-
-/**
- * Reference an existing pod-declared volume from a container's
- * `volumeMounts[].name`. Use inside `defineContainer({ volumeMounts: [...] })`
- * when the resulting container is fed to `definePod` — the pod builder
- * binds the union of declared volume names to the container's Mounts
- * phantom.
- */
-export const mountRef = <const N extends string>(name: N): VolumeName<N> =>
-	_volumeName(name);
 
 export interface Volume<N extends string = string> {
 	readonly name: VolumeName<N>;
@@ -47,18 +37,18 @@ export interface Volume<N extends string = string> {
 	readonly hostPath?: { readonly path: string; readonly type?: string };
 }
 
+export interface EmptyVolumeInput<N extends string> {
+	readonly name: N;
+	readonly medium?: string;
+	readonly sizeLimit?: string;
+}
+
 export interface VolumeFromSecretInput<N extends string> {
 	readonly name: N;
 	readonly ref: SecretRef<string>;
 	readonly optional?: boolean;
 	readonly defaultMode?: number;
 }
-export const volumeFromSecret = <const N extends string>(
-	input: VolumeFromSecretInput<N>,
-): Volume<N> => ({
-	name: _volumeName(input.name),
-	secret: { secretName: input.ref, optional: input.optional, defaultMode: input.defaultMode },
-});
 
 export interface VolumeFromConfigMapInput<N extends string> {
 	readonly name: N;
@@ -67,41 +57,60 @@ export interface VolumeFromConfigMapInput<N extends string> {
 	readonly defaultMode?: number;
 	readonly items?: ReadonlyArray<{ readonly key: string; readonly path: string }>;
 }
-export const volumeFromConfigMap = <const N extends string>(
-	input: VolumeFromConfigMapInput<N>,
-): Volume<N> => ({
-	name: _volumeName(input.name),
-	configMap: {
-		name: input.ref,
-		optional: input.optional,
-		defaultMode: input.defaultMode,
-		items: input.items,
-	},
-});
 
-export interface EmptyDirVolumeInput<N extends string> {
-	readonly name: N;
-	readonly medium?: string;
-	readonly sizeLimit?: string;
-}
-export const emptyDirVolume = <const N extends string>(
-	input: EmptyDirVolumeInput<N>,
-): Volume<N> => ({
-	name: _volumeName(input.name),
-	emptyDir: { medium: input.medium, sizeLimit: input.sizeLimit },
-});
-
-export interface PvcVolumeInput<N extends string, PvcN extends string> {
+export interface VolumeFromPvcInput<N extends string, PvcN extends string> {
 	readonly name: N;
 	readonly claim: PvcRef<PvcN>;
 	readonly readOnly?: boolean;
 }
-export const pvcVolume = <const N extends string, const PvcN extends string>(
-	input: PvcVolumeInput<N, PvcN>,
-): Volume<N> => ({
-	name: _volumeName(input.name),
-	persistentVolumeClaim: { claimName: input.claim, readOnly: input.readOnly },
-});
+
+/**
+ * `Volume` value namespace.
+ *
+ *   volumes: [
+ *     Volume.empty({ name: "config" }),
+ *     Volume.fromSecret({ name: "tls", ref: tlsSecret.ref }),
+ *     Volume.fromConfigMap({ name: "settings", ref: cfg.ref }),
+ *     Volume.fromPvc({ name: "data", claim: pvc.ref }),
+ *   ],
+ *   volumeMounts: [
+ *     { name: Volume.mountRef("config"), mountPath: "/etc/conf" },
+ *   ],
+ *
+ * All four constructors capture the literal `name` in the returned
+ * `Volume<N>` brand; `definePod` infers the union and constrains each
+ * container's `volumeMounts[i].name` to it.
+ */
+export const Volume = {
+	empty: <const N extends string>(input: EmptyVolumeInput<N>): Volume<N> => ({
+		name: _volumeName(input.name),
+		emptyDir: { medium: input.medium, sizeLimit: input.sizeLimit },
+	}),
+	fromSecret: <const N extends string>(input: VolumeFromSecretInput<N>): Volume<N> => ({
+		name: _volumeName(input.name),
+		secret: {
+			secretName: input.ref,
+			optional: input.optional,
+			defaultMode: input.defaultMode,
+		},
+	}),
+	fromConfigMap: <const N extends string>(input: VolumeFromConfigMapInput<N>): Volume<N> => ({
+		name: _volumeName(input.name),
+		configMap: {
+			name: input.ref,
+			optional: input.optional,
+			defaultMode: input.defaultMode,
+			items: input.items,
+		},
+	}),
+	fromPvc: <const N extends string, const PvcN extends string>(
+		input: VolumeFromPvcInput<N, PvcN>,
+	): Volume<N> => ({
+		name: _volumeName(input.name),
+		persistentVolumeClaim: { claimName: input.claim, readOnly: input.readOnly },
+	}),
+	mountRef: <const N extends string>(name: N): VolumeName<N> => _volumeName(name),
+};
 
 /**
  * Typed container volumeMount. `Mounts` is the union of volume names

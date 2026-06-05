@@ -3,25 +3,25 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { defineContainer } from "./container";
 import { definedService } from "./network";
-import { port, portRef } from "./ports";
+import { Port } from "./ports";
 
 const ctx = RenderContext.make("test");
 const _run = <A>(eff: Effect.Effect<A, unknown>): Promise<A> =>
 	Effect.runPromise(eff as Effect.Effect<A, never, never>);
 
-describe("port / portRef", () => {
-	it("port carries the literal name as both runtime value and type", () => {
-		const p = port({ name: "http", containerPort: 8080 });
+describe("Port.make / Port.ref", () => {
+	it("Port.make carries the literal name as both runtime value and type", () => {
+		const p = Port.make({ name: "http", containerPort: 8080 });
 		expect(p.containerPort).toBe(8080);
 		expect(p.name).toBe("http");
 	});
 
-	it("portRef is the bare string at runtime", () => {
-		expect(portRef("http")).toBe("http");
+	it("Port.ref is the bare string at runtime", () => {
+		expect(Port.ref("http")).toBe("http");
 	});
 
-	it("port preserves protocol and host fields", () => {
-		const p = port({ name: "metrics", containerPort: 9090, protocol: "TCP", hostPort: 9090 });
+	it("Port.make preserves protocol and host fields", () => {
+		const p = Port.make({ name: "metrics", containerPort: 9090, protocol: "TCP", hostPort: 9090 });
 		expect(p.protocol).toBe("TCP");
 		expect(p.hostPort).toBe(9090);
 	});
@@ -32,9 +32,9 @@ describe("defineContainer", () => {
 		const c = defineContainer({
 			name: "api",
 			image: "ghcr.io/example/api:1.0.0",
-			ports: [port({ name: "http", containerPort: 8080 })],
+			ports: [Port.make({ name: "http", containerPort: 8080 })],
 			readinessProbe: {
-				httpGet: { path: "/healthz", port: portRef("http") },
+				httpGet: { path: "/healthz", port: Port.ref("http") },
 				periodSeconds: 5,
 			},
 		});
@@ -49,7 +49,7 @@ describe("defineContainer", () => {
 		const c = defineContainer({
 			name: "api",
 			image: "x",
-			ports: [port({ name: "http", containerPort: 8080 })],
+			ports: [Port.make({ name: "http", containerPort: 8080 })],
 			readinessProbe: { httpGet: { path: "/", port: 8080 } },
 		});
 		expect(c.readinessProbe?.httpGet?.port).toBe(8080);
@@ -61,8 +61,8 @@ describe("definedService", () => {
 		name: "api",
 		image: "x",
 		ports: [
-			port({ name: "http", containerPort: 8080 }),
-			port({ name: "metrics", containerPort: 9090 }),
+			Port.make({ name: "http", containerPort: 8080 }),
+			Port.make({ name: "metrics", containerPort: 9090 }),
 		],
 	});
 
@@ -73,8 +73,8 @@ describe("definedService", () => {
 			selector: { app: "api" },
 			forContainer: api,
 			ports: [
-				{ port: 80, targetPort: portRef("http") },
-				{ port: 9090, targetPort: portRef("metrics") },
+				{ port: 80, targetPort: Port.ref("http") },
+				{ port: 9090, targetPort: Port.ref("metrics") },
 			],
 		});
 		const out = await _run(render({ manifest: svc, ctx }));
