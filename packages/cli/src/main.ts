@@ -6,6 +6,7 @@ import { buildCommand } from "./commands/build";
 import { crdCommand } from "./commands/crd";
 import { diffCommand } from "./commands/diff";
 import { dockerCommand } from "./commands/docker";
+import { graphCommand } from "./commands/graph";
 import { helmCommand } from "./commands/helmFetch";
 import { setCommand } from "./commands/set";
 import { validateCommand } from "./commands/validate";
@@ -21,6 +22,7 @@ const root = Command.make("konfig", {}, () =>
 		helmCommand,
 		setCommand,
 		dockerCommand,
+		graphCommand,
 	]),
 );
 
