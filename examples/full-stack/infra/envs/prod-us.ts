@@ -12,6 +12,7 @@ import { defineApiBuild, defineWorkerBuild } from "../modules/builds";
 import { defineFeatureFlags } from "../modules/feature-flags";
 import { defineImagePulls } from "../modules/image-pulls";
 import { definePostgres } from "../modules/postgres";
+import { defineRedisCache } from "../modules/redis-cache";
 import { defineSopsOperator } from "../modules/sops-operator";
 import { defineWorker } from "../modules/worker";
 
@@ -42,6 +43,7 @@ const workerBuild = defineWorkerBuild({
 });
 const api = defineApi({ source: src("api"), replicas: 3, sopsBase });
 const worker = defineWorker({ source: src("worker"), replicas: 2, sopsBase });
+const redisCache = defineRedisCache({ source: src("redis-cache") });
 
 export default AppOfApps.entrypoint(
 	AppOfApps.fromModules({
@@ -54,6 +56,7 @@ export default AppOfApps.entrypoint(
 			postgres,
 			apiBuild,
 			workerBuild,
+			redisCache,
 			api,
 			worker,
 		],
