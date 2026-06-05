@@ -1,10 +1,12 @@
 /**
- * Staging composition. Same shape as prod, smaller replica counts.
+ * Staging composition. Same shape as prod, smaller replica counts and
+ * a `staging` image tag.
  */
 import { AppOfApps } from "@konfig.ts/argocd";
-import { Effect, Layer } from "effect";
 import { cluster } from "../cluster";
 import { defineApi } from "../modules/api";
+import { defineApiBuild, defineWorkerBuild } from "../modules/builds";
+import { defineFeatureFlags } from "../modules/feature-flags";
 import { defineImagePulls } from "../modules/image-pulls";
 import { definePostgres } from "../modules/postgres";
 import { defineSopsOperator } from "../modules/sops-operator";
@@ -21,43 +23,34 @@ const sopsBase = "infra/secrets";
 
 const sopsOperator = defineSopsOperator({ source: src("sops-operator") });
 const imagePulls = defineImagePulls({ source: src("image-pulls"), sopsBase });
+const featureFlags = defineFeatureFlags({ source: src("feature-flags") });
 const postgres = definePostgres({ source: src("postgres"), storageGi: 5 });
-const api = defineApi({
-	source: src("api"),
-	image: "ghcr.io/example/api:staging",
-	replicas: 1,
-	sopsBase,
+const apiBuild = defineApiBuild({
+	source: src("api-build"),
+	registry: "ghcr.io/example",
+	tag: "staging",
 });
-const worker = defineWorker({
-	source: src("worker"),
-	image: "ghcr.io/example/worker:staging",
-	replicas: 1,
-	sopsBase,
+const workerBuild = defineWorkerBuild({
+	source: src("worker-build"),
+	registry: "ghcr.io/example",
+	tag: "staging",
 });
+const api = defineApi({ source: src("api"), replicas: 1, sopsBase });
+const worker = defineWorker({ source: src("worker"), replicas: 1, sopsBase });
 
-const program = Effect.gen(function* () {
-	const sopsApp = yield* sopsOperator;
-	const pullsApp = yield* imagePulls;
-	const pgApp = yield* postgres;
-	const apiApp = yield* api;
-	const workerApp = yield* worker;
-	return AppOfApps.make({
-		target: {
-			repoURL: cluster.repositoryUrl,
-			branch,
-			rootPath,
-		},
+export default AppOfApps.entrypoint(
+	AppOfApps.fromModules({
+		target: { repoURL: cluster.repositoryUrl, branch, rootPath },
 		defaults: { destination: { server: "https://kubernetes.default.svc" } },
-		apps: [sopsApp, pullsApp, pgApp, apiApp, workerApp],
-	});
-}).pipe(
-	Effect.provide(
-		Layer.mergeAll(api.layer, worker.layer).pipe(
-			Layer.provideMerge(
-				Layer.mergeAll(sopsOperator.layer, imagePulls.layer, postgres.layer),
-			),
-		),
-	),
+		modules: [
+			sopsOperator,
+			imagePulls,
+			featureFlags,
+			postgres,
+			apiBuild,
+			workerBuild,
+			api,
+			worker,
+		],
+	}),
 );
-
-export default AppOfApps.entrypoint(program);

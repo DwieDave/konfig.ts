@@ -1,86 +1,123 @@
 import { Application } from "@konfig.ts/argocd";
 import { Dep } from "@konfig.ts/core";
-import { Environment, Workload } from "@konfig.ts/k8s";
+import {
+	configMapEnv,
+	defineContainer,
+	Environment,
+	port,
+	portRef,
+	Workload,
+	secretEnvForPod,
+	valueEnv,
+} from "@konfig.ts/k8s";
 import { Sops } from "@konfig.ts/sops";
 import { apiEnv } from "@example/env-contracts";
 import { Effect } from "effect";
+import { featureFlags } from "./feature-flags";
 
 export interface ApiOptions {
-  readonly source: Application.ArgoSource;
-  readonly image: string;
-  readonly replicas: number;
-  readonly sopsBase: string;
+	readonly source: Application.ArgoSource;
+	readonly replicas: number;
+	readonly sopsBase: string;
 }
 
 /**
  * `apps/api` workload module.
  *
- * Demonstrates the env-contract -> manifest binding:
- *   - `Environment.bind` walks `apiEnv` and, for each secret member,
- *     calls the supplied backend's `emit` to produce the SopsSecret
- *     manifest, while wiring `secretKeyRef` env vars into the container.
- *   - `Sops.passthrough` reuses the encrypted yaml on disk, so no
- *     `sops` shell-out at render time.
+ * Showcases the round-2 type-safety features end-to-end:
  *
- * Type-level dependency: the `yield* Dep.Secret("ghcr-pull")` line
- * makes this module require a provider for "ghcr-pull" in the
- * composition layer. envs/prod.ts gets a type error if `image-pulls`
- * isn't merged into the provided layer.
+ *   - `yield* Dep.Image("api")` resolves at composition time to a
+ *     `BuiltImageRef<"api">` provided by `defineApiBuild` (modules/builds.ts).
+ *     Forgetting to list `apiBuild` in `fromModules({ modules })` surfaces
+ *     as a `_konfig_unsatisfied` hint at `AppOfApps.entrypoint`.
+ *   - `defineContainer({ ports, env })` brands the port-name union
+ *     ("http") and validates the env list for duplicate names. A typo'd
+ *     `portRef(...)` on the readiness probe is a compile error; a
+ *     duplicate env name surfaces a human-readable hint inline.
+ *   - `secretEnvForPod({ podNamespace: "app", ref })` rejects refs whose
+ *     namespace doesn't match — the db-creds Secret lives in "app", so
+ *     a cross-namespace mistake fails at type-check time, not at pod
+ *     startup with "secret not found".
+ *   - `Environment.bind` still produces the same SopsSecret manifest +
+ *     envVars; we splice in `valueEnv`/`secretEnvForPod` extras and the
+ *     duplicate-detection guards us against shadowing one of bind's
+ *     names by accident.
  */
 export const defineApi = (opts: ApiOptions) =>
-  Application.define({
-    name: "api",
-    namespace: "app",
-    source: opts.source,
-    build: Effect.gen(function* () {
-      const ghcrRef = yield* Dep.Secret("ghcr-pull");
+	Application.define({
+		name: "api",
+		namespace: "app",
+		source: opts.source,
+		build: Effect.gen(function* () {
+			const ghcrRef = yield* Dep.Secret("ghcr-pull");
+			const apiImage = yield* Dep.Image("api");
 
-      const bound = Environment.bind({
-        env: apiEnv,
-        namespace: "app",
-        secrets: {
-          db: {
-            backend: Sops.passthrough({
-              file: `${opts.sopsBase}/SopsSecret-db-creds.yaml`,
-            }),
-          },
-          s3: {
-            backend: Sops.passthrough({
-              file: `${opts.sopsBase}/SopsSecret-s3-creds.yaml`,
-            }),
-          },
-          jwt: {
-            backend: Sops.passthrough({
-              file: `${opts.sopsBase}/SopsSecret-jwt-signing-key.yaml`,
-            }),
-          },
-        },
-      });
+			const bound = Environment.bind({
+				env: apiEnv,
+				namespace: "app",
+				secrets: {
+					db: {
+						backend: Sops.passthrough({
+							file: `${opts.sopsBase}/SopsSecret-db-creds.yaml`,
+						}),
+					},
+					s3: {
+						backend: Sops.passthrough({
+							file: `${opts.sopsBase}/SopsSecret-s3-creds.yaml`,
+						}),
+					},
+					jwt: {
+						backend: Sops.passthrough({
+							file: `${opts.sopsBase}/SopsSecret-jwt-signing-key.yaml`,
+						}),
+					},
+				},
+			});
 
-      const workload = Workload.web({
-        name: "api",
-        namespace: "app",
-        deployment: {
-          replicas: opts.replicas,
-          imagePullSecrets: [{ name: ghcrRef }],
-          containers: [
-            {
-              name: "api",
-              image: opts.image,
-              ports: [{ containerPort: 8080 }],
-              env: bound.envVars,
-              readinessProbe: {
-                httpGet: { path: "/healthz", port: 8080 },
-                periodSeconds: 5,
-              },
-            },
-          ],
-        },
-        service: {
-          ports: [{ port: 80, targetPort: 8080 }],
-        },
-      });
+			const apiContainer = defineContainer({
+				name: "api",
+				image: apiImage,
+				ports: [port({ name: "http", containerPort: 8080 })],
+				env: [
+					...bound.envVars,
+					// secretEnvForPod ties the db ref's namespace ("app") to this
+					// pod's namespace. Crossing namespaces is a compile error.
+					secretEnvForPod({
+						name: "DATABASE_URL_PRIMARY",
+						ref: bound.members.db.ref,
+						key: "url",
+						podNamespace: "app",
+					}),
+					// configMapEnv with a typed ref: `key` is constrained to
+					// the keys declared on featureFlags ("NEW_UI" | "BETA_DASHBOARD"
+					// | "DARK_MODE"). Renaming a key in feature-flags.ts breaks
+					// this call site at compile time.
+					configMapEnv({
+						name: "FEATURE_NEW_UI",
+						ref: featureFlags.ref,
+						key: "NEW_UI",
+					}),
+					valueEnv({ name: "API_NAME", value: "api" }),
+				],
+				readinessProbe: {
+					httpGet: { path: "/healthz", port: portRef("http") },
+					periodSeconds: 5,
+				},
+			});
 
-      return [...bound.manifests, workload];
-    }),
-  });
+			const workload = Workload.web({
+				name: "api",
+				namespace: "app",
+				deployment: {
+					replicas: opts.replicas,
+					imagePullSecrets: [{ name: ghcrRef }],
+					containers: [apiContainer],
+				},
+				service: {
+					ports: [{ port: 80, targetPort: portRef("http") }],
+				},
+			});
+
+			return [...bound.manifests, workload];
+		}),
+	});

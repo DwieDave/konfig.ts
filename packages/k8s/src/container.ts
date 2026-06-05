@@ -29,7 +29,17 @@ import type { Volume, VolumeMount, VolumeNamesOf } from "./volume";
  * as well as a raw string; the typed builder `defineContainer` is the
  * link that captures the literal name union for cross-reference checks.
  */
-export interface ContainerInput extends Omit<K8sContainer, "env" | "image" | "ports"> {
+export interface ContainerInput
+	extends Omit<
+		K8sContainer,
+		| "env"
+		| "image"
+		| "ports"
+		| "readinessProbe"
+		| "livenessProbe"
+		| "startupProbe"
+		| "volumeMounts"
+	> {
 	/**
 	 * Container image. Accepts a raw string (escape hatch for vendor
 	 * images: `ghcr.io/bitnami/postgresql:16.0.0`) or a `BuiltImageRef<App>`
@@ -41,6 +51,23 @@ export interface ContainerInput extends Omit<K8sContainer, "env" | "image" | "po
 	readonly image: string | BuiltImageRef<string>;
 	readonly env?: ReadonlyArray<EnvVar>;
 	readonly ports?: ReadonlyArray<ContainerPort | { readonly containerPort: number; readonly name?: string; readonly protocol?: "TCP" | "UDP" | "SCTP" }>;
+	/**
+	 * Probes accept either the upstream K8s shape or konfig's branded
+	 * `ProbeTarget<string>` (from `defineContainer`). The two are
+	 * structurally close — the union lets a `ContainerSpec` flow
+	 * through `Workload.web`'s containers slot without a cast.
+	 */
+	readonly readinessProbe?: K8sContainer["readinessProbe"] | ProbeTarget<string>;
+	readonly livenessProbe?: K8sContainer["livenessProbe"] | ProbeTarget<string>;
+	readonly startupProbe?: K8sContainer["startupProbe"] | ProbeTarget<string>;
+	/**
+	 * Volume mounts accept the upstream K8s shape or konfig's branded
+	 * `VolumeMount<string>` (from `defineContainer` / `mountRef`). Same
+	 * rationale as the probe widening above.
+	 */
+	readonly volumeMounts?:
+		| K8sContainer["volumeMounts"]
+		| ReadonlyArray<VolumeMount<string>>;
 }
 
 /**

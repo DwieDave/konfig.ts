@@ -10,6 +10,8 @@
 import { AppOfApps } from "@konfig.ts/argocd";
 import { cluster, clusters } from "../cluster";
 import { defineApi } from "../modules/api";
+import { defineApiBuild, defineWorkerBuild } from "../modules/builds";
+import { defineFeatureFlags } from "../modules/feature-flags";
 import { defineImagePulls } from "../modules/image-pulls";
 import { definePostgres } from "../modules/postgres";
 import { defineSopsOperator } from "../modules/sops-operator";
@@ -28,24 +30,34 @@ const overlay = clusters["eu-west-1"]!;
 
 const sopsOperator = defineSopsOperator({ source: src("sops-operator") });
 const imagePulls = defineImagePulls({ source: src("image-pulls"), sopsBase });
+const featureFlags = defineFeatureFlags({ source: src("feature-flags") });
 const postgres = definePostgres({ source: src("postgres"), storageGi: 20 });
-const api = defineApi({
-	source: src("api"),
-	image: `${overlay.registry}/api:1.0.0`,
-	replicas: 2,
-	sopsBase,
+const apiBuild = defineApiBuild({
+	source: src("api-build"),
+	registry: overlay.registry,
+	tag: "1.0.0",
 });
-const worker = defineWorker({
-	source: src("worker"),
-	image: `${overlay.registry}/worker:1.0.0`,
-	replicas: 1,
-	sopsBase,
+const workerBuild = defineWorkerBuild({
+	source: src("worker-build"),
+	registry: overlay.registry,
+	tag: "1.0.0",
 });
+const api = defineApi({ source: src("api"), replicas: 2, sopsBase });
+const worker = defineWorker({ source: src("worker"), replicas: 1, sopsBase });
 
 export default AppOfApps.entrypoint(
 	AppOfApps.fromModules({
 		target: { repoURL: cluster.repositoryUrl, branch, rootPath },
 		defaults: { destination: { server: "https://kubernetes.default.svc" } },
-		modules: [sopsOperator, imagePulls, postgres, api, worker],
+		modules: [
+			sopsOperator,
+			imagePulls,
+			featureFlags,
+			postgres,
+			apiBuild,
+			workerBuild,
+			api,
+			worker,
+		],
 	}),
 );

@@ -32,9 +32,12 @@ export interface DeclaredDownward<EnvName extends string> {
  * `Environment` members give a `members` sub-record with the same
  * recursive shape.
  */
-export type DeclaredMember<A extends EnvMember> = A extends SecretEntry<infer N, infer K, infer _E>
+export type DeclaredMember<
+	A extends EnvMember,
+	Ns extends string = string,
+> = A extends SecretEntry<infer N, infer K, infer _E>
 	? [N, K] extends [string, string]
-		? DeclaredSecret<N, K>
+		? DeclaredSecret<N, K, Ns>
 		: never
 	: A extends LiteralEntry<infer EnvName, infer T>
 		? [EnvName] extends [string]
@@ -45,13 +48,16 @@ export type DeclaredMember<A extends EnvMember> = A extends SecretEntry<infer N,
 				? DeclaredDownward<EnvName>
 				: never
 			: A extends Environment<infer SubM>
-				? { readonly [K in keyof SubM]: DeclaredMember<SubM[K]> }
+				? { readonly [K in keyof SubM]: DeclaredMember<SubM[K], Ns> }
 				: never;
 
-export interface DeclaredEnvironment<M extends Readonly<Record<string, EnvMember>>> {
+export interface DeclaredEnvironment<
+	M extends Readonly<Record<string, EnvMember>>,
+	Ns extends string = string,
+> {
 	readonly envVars: ReadonlyArray<EnvVar>;
 	readonly manifests: ReadonlyArray<Manifest.Manifest<unknown>>;
-	readonly members: { readonly [K in keyof M]: DeclaredMember<M[K]> };
+	readonly members: { readonly [K in keyof M]: DeclaredMember<M[K], Ns> };
 	// merged values layer over every secret member with a source.
 	readonly valuesLayer: Layer.Layer<unknown, RenderError, Manifest.RenderServices>;
 }
@@ -162,7 +168,10 @@ export type LiteralMembersOpts<M extends Readonly<Record<string, EnvMember>>> = 
 			: never;
 };
 
-interface _BindEnvironmentInputBase<M extends Readonly<Record<string, EnvMember>>> {
+interface _BindEnvironmentInputBase<
+	M extends Readonly<Record<string, EnvMember>>,
+	Ns extends string = string,
+> {
 	readonly env: Environment<M>;
 	/**
 	 * Per-literal value override for the manifest's emitted env var. The
@@ -176,8 +185,12 @@ interface _BindEnvironmentInputBase<M extends Readonly<Record<string, EnvMember>
 	 * the bundle is consumed across multiple k8s namespaces (e.g. prod /
 	 * staging / local) without redeclaring each contract. Recurses into
 	 * nested `Environment` members.
+	 *
+	 * When passed as a string literal, the literal flows into each
+	 * `DeclaredSecret.ref`'s brand so `secretEnvForPod` can enforce
+	 * cross-namespace coherence on hand-spliced env entries.
 	 */
-	readonly namespace?: string;
+	readonly namespace?: Ns;
 }
 
 /**
@@ -188,8 +201,10 @@ interface _BindEnvironmentInputBase<M extends Readonly<Record<string, EnvMember>
  * every secret member — and for each member, either a `backend` or a
  * `source` (see `SecretMemberOptions`).
  */
-export type BindEnvironmentInput<M extends Readonly<Record<string, EnvMember>>> =
-	_BindEnvironmentInputBase<M> &
+export type BindEnvironmentInput<
+	M extends Readonly<Record<string, EnvMember>>,
+	Ns extends string = string,
+> = _BindEnvironmentInputBase<M, Ns> &
 		(HasSecrets<M> extends true
 			? { readonly secrets: SecretMembersOpts<M> }
 			: { readonly secrets?: SecretMembersOpts<M> });
@@ -223,9 +238,12 @@ const _bindDownward = (input: _BindDownwardInput): DeclaredDownward<string> => (
 	},
 });
 
-export const bindEnvironment = <const M extends Readonly<Record<string, EnvMember>>>(
-	input: BindEnvironmentInput<M>,
-): DeclaredEnvironment<M> => {
+export const bindEnvironment = <
+	const M extends Readonly<Record<string, EnvMember>>,
+	const Ns extends string = string,
+>(
+	input: BindEnvironmentInput<M, Ns>,
+): DeclaredEnvironment<M, Ns> => {
 	const { env } = input;
 	const declared: Record<string, unknown> = {};
 	const envVars: EnvVar[] = [];
@@ -305,9 +323,9 @@ export const bindEnvironment = <const M extends Readonly<Record<string, EnvMembe
 	return {
 		envVars,
 		manifests,
-		members: unsafeCoerce<{ readonly [K in keyof M]: DeclaredMember<M[K]> }>(
+		members: unsafeCoerce<{ readonly [K in keyof M]: DeclaredMember<M[K], Ns> }>(
 			declared,
-			"declared populated by iterating env.members; each key maps to its DeclaredMember<M[K]>",
+			"declared populated by iterating env.members; each key maps to its DeclaredMember<M[K], Ns>",
 		),
 		valuesLayer,
 	};

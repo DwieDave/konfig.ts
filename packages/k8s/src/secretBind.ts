@@ -5,10 +5,10 @@ import type { SecretBackend } from "./backend";
 import { type EnvVar, secretEnv } from "./env";
 import { SecretRef as SecretRefValue } from "./refs";
 
-export interface DeclaredSecret<N extends string, K extends string> {
-	readonly ref: SecretRef<N, K>;
+export interface DeclaredSecret<N extends string, K extends string, Ns extends string = string> {
+	readonly ref: SecretRef<N, K, Ns>;
 	readonly name: N;
-	readonly namespace: string;
+	readonly namespace: Ns;
 	readonly keys: ReadonlyArray<K>;
 	readonly envVars: ReadonlyArray<EnvVar>;
 	readonly manifest?: Manifest.Manifest<unknown>;
@@ -29,6 +29,7 @@ export interface BindSecretInput<
 	N extends string,
 	K extends string,
 	E extends Readonly<Record<K, string>>,
+	Ns extends string = string,
 > {
 	readonly secret: SecretEntry<N, K, E>;
 	readonly backend?: SecretBackend<N, K>;
@@ -41,20 +42,25 @@ export interface BindSecretInput<
 	 * k8s namespaces (e.g. prod / staging / local of the same workload)
 	 * — the runtime read is namespace-independent, but each binding emits
 	 * its manifest into a different namespace.
+	 *
+	 * When passed as a string literal (via `Environment.bind`'s
+	 * `const namespace`), the literal flows into the ref's brand so
+	 * `secretEnvForPod` can enforce cross-namespace coherence.
 	 */
-	readonly namespace?: string;
+	readonly namespace?: Ns;
 }
 
 export const bindSecret = <
 	N extends string,
 	K extends string,
 	E extends Readonly<Record<K, string>>,
+	const Ns extends string = string,
 >(
-	input: BindSecretInput<N, K, E>,
-): DeclaredSecret<N, K> => {
+	input: BindSecretInput<N, K, E, Ns>,
+): DeclaredSecret<N, K, Ns> => {
 	const { secret } = input;
-	const namespace = input.namespace ?? secret.namespace;
-	const ref = SecretRefValue.of<N, K>(secret.name);
+	const namespace = (input.namespace ?? secret.namespace) as Ns;
+	const ref = SecretRefValue.of<N, K, Ns>(secret.name);
 	const envVars: EnvVar[] = secret.keys.map((key: K) =>
 		secretEnv({ name: secret.env[key], ref, key }),
 	);
@@ -72,7 +78,7 @@ export const bindSecret = <
 					source: input.source,
 				});
 
-	const out: DeclaredSecret<N, K> = {
+	const out: DeclaredSecret<N, K, Ns> = {
 		ref,
 		name: secret.name,
 		namespace,
