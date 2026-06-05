@@ -1,5 +1,5 @@
 
-import type { AnyRenderError, Manifest as CoreManifest } from "@konfig.ts/core";
+import type { AnyRenderError, Dep, Manifest as CoreManifest } from "@konfig.ts/core";
 import { Effect, Layer } from "effect";
 import type { Application, ApplicationHandle } from "./Application";
 
@@ -39,9 +39,45 @@ export const make = (opts: AppOfAppsMakeOptions): AppOfAppsResult => ({
 	apps: opts.apps,
 });
 
-export const entrypoint = <A, E, R extends CoreManifest.RenderServices = never>(
-	program: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> => program;
+/**
+ * Per-Need template-literal hint shown when a dep-graph residual reaches
+ * `entrypoint`. Each unmet `Dep.Need<K, V>` becomes a sentence naming
+ * the missing kind, the missing value, and how to fix it. Variants for
+ * non-Need residuals (unlikely in practice) fall back to a generic
+ * pointer at the Effect Layer error.
+ */
+type UnsatisfiedHint<R> =
+	R extends Dep.Need<infer K, infer V>
+		? `Missing provider for ${K} "${V}". Add a module that provides it to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list.`
+		: "Unsatisfied dep — see the Effect Layer error above.";
+
+/**
+ * When the residual `R` (i.e. anything in the program's R-channel that
+ * isn't `Manifest.RenderServices`) is non-empty, intersect the input
+ * program type with an object carrying a `_konfig_unsatisfied` property.
+ * The program has no such property, so the call fails with a message
+ * that names the missing dep — far friendlier than the raw
+ * "Need<...> not assignable to never".
+ */
+type ResidualHintCheck<R> = [Exclude<R, CoreManifest.RenderServices>] extends [never]
+	? unknown
+	: {
+			readonly _konfig_unsatisfied: UnsatisfiedHint<
+				Exclude<R, CoreManifest.RenderServices>
+			>;
+		};
+
+/**
+ * Marks a fully-wired program as the entrypoint for an app-of-apps
+ * render. Accepts only programs whose `R` channel reduces to
+ * `Manifest.RenderServices`; otherwise the call fails at the
+ * `program` argument with a `_konfig_unsatisfied` hint that names the
+ * missing provider.
+ */
+export const entrypoint = <A, E, R>(
+	program: Effect.Effect<A, E, R> & ResidualHintCheck<R>,
+): Effect.Effect<A, E, R & CoreManifest.RenderServices> =>
+	program as unknown as Effect.Effect<A, E, R & CoreManifest.RenderServices>;
 
 // `any` in the AnyHandle upper bound: Effect's Layer is contravariant in
 // its first parameter and the wrapper here is invariant at the inference

@@ -71,9 +71,11 @@ declare const badProgram: ReturnType<
 type BadR = typeof badProgram extends Effect.Effect<infer _A, infer _E, infer R> ? R : never;
 type _BadR = Expect<Equal<BadR, Dep.Need<"Secret", "ghcr-pull"> | Manifest.RenderServices>>;
 
-// 6 · `entrypoint` accepts the wired-clean program and rejects the bad one.
+// 6 · `entrypoint` accepts the wired-clean program and rejects the bad
+//     one with a `_konfig_unsatisfied` hint property naming the missing
+//     provider (see the prototype 10 implementation).
 const _okEntry = AppOfAppsNS.entrypoint(okProgram);
-// @ts-expect-error - Need<"Secret", "ghcr-pull"> is not assignable to RenderServices.
+// @ts-expect-error - Missing _konfig_unsatisfied — hint surfaces the unmet Need<"Secret", "ghcr-pull">.
 const _badEntry = AppOfAppsNS.entrypoint(badProgram);
 
 void _okEntry;
