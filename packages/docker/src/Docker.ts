@@ -1,3 +1,4 @@
+import { unsafeCoerce } from "@konfig.ts/core";
 import type {
 	BuildAtom,
 	CopyAtom,
@@ -31,12 +32,15 @@ export const makeDockerApp = (spec: DockerSpec): DockerApp => ({
 export const isDockerApp = (u: unknown): u is DockerApp =>
 	typeof u === "object" && u !== null && DockerAppTypeId in u;
 
-const omitUndef = <T extends Record<string, unknown>>(o: T): T => {
+const _omitUndef = <T extends Record<string, unknown>>(o: T): T => {
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(o)) {
 		if (v !== undefined) out[k] = v;
 	}
-	return out as T;
+	return unsafeCoerce<T>(
+		out,
+		"out was built by copying defined entries of T; the resulting record is structurally T modulo optional-field absence",
+	);
 };
 
 export const Docker = {
@@ -48,9 +52,9 @@ export const Docker = {
 	},
 	runtime: {
 		bun: (opts?: { alpine?: boolean }): RuntimeAtom =>
-			omitUndef({ _tag: "BunRuntime", alpine: opts?.alpine }) as RuntimeAtom,
+			unsafeCoerce<RuntimeAtom>(_omitUndef({ _tag: "BunRuntime", alpine: opts?.alpine }), "_omitUndef preserves the literal _tag; structurally a RuntimeAtom variant"),
 		node: (opts?: { alpine?: boolean }): RuntimeAtom =>
-			omitUndef({ _tag: "NodeRuntime", alpine: opts?.alpine }) as RuntimeAtom,
+			unsafeCoerce<RuntimeAtom>(_omitUndef({ _tag: "NodeRuntime", alpine: opts?.alpine }), "_omitUndef preserves the literal _tag; structurally a RuntimeAtom variant"),
 	},
 	build: {
 		script: (script: string): BuildAtom => ({ _tag: "BuildScript", script }),
@@ -58,16 +62,17 @@ export const Docker = {
 		none: (): BuildAtom => ({ _tag: "BuildNone" }),
 	},
 	copy: {
-		builderArtifact: (src: string, dst: string, opts?: { chown?: string }): CopyAtom =>
-			omitUndef({ _tag: "BuilderArtifact", src, dst, chown: opts?.chown }) as CopyAtom,
+		builderArtifact: (input: { readonly src: string; readonly dst: string; readonly chown?: string }): CopyAtom =>
+			unsafeCoerce<CopyAtom>(_omitUndef({ _tag: "BuilderArtifact", src: input.src, dst: input.dst, chown: input.chown }), "_omitUndef preserves the literal _tag; structurally a CopyAtom variant"),
 		workspaceSource: (name: string): CopyAtom => ({ _tag: "WorkspaceSource", name }),
 		workspaceSourceAll: (): CopyAtom => ({ _tag: "WorkspaceSourceAll" }),
-		path: (
-			src: string,
-			dst: string,
-			opts?: { from?: string; chown?: string },
-		): CopyAtom =>
-			omitUndef({ _tag: "CopyPath", src, dst, from: opts?.from, chown: opts?.chown }) as CopyAtom,
+		path: (input: {
+			readonly src: string;
+			readonly dst: string;
+			readonly from?: string;
+			readonly chown?: string;
+		}): CopyAtom =>
+			unsafeCoerce<CopyAtom>(_omitUndef({ _tag: "CopyPath", src: input.src, dst: input.dst, from: input.from, chown: input.chown }), "_omitUndef preserves the literal _tag; structurally a CopyAtom variant"),
 	},
 	healthcheck: {
 		httpGet: (input: {
@@ -77,21 +82,19 @@ export const Docker = {
 			timeout?: string;
 			retries?: number;
 			startPeriod?: string;
-		}): HealthcheckAtom => omitUndef({ _tag: "HealthcheckHttpGet", ...input }) as HealthcheckAtom,
-		command: (
-			argv: ReadonlyArray<string>,
-			opts?: {
-				interval?: string;
-				timeout?: string;
-				retries?: number;
-				startPeriod?: string;
-			},
-		): HealthcheckAtom =>
-			omitUndef({ _tag: "HealthcheckCommand", argv, ...(opts ?? {}) }) as HealthcheckAtom,
+		}): HealthcheckAtom => unsafeCoerce<HealthcheckAtom>(_omitUndef({ _tag: "HealthcheckHttpGet", ...input }), "_omitUndef preserves the literal _tag; structurally a HealthcheckAtom variant"),
+		command: (input: {
+			readonly argv: ReadonlyArray<string>;
+			readonly interval?: string;
+			readonly timeout?: string;
+			readonly retries?: number;
+			readonly startPeriod?: string;
+		}): HealthcheckAtom =>
+			unsafeCoerce<HealthcheckAtom>(_omitUndef({ _tag: "HealthcheckCommand", ...input }), "_omitUndef preserves the literal _tag; structurally a HealthcheckAtom variant"),
 	},
 	user: {
 		nonRoot: (opts?: { uid?: number; gid?: number; name?: string }): UserAtom =>
-			omitUndef({ _tag: "UserNonRoot", ...(opts ?? {}) }) as UserAtom,
+			unsafeCoerce<UserAtom>(_omitUndef({ _tag: "UserNonRoot", ...opts }), "_omitUndef preserves the literal _tag; structurally a UserAtom variant"),
 		root: (): UserAtom => ({ _tag: "UserRoot" }),
 	},
 	platform: {

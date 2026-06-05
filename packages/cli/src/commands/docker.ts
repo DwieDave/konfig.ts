@@ -6,6 +6,7 @@ import {
 	hasDifferences,
 	parseYaml,
 	redact,
+	unsafeCoerce,
 } from "@konfig.ts/core";
 import {
 	DockerWriteError,
@@ -46,7 +47,7 @@ interface SpecLoad {
 	readonly root: string;
 }
 
-const loadSpec = (
+const _loadSpec = (
 	targetArg: string,
 ): Effect.Effect<SpecLoad, SpecImportError | SpecNotADockerApp | import("@konfig.ts/docker").AnyDockerError, FileSystem | Path> =>
 	Effect.gen(function* () {
@@ -57,7 +58,10 @@ const loadSpec = (
 			try: () => import(dockerTsPath),
 			catch: (e) => new SpecImportError({ specPath: dockerTsPath, cause: e }),
 		});
-		const app = (mod as { default: unknown }).default;
+		const app = unsafeCoerce<{ readonly default: unknown }>(
+			mod,
+			"dynamic import() returns a module namespace object; .default is typed unknown and guarded by isDockerApp below",
+		).default;
 		if (!isDockerApp(app)) {
 			return yield* Effect.fail(new SpecNotADockerApp({ specPath: dockerTsPath }));
 		}
@@ -66,10 +70,10 @@ const loadSpec = (
 		return { app, targetAbs, specPath, root };
 	});
 
-const emitFor = (load: SpecLoad) =>
+const _emitFor = (load: SpecLoad) =>
 	emit({ spec: { ...load.app.spec, target: load.targetAbs }, specPath: load.specPath });
 
-const writeAtomic = (
+const _writeAtomic = (
 	fs: FileSystem,
 	p: Path,
 	path: string,
@@ -86,7 +90,7 @@ const writeAtomic = (
 		void p;
 	});
 
-const writeOne = (
+const _writeOne = (
 	dest: string,
 	content: string,
 	force: boolean,
@@ -108,7 +112,7 @@ const writeOne = (
 			}
 			if (head.managed && existing === content) return { written: false };
 		}
-		yield* writeAtomic(fs, p, dest, content);
+		yield* _writeAtomic(fs, p, dest, content);
 		return { written: true };
 	});
 
@@ -121,8 +125,8 @@ export const previewCommand = Command.make(
 	},
 	(args) =>
 		Effect.gen(function* () {
-			const load = yield* loadSpec(args.target);
-			const e = yield* emitFor(load);
+			const load = yield* _loadSpec(args.target);
+			const e = yield* _emitFor(load);
 			if (!args.devOnly) yield* Console.log(e.dockerfile);
 			if (!args.prodOnly && e.dockerfileDev) {
 				if (!args.devOnly) yield* Console.log("\n# ---- Dockerfile.dev ----\n");
@@ -149,25 +153,25 @@ export const writeCommand = Command.make(
 	(args) =>
 		Effect.gen(function* () {
 			const p = yield* Path;
-			const load = yield* loadSpec(args.target);
-			const e = yield* emitFor(load);
+			const load = yield* _loadSpec(args.target);
+			const e = yield* _emitFor(load);
 			const outDirAbs = args.outDir._tag === "Some"
 				? p.resolve(process.cwd(), args.outDir.value)
 				: load.targetAbs;
 			if (!args.devOnly) {
 				const dest = p.join(outDirAbs, "Dockerfile");
-				const r = yield* writeOne(dest, e.dockerfile, args.force);
+				const r = yield* _writeOne(dest, e.dockerfile, args.force);
 				yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`);
 			}
 			if (!args.prodOnly && e.dockerfileDev) {
 				const dest = p.join(outDirAbs, "Dockerfile.dev");
-				const r = yield* writeOne(dest, e.dockerfileDev, args.force);
+				const r = yield* _writeOne(dest, e.dockerfileDev, args.force);
 				yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`);
 			}
 		}),
 ).pipe(Command.withDescription("Write Dockerfile + Dockerfile.dev next to a target"));
 
-const diffOne = (
+const _diffOne = (
 	dest: string,
 	emitted: string,
 	kind: "prod" | "dev",
@@ -201,16 +205,20 @@ export const diffCommand = Command.make(
 	(args) =>
 		Effect.gen(function* () {
 			const p = yield* Path;
-			const load = yield* loadSpec(args.target);
-			const e = yield* emitFor(load);
-			yield* diffOne(p.join(load.targetAbs, "Dockerfile"), e.dockerfile, "prod", args.target, args.format as DiffFormat);
+			const load = yield* _loadSpec(args.target);
+			const e = yield* _emitFor(load);
+			const fmt = unsafeCoerce<DiffFormat>(
+				args.format,
+				"args.format is constrained by the Flag schema to DiffFormat; the union is widened by Effect's CLI types",
+			);
+			yield* _diffOne(p.join(load.targetAbs, "Dockerfile"), e.dockerfile, "prod", args.target, fmt);
 			if (e.dockerfileDev) {
-				yield* diffOne(
+				yield* _diffOne(
 					p.join(load.targetAbs, "Dockerfile.dev"),
 					e.dockerfileDev,
 					"dev",
 					args.target,
-					args.format as DiffFormat,
+					fmt,
 				);
 			}
 			yield* Console.log(`OK — ${args.target} matches`);

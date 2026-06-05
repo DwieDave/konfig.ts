@@ -1,7 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
 	Downward,
-	Environment,
 	Literal,
 	Secret,
 	SecretSource,

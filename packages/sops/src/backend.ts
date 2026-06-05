@@ -84,7 +84,7 @@ const _emit = <N extends string, K extends string>(
 				),
 			);
 			const parsed = yield* Effect.try({
-				try: () => YAML.parse(encryptedYaml) as unknown,
+				try: (): unknown => YAML.parse(encryptedYaml),
 				catch: (cause) =>
 					new RenderError({
 						message: `Sops(${input.base.namespace}/${input.base.name}): sops stdout was not valid YAML`,
@@ -118,7 +118,7 @@ const _passthrough = <N extends string, K extends string>(
 					),
 				);
 			const parsed = yield* Effect.try({
-				try: () => YAML.parse(contents) as unknown,
+				try: (): unknown => YAML.parse(contents),
 				catch: (cause) =>
 					new RenderError({
 						message: `Sops.passthrough(${input.base.namespace}/${input.base.name}): file ${input.file} was not valid YAML`,

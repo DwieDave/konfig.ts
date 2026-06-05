@@ -1,4 +1,4 @@
-import { Manifest } from "@konfig.ts/core";
+import { Manifest, unsafeCoerce } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	Deployment as K8sDeployment,
@@ -61,11 +61,12 @@ export const PodSet = {
 				const d = yield* deployment.render(ctx);
 				const s = service !== undefined ? yield* service.render(ctx) : undefined;
 				const n = netPol !== undefined ? yield* netPol.render(ctx) : undefined;
+				const reason = "tuple element types are statically known per branch; the array literal is widened by TS, the brand-free runtime shape matches the typed tuple";
 				if (s !== undefined && n !== undefined)
-					return [d, s, n] as readonly [K8sDeployment, K8sService, K8sNetworkPolicy];
-				if (s !== undefined) return [d, s] as readonly [K8sDeployment, K8sService];
-				if (n !== undefined) return [d, n] as readonly [K8sDeployment, K8sNetworkPolicy];
-				return [d] as readonly [K8sDeployment];
+					return unsafeCoerce<readonly [K8sDeployment, K8sService, K8sNetworkPolicy]>([d, s, n], reason);
+				if (s !== undefined) return unsafeCoerce<readonly [K8sDeployment, K8sService]>([d, s], reason);
+				if (n !== undefined) return unsafeCoerce<readonly [K8sDeployment, K8sNetworkPolicy]>([d, n], reason);
+				return unsafeCoerce<readonly [K8sDeployment]>([d], reason);
 			}),
 		);
 	},

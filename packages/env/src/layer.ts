@@ -23,20 +23,24 @@ import { unsafeCoerce } from "@konfig.ts/core";
  * scope, no per-service `Config.string` reads.
  *
  *   class AppEnv extends Context.Service<AppEnv, EnvironmentShape<typeof bundleEnv.members>>()("AppEnv") {}
- *   export const AppEnvLive = environmentLayer(AppEnv, bundleEnv);
+ *   export const AppEnvLive = environmentLayer({ tag: AppEnv, env: bundleEnv });
  *
  *   // downstream:
  *   const env = yield* AppEnv;
  *   const password = Redacted.value(env.postgres.password);
  */
+export interface EnvironmentLayerInput<Self, M extends Readonly<Record<string, EnvMember>>> {
+	readonly tag: Context.Service<Self, EnvironmentShape<M>>;
+	readonly env: Environment<M>;
+}
+
 export const environmentLayer = <Self, M extends Readonly<Record<string, EnvMember>>>(
-	tag: Context.Service<Self, EnvironmentShape<M>>,
-	env: Environment<M>,
+	input: EnvironmentLayerInput<Self, M>,
 ): Layer.Layer<Self> =>
 	Layer.effect(
-		tag,
+		input.tag,
 		unsafeCoerce<Effect.Effect<EnvironmentShape<M>>>(
-			env,
+			input.env,
 			"Environment<M> extends Config<EnvironmentShape<M>>, and Config is structurally a no-deps Effect — Layer.effect accepts it",
 		),
 	);

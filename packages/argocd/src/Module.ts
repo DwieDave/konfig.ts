@@ -1,4 +1,4 @@
-import { type AnyRenderError } from "@konfig.ts/core";
+import { type AnyRenderError, unsafeCoerce } from "@konfig.ts/core";
 import { Effect, type Layer } from "effect";
 import {
 	type ArgoSource,
@@ -30,7 +30,7 @@ export type ModuleBuildResult<R = never> =
 	| Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
 	| ReadonlyArray<unknown>;
 
-const liftBuild = <R>(
+const _liftBuild = <R>(
 	result: ModuleBuildResult<R>,
 ): Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> =>
 	Effect.isEffect(result) ? result : Effect.succeed(result);
@@ -84,19 +84,30 @@ export const fixedNs = <const Ns extends string, Opts = Record<never, never>, R 
 	return <const Name extends string>(
 		args: { readonly name: LiteralName<Name>; readonly source: ArgoSource } & Opts,
 	) => {
-		const { name, source, ...rest } = args as unknown as {
+		const { name, source, ...rest } = unsafeCoerce<{
 			name: LiteralName<Name>;
 			source: ArgoSource;
-		} & Opts;
+		} & Opts>(args, "destructuring requires the same intersection type as the parameter; widening rest from the intersection is structural");
 		return define<Name, Ns, R, Extra>({
 			name,
-			namespace: namespace as LiteralName<Ns>,
+			namespace: unsafeCoerce<LiteralName<Ns>>(
+				namespace,
+				"Ns is a const string literal; LiteralName<Ns> resolves to Ns itself when Ns is not the bare string type",
+			),
 			source,
 			...(syncPolicy !== undefined ? { syncPolicy } : {}),
 			...(annotations !== undefined ? { annotations } : {}),
 			...(buildMetadata !== undefined ? { buildMetadata } : {}),
 			...(provides !== undefined ? { provides } : {}),
-			build: liftBuild(build({ name: name as Name, namespace }, rest as Opts)),
+			build: _liftBuild(
+				build(
+					{
+						name: unsafeCoerce<Name>(name, "LiteralName<Name> resolves to Name itself once the call typechecks"),
+						namespace,
+					},
+					unsafeCoerce<Opts>(rest, "rest is the args object minus { name, source }; structurally equals Opts"),
+				),
+			),
 		});
 	};
 };
@@ -149,11 +160,11 @@ export const dynamicNs = <Opts = Record<never, never>, R = never, Extra = never>
 			readonly source: ArgoSource;
 		} & Opts,
 	) => {
-		const { name, namespace, source, ...rest } = args as unknown as {
+		const { name, namespace, source, ...rest } = unsafeCoerce<{
 			name: LiteralName<Name>;
 			namespace: LiteralName<Ns>;
 			source: ArgoSource;
-		} & Opts;
+		} & Opts>(args, "destructuring requires the same intersection type as the parameter; widening rest from the intersection is structural");
 		return define<Name, Ns, R, Extra>({
 			name,
 			namespace,
@@ -162,7 +173,15 @@ export const dynamicNs = <Opts = Record<never, never>, R = never, Extra = never>
 			...(annotations !== undefined ? { annotations } : {}),
 			...(buildMetadata !== undefined ? { buildMetadata } : {}),
 			...(provides !== undefined ? { provides } : {}),
-			build: liftBuild(build({ name: name as Name, namespace: namespace as Ns }, rest as Opts)),
+			build: _liftBuild(
+				build(
+					{
+						name: unsafeCoerce<Name>(name, "LiteralName<Name> resolves to Name itself once the call typechecks"),
+						namespace: unsafeCoerce<Ns>(namespace, "LiteralName<Ns> resolves to Ns itself once the call typechecks"),
+					},
+					unsafeCoerce<Opts>(rest, "rest is the args object minus { name, namespace, source }; structurally equals Opts"),
+				),
+			),
 		});
 	};
 };

@@ -62,7 +62,7 @@ export const buildCommand = Command.make(
 	(args) =>
 		Effect.gen(function* () {
 			const cfg = yield* resolveConfig();
-			const ctx = renderContextFromFlags(args.env, args);
+			const ctx = renderContextFromFlags({ env: args.env, flags: args });
 			const fs = yield* FileSystem;
 			const logFmt = args.log;
 

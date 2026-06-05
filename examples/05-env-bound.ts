@@ -1,7 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { RenderContext, Yaml } from "@konfig.ts/core";
 import {
-	Environment,
 	Literal,
 	Secret,
 	SecretSource,

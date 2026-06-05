@@ -33,11 +33,11 @@ export const SecretRef = {
 	 * cross-namespace cases: ExternalSecret reflection, in-cluster
 	 * shared infra). The cast is grep-able so PR reviewers see opt-ins.
 	 */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	// oxlint-disable-next-line app/no-type-assertion
 	unsafeReNamespace: <N extends string, K extends string>(
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		// oxlint-disable-next-line app/no-type-assertion
 		ref: SecretRef<N, K, any>,
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		// oxlint-disable-next-line app/no-type-assertion
 	): SecretRef<N, K, any> => ref,
 };
 

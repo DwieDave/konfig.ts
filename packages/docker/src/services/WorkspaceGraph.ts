@@ -1,3 +1,4 @@
+import { brand, unsafeCoerce } from "@konfig.ts/core";
 import { Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -13,7 +14,7 @@ import type { NodeModulesLayout } from "./PackageManager";
 const ROOT_BRAND: unique symbol = Symbol.for("@konfig.ts/docker/RootDir");
 export type RootDir = string & { readonly [ROOT_BRAND]: true };
 
-const brandRoot = (s: string): RootDir => s as RootDir;
+const _brandRoot = (s: string): RootDir => brand<RootDir>(s);
 
 export interface PackageJson {
 	readonly name?: string;
@@ -52,9 +53,9 @@ export interface DetectedPm {
 	readonly presentLockfiles: ReadonlyArray<string>;
 }
 
-/* ──────────────────────────── findRoot ──────────────────────────── */
+// ──────────────────────────── findRoot ────────────────────────────
 
-const readPkgJsonIfExists = (
+const _readPkgJsonIfExists = (
 	fs: FileSystem,
 	p: Path,
 	cur: string,
@@ -66,13 +67,13 @@ const readPkgJsonIfExists = (
 		const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""));
 		if (text === "") return undefined;
 		try {
-			return JSON.parse(text) as PackageJson;
+			return unsafeCoerce<PackageJson>(JSON.parse(text), "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses");
 		} catch {
 			return undefined;
 		}
 	});
 
-const isMonorepoRoot = (pkg: PackageJson | undefined, hasPnpmYaml: boolean): boolean => {
+const _isMonorepoRoot = (pkg: PackageJson | undefined, hasPnpmYaml: boolean): boolean => {
 	if (hasPnpmYaml) return true;
 	if (!pkg?.workspaces) return false;
 	return true;
@@ -86,11 +87,11 @@ export const findRoot = (from: string): Effect.Effect<RootDir, MonorepoRootNotFo
 		// Walk up to filesystem root; bail when dirname is a fixed point.
 		// Bound by 64 iterations as a defense against pathological symlinks.
 		for (let i = 0; i < 64; i++) {
-			const pkg = yield* readPkgJsonIfExists(fs, p, cur);
+			const pkg = yield* _readPkgJsonIfExists(fs, p, cur);
 			const pnpmYamlExists = yield* fs
 				.exists(p.join(cur, "pnpm-workspace.yaml"))
 				.pipe(Effect.orElseSucceed(() => false));
-			if (isMonorepoRoot(pkg, pnpmYamlExists)) return brandRoot(cur);
+			if (_isMonorepoRoot(pkg, pnpmYamlExists)) return _brandRoot(cur);
 			const parent = p.dirname(cur);
 			if (parent === cur) break;
 			cur = parent;
@@ -98,9 +99,9 @@ export const findRoot = (from: string): Effect.Effect<RootDir, MonorepoRootNotFo
 		return yield* Effect.fail(new MonorepoRootNotFound({ from }));
 	});
 
-/* ──────────────────────────── glob ──────────────────────────── */
+// ──────────────────────────── glob ────────────────────────────
 
-const expandWorkspaceGlob = (
+const _expandWorkspaceGlob = (
 	fs: FileSystem,
 	p: Path,
 	root: string,
@@ -116,13 +117,9 @@ const expandWorkspaceGlob = (
 				if (part === "*") {
 					const children = yield* fs
 						.readDirectory(absDir)
-						.pipe(Effect.orElseSucceed(() => [] as string[]));
+						.pipe(Effect.orElseSucceed((): string[] => []));
 					for (const ch of children) {
-						const childAbs = p.join(absDir, ch);
-						const childPkg = p.join(childAbs, "package.json");
-						const exists = yield* fs.exists(childPkg).pipe(Effect.orElseSucceed(() => false));
-						if (exists) next.push(p.join(cur, ch));
-						else next.push(p.join(cur, ch));
+						next.push(p.join(cur, ch));
 					}
 				} else if (part === "**") {
 					return yield* Effect.fail(new Error("** glob not supported in workspaces patterns"));
@@ -142,27 +139,13 @@ const expandWorkspaceGlob = (
 		return filtered;
 	}).pipe(Effect.orElseSucceed(() => []));
 
-/* ──────────────────────────── allWorkspaces ──────────────────────────── */
-
-const workspacePatterns = async (
-	root: RootDir,
-	fs: FileSystem,
-	p: Path,
-): Promise<ReadonlyArray<string>> => {
-	// Unused; effectful version below.
-	void root;
-	void fs;
-	void p;
-	return [];
-};
-
-void workspacePatterns;
+// ──────────────────────────── allWorkspaces ────────────────────────────
 
 interface PnpmWorkspaceYaml {
 	readonly packages?: ReadonlyArray<string>;
 }
 
-const readWorkspacePatterns = (
+const _readWorkspacePatterns = (
 	root: RootDir,
 	fs: FileSystem,
 	p: Path,
@@ -174,20 +157,20 @@ const readWorkspacePatterns = (
 			const text = yield* fs.readFileString(pnpmPath).pipe(Effect.orElseSucceed(() => ""));
 			if (text === "") return [];
 			try {
-				const parsed = parseYaml(text) as PnpmWorkspaceYaml;
+				const parsed = unsafeCoerce<PnpmWorkspaceYaml>(parseYaml(text), "YAML.parse over a pnpm-workspace.yaml file — defensively typed as PnpmWorkspaceYaml with optional packages");
 				return parsed.packages ?? [];
 			} catch {
 				return [];
 			}
 		}
-		const pkg = yield* readPkgJsonIfExists(fs, p, root);
+		const pkg = yield* _readPkgJsonIfExists(fs, p, root);
 		const ws = pkg?.workspaces;
 		if (!ws) return [];
 		if (Array.isArray(ws)) return ws;
-		return (ws as { packages?: ReadonlyArray<string> }).packages ?? [];
+		return unsafeCoerce<{ readonly packages?: ReadonlyArray<string> }>(ws, "Array.isArray narrowed the array branch above; remaining branch is the object form").packages ?? [];
 	});
 
-const parseWorkspacePackage = (
+const _parseWorkspacePackage = (
 	root: RootDir,
 	fs: FileSystem,
 	p: Path,
@@ -198,7 +181,7 @@ const parseWorkspacePackage = (
 		const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""));
 		if (text === "") return undefined;
 		try {
-			const pkg = JSON.parse(text) as PackageJson;
+			const pkg = unsafeCoerce<PackageJson>(JSON.parse(text), "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses");
 			if (!pkg.name) return undefined;
 			return {
 				name: pkg.name,
@@ -217,24 +200,24 @@ export const allWorkspaces = (
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const p = yield* Path;
-		const patterns = yield* readWorkspacePatterns(root, fs, p);
+		const patterns = yield* _readWorkspacePatterns(root, fs, p);
 		const dirSet = new Set<string>();
 		for (const pat of patterns) {
-			const dirs = yield* expandWorkspaceGlob(fs, p, root, pat);
+			const dirs = yield* _expandWorkspaceGlob(fs, p, root, pat);
 			for (const d of dirs) dirSet.add(d);
 		}
 		const out: Workspace[] = [];
 		for (const d of dirSet) {
-			const ws = yield* parseWorkspacePackage(root, fs, p, d);
+			const ws = yield* _parseWorkspacePackage(root, fs, p, d);
 			if (ws) out.push(ws);
 		}
 		out.sort((a, b) => a.name.localeCompare(b.name));
 		return out;
 	});
 
-/* ──────────────────────────── detectPm ──────────────────────────── */
+// ──────────────────────────── detectPm ────────────────────────────
 
-const parseCorepackField = (
+const _parseCorepackField = (
 	pm: string,
 ): { kind: DetectedPmKind; version: string } | undefined => {
 	const at = pm.lastIndexOf("@");
@@ -256,7 +239,7 @@ const PM_LOCKFILES: ReadonlyArray<{ kind: DetectedPmKind; file: string }> = [
 	{ kind: "Yarn", file: "yarn.lock" },
 ];
 
-const detectYarnVariant = (
+const _detectYarnVariant = (
 	root: RootDir,
 	fs: FileSystem,
 	p: Path,
@@ -271,7 +254,7 @@ const detectYarnVariant = (
 		return "classic";
 	});
 
-const detectPnpmLayout = (
+const _detectPnpmLayout = (
 	root: RootDir,
 	fs: FileSystem,
 	p: Path,
@@ -294,8 +277,8 @@ export const detectPm = (
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const p = yield* Path;
-		const pkg = yield* readPkgJsonIfExists(fs, p, root);
-		const corepack = pkg?.packageManager ? parseCorepackField(pkg.packageManager) : undefined;
+		const pkg = yield* _readPkgJsonIfExists(fs, p, root);
+		const corepack = pkg?.packageManager ? _parseCorepackField(pkg.packageManager) : undefined;
 		const presentLockfiles: Array<{ kind: DetectedPmKind; file: string }> = [];
 		for (const entry of PM_LOCKFILES) {
 			const ex = yield* fs
@@ -305,10 +288,10 @@ export const detectPm = (
 		}
 		// Corepack wins.
 		if (corepack) {
-			const layout = corepack.kind === "Pnpm" ? yield* detectPnpmLayout(root, fs, p) : undefined;
+			const layout = corepack.kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined;
 			const yarnVariant =
 				corepack.kind === "Yarn"
-					? yield* detectYarnVariant(root, fs, p, corepack.version)
+					? yield* _detectYarnVariant(root, fs, p, corepack.version)
 					: undefined;
 			const present = presentLockfiles
 				.filter((l) => l.kind === corepack.kind)
@@ -338,8 +321,8 @@ export const detectPm = (
 			);
 		}
 		const kind = [...kinds][0]!;
-		const layout = kind === "Pnpm" ? yield* detectPnpmLayout(root, fs, p) : undefined;
-		const yarnVariant = kind === "Yarn" ? yield* detectYarnVariant(root, fs, p) : undefined;
+		const layout = kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined;
+		const yarnVariant = kind === "Yarn" ? yield* _detectYarnVariant(root, fs, p) : undefined;
 		const present = presentLockfiles.filter((l) => l.kind === kind).map((l) => l.file);
 		return {
 			kind,
@@ -350,11 +333,11 @@ export const detectPm = (
 		};
 	});
 
-/* ──────────────────────────── closureOf ──────────────────────────── */
+// ──────────────────────────── closureOf ────────────────────────────
 
 const WORKSPACE_PROTOCOLS = ["workspace:", "link:"] as const;
 
-const workspaceDeps = (pkg: PackageJson): ReadonlyArray<string> => {
+const _workspaceDeps = (pkg: PackageJson): ReadonlyArray<string> => {
 	const out: string[] = [];
 	const merge = (rec?: Record<string, string>): void => {
 		if (!rec) return;
@@ -397,7 +380,7 @@ export const closureOf = (
 			if (visited.has(ws.name)) return undefined;
 			if (onStack.has(ws.name)) return cycleErr([...stack, ws.name]);
 			onStack.add(ws.name);
-			const deps = workspaceDeps(ws.pkg);
+			const deps = _workspaceDeps(ws.pkg);
 			for (const depName of deps) {
 				const dep = byName.get(depName);
 				if (!dep) continue;

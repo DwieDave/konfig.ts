@@ -144,8 +144,14 @@ export const define = <const Name extends string, const Ns extends string, R = n
 	| Extra,
 	Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
 > => {
-	const name = opts.name as Name;
-	const namespace = opts.namespace as Ns;
+	const name = unsafeCoerce<Name>(
+		opts.name,
+		"LiteralName<Name> resolves to Name itself once the call typechecks",
+	);
+	const namespace = unsafeCoerce<Ns>(
+		opts.namespace,
+		"LiteralName<Ns> resolves to Ns itself once the call typechecks",
+	);
 	const tag = Dep.App<Name, Application>(name);
 
 	const ownsLayer = Layer.mergeAll(

@@ -8,7 +8,7 @@ import type {
 	SecretEntry,
 	SecretSource,
 } from "@konfig.ts/env";
-import { Layer } from "effect";
+import { Layer, Match } from "effect";
 import type { SecretBackend } from "./backend";
 import type { EnvVar } from "./env";
 import { bindSecret, type DeclaredSecret } from "./secretBind";
@@ -79,7 +79,7 @@ interface _SecretMemberBackendOptionalSource<N extends string, K extends string>
 	readonly source?: SecretSource<K, Manifest.RenderServices>;
 }
 
-interface _SecretMemberSourceOnly<N extends string, K extends string>
+interface _SecretMemberSourceOnly<_N extends string, K extends string>
 	extends _SecretMemberOptionsBase {
 	readonly backend?: undefined;
 	readonly source: SecretSource<K, Manifest.RenderServices>;
@@ -238,6 +238,111 @@ const _bindDownward = (input: _BindDownwardInput): DeclaredDownward<string> => (
 	},
 });
 
+type _AnyValuesLayer = Layer.Layer<unknown, RenderError, Manifest.RenderServices>;
+
+interface _BindAcc {
+	readonly declared: Record<string, unknown>;
+	readonly envVars: EnvVar[];
+	readonly manifests: Manifest.Manifest<unknown>[];
+	readonly valuesLayers: _AnyValuesLayer[];
+}
+
+interface _DispatchInput {
+	readonly memberKey: string;
+	readonly entry: EnvMember;
+	readonly secretsOpts: Record<string, unknown> | undefined;
+	readonly literalsOpts: Record<string, unknown> | undefined;
+	readonly namespace: string | undefined;
+	readonly acc: _BindAcc;
+}
+
+const _handleSecret = (input: _DispatchInput): void => {
+	const memberOpts = unsafeCoerce<SecretMemberOptions<string, string> | undefined>(
+		input.secretsOpts?.[input.memberKey],
+		"SecretMembersOpts<M> shape — runtime key lookup against the typed input",
+	);
+	const secret = unsafeCoerce<SecretEntry<string, string, Readonly<Record<string, string>>>>(
+		input.entry,
+		"Match.tag('Secret') narrowed entry to SecretEntry; the helper-level signature is the general SecretEntry shape",
+	);
+	const d = bindSecret({
+		secret,
+		backend: memberOpts?.backend,
+		source: memberOpts?.source,
+		labels: memberOpts?.labels,
+		annotations: memberOpts?.annotations,
+		namespace: input.namespace,
+	});
+	input.acc.declared[input.memberKey] = d;
+	input.acc.envVars.push(...d.envVars);
+	if (d.manifest !== undefined) input.acc.manifests.push(d.manifest);
+	if (d.layer !== undefined) {
+		input.acc.valuesLayers.push(
+			unsafeCoerce<_AnyValuesLayer>(
+				d.layer,
+				"DeclaredSecret.layer is Layer<Provide<SecretValues, N>, ...>; widen to unknown for the heterogeneous Layer.mergeAll",
+			),
+		);
+	}
+};
+
+const _handleLiteral = (input: _DispatchInput): void => {
+	const literal = unsafeCoerce<LiteralEntry<string, unknown>>(
+		input.entry,
+		"Match.tag('Literal') narrowed entry to LiteralEntry<string, unknown>",
+	);
+	const d = _bindLiteral({ entry: literal, override: input.literalsOpts?.[input.memberKey] });
+	input.acc.declared[input.memberKey] = d;
+	input.acc.envVars.push(d.envVar);
+};
+
+const _handleDownward = (input: _DispatchInput): void => {
+	const downward = unsafeCoerce<DownwardEntry<string>>(
+		input.entry,
+		"Match.tag('Downward') narrowed entry to DownwardEntry<string>",
+	);
+	const d = _bindDownward({ entry: downward });
+	input.acc.declared[input.memberKey] = d;
+	input.acc.envVars.push(d.envVar);
+};
+
+const _handleEnvironment = (input: _DispatchInput): void => {
+	const subEnv = unsafeCoerce<AnyEnvironment>(
+		input.entry,
+		"Match.tag('Environment') narrowed entry to a nested Environment",
+	);
+	const sub = bindEnvironment({
+		env: subEnv,
+		secrets: unsafeCoerce<SecretMembersOpts<Readonly<Record<string, EnvMember>>>>(
+			input.secretsOpts?.[input.memberKey] ?? {},
+			"sub-record from SecretMembersOpts<M> — type is checked at the outer call site",
+		),
+		literals: unsafeCoerce<LiteralMembersOpts<Readonly<Record<string, EnvMember>>>>(
+			input.literalsOpts?.[input.memberKey] ?? {},
+			"sub-record from LiteralMembersOpts<M> — type is checked at the outer call site",
+		),
+		namespace: input.namespace,
+	});
+	input.acc.declared[input.memberKey] = sub.members;
+	input.acc.envVars.push(...sub.envVars);
+	input.acc.manifests.push(...sub.manifests);
+	input.acc.valuesLayers.push(
+		unsafeCoerce<_AnyValuesLayer>(
+			sub.valuesLayer,
+			"valuesLayer aggregate over the recursive merge",
+		),
+	);
+};
+
+const _dispatch = (input: _DispatchInput): void =>
+	Match.value(input.entry._kind).pipe(
+		Match.when("Secret", () => _handleSecret(input)),
+		Match.when("Literal", () => _handleLiteral(input)),
+		Match.when("Downward", () => _handleDownward(input)),
+		Match.when("Environment", () => _handleEnvironment(input)),
+		Match.exhaustive,
+	);
+
 export const bindEnvironment = <
 	const M extends Readonly<Record<string, EnvMember>>,
 	const Ns extends string = string,
@@ -245,86 +350,48 @@ export const bindEnvironment = <
 	input: BindEnvironmentInput<M, Ns>,
 ): DeclaredEnvironment<M, Ns> => {
 	const { env } = input;
-	const declared: Record<string, unknown> = {};
-	const envVars: EnvVar[] = [];
-	const manifests: Manifest.Manifest<unknown>[] = [];
-	const valuesLayers: Layer.Layer<unknown, RenderError, Manifest.RenderServices>[] = [];
-	const secretsOpts = unsafeCoerce<Record<string, unknown> | undefined>(input.secrets, "discriminated union from BindEnvironmentInput; iterate keys at runtime");
-	const literalsOpts = unsafeCoerce<Record<string, unknown> | undefined>(input.literals, "discriminated union from BindEnvironmentInput; iterate keys at runtime");
+	const acc: _BindAcc = {
+		declared: {},
+		envVars: [],
+		manifests: [],
+		valuesLayers: [],
+	};
+	const secretsOpts = unsafeCoerce<Record<string, unknown> | undefined>(
+		input.secrets,
+		"discriminated union from BindEnvironmentInput; iterate keys at runtime",
+	);
+	const literalsOpts = unsafeCoerce<Record<string, unknown> | undefined>(
+		input.literals,
+		"discriminated union from BindEnvironmentInput; iterate keys at runtime",
+	);
 
 	for (const memberKey of Object.keys(env.members)) {
-		const entry = unsafeCoerce<EnvMember>(env.members[memberKey], "env.members values are EnvMember by construction");
-		if (entry._kind === "Secret") {
-			const memberOpts = unsafeCoerce<SecretMemberOptions<string, string> | undefined>(
-				secretsOpts?.[memberKey],
-				"SecretMembersOpts<M> shape — runtime key lookup against the typed input",
-			);
-			const d = bindSecret({
-				secret: entry,
-				backend: memberOpts?.backend,
-				source: memberOpts?.source,
-				labels: memberOpts?.labels,
-				annotations: memberOpts?.annotations,
-				namespace: input.namespace,
-			});
-			declared[memberKey] = d;
-			envVars.push(...d.envVars);
-			if (d.manifest !== undefined) manifests.push(d.manifest);
-			if (d.layer !== undefined)
-				valuesLayers.push(
-					unsafeCoerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(
-						d.layer,
-						"DeclaredSecret.layer is Layer<Provide<SecretValues, N>, ...>; widen to unknown for the heterogeneous Layer.mergeAll",
-					),
-				);
-		} else if (entry._kind === "Literal") {
-			const d = _bindLiteral({ entry, override: literalsOpts?.[memberKey] });
-			declared[memberKey] = d;
-			envVars.push(d.envVar);
-		} else if (entry._kind === "Downward") {
-			const d = _bindDownward({ entry });
-			declared[memberKey] = d;
-			envVars.push(d.envVar);
-		} else {
-			// Nested Environment — recurse with the matching sub-overrides.
-			const subEnv = unsafeCoerce<AnyEnvironment>(entry, "_kind branch narrowed to nested Environment");
-			const sub = bindEnvironment({
-				env: subEnv,
-				secrets: unsafeCoerce<SecretMembersOpts<Readonly<Record<string, EnvMember>>>>(
-					secretsOpts?.[memberKey] ?? {},
-					"sub-record from SecretMembersOpts<M> — type is checked at the outer call site",
-				),
-				literals: unsafeCoerce<LiteralMembersOpts<Readonly<Record<string, EnvMember>>>>(
-					literalsOpts?.[memberKey] ?? {},
-					"sub-record from LiteralMembersOpts<M> — type is checked at the outer call site",
-				),
-				namespace: input.namespace,
-			});
-			// Recursive declared sub-record matches DeclaredMember<Environment<...>>.
-			declared[memberKey] = sub.members;
-			envVars.push(...sub.envVars);
-			manifests.push(...sub.manifests);
-			valuesLayers.push(
-				unsafeCoerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(
-					sub.valuesLayer,
-					"valuesLayer aggregate over the recursive merge",
-				),
-			);
-		}
+		const entry = unsafeCoerce<EnvMember>(
+			env.members[memberKey],
+			"env.members values are EnvMember by construction",
+		);
+		_dispatch({
+			memberKey,
+			entry,
+			secretsOpts,
+			literalsOpts,
+			namespace: input.namespace,
+			acc,
+		});
 	}
 
-	const valuesLayer = unsafeCoerce<Layer.Layer<unknown, RenderError, Manifest.RenderServices>>(
-		valuesLayers.length === 0
+	const valuesLayer = unsafeCoerce<_AnyValuesLayer>(
+		acc.valuesLayers.length === 0
 			? Layer.empty
-			: Layer.mergeAll(valuesLayers[0]!, ...valuesLayers.slice(1)),
+			: Layer.mergeAll(acc.valuesLayers[0]!, ...acc.valuesLayers.slice(1)),
 		"merged Layer over a heterogeneous list of per-secret value layers",
 	);
 
 	return {
-		envVars,
-		manifests,
+		envVars: acc.envVars,
+		manifests: acc.manifests,
 		members: unsafeCoerce<{ readonly [K in keyof M]: DeclaredMember<M[K], Ns> }>(
-			declared,
+			acc.declared,
 			"declared populated by iterating env.members; each key maps to its DeclaredMember<M[K], Ns>",
 		),
 		valuesLayer,

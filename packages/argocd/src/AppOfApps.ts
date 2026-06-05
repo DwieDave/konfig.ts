@@ -1,5 +1,5 @@
 
-import type { AnyRenderError, Dep, Manifest as CoreManifest } from "@konfig.ts/core";
+import { type AnyRenderError, type Dep, type Manifest as CoreManifest, unsafeCoerce } from "@konfig.ts/core";
 import { Effect, Layer } from "effect";
 import type { Application, ApplicationHandle } from "./Application";
 
@@ -77,18 +77,21 @@ type ResidualHintCheck<R> = [Exclude<R, CoreManifest.RenderServices>] extends [n
 export const entrypoint = <A, E, R>(
 	program: Effect.Effect<A, E, R> & ResidualHintCheck<R>,
 ): Effect.Effect<A, E, R & CoreManifest.RenderServices> =>
-	program as unknown as Effect.Effect<A, E, R & CoreManifest.RenderServices>;
+	unsafeCoerce<Effect.Effect<A, E, R & CoreManifest.RenderServices>>(
+		program,
+		"ResidualHintCheck<R> intersection is a phantom; once the call typechecks, the runtime value is the original Effect",
+	);
 
 // `any` in the AnyHandle upper bound: Effect's Layer is contravariant in
 // its first parameter and the wrapper here is invariant at the inference
 // site. `unknown` rejects concrete subtypes; `any` is bivariant — the
 // canonical "any handle" upper bound.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = ApplicationHandle<any, any, any>;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line app/no-type-assertion
 type OutOfHandle<H> = H extends ApplicationHandle<any, infer Out, any> ? Out : never;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line app/no-type-assertion
 type InOfHandle<H> = H extends ApplicationHandle<any, any, infer In> ? In : never;
 
 // Left-fold `Layer.provideMerge` over the tuple: each successive module's
@@ -168,13 +171,19 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>>(
 
 	type AnyLayer = Layer.Layer<never, AnyRenderError, never>;
 	const wired = opts.modules.reduce<AnyLayer>(
-		(acc, mod) => Layer.provideMerge(mod.layer as unknown as AnyLayer, acc) as unknown as AnyLayer,
-		Layer.empty as unknown as AnyLayer,
+		(acc, mod) =>
+			unsafeCoerce<AnyLayer>(
+				Layer.provideMerge(
+					unsafeCoerce<AnyLayer>(mod.layer, "ApplicationHandle.layer's variance is invariant from TS's view; the fold collapses to the residual at the type level only"),
+					acc,
+				),
+				"Layer.provideMerge's return type is computed per-call; the fold collapses to AnyLayer for the running accumulator",
+			),
+		unsafeCoerce<AnyLayer>(Layer.empty, "Layer.empty has type Layer<never, never, never>; widening to AnyLayer is a no-op at runtime"),
 	);
 
-	return Effect.provide(program, wired) as unknown as Effect.Effect<
-		AppOfAppsResult,
-		AnyRenderError,
-		ResidualIn<Ms> | CoreManifest.RenderServices
-	>;
+	return unsafeCoerce<Effect.Effect<AppOfAppsResult, AnyRenderError, ResidualIn<Ms> | CoreManifest.RenderServices>>(
+		Effect.provide(program, wired),
+		"the runtime Effect is the same; only the static R channel is narrowed to ResidualIn<Ms> by the fold-as-type",
+	);
 };

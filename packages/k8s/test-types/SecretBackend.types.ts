@@ -46,7 +46,7 @@ type _BackendEmitInput = Expect<
 
 // 4 · A bundle without secrets makes Environment.bind's `secrets`
 //     field optional; with a secret it becomes required.
-const noSecrets = (() => null as unknown as ReturnType<typeof Secret.define>) /* satisfies guard */;
+const noSecrets = (() => null as unknown as ReturnType<typeof Secret.define>);
 void noSecrets;
 
 declare const dbCreds: ReturnType<

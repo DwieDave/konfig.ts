@@ -27,10 +27,28 @@
 			}
 		},
 		{
-			"files": ["**/*.test.ts"],
+			"files": ["**/*.test.ts", "**/test-types/**/*.ts"],
 			"rules": {
 				"app/no-type-assertion": "off",
-				"app/no-multiple-function-params": "off"
+				"app/no-banned-type-assertions": "off",
+				"app/no-multiple-function-params": "off",
+				"app/private-function-prefix": "off"
+			}
+		},
+		{
+			"files": ["examples/**/*.ts"],
+			"rules": {
+				"app/private-function-prefix": "off"
+			}
+		},
+		{
+			"files": ["packages/k8s/src/.generated/**/*.ts"],
+			"rules": {
+				"app/no-comments": "off",
+				"app/no-multiple-function-params": "off",
+				"app/no-type-assertion": "off",
+				"app/no-banned-type-assertions": "off",
+				"app/private-function-prefix": "off"
 			}
 		}
 	]

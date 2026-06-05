@@ -110,7 +110,10 @@ export const Service = {
 			labels: input.labels,
 			annotations: input.annotations,
 			selector: input.selector,
-			ports: input.ports as unknown as ReadonlyArray<K8sServicePort>,
+			ports: unsafeCoerce<ReadonlyArray<K8sServicePort>>(
+				input.ports,
+				"ServicePortSpec<Ports> structurally matches K8sServicePort; targetPort's PortName<Ports> brand is a phantom — runtime value is the underlying string",
+			),
 			type: input.type,
 			clusterIP: input.clusterIP,
 			sessionAffinity: input.sessionAffinity,

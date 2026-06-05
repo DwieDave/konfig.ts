@@ -1,5 +1,6 @@
 
 import type { BuiltImageRef, SecretRef, ServiceAccountRef } from "@konfig.ts/core";
+import { unsafeCoerce } from "@konfig.ts/core";
 import type {
 	Container as K8sContainer,
 	PodSpec as K8sPodSpec,
@@ -8,7 +9,6 @@ import type { EnvVar } from "./env";
 import type {
 	ContainerPort,
 	NamesOf,
-	PortName,
 	ProbeTarget,
 } from "./ports";
 import type { Volume, VolumeMount, VolumeNamesOf } from "./volume";
@@ -184,12 +184,21 @@ export const Container = {
 		type M = MountNamesOf<Mounts>;
 		const out: ContainerSpec<P, M> = {
 			...input,
-			ports: input.ports as unknown as ReadonlyArray<ContainerPort<P>>,
+			ports: unsafeCoerce<ReadonlyArray<ContainerPort<P>>>(
+				input.ports,
+				"Ports tuple's element brands are the same PortName<N>; widening Ports → readonly ContainerPort<P>[] only changes the static shape, not the runtime values",
+			),
 			readinessProbe: input.readinessProbe,
 			livenessProbe: input.livenessProbe,
 			startupProbe: input.startupProbe,
-			volumeMounts: input.volumeMounts as unknown as ReadonlyArray<VolumeMount<M>>,
-			env: input.env as unknown as ReadonlyArray<EnvVar<string>> | undefined,
+			volumeMounts: unsafeCoerce<ReadonlyArray<VolumeMount<M>> | undefined>(
+				input.volumeMounts,
+				"Mounts tuple's element brands are the same VolumeMount<N>; widening Mounts → readonly VolumeMount<M>[] preserves runtime shape",
+			),
+			env: unsafeCoerce<ReadonlyArray<EnvVar<string>> | undefined>(
+				input.env,
+				"EnvDupCheck<Envs> intersection vanishes at runtime; the runtime value is the original EnvVar[]",
+			),
 		};
 		return out;
 	},
@@ -255,7 +264,10 @@ export const Pod = {
 	define: <const V extends ReadonlyArray<Volume<string>>>(
 		input: DefinePodInput<V>,
 	): DefinedPod<VolumeNamesOf<V>> => ({
-		volumes: input.volumes as unknown as ReadonlyArray<Volume<VolumeNamesOf<V>>>,
+		volumes: unsafeCoerce<ReadonlyArray<Volume<VolumeNamesOf<V>>>>(
+			input.volumes,
+			"V tuple's elements are Volume<N>; widening V → readonly Volume<VolumeNamesOf<V>>[] is a structural relaxation, runtime value unchanged",
+		),
 		containers: input.containers,
 		initContainers: input.initContainers,
 	}),

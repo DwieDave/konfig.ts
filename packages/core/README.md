@@ -85,9 +85,12 @@ import { Dep } from "@konfig.ts/core";
 For each kind there's a matching `provideX` helper (`provideSecret`,
 `provideNamespace`, …) that emits a `Layer.Layer<Provide<K, N>>`.
 
-`brand(value)` and `coerce(value)` from `@konfig.ts/core` are escape
-hatches. `brand` is fine — it's a nominal-typing primitive for the `*Ref`
-types. `coerce` is the unchecked cast; prefer the schema boundary below.
+`brand(value)` and `unsafeCoerce(value, reason)` from `@konfig.ts/core`
+are escape hatches. `brand` is fine — it's a nominal-typing primitive
+for the `*Ref` types. `unsafeCoerce` is the unchecked cast and takes a
+mandatory reason string so every call site documents WHY the cast is
+sound; prefer the schema boundary below for values crossing a trust
+boundary. (`coerce` is deprecated and will be removed before 1.0.)
 
 ## Stable YAML — `Yaml.serialize({ value })`
 

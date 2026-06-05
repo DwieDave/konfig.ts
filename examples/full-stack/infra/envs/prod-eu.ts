@@ -27,7 +27,7 @@ const src = (name: string) => ({
 });
 
 const sopsBase = "infra/secrets";
-const overlay = clusters["eu-west-1"]!;
+const overlay = clusters["eu-west-1"];
 
 const sopsOperator = defineSopsOperator({ source: src("sops-operator") });
 const imagePulls = defineImagePulls({ source: src("image-pulls"), sopsBase });

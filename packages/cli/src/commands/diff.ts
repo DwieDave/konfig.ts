@@ -60,7 +60,7 @@ export const diffCommand = Command.make(
 	(args) =>
 		Effect.gen(function* () {
 			const cfg = yield* resolveConfig();
-			const ctx = renderContextFromFlags(args.env, args);
+			const ctx = renderContextFromFlags({ env: args.env, flags: args });
 			const path = yield* Path;
 
 			if (cfg.config.diff === undefined) {

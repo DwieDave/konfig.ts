@@ -2,12 +2,12 @@ import { Schema } from "effect";
 
 const SECRET_BASE64_RE = /^[A-Za-z0-9+/]{40,}={0,2}$/;
 
-const looksLikeSecret = (s: string): boolean =>
+const _looksLikeSecret = (s: string): boolean =>
 	s.startsWith("sk_") || s.includes("BEGIN PRIVATE KEY") || SECRET_BASE64_RE.test(s);
 
 const notASecret = Schema.makeFilter<string>(
 	(s) =>
-		!looksLikeSecret(s) ||
+		!_looksLikeSecret(s) ||
 		"env value matches a common secret pattern; runtime secrets belong in the k8s manifest layer, not the Dockerfile",
 	{ expected: "a non-secret-looking string" },
 );
@@ -166,4 +166,5 @@ export const DockerSpec = Schema.Struct({
 export type DockerSpec = typeof DockerSpec.Type;
 
 export const decodeDockerSpec = Schema.decodeUnknownEffect(DockerSpec);
+// oxlint-disable-next-line app/no-sync-schema-apis
 export const decodeDockerSpecSync = Schema.decodeUnknownSync(DockerSpec);

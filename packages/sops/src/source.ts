@@ -19,7 +19,10 @@ export interface SopsSourceInput<K extends string> {
 
 const _defaultExtract = (key: string, parsed: unknown): unknown => {
 	if (parsed === null || typeof parsed !== "object") return undefined;
-	return (parsed as Record<string, unknown>)[key];
+	return unsafeCoerce<Record<string, unknown>>(
+		parsed,
+		"typeof === object branch above narrows parsed to a non-null object; index access yields unknown",
+	)[key];
 };
 
 /**
@@ -39,7 +42,7 @@ const _source = <const K extends string>(
 			),
 		);
 		const parsed = yield* Effect.try({
-			try: () => YAML.parse(decryptedYaml) as unknown,
+			try: (): unknown => YAML.parse(decryptedYaml),
 			catch: (cause) =>
 				new SecretSourceError({ source: "Sops", key: input.file, cause }),
 		});

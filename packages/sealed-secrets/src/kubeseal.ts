@@ -63,7 +63,7 @@ export const runKubeseal = (input: RunKubesealInput) =>
 			.string(cmd)
 			.pipe(Effect.mapError((cause) => new KubesealInvocationError({ cause })));
 		const parsed = yield* Effect.try({
-			try: () => YAML.parse(stdout) as unknown,
+			try: (): unknown => YAML.parse(stdout),
 			catch: (cause) => new KubesealParseError({ output: stdout, cause }),
 		});
 		return yield* _decodeSealedSecret(parsed);

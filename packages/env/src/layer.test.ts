@@ -35,7 +35,7 @@ describe("environmentLayer", () => {
 			expect(env.port).toBe(8080);
 			expect(Redacted.value(env.db.url)).toBe("postgres://localhost/api");
 			expect(Redacted.value(env.db.password)).toBe("hunter2");
-		}).pipe(Effect.provide(environmentLayer(ApiEnv, apiEnv)), Effect.provide(fakeEnv)),
+		}).pipe(Effect.provide(environmentLayer({ tag: ApiEnv, env: apiEnv })), Effect.provide(fakeEnv)),
 	);
 
 	it.effect("yields are typed end-to-end", () =>
@@ -44,7 +44,7 @@ describe("environmentLayer", () => {
 			// `port` is number (Literal<"PORT", number>) — not string.
 			const portPlus: number = env.port + 1;
 			expect(portPlus).toBe(8081);
-		}).pipe(Effect.provide(environmentLayer(ApiEnv, apiEnv)), Effect.provide(fakeEnv)),
+		}).pipe(Effect.provide(environmentLayer({ tag: ApiEnv, env: apiEnv })), Effect.provide(fakeEnv)),
 	);
 });
 

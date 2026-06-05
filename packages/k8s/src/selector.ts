@@ -1,3 +1,5 @@
+import { unsafeCoerce } from "@konfig.ts/core";
+
 /**
  * Selector — one source of truth for "this pod set."
  *
@@ -27,7 +29,10 @@ export interface Selector<L extends Readonly<Record<string, string>>> {
  */
 export const Selector = {
 	make: <const L extends Readonly<Record<string, string>>>(labels: L): Selector<L> =>
-		({ labels }) as unknown as Selector<L>,
+		unsafeCoerce<Selector<L>>(
+			{ labels },
+			"SelectorBrand is a unique-symbol phantom — no runtime value; runtime shape is { labels }",
+		),
 };
 
 export type SelectorLabels<S> = S extends Selector<infer L> ? L : never;

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Match } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import {
@@ -29,7 +29,7 @@ import {
 } from "../services/WorkspaceGraph";
 import type { Dockerfile, DockerfileBundle, Instruction, Stage } from "./DockerfileIR";
 
-/* ──────────────────────────── context ──────────────────────────── */
+// ──────────────────────────── context ────────────────────────────
 
 export interface LowerContext {
 	readonly root: RootDir;
@@ -40,7 +40,7 @@ export interface LowerContext {
 	readonly hasPatchesDir: boolean;
 }
 
-const lookupTarget = (
+const _lookupTarget = (
 	all: ReadonlyArray<Workspace>,
 	ref: string,
 	root: string,
@@ -62,7 +62,7 @@ export const prepareContext = (
 		const p = yield* Path;
 		const root = yield* findRoot(spec.target);
 		const all = yield* allWorkspaces(root);
-		const target = lookupTarget(all, spec.target, root);
+		const target = _lookupTarget(all, spec.target, root);
 		if (!target) return yield* Effect.fail(new WorkspaceNotFound({ target: spec.target }));
 		const detectedPm = yield* detectPm(root);
 		const closure = yield* closureOf({ all, target: target.name });
@@ -72,66 +72,61 @@ export const prepareContext = (
 		return { root, allWorkspaces: all, closure, target, detectedPm, hasPatchesDir };
 	});
 
-/* ──────────────────────────── resolution ──────────────────────────── */
+// ──────────────────────────── resolution ────────────────────────────
 
 type PmKind = "Bun" | "Npm" | "Pnpm" | "Yarn";
 type RuntimeKind = "Bun" | "Node";
 
-const specPmKind = (s: DockerSpec): PmKind | undefined => {
-	switch (s.packageManager?._tag) {
-		case "BunPm":
-			return "Bun";
-		case "NpmPm":
-			return "Npm";
-		case "PnpmPm":
-			return "Pnpm";
-		case "YarnPm":
-			return "Yarn";
-		default:
-			return undefined;
-	}
-};
+const _specPmKind = (s: DockerSpec): PmKind | undefined =>
+	Match.value(s.packageManager?._tag).pipe(
+		Match.when("BunPm", (): PmKind => "Bun"),
+		Match.when("NpmPm", (): PmKind => "Npm"),
+		Match.when("PnpmPm", (): PmKind => "Pnpm"),
+		Match.when("YarnPm", (): PmKind => "Yarn"),
+		Match.orElse((): PmKind | undefined => undefined),
+	);
 
-const specRuntimeKind = (s: DockerSpec): RuntimeKind | undefined => {
-	switch (s.runtime?._tag) {
-		case "BunRuntime":
-			return "Bun";
-		case "NodeRuntime":
-			return "Node";
-		default:
-			return undefined;
-	}
-};
+const _specRuntimeKind = (s: DockerSpec): RuntimeKind | undefined =>
+	Match.value(s.runtime?._tag).pipe(
+		Match.when("BunRuntime", (): RuntimeKind => "Bun"),
+		Match.when("NodeRuntime", (): RuntimeKind => "Node"),
+		Match.orElse((): RuntimeKind | undefined => undefined),
+	);
 
-const defaultRuntimeFor = (pm: PmKind): RuntimeKind => (pm === "Bun" ? "Bun" : "Node");
+const _defaultRuntimeFor = (pm: PmKind): RuntimeKind => (pm === "Bun" ? "Bun" : "Node");
 
 interface PmImplOpts {
 	readonly layout: NodeModulesLayout;
 	readonly yarnVariant: "classic" | "berry";
 }
 
-const pmImpl = (kind: PmKind, opts: PmImplOpts): PackageManager => {
+const _pmImpl = (kind: PmKind, opts: PmImplOpts): PackageManager => {
 	if (kind === "Bun") return bunPm;
 	if (kind === "Npm") return npmPm;
 	if (kind === "Yarn") return yarnPm({ variant: opts.yarnVariant });
 	return pnpmPm({ layout: opts.layout });
 };
 
-const runtimeImpl = (kind: RuntimeKind): Runtime => (kind === "Bun" ? bunRuntime : nodeRuntime);
+const _runtimeImpl = (kind: RuntimeKind): Runtime => (kind === "Bun" ? bunRuntime : nodeRuntime);
 
-const pmEngineKey = (kind: PmKind): string => kind.toLowerCase();
-const runtimeEngineKey = (kind: RuntimeKind): string => kind.toLowerCase();
+const _pmEngineKey = (kind: PmKind): string => kind.toLowerCase();
+const _runtimeEngineKey = (kind: RuntimeKind): string => kind.toLowerCase();
 
-const readEngineVersion = (ws: Workspace, key: string): string | undefined =>
+const _readEngineVersion = (ws: Workspace, key: string): string | undefined =>
 	ws.pkg.engines?.[key];
 
-/* ──────────────────────────── validation ──────────────────────────── */
+// ──────────────────────────── validation ────────────────────────────
+
+export interface ValidateSpecInput {
+	readonly spec: DockerSpec;
+	readonly ctx: LowerContext;
+}
 
 export const validateSpec = (
-	spec: DockerSpec,
-	ctx: LowerContext,
+	input: ValidateSpecInput,
 ): Effect.Effect<void, AnyDockerError, FileSystem | Path> =>
 	Effect.gen(function* () {
+		const { spec, ctx } = input;
 		const fs = yield* FileSystem;
 		const p = yield* Path;
 
@@ -165,18 +160,18 @@ export const validateSpec = (
 		}
 	});
 
-/* ──────────────────────────── stage building ──────────────────────────── */
+// ──────────────────────────── stage building ────────────────────────────
 
 const HARDENED_DEFAULT_USER = { uid: 1001, gid: 1001, name: "app" } as const;
 
-const envToInstruction = (env: Record<string, string> | undefined): Instruction | undefined => {
+const _envToInstruction = (env: Record<string, string> | undefined): Instruction | undefined => {
 	if (!env) return undefined;
 	const entries = Object.entries(env).sort(([a], [b]) => a.localeCompare(b));
 	if (entries.length === 0) return undefined;
 	return { _tag: "Env", entries };
 };
 
-const exposeToInstructions = (
+const _exposeToInstructions = (
 	expose: number | ReadonlyArray<number> | undefined,
 ): ReadonlyArray<Instruction> => {
 	if (expose === undefined) return [];
@@ -184,7 +179,7 @@ const exposeToInstructions = (
 	return ports.map((port): Instruction => ({ _tag: "Expose", port }));
 };
 
-const expandWorkspaceSourceAll = (
+const _expandWorkspaceSourceAll = (
 	copy: ReadonlyArray<CopyAtom>,
 	closure: ReadonlyArray<Workspace>,
 	target: Workspace,
@@ -203,7 +198,7 @@ const expandWorkspaceSourceAll = (
 	return out;
 };
 
-const copyAtomToInstruction = (
+const _copyAtomToInstruction = (
 	c: CopyAtom,
 	ctx: LowerContext,
 ): Instruction | undefined => {
@@ -240,7 +235,7 @@ const copyAtomToInstruction = (
 	return undefined;
 };
 
-const userInstructions = (user: UserAtom | undefined): {
+const _userInstructions = (user: UserAtom | undefined): {
 	readonly setupRun: Instruction | undefined;
 	readonly user: Instruction | undefined;
 	readonly chown: string | undefined;
@@ -269,40 +264,40 @@ interface PmContext {
 	readonly alpine: boolean;
 }
 
-const resolveDefaults = (
+const _resolveDefaults = (
 	spec: DockerSpec,
 	ctx: LowerContext,
 ): Effect.Effect<PmContext, AnyDockerError> =>
 	Effect.gen(function* () {
-		const pmKind: PmKind = specPmKind(spec) ?? ctx.detectedPm.kind;
-		const runtimeKind: RuntimeKind = specRuntimeKind(spec) ?? defaultRuntimeFor(pmKind);
+		const pmKind: PmKind = _specPmKind(spec) ?? ctx.detectedPm.kind;
+		const runtimeKind: RuntimeKind = _specRuntimeKind(spec) ?? _defaultRuntimeFor(pmKind);
 		const alpine =
 			spec.runtime?._tag === "BunRuntime" || spec.runtime?._tag === "NodeRuntime"
 				? spec.runtime.alpine ?? true
 				: true;
-		const pmVersion = readEngineVersion(ctx.target, pmEngineKey(pmKind));
+		const pmVersion = _readEngineVersion(ctx.target, _pmEngineKey(pmKind));
 		if (!pmVersion) {
 			return yield* Effect.fail(
 				new EngineVersionMissing({
 					target: ctx.target.name,
-					engineField: `engines.${pmEngineKey(pmKind)}`,
+					engineField: `engines.${_pmEngineKey(pmKind)}`,
 				}),
 			);
 		}
-		const runtimeVersion = readEngineVersion(ctx.target, runtimeEngineKey(runtimeKind));
+		const runtimeVersion = _readEngineVersion(ctx.target, _runtimeEngineKey(runtimeKind));
 		if (!runtimeVersion) {
 			return yield* Effect.fail(
 				new EngineVersionMissing({
 					target: ctx.target.name,
-					engineField: `engines.${runtimeEngineKey(runtimeKind)}`,
+					engineField: `engines.${_runtimeEngineKey(runtimeKind)}`,
 				}),
 			);
 		}
-		const pm = pmImpl(pmKind, {
+		const pm = _pmImpl(pmKind, {
 			layout: ctx.detectedPm.pnpmLayout ?? "isolated",
 			yarnVariant: ctx.detectedPm.yarnVariant ?? "classic",
 		});
-		const runtime = runtimeImpl(runtimeKind);
+		const runtime = _runtimeImpl(runtimeKind);
 		const runtimeImage = runtime.imageRef({ version: runtimeVersion, alpine });
 		const depsImage = pm.depsImage({ runtimeImage, pmVersion });
 		return {
@@ -318,9 +313,9 @@ const resolveDefaults = (
 		};
 	});
 
-/* ──────────────────────────── prod stages ──────────────────────────── */
+// ──────────────────────────── prod stages ────────────────────────────
 
-const baseStage = (img: ImageRef): Stage => ({
+const _baseStage = (img: ImageRef): Stage => ({
 	name: "base",
 	from: { _tag: "FromImage", image: img.image, tag: img.tag },
 	instructions: [],
@@ -328,7 +323,7 @@ const baseStage = (img: ImageRef): Stage => ({
 
 /**
  * `prod-deps` stage — only emitted when `spec.runner.production === true`.
- * Identical shape to {@link depsStage} but appends the package manager's
+ * Identical shape to {@link _depsStage} but appends the package manager's
  * `productionFlag` to the install command so `devDependencies` are
  * skipped. The runner then copies its `node_modules/` from this stage
  * instead of `builder`, dropping typescript / @types / lint / test
@@ -339,7 +334,7 @@ const _lockfilesToCopy = (ctx: LowerContext, pm: PmContext): ReadonlyArray<strin
 		? ctx.detectedPm.presentLockfiles
 		: pm.pmImpl.lockfileNames;
 
-const prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
+const _prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
 	const rootFiles: ReadonlyArray<string> = [
 		"package.json",
 		..._lockfilesToCopy(ctx, pm),
@@ -413,7 +408,7 @@ const prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stag
 	};
 };
 
-const depsStage = (ctx: LowerContext, pm: PmContext): Stage => {
+const _depsStage = (ctx: LowerContext, pm: PmContext): Stage => {
 	const rootFiles: ReadonlyArray<string> = [
 		"package.json",
 		..._lockfilesToCopy(ctx, pm),
@@ -444,7 +439,7 @@ const depsStage = (ctx: LowerContext, pm: PmContext): Stage => {
 	};
 };
 
-const builderStage = (
+const _builderStage = (
 	spec: DockerSpec,
 	ctx: LowerContext,
 	pm: PmContext,
@@ -496,35 +491,33 @@ const builderStage = (
 	};
 };
 
-const platformAtomToIR = (
+const _platformAtomToIR = (
 	p: DockerSpec["runner"]["platform"],
 ): Stage["platform"] => {
 	if (!p) return undefined;
-	switch (p._tag) {
-		case "PlatformLinuxAmd64":
-			return { _tag: "Single", value: "linux/amd64" };
-		case "PlatformLinuxArm64":
-			return { _tag: "Single", value: "linux/arm64" };
-		case "PlatformMulti":
-			return { _tag: "Multi", values: p.values };
-	}
+	return Match.value(p).pipe(
+		Match.tag("PlatformLinuxAmd64", (): Stage["platform"] => ({ _tag: "Single", value: "linux/amd64" })),
+		Match.tag("PlatformLinuxArm64", (): Stage["platform"] => ({ _tag: "Single", value: "linux/arm64" })),
+		Match.tag("PlatformMulti", (m): Stage["platform"] => ({ _tag: "Multi", values: m.values })),
+		Match.exhaustive,
+	);
 };
 
-const runnerStage = (
+const _runnerStage = (
 	spec: DockerSpec,
 	ctx: LowerContext,
 	_pm: PmContext,
 ): Stage => {
 	const runner: RunnerSpec = spec.runner;
-	const user = userInstructions(runner.user);
+	const user = _userInstructions(runner.user);
 	const instructions: Instruction[] = [];
 	if (user.setupRun) instructions.push(user.setupRun);
-	const env = { ...(runner.env ?? {}) };
+	const env = { ...runner.env };
 	if (env["NODE_ENV"] === undefined) env["NODE_ENV"] = "production";
-	const envInstr = envToInstruction(env);
+	const envInstr = _envToInstruction(env);
 	if (envInstr) instructions.push(envInstr);
-	instructions.push(...exposeToInstructions(runner.expose));
-	const expandedCopy = expandWorkspaceSourceAll(runner.copy, ctx.closure, ctx.target);
+	instructions.push(..._exposeToInstructions(runner.expose));
+	const expandedCopy = _expandWorkspaceSourceAll(runner.copy, ctx.closure, ctx.target);
 	// When the runner uses a custom base image (e.g. nginx:alpine for a
 	// static SPA), DON'T auto-copy `/app/node_modules` or workspace
 	// sources — the alternate base may not even have an `/app` dir and
@@ -547,7 +540,7 @@ const runnerStage = (
 		});
 	}
 	for (const c of expandedCopy) {
-		let instr = copyAtomToInstruction(c, ctx);
+		let instr = _copyAtomToInstruction(c, ctx);
 		if (!instr) continue;
 		if (instr._tag === "Copy" && !instr.chown && user.chown) {
 			instr = { ...instr, chown: user.chown };
@@ -556,7 +549,7 @@ const runnerStage = (
 	}
 	// runner.removePaths is applied IN the source stage (prod-deps or
 	// builder) so the deletion shrinks layer size — NOT here in the
-	// runner stage. See prodDepsStage / builderStage.
+	// runner stage. See _prodDepsStage / _builderStage.
 	if (runner.healthcheck) {
 		if (runner.healthcheck._tag === "HealthcheckHttpGet") {
 			const hc = runner.healthcheck;
@@ -599,17 +592,17 @@ const runnerStage = (
 	return {
 		name: "runner",
 		from: fromIR,
-		...(platformAtomToIR(runner.platform) ? { platform: platformAtomToIR(runner.platform) } : {}),
+		...(_platformAtomToIR(runner.platform) ? { platform: _platformAtomToIR(runner.platform) } : {}),
 		workdir: runner.workdir,
 		instructions,
 	};
 };
 
-/* ──────────────────────────── dev stage ──────────────────────────── */
+// ──────────────────────────── dev stage ────────────────────────────
 
-const devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
+const _devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
 	const dev = spec.dev;
-	if (!dev) throw new Error("devStage called without spec.dev");
+	if (!dev) throw new Error("_devStage called without spec.dev");
 	const rootFiles: ReadonlyArray<string> = [
 		"package.json",
 		..._lockfilesToCopy(ctx, pm),
@@ -638,11 +631,11 @@ const devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => 
 		instructions.push({ _tag: "Copy", src: [ws.relDir], dst: `./${ws.relDir}` });
 	}
 	instructions.push({ _tag: "Workdir", path: dev.workdir ?? `/app/${ctx.target.relDir}` });
-	const env = { ...(dev.env ?? {}) };
+	const env = { ...dev.env };
 	if (env["NODE_ENV"] === undefined) env["NODE_ENV"] = "development";
-	const envInstr = envToInstruction(env);
+	const envInstr = _envToInstruction(env);
 	if (envInstr) instructions.push(envInstr);
-	instructions.push(...exposeToInstructions(dev.expose));
+	instructions.push(..._exposeToInstructions(dev.expose));
 	instructions.push({ _tag: "Cmd", argv: dev.cmd });
 	return {
 		name: "dev",
@@ -652,7 +645,7 @@ const devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => 
 	};
 };
 
-/* ──────────────────────────── buildIR (pure) ──────────────────────────── */
+// ──────────────────────────── buildIR (pure) ────────────────────────────
 
 export interface BuildIRInput {
 	readonly spec: DockerSpec;
@@ -662,30 +655,30 @@ export interface BuildIRInput {
 
 export const buildIR = (input: BuildIRInput): DockerfileBundle => {
 	const { spec, ctx, pm } = input;
-	const base = baseStage(pm.runtimeImage);
+	const base = _baseStage(pm.runtimeImage);
 	const prodStages: Stage[] = [
 		base,
-		depsStage(ctx, pm),
-		builderStage(spec, ctx, pm),
+		_depsStage(ctx, pm),
+		_builderStage(spec, ctx, pm),
 	];
 	if (spec.runner.production) {
-		prodStages.push(prodDepsStage(spec, ctx, pm));
+		prodStages.push(_prodDepsStage(spec, ctx, pm));
 	}
-	prodStages.push(runnerStage(spec, ctx, pm));
+	prodStages.push(_runnerStage(spec, ctx, pm));
 	const prod: Dockerfile = { args: [], stages: prodStages };
 	if (!spec.dev) return { prod };
-	const dev: Dockerfile = { args: [], stages: [base, devStage(spec, ctx, pm)] };
+	const dev: Dockerfile = { args: [], stages: [base, _devStage(spec, ctx, pm)] };
 	return { prod, dev };
 };
 
-/* ──────────────────────────── public lower ──────────────────────────── */
+// ──────────────────────────── public lower ────────────────────────────
 
 export const lower = (
 	spec: DockerSpec,
 ): Effect.Effect<DockerfileBundle, AnyDockerError, FileSystem | Path> =>
 	Effect.gen(function* () {
 		const ctx = yield* prepareContext(spec);
-		yield* validateSpec(spec, ctx);
-		const pm = yield* resolveDefaults(spec, ctx);
+		yield* validateSpec({ spec, ctx });
+		const pm = yield* _resolveDefaults(spec, ctx);
 		return buildIR({ spec, ctx, pm });
 	});

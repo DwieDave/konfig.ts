@@ -1,5 +1,5 @@
 import { Dep } from "@konfig.ts/core";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { define } from "./Application";
 

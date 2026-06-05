@@ -78,7 +78,7 @@ const _collectFiles = (
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const path = yield* Path;
-		const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => [] as string[]));
+		const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed((): string[] => []));
 		for (const e of entries) {
 			const full = path.join(dir, e);
 			const stat = yield* fs.stat(full).pipe(Effect.orElseSucceed(() => null));

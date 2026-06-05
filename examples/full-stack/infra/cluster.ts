@@ -23,7 +23,7 @@ export interface ClusterOverlay {
 	readonly domain: string;
 }
 
-export const clusters: Readonly<Record<string, ClusterOverlay>> = {
+export const clusters = {
 	"eu-west-1": {
 		registry: "ghcr.io/example",
 		ingressClass: "nginx",
@@ -36,4 +36,6 @@ export const clusters: Readonly<Record<string, ClusterOverlay>> = {
 		storageClass: "gp3-iops",
 		domain: "us.example.dev",
 	},
-};
+} as const satisfies Readonly<Record<string, ClusterOverlay>>;
+
+export type ClusterName = keyof typeof clusters;

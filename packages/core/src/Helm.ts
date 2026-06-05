@@ -49,50 +49,63 @@ interface _ParseHelmOutputInput {
 	readonly version: string;
 	readonly namespace: string | undefined;
 }
-const _parseHelmOutput = (input: _ParseHelmOutputInput): RawYaml[] => {
-	const { output, chart, version, namespace } = input;
-	const docs = output.split(/^---$/m);
-	const results: RawYaml[] = [];
-	for (const doc of docs) {
-		const trimmed = doc.trim();
-		if (trimmed.length === 0) continue;
-		if (trimmed.startsWith("#") && !trimmed.includes("\n")) continue;
+interface _ParsedDocShape {
+	readonly kind?: string;
+	readonly metadata?: { readonly namespace?: string };
+}
 
-		let content = `---\n${trimmed}\n`;
-		if (namespace !== undefined) {
-			try {
-				const parsed = unsafeCoerce<{
-					kind?: string;
-					metadata?: { namespace?: string };
-				} | null>(
-					YAML.parse(trimmed),
-					"parsed YAML shape probed via runtime typeof checks below",
-				);
-				if (
-					parsed !== null &&
-					typeof parsed === "object" &&
-					typeof parsed.kind === "string" &&
-					!CLUSTER_SCOPED_KINDS.has(parsed.kind) &&
-					(parsed.metadata?.namespace === undefined || parsed.metadata.namespace === "")
-				) {
-					const withNs = {
-						...parsed,
-						metadata: { ...parsed.metadata, namespace },
-					};
-					content = `---\n${YAML.stringify(withNs, { lineWidth: 0 })}`;
-					if (!content.endsWith("\n")) content += "\n";
-				}
-			} catch {}
-		}
-
-		results.push({
-			_tag: "RawYaml",
-			content,
-			origin: `helm:${chart}@${version}`,
-		});
+const _tryParseYaml = (trimmed: string): { ok: true; value: _ParsedDocShape | null } | { ok: false; cause: unknown } => {
+	try {
+		return { ok: true, value: unsafeCoerce<_ParsedDocShape | null>(YAML.parse(trimmed), "YAML.parse return is structurally probed by guarded property reads on the result") };
+	} catch (cause) {
+		return { ok: false, cause };
 	}
-	return results;
 };
+
+const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<RawYaml[]> =>
+	Effect.gen(function* () {
+		const { output, chart, version, namespace } = input;
+		const docs = output.split(/^---$/m);
+		const results: RawYaml[] = [];
+		for (const doc of docs) {
+			const trimmed = doc.trim();
+			if (trimmed.length === 0) continue;
+			if (trimmed.startsWith("#") && !trimmed.includes("\n")) continue;
+
+			let content = `---\n${trimmed}\n`;
+			if (namespace !== undefined) {
+				const parseResult = _tryParseYaml(trimmed);
+				if (!parseResult.ok) {
+					yield* Effect.logWarning(
+						`helm:${chart}@${version}: skipping namespace patch — document ${results.length + 1} did not parse as YAML (${String(parseResult.cause)}); shipping verbatim`,
+					);
+				} else {
+					const parsed = parseResult.value;
+					if (
+						parsed !== null &&
+						typeof parsed === "object" &&
+						typeof parsed.kind === "string" &&
+						!CLUSTER_SCOPED_KINDS.has(parsed.kind) &&
+						(parsed.metadata?.namespace === undefined || parsed.metadata.namespace === "")
+					) {
+						const withNs = {
+							...parsed,
+							metadata: { ...parsed.metadata, namespace },
+						};
+						content = `---\n${YAML.stringify(withNs, { lineWidth: 0 })}`;
+						if (!content.endsWith("\n")) content += "\n";
+					}
+				}
+			}
+
+			results.push({
+				_tag: "RawYaml",
+				content,
+				origin: `helm:${chart}@${version}`,
+			});
+		}
+		return results;
+	});
 
 const _normalizeDigest = (digest: string): string =>
 	digest.startsWith("sha256:") ? digest : `sha256:${digest}`;
@@ -127,10 +140,10 @@ const _hashFile = (filePath: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const bytes = yield* fs.readFile(filePath);
-		const subtle = unsafeCoerce<_CryptoGlobal>(
-			(globalThis as unknown as { readonly crypto: unknown }).crypto,
+		const subtle = unsafeCoerce<{ readonly crypto: _CryptoGlobal }>(
+			globalThis,
 			"globalThis.crypto is provided by the runtime (Node ≥ 20, Bun) — typed via local _CryptoGlobal interface",
-		).subtle;
+		).crypto.subtle;
 		const digest = yield* Effect.promise(() => subtle.digest("SHA-256", bytes));
 		return `sha256:${_toHex(digest)}`;
 	});
@@ -239,7 +252,7 @@ export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {
 				...extraOpts,
 			]);
 			const stdout = yield* spawner.string(template);
-			return _parseHelmOutput({
+			return yield* _parseHelmOutput({
 				output: stdout,
 				chart: opts.chart,
 				version: opts.version,

@@ -23,18 +23,20 @@ export interface RenderContextFlagValues {
 	readonly flag: Option.Option<Record<string, string>>;
 }
 
-export const renderContextFromFlags = (
-	env: string,
-	flags: RenderContextFlagValues,
-): RenderContext => {
-	const flagMap = Option.match(flags.flag, {
+export interface RenderContextFromFlagsInput {
+	readonly env: string;
+	readonly flags: RenderContextFlagValues;
+}
+
+export const renderContextFromFlags = (input: RenderContextFromFlagsInput): RenderContext => {
+	const flagMap = Option.match(input.flags.flag, {
 		onSome: (record) => new Map<string, unknown>(Object.entries(record)),
 		onNone: () => undefined,
 	});
 	return RenderContext.makeFull({
-		env,
-		cluster: Option.getOrUndefined(flags.cluster),
-		k8sVersion: Option.getOrUndefined(flags.k8sVersion),
+		env: input.env,
+		cluster: Option.getOrUndefined(input.flags.cluster),
+		k8sVersion: Option.getOrUndefined(input.flags.k8sVersion),
 		flags: flagMap,
 	});
 };

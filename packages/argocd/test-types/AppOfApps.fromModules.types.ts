@@ -11,7 +11,8 @@ type Expect<T extends true> = T;
 type Equal<X, Y> =
 	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 
-type AppOfAppsResult = AppOfAppsNS.AppOfAppsResult;
+type _AppOfAppsResult = AppOfAppsNS.AppOfAppsResult;
+void (null as unknown as _AppOfAppsResult);
 type Handle<Name extends string, Out, In> = ApplicationNS.ApplicationHandle<Name, Out, In>;
 
 // Fixtures: a provider that emits Provide<"Secret", "ghcr-pull"> and a

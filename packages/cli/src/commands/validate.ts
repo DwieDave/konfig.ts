@@ -26,7 +26,7 @@ export const validateCommand = Command.make(
 	(args) =>
 		Effect.gen(function* () {
 			const cfg = yield* resolveConfig();
-			const ctx = renderContextFromFlags(args.env, args);
+			const ctx = renderContextFromFlags({ env: args.env, flags: args });
 			const rendered = yield* renderEnv({ cfg, envName: args.env, ctx });
 
 			const allIssues = yield* Effect.all(

@@ -1,45 +1,51 @@
 import type { AstNode, Rule } from "../types.ts";
 
 /**
- * Why a comment budget? Most comments rot — the code moves and the
- * comment stays. `app/no-comments` caps non-directive comments to N
- * per file at K chars each, forcing the alternatives: a clearer name,
- * a tighter function, or a docblock on the exported symbol.
+ * Why a comment policy? Most comments rot — the code moves and the
+ * comment stays. `app/no-comments` enforces two cheap guardrails: no
+ * non-JSDoc block comments (`/* ... *\/`), and a per-comment length
+ * cap. The combination encourages either a clearer name, a tighter
+ * function, a JSDoc block on the exported symbol, or — for intentional
+ * rationale — a `// konfig: WHY ...` tag that future readers must NOT
+ * remove without understanding the "why".
  *
  * Exemptions:
  *  - Directives (`eslint`, `oxlint`, `biome`, `prettier`, `@ts-...`)
  *    are always passed through.
- *  - WHY comments tagged `// konfig: WHY <reason>` are passed through
- *    without counting against the budget — the prefix marks them as
- *    intentional rationale that future readers must NOT remove
- *    without understanding the "why".
+ *  - JSDoc block comments (`/** ... *\/`) on declarations are
+ *    documentation, not commentary — they pass through. A JSDoc block
+ *    parses with its raw value starting with `*` (from the second `*`
+ *    in `/**`), which is how we recognise them without a parent-node
+ *    lookup.
+ *  - WHY comments tagged `// konfig: WHY <reason>` are unrestricted.
  */
 const DIRECTIVE_PREFIX = /^\s*(eslint|oxlint|biome|prettier|@ts-)/;
 const WHY_PREFIX = /^\s*konfig:\s*WHY\b/;
-const MAX_COMMENTS_PER_FILE = 3;
 const MAX_COMMENT_LENGTH = 150;
+
+const _isJsDoc = (value: string): boolean => value.startsWith("*");
 
 export const noComments: Rule = {
 	meta: {
 		type: "suggestion",
 		docs: {
 			description:
-				"Comments are budget-limited: single-line only, < 150 chars, max 3 non-directive comments per file. `// konfig: WHY ...` is exempt.",
+				"No non-JSDoc block comments; single-line comments must be < 150 chars. JSDoc `/** ... */` blocks and `// konfig: WHY ...` are exempt.",
 		},
 	},
 	create(context) {
 		return {
 			Program(node: AstNode) {
-				let kept = 0;
 				for (const comment of context.sourceCode.getAllComments()) {
 					if (DIRECTIVE_PREFIX.test(comment.value)) continue;
 					if (WHY_PREFIX.test(comment.value)) continue;
 					if (comment.type === "Block") {
+						if (_isJsDoc(comment.value)) continue;
 						context.report({
 							loc: comment.loc,
 							node,
 							message:
-								"Block comments are not allowed — use a `//` line comment instead, or `// konfig: WHY ...` for intentional rationale.",
+								"Non-JSDoc block comments are not allowed — use a `//` line comment, a `/** ... */` JSDoc block on a declaration, or `// konfig: WHY ...` for intentional rationale.",
 						});
 						continue;
 					}
@@ -48,15 +54,6 @@ export const noComments: Rule = {
 							loc: comment.loc,
 							node,
 							message: `Comment exceeds ${MAX_COMMENT_LENGTH} chars (${comment.value.length}). Split, shorten, or convert to a \`// konfig: WHY ...\` rationale comment.`,
-						});
-						continue;
-					}
-					kept++;
-					if (kept > MAX_COMMENTS_PER_FILE) {
-						context.report({
-							loc: comment.loc,
-							node,
-							message: `Over the per-file comment budget (${MAX_COMMENTS_PER_FILE}). Remove, consolidate, or convert to a \`// konfig: WHY ...\` rationale comment.`,
 						});
 					}
 				}

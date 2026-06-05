@@ -1,3 +1,4 @@
+import { unsafeCoerce } from "@konfig.ts/core";
 import { type Config, Effect } from "effect";
 import type { EnvMember, Environment } from "./environment";
 import type { EnvironmentShape } from "./layer";
@@ -21,5 +22,8 @@ export const runtime = <M extends Readonly<Record<string, EnvMember>>>(
 ): Effect.Effect<EnvironmentShape<M>, Config.ConfigError> =>
 	Effect.gen(function* () {
 		const decoded = yield* env;
-		return decoded as EnvironmentShape<M>;
+		return unsafeCoerce<EnvironmentShape<M>>(
+			decoded,
+			"Environment<M> extends Config<{ [K in keyof M]: MemberValue<M[K]> }>, structurally equal to EnvironmentShape<M> by definition",
+		);
 	});

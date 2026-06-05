@@ -1,4 +1,4 @@
-import { Dep, type Manifest, RenderError, type SecretRef } from "@konfig.ts/core";
+import { Dep, type Manifest, RenderError, type SecretRef, unsafeCoerce } from "@konfig.ts/core";
 import type { SecretEntry, SecretSource } from "@konfig.ts/env";
 import { type Context, type Layer, Layer as L, Effect } from "effect";
 import type { SecretBackend } from "./backend";
@@ -59,7 +59,10 @@ export const bindSecret = <
 	input: BindSecretInput<N, K, E, Ns>,
 ): DeclaredSecret<N, K, Ns> => {
 	const { secret } = input;
-	const namespace = (input.namespace ?? secret.namespace) as Ns;
+	const namespace = unsafeCoerce<Ns>(
+		input.namespace ?? secret.namespace,
+		"Ns defaults to `string`; the override (if present) is `Ns`, the secret's own namespace is `string` — runtime value either way is a string",
+	);
 	const ref = SecretRefValue.of<N, K, Ns>(secret.name);
 	const envVars: EnvVar[] = secret.keys.map((key: K) =>
 		EnvVar.fromSecret({ name: secret.env[key], ref, key }),

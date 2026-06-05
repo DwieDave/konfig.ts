@@ -35,7 +35,10 @@ export const make = <A>(run: MakeRun<A>): Manifest<A> => ({
 	render: (ctx) => {
 		const result = run(ctx);
 		return Effect.isEffect(result)
-			? (result as Effect.Effect<A, AnyRenderError, RenderServices>)
+			? unsafeCoerce<Effect.Effect<A, AnyRenderError, RenderServices>>(
+					result,
+					"Effect.isEffect narrowed `result` to an Effect; TS's narrowing doesn't carry the Effect's full type parameters",
+				)
 			: Effect.succeed(result);
 	},
 });

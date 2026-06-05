@@ -17,6 +17,7 @@
 	"include": [
 		"infra/**/*.ts",
 		"apps/**/docker.ts",
+		"apps/**/src/**/*.ts",
 		"shared/**/*.ts"
 	]
 }

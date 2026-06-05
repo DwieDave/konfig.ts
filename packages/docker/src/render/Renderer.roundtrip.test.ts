@@ -9,7 +9,7 @@ import type {
 } from "../ir/DockerfileIR";
 import { render } from "./Renderer";
 
-/* ───────────────────────── tiny canonical-output parser ──────────────────── */
+// ───────────────────────── tiny canonical-output parser ────────────────────
 
 const splitFromLine = (line: string): { platform?: PlatformValue; rest: string } => {
 	const m = line.match(/^FROM (--platform=(\S+) )?(.+)$/);
@@ -143,7 +143,7 @@ const parseDockerfile = (text: string): Dockerfile => {
 	return { args, stages };
 };
 
-/* ────────────────────────── fast-check arbitraries ──────────────────────── */
+// ────────────────────────── fast-check arbitraries ────────────────────────
 
 const idChar = fc.constantFrom(
 	"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "0", "1", "2", "3",
@@ -245,7 +245,7 @@ const dockerfileArb: fc.Arbitrary<Dockerfile> = fc
 		return { args: [], stages: unique };
 	});
 
-/* ─────────────────────────────── tests ──────────────────────────────────── */
+// ─────────────────────────────── tests ────────────────────────────────────
 
 describe("Renderer round-trip", () => {
 	it("render→parse→render is fixed-point", () => {

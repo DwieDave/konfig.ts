@@ -139,7 +139,10 @@ export const parseYamlAll = (text: string): ReadonlyArray<unknown> => {
  */
 const _docKey = (value: unknown, fallbackIdx: number): string => {
 	if (value === null || typeof value !== "object") return `:doc:${fallbackIdx}`;
-	const v = value as { kind?: unknown; metadata?: { name?: unknown; namespace?: unknown } };
+	const v = unsafeCoerce<{ readonly kind?: unknown; readonly metadata?: { readonly name?: unknown; readonly namespace?: unknown } }>(
+		value,
+		"typeof === object && !== null branch above narrowed value; every field access below is guarded by a typeof check",
+	);
 	const kind = typeof v.kind === "string" ? v.kind : "";
 	const name = typeof v.metadata?.name === "string" ? v.metadata.name : "";
 	const ns = typeof v.metadata?.namespace === "string" ? v.metadata.namespace : "";

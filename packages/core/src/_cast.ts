@@ -21,7 +21,7 @@ export const brand = <T>(value: string): T => value as unknown as T;
  * The `reason` parameter is intentionally not used at runtime; it
  * documents intent for readers and audits.
  */
-// oxlint-disable-next-line app/no-type-assertion
+// oxlint-disable-next-line app/no-type-assertion app/no-multiple-function-params
 export const unsafeCoerce = <T>(value: unknown, _reason: string): T => value as T;
 
 /**
