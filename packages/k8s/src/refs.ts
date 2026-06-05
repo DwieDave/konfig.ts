@@ -6,7 +6,11 @@ import {
 	type SecretRef as SRef,
 } from "@konfig.ts/core";
 
-export type SecretRef<N extends string = string, K extends string = string> = SRef<N, K>;
+export type SecretRef<
+	N extends string = string,
+	K extends string = string,
+	Ns extends string = string,
+> = SRef<N, K, Ns>;
 export type ConfigMapRef<N extends string = string, K extends string = string> = CMRef<N, K>;
 export type ServiceAccountRef<N extends string = string> = SARef<N>;
 export type PvcRef<N extends string = string> = PRef<N>;
@@ -17,10 +21,24 @@ export type {
 	SecretRefKeys,
 	SecretRefName,
 } from "@konfig.ts/core";
+export type { SecretRefNamespace } from "@konfig.ts/core";
 
 export const SecretRef = {
-	of: <N extends string, K extends string = string>(name: N): SecretRef<N, K> =>
-		brand<SecretRef<N, K>>(name),
+	of: <N extends string, K extends string = string, Ns extends string = string>(
+		name: N,
+	): SecretRef<N, K, Ns> => brand<SecretRef<N, K, Ns>>(name),
+	/**
+	 * Escape hatch — widen a typed ref's namespace slot to `any`, making
+	 * it usable across any pod context. Use sparingly (legitimate
+	 * cross-namespace cases: ExternalSecret reflection, in-cluster
+	 * shared infra). The cast is grep-able so PR reviewers see opt-ins.
+	 */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	unsafeReNamespace: <N extends string, K extends string>(
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		ref: SecretRef<N, K, any>,
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	): SecretRef<N, K, any> => ref,
 };
 
 export const ConfigMapRef = {

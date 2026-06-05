@@ -61,6 +61,46 @@ export const secretEnv = <
 	},
 });
 
+export interface SecretEnvForPodInput<
+	EnvName extends string,
+	N extends string,
+	K extends string,
+	Ns extends string,
+> {
+	readonly name: EnvName;
+	/**
+	 * Ref whose namespace slot must match `podNamespace`. Pass refs that
+	 * came from `Secret.make({ namespace })` in the same namespace as
+	 * the consuming pod. For legitimate cross-namespace cases, widen
+	 * via `SecretRef.unsafeReNamespace(ref)` first.
+	 */
+	readonly ref: SecretRef<N, K, NoInfer<Ns>>;
+	readonly key: NoInfer<K>;
+	readonly podNamespace: Ns;
+	readonly optional?: boolean;
+}
+
+/**
+ * Namespace-checked variant of `secretEnv`. The ref's namespace slot
+ * (`Ns`) must match `podNamespace`. Catches the "pod in namespace A
+ * references a Secret in namespace B" CrashLoopBackOff at compile time
+ * — kube-apiserver only resolves `valueFrom.secretKeyRef` against the
+ * pod's own namespace, so cross-namespace refs are runtime errors.
+ */
+export const secretEnvForPod = <
+	const EnvName extends string,
+	N extends string,
+	K extends string,
+	const Ns extends string,
+>(
+	input: SecretEnvForPodInput<EnvName, N, K, Ns>,
+): EnvVar<EnvName> => ({
+	name: input.name,
+	valueFrom: {
+		secretKeyRef: { name: input.ref, key: input.key, optional: input.optional },
+	},
+});
+
 export interface ConfigMapEnvInput<EnvName extends string, N extends string, K extends string> {
 	readonly name: EnvName;
 	readonly ref: ConfigMapRef<N, K>;

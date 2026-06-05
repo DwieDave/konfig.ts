@@ -109,24 +109,35 @@ export const ConfigMap = {
 	},
 };
 
-export interface SecretInput<N extends string, K extends string = string> extends CommonMeta {
+export interface SecretInput<
+	N extends string,
+	Ns extends string = string,
+	K extends string = string,
+> extends CommonMeta {
 	readonly name: N;
-	readonly namespace: string;
+	readonly namespace: Ns;
 	readonly type?: string;
 	readonly data?: Readonly<Record<K, string>>;
 	readonly stringData?: Readonly<Record<K, string>>;
 	readonly immutable?: boolean;
 }
 
-export interface SecretManifest<N extends string, K extends string = string>
-	extends Manifest.Manifest<K8sSecret> {
-	readonly ref: SecretRef<N, K>;
+export interface SecretManifest<
+	N extends string,
+	Ns extends string = string,
+	K extends string = string,
+> extends Manifest.Manifest<K8sSecret> {
+	readonly ref: SecretRef<N, K, Ns>;
 }
 
 export const Secret = {
-	make: <const N extends string, const K extends string = string>(
-		input: SecretInput<N, K>,
-	): SecretManifest<N, K> => {
+	make: <
+		const N extends string,
+		const Ns extends string = string,
+		const K extends string = string,
+	>(
+		input: SecretInput<N, Ns, K>,
+	): SecretManifest<N, Ns, K> => {
 		const resource: K8sSecret = {
 			apiVersion: "v1",
 			kind: "Secret",
@@ -142,6 +153,6 @@ export const Secret = {
 			immutable: input.immutable,
 		};
 		const m = Manifest.make<K8sSecret>(() => Effect.succeed(resource));
-		return Object.assign(m, { ref: SecretRefValue.of<N, K>(input.name) });
+		return Object.assign(m, { ref: SecretRefValue.of<N, K, Ns>(input.name) });
 	},
 };

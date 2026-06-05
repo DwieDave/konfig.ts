@@ -16,14 +16,24 @@ declare const BuiltImageRefBrand: unique symbol;
 
 /**
  * Nominal reference to a named Secret. `N` brands the secret's metadata
- * name; `K` (defaults to `string`, the unconstrained shape) brands the
- * union of declared data keys, so consumers like `secretEnv({ ref, key })`
- * can constrain `key` to keys that actually exist. Producers (e.g.
- * `Secret.make`, `Environment.bind` via `secretBind`) populate `K` from
- * the source-of-truth (`stringData` keys, `defineSecret({ env })` keys).
+ * name; `K` (defaults to `string`) brands the union of declared data
+ * keys, so consumers like `secretEnv({ ref, key })` can constrain `key`
+ * to keys that actually exist; `Ns` (defaults to `string`) brands the
+ * secret's owning namespace, so pod-context consumers (like
+ * `secretEnvForPod`) can reject refs from a different namespace at
+ * compile time — eliminating the runtime "secret not found across
+ * namespaces" failure mode.
  */
-export type SecretRef<N extends string, K extends string = string> = string & {
-	readonly [SecretRefBrand]: { readonly name: N; readonly keys: K };
+export type SecretRef<
+	N extends string,
+	K extends string = string,
+	Ns extends string = string,
+> = string & {
+	readonly [SecretRefBrand]: {
+		readonly name: N;
+		readonly keys: K;
+		readonly namespace: Ns;
+	};
 };
 /**
  * Nominal reference to a named ConfigMap. `N` brands the metadata name;
@@ -59,16 +69,23 @@ export type BuiltImageRef<App extends string> = string & {
 
 export type BuiltImageRefApp<R> = R extends BuiltImageRef<infer App> ? App : never;
 
-export type SecretRefName<R> = R extends SecretRef<infer N, infer _K> ? N : never;
-export type SecretRefKeys<R> = R extends SecretRef<infer _N, infer K> ? K : never;
+export type SecretRefName<R> = R extends SecretRef<infer N, infer _K, infer _Ns> ? N : never;
+export type SecretRefKeys<R> = R extends SecretRef<infer _N, infer K, infer _Ns> ? K : never;
+export type SecretRefNamespace<R> = R extends SecretRef<infer _N, infer _K, infer Ns>
+	? Ns
+	: never;
 export type ConfigMapRefName<R> = R extends ConfigMapRef<infer N, infer _K> ? N : never;
 export type ConfigMapRefKeys<R> = R extends ConfigMapRef<infer _N, infer K> ? K : never;
 export type PvcRefName<R> = R extends PvcRef<infer N> ? N : never;
 
-export const Secret = <N extends string, K extends string = string>(
+export const Secret = <
+	N extends string,
+	K extends string = string,
+	Ns extends string = string,
+>(
 	name: N,
-): Context.Service<Need<"Secret", N>, SecretRef<N, K>> =>
-	Context.Service<Need<"Secret", N>, SecretRef<N, K>>(`Secret:${name}`);
+): Context.Service<Need<"Secret", N>, SecretRef<N, K, Ns>> =>
+	Context.Service<Need<"Secret", N>, SecretRef<N, K, Ns>>(`Secret:${name}`);
 
 export type SecretValuesRecord<K extends string> = {
 	readonly [P in K]: Redacted.Redacted<string>;
@@ -144,10 +161,14 @@ export const provideImage = <const App extends string>(
 	input: _ImageRefInput<App>,
 ): Layer.Layer<Provide<"Image", App>> => Layer.succeed(Image(input.app))(_fullRef(input));
 
-export const provideSecret = <const N extends string, const K extends string = string>(
+export const provideSecret = <
+	const N extends string,
+	const K extends string = string,
+	const Ns extends string = string,
+>(
 	name: N,
 ): Layer.Layer<Provide<"Secret", N>> =>
-	Layer.succeed(Secret<N, K>(name))(brand<SecretRef<N, K>>(name));
+	Layer.succeed(Secret<N, K, Ns>(name))(brand<SecretRef<N, K, Ns>>(name));
 
 export const provideConfigMap = <const N extends string, const K extends string = string>(
 	name: N,

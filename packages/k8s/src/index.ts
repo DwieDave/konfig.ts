@@ -34,6 +34,8 @@ export {
 	type EnvVarSource,
 	rawEnv,
 	secretEnv,
+	secretEnvForPod,
+	type SecretEnvForPodInput,
 	valueEnv,
 } from "./env";
 export {

@@ -25,6 +25,53 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
 		expect(env.valueFrom?.secretKeyRef?.key).toBe("password");
 	});
 
+	it("secretEnvForPod accepts refs from the matching pod namespace", async () => {
+		const { secretEnvForPod } = await import("./env");
+		const { Secret } = await import("./identity");
+		const dbCreds = Secret.make({
+			name: "db-creds",
+			namespace: "app",
+			stringData: { url: "u" },
+		});
+		const env = secretEnvForPod({
+			name: "DATABASE_URL",
+			ref: dbCreds.ref,
+			key: "url",
+			podNamespace: "app",
+		});
+		expect(env.valueFrom?.secretKeyRef).toEqual({
+			name: "db-creds",
+			key: "url",
+		});
+	});
+
+	it("secretEnvForPod rejects refs from a different namespace at compile time", async () => {
+		const { secretEnvForPod } = await import("./env");
+		const { Secret } = await import("./identity");
+		const monCreds = Secret.make({
+			name: "grafana",
+			namespace: "monitoring",
+			stringData: { token: "t" },
+		});
+		// @ts-expect-error — SecretRef<*, *, "monitoring"> not assignable to SecretRef<*, *, "app">.
+		secretEnvForPod({
+			name: "GRAFANA",
+			ref: monCreds.ref,
+			key: "token",
+			podNamespace: "app",
+		});
+
+		// Escape hatch wires it through, runtime is unchanged.
+		const escaped = SecretRef.unsafeReNamespace(monCreds.ref);
+		const env = secretEnvForPod({
+			name: "GRAFANA",
+			ref: escaped,
+			key: "token",
+			podNamespace: "app",
+		});
+		expect(env.valueFrom?.secretKeyRef?.name).toBe("grafana");
+	});
+
 	it("env-var (configMapKeyRef) rejects raw string", async () => {
 		const { configMapEnv } = await import("./env");
 		// @ts-expect-error — raw string for `ref` is not assignable to ConfigMapRef.
