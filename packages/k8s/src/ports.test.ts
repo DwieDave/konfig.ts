@@ -2,7 +2,7 @@ import { render, RenderContext } from "@konfig.ts/core";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { defineContainer } from "./container";
-import { definedService } from "./network";
+import { Service } from "./network";
 import { Port } from "./ports";
 
 const ctx = RenderContext.make("test");
@@ -56,7 +56,7 @@ describe("defineContainer", () => {
 	});
 });
 
-describe("definedService", () => {
+describe("Service.fromContainer", () => {
 	const api = defineContainer({
 		name: "api",
 		image: "x",
@@ -67,7 +67,7 @@ describe("definedService", () => {
 	});
 
 	it("emits a K8s Service from a typed container + port spec", async () => {
-		const svc = definedService({
+		const svc = Service.fromContainer({
 			name: "api",
 			namespace: "default",
 			selector: { app: "api" },
@@ -85,7 +85,7 @@ describe("definedService", () => {
 	});
 
 	it("numeric targetPort still works", () => {
-		const svc = definedService({
+		const svc = Service.fromContainer({
 			name: "api",
 			namespace: "default",
 			selector: { app: "api" },

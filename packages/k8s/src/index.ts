@@ -79,13 +79,13 @@ export {
 export { NativeSecret, type NativeSecretOptions } from "./nativeSecret";
 export { hashSecretValues, type HashSecretValuesInput } from "./podHash";
 export {
-	type DefinedServiceInput,
-	definedService,
 	Ingress,
 	type IngressInput,
 	type IngressTLSInput,
 	ingressTLS,
 	Service,
+	type ServiceFromContainerInput,
+	type ServiceFromPodSetInput,
 	type ServiceInput,
 } from "./network";
 export {
@@ -94,7 +94,11 @@ export {
 	type ClusterRoleBindingInput,
 	type ClusterRoleInput,
 	NetworkPolicy,
+	type NetworkPolicyEgressRule,
+	type NetworkPolicyFromPodSetInput,
+	type NetworkPolicyIngressRule,
 	type NetworkPolicyInput,
+	type NetworkPolicyPeer,
 	PersistentVolume,
 	PersistentVolumeClaim,
 	type PersistentVolumeClaimInput,
@@ -120,6 +124,7 @@ export {
 	CronJob,
 	type CronJobInput,
 	Deployment,
+	type DeploymentFromPodSetInput,
 	type DeploymentInput,
 	Job,
 	type JobInput,
@@ -130,16 +135,4 @@ export {
 export * as Workload from "./workloadHelpers";
 export { Selector } from "./selector";
 export type { SelectorLabels } from "./selector";
-export {
-	type BundledDeploymentInput,
-	type BundledEgressRule,
-	type BundledIngressRule,
-	type BundledNetworkPolicyInput,
-	type BundledPeer,
-	type BundledServiceInput,
-	bundledDeployment,
-	bundledNetworkPolicy,
-	bundledService,
-	type PodSetResourcesInput,
-	podSetResources,
-} from "./podSet";
+export { type DefinePodSetInput, definePodSet } from "./podSet";

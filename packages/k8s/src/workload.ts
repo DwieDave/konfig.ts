@@ -7,6 +7,7 @@ import type {
 	StatefulSet as K8sStatefulSet,
 } from "./.generated/k8s-types";
 import type { PodSpecInput } from "./container";
+import type { Selector } from "./selector";
 
 interface WorkloadMeta {
 	readonly name: string;
@@ -28,6 +29,33 @@ interface SelectorAndTemplate {
 
 export interface DeploymentInput extends WorkloadMeta, SelectorAndTemplate {
 	readonly replicas?: number;
+	readonly strategy?: unknown;
+	readonly revisionHistoryLimit?: number;
+	readonly progressDeadlineSeconds?: number;
+	readonly minReadySeconds?: number;
+}
+
+/**
+ * Deployment built from a `Selector`. The selector's labels become both
+ * the Deployment's `spec.selector.matchLabels` and the pod template's
+ * `metadata.labels` — coherent by construction. Drift between selector
+ * and template (the classic "service has no endpoints" footgun) is
+ * structurally impossible once both consume the same `podSet`.
+ */
+export interface DeploymentFromPodSetInput<L extends Readonly<Record<string, string>>> {
+	readonly name: string;
+	readonly namespace: string;
+	readonly labels?: Readonly<Record<string, string>>;
+	readonly annotations?: Readonly<Record<string, string>>;
+	readonly podSet: Selector<L>;
+	readonly replicas?: number;
+	readonly template: {
+		readonly metadata?: {
+			readonly labels?: Readonly<Record<string, string>>;
+			readonly annotations?: Readonly<Record<string, string>>;
+		};
+		readonly spec: PodSpecInput;
+	};
 	readonly strategy?: unknown;
 	readonly revisionHistoryLimit?: number;
 	readonly progressDeadlineSeconds?: number;
@@ -57,6 +85,28 @@ export const Deployment = {
 		};
 		return Manifest.make<K8sDeployment>(() => Effect.succeed(resource));
 	},
+	fromPodSet: <L extends Readonly<Record<string, string>>>(
+		input: DeploymentFromPodSetInput<L>,
+	): Manifest.Manifest<K8sDeployment> =>
+		Deployment.make({
+			name: input.name,
+			namespace: input.namespace,
+			labels: input.labels,
+			annotations: input.annotations,
+			replicas: input.replicas,
+			selector: { matchLabels: input.podSet.labels },
+			template: {
+				metadata: {
+					labels: { ...input.podSet.labels, ...input.template.metadata?.labels },
+					annotations: input.template.metadata?.annotations,
+				},
+				spec: input.template.spec,
+			},
+			strategy: input.strategy,
+			revisionHistoryLimit: input.revisionHistoryLimit,
+			progressDeadlineSeconds: input.progressDeadlineSeconds,
+			minReadySeconds: input.minReadySeconds,
+		}),
 };
 
 export interface StatefulSetInput extends WorkloadMeta, SelectorAndTemplate {

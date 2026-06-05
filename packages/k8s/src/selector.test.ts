@@ -1,13 +1,11 @@
 import { render, RenderContext } from "@konfig.ts/core";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import {
-	bundledDeployment,
-	bundledNetworkPolicy,
-	bundledService,
-	podSetResources,
-} from "./podSet";
+import { Service } from "./network";
+import { definePodSet } from "./podSet";
+import { NetworkPolicy } from "./policy";
 import { Selector } from "./selector";
+import { Deployment } from "./workload";
 
 const ctx = RenderContext.make("test");
 const _run = <A>(eff: Effect.Effect<A, unknown>): Promise<A> =>
@@ -20,10 +18,10 @@ describe("Selector.make", () => {
 	});
 });
 
-describe("bundledDeployment", () => {
-	it("uses the bundle's labels for both selector and template", async () => {
+describe("Deployment.fromPodSet", () => {
+	it("uses the selector's labels for both selector and template", async () => {
 		const apiPods = Selector.make({ app: "api", tier: "web" });
-		const dep = bundledDeployment({
+		const dep = Deployment.fromPodSet({
 			name: "api",
 			namespace: "default",
 			podSet: apiPods,
@@ -36,9 +34,9 @@ describe("bundledDeployment", () => {
 		expect(out.spec?.replicas).toBe(2);
 	});
 
-	it("merges extra template labels with the bundle's labels", async () => {
+	it("merges extra template labels with the selector's labels", async () => {
 		const apiPods = Selector.make({ app: "api" });
-		const dep = bundledDeployment({
+		const dep = Deployment.fromPodSet({
 			name: "api",
 			namespace: "default",
 			podSet: apiPods,
@@ -52,10 +50,10 @@ describe("bundledDeployment", () => {
 	});
 });
 
-describe("bundledService", () => {
-	it("uses the bundle's labels as spec.selector", async () => {
+describe("Service.fromPodSet", () => {
+	it("uses the selector's labels as spec.selector", async () => {
 		const apiPods = Selector.make({ app: "api" });
-		const svc = bundledService({
+		const svc = Service.fromPodSet({
 			name: "api",
 			namespace: "default",
 			podSet: apiPods,
@@ -67,11 +65,11 @@ describe("bundledService", () => {
 	});
 });
 
-describe("bundledNetworkPolicy", () => {
-	it("uses the bundle's labels as spec.podSelector and lowers ingress peers", async () => {
+describe("NetworkPolicy.fromPodSet", () => {
+	it("uses the selector's labels as spec.podSelector and lowers ingress peers", async () => {
 		const apiPods = Selector.make({ app: "api" });
 		const dbPods = Selector.make({ app: "postgres" });
-		const np = bundledNetworkPolicy({
+		const np = NetworkPolicy.fromPodSet({
 			name: "api-ingress",
 			namespace: "default",
 			podSet: apiPods,
@@ -86,11 +84,11 @@ describe("bundledNetworkPolicy", () => {
 	});
 });
 
-describe("podSetResources", () => {
-	it("emits a coherent Deployment + Service + NetworkPolicy from one bundle", async () => {
+describe("definePodSet", () => {
+	it("emits a coherent Deployment + Service + NetworkPolicy from one selector", async () => {
 		const apiPods = Selector.make({ app: "api", tier: "web" });
 		const dbPods = Selector.make({ app: "postgres" });
-		const trio = podSetResources({
+		const trio = definePodSet({
 			podSet: apiPods,
 			deployment: {
 				name: "api",

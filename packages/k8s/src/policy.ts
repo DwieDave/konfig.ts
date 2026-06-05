@@ -10,6 +10,11 @@ import type {
 	RoleBinding as K8sRoleBinding,
 } from "./.generated/k8s-types";
 import type { PersistentVolumeSpec as K8sPersistentVolumeSpec } from "kubernetes-types/core/v1";
+import type {
+	NetworkPolicyEgressRule as K8sNetworkPolicyEgressRule,
+	NetworkPolicyIngressRule as K8sNetworkPolicyIngressRule,
+} from "kubernetes-types/networking/v1";
+import type { Selector } from "./selector";
 
 interface NamespacedMeta {
 	readonly name: string;
@@ -122,6 +127,52 @@ export interface NetworkPolicyInput extends NamespacedMeta {
 	readonly spec: K8sNetworkPolicy["spec"];
 }
 
+/**
+ * Peer rule for `NetworkPolicy.fromPodSet`. A peer is either a typed
+ * `Selector` (matched as `podSelector.matchLabels`), a `namespaceSelector`,
+ * or a CIDR block.
+ */
+export interface NetworkPolicyPeer {
+	readonly podSet?: Selector<Readonly<Record<string, string>>>;
+	readonly namespaceSelector?: { readonly matchLabels?: Readonly<Record<string, string>> };
+	readonly ipBlock?: { readonly cidr: string; readonly except?: ReadonlyArray<string> };
+}
+
+export interface NetworkPolicyIngressRule {
+	readonly from?: ReadonlyArray<NetworkPolicyPeer>;
+	readonly ports?: K8sNetworkPolicyIngressRule["ports"];
+}
+
+export interface NetworkPolicyEgressRule {
+	readonly to?: ReadonlyArray<NetworkPolicyPeer>;
+	readonly ports?: K8sNetworkPolicyEgressRule["ports"];
+}
+
+/**
+ * NetworkPolicy built from typed `Selector`s. `podSet` drives
+ * `spec.podSelector`; ingress/egress peer rules accept further selectors
+ * via `from[].podSet` / `to[].podSet`. Peer selectors need not match the
+ * owning selector — the typing ties this NetworkPolicy's selection to a
+ * single source of truth and lets peers be independently typed.
+ */
+export interface NetworkPolicyFromPodSetInput<L extends Readonly<Record<string, string>>>
+	extends NamespacedMeta {
+	readonly podSet: Selector<L>;
+	readonly policyTypes?: ReadonlyArray<"Ingress" | "Egress">;
+	readonly ingress?: ReadonlyArray<NetworkPolicyIngressRule>;
+	readonly egress?: ReadonlyArray<NetworkPolicyEgressRule>;
+}
+
+const _lowerPeer = (peer: NetworkPolicyPeer): {
+	readonly podSelector?: { readonly matchLabels?: Readonly<Record<string, string>> };
+	readonly namespaceSelector?: { readonly matchLabels?: Readonly<Record<string, string>> };
+	readonly ipBlock?: { readonly cidr: string; readonly except?: ReadonlyArray<string> };
+} => ({
+	...(peer.podSet !== undefined ? { podSelector: { matchLabels: peer.podSet.labels } } : {}),
+	...(peer.namespaceSelector !== undefined ? { namespaceSelector: peer.namespaceSelector } : {}),
+	...(peer.ipBlock !== undefined ? { ipBlock: peer.ipBlock } : {}),
+});
+
 export const NetworkPolicy = {
 	make: (input: NetworkPolicyInput): Manifest.Manifest<K8sNetworkPolicy> =>
 		Manifest.make<K8sNetworkPolicy>(() =>
@@ -137,6 +188,33 @@ export const NetworkPolicy = {
 				spec: input.spec,
 			}),
 		),
+	fromPodSet: <L extends Readonly<Record<string, string>>>(
+		input: NetworkPolicyFromPodSetInput<L>,
+	): Manifest.Manifest<K8sNetworkPolicy> => {
+		const ingress = input.ingress?.map((rule) => ({
+			from: rule.from?.map(_lowerPeer),
+			ports: rule.ports,
+		}));
+		const egress = input.egress?.map((rule) => ({
+			to: rule.to?.map(_lowerPeer),
+			ports: rule.ports,
+		}));
+		return NetworkPolicy.make({
+			name: input.name,
+			namespace: input.namespace,
+			labels: input.labels,
+			annotations: input.annotations,
+			spec: unsafeCoerce<K8sNetworkPolicy["spec"]>(
+				{
+					podSelector: { matchLabels: input.podSet.labels },
+					policyTypes: input.policyTypes,
+					ingress,
+					egress,
+				},
+				"konfig peers carry readonly arrays; upstream NetworkPolicySpec is mutable but the runtime shape matches",
+			),
+		});
+	},
 };
 
 export interface ClusterRoleInput extends ClusterMeta {

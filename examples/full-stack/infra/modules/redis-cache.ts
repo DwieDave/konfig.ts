@@ -1,10 +1,10 @@
 import { Application } from "@konfig.ts/argocd";
 import {
-	bundledDeployment,
-	bundledNetworkPolicy,
 	defineContainer,
-	definedService,
+	Deployment,
+	NetworkPolicy,
 	Port,
+	Service,
 } from "@konfig.ts/k8s";
 import { Effect } from "effect";
 import { apiPods, redisCachePods, workerPods } from "../podSets";
@@ -21,17 +21,17 @@ export interface RedisCacheOptions {
  *     captures the literal port-name union ("redis") and constrains
  *     the readiness probe's `tcpSocket.port` to it.
  *
- *   - `bundledDeployment({ podSet: redisCachePods, ... })` derives
+ *   - `Deployment.fromPodSet({ podSet: redisCachePods, ... })` derives
  *     `spec.selector.matchLabels` AND `template.metadata.labels` from
  *     the same `Selector` — drift between the two (a classic
  *     "Service has no endpoints" footgun) is structurally impossible.
  *
- *   - `definedService({ forContainer: redisContainer, ... })` ties
- *     `targetPort` to the container's port-name union via NoInfer —
+ *   - `Service.fromContainer({ forContainer: redisContainer, ... })`
+ *     ties `targetPort` to the container's port-name union via NoInfer —
  *     `targetPort: Port.ref("rdis")` is a compile-time error, not a
  *     "unable to find named port" pod-startup failure.
  *
- *   - `bundledNetworkPolicy({ podSet, ingress: [{ from: [{ podSet }] }] })`
+ *   - `NetworkPolicy.fromPodSet({ podSet, ingress: [{ from: [{ podSet }] }] })`
  *     restricts ingress to the api and worker pod sets (imported as
  *     `Selector`s from `infra/podSets.ts`). The same label record
  *     drives Workload.web's internal selectors AND this netpol's
@@ -57,7 +57,7 @@ export const defineRedisCache = (opts: RedisCacheOptions) =>
 				},
 			});
 
-			const deployment = bundledDeployment({
+			const deployment = Deployment.fromPodSet({
 				name: "redis-cache",
 				namespace: "app",
 				podSet: redisCachePods,
@@ -65,7 +65,7 @@ export const defineRedisCache = (opts: RedisCacheOptions) =>
 				template: { spec: { containers: [redisContainer] } },
 			});
 
-			const service = definedService({
+			const service = Service.fromContainer({
 				name: "redis-cache",
 				namespace: "app",
 				selector: redisCachePods.labels,
@@ -73,7 +73,7 @@ export const defineRedisCache = (opts: RedisCacheOptions) =>
 				ports: [{ port: 6379, targetPort: Port.ref("redis") }],
 			});
 
-			const netpol = bundledNetworkPolicy({
+			const netpol = NetworkPolicy.fromPodSet({
 				name: "redis-cache-ingress",
 				namespace: "app",
 				podSet: redisCachePods,

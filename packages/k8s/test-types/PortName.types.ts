@@ -1,10 +1,10 @@
 // Compile-time assertions for port-name branding. `defineContainer`
 // captures the literal port-name union as a phantom on `ContainerSpec`,
-// and `definedService` propagates it to the typed `ServicePortSpec`.
+// and `Service.fromContainer` propagates it to the typed `ServicePortSpec`.
 // A mistyped probe port or `targetPort` fails at compile time.
 
 import type { ContainerSpec, NamesOf } from "@konfig.ts/k8s";
-import { defineContainer, definedService, Port } from "@konfig.ts/k8s";
+import { defineContainer, Port, Service } from "@konfig.ts/k8s";
 
 type Expect<T extends true> = T;
 type Equal<X, Y> =
@@ -58,8 +58,8 @@ const numericProbe = defineContainer({
 });
 void numericProbe;
 
-// 6 · `definedService` — targetPort with a declared name OK.
-const _okSvc = definedService({
+// 6 · `Service.fromContainer` — targetPort with a declared name OK.
+const _okSvc = Service.fromContainer({
 	name: "api",
 	namespace: "default",
 	selector: { app: "api" },
@@ -67,8 +67,8 @@ const _okSvc = definedService({
 	ports: [{ port: 80, targetPort: Port.ref("http") }],
 });
 
-// 7 · `definedService` — targetPort with an undeclared name fails.
-const _badSvc = definedService({
+// 7 · `Service.fromContainer` — targetPort with an undeclared name fails.
+const _badSvc = Service.fromContainer({
 	name: "api",
 	namespace: "default",
 	selector: { app: "api" },

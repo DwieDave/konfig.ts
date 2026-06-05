@@ -1,15 +1,10 @@
 // Compile-time assertions for Selector<L> coherence. Two distinct
-// selectors are not assignable to each other; the bundled K8s variants
-// (bundledDeployment / bundledService / bundledNetworkPolicy /
-// podSetResources) refuse to mix label sets across resources.
+// selectors are not assignable to each other; the typed K8s variants
+// (Deployment.fromPodSet / Service.fromPodSet / NetworkPolicy.fromPodSet /
+// definePodSet) refuse to mix label sets across resources.
 
 import type { Selector as SelectorT, SelectorLabels } from "@konfig.ts/k8s";
-import {
-	bundledDeployment,
-	bundledService,
-	podSetResources,
-	Selector,
-} from "@konfig.ts/k8s";
+import { definePodSet, Deployment, Selector, Service } from "@konfig.ts/k8s";
 
 type Expect<T extends true> = T;
 type Equal<X, Y> =
@@ -30,26 +25,26 @@ type _NotAssignable = Expect<
 >;
 
 // 3 · Bundled consumers accept the matching selector.
-const _okDep = bundledDeployment({
+const _okDep = Deployment.fromPodSet({
 	name: "api",
 	namespace: "default",
 	podSet: apiPods,
 	template: { spec: { containers: [{ name: "api", image: "x" }] } },
 });
 
-const _okSvc = bundledService({
+const _okSvc = Service.fromPodSet({
 	name: "api",
 	namespace: "default",
 	podSet: apiPods,
 	ports: [{ port: 80 }],
 });
 
-// 4 · `podSetResources` infers L from `podSet` and rejects a mismatched
+// 4 · `definePodSet` infers L from `podSet` and rejects a mismatched
 //     sub-resource. Here, attempting to claim a fixed-label deployment
 //     for a different bundle is the kind of error we want to catch —
 //     the umbrella's L is inferred from `podSet`, so the sub-input is
 //     implicitly typed to it (no separate bundle to mismatch).
-const _okTrio = podSetResources({
+const _okTrio = definePodSet({
 	podSet: apiPods,
 	deployment: {
 		name: "api",
