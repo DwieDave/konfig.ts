@@ -7,21 +7,19 @@ export const DEFAULT_CRD_OUT_DIR = ".generated/crd";
 export const DEFAULT_HELM_CACHE = ".konfig/helm-cache";
 export const DEFAULT_CHARTS_DIR = "infra/k8s-konfig/charts";
 
-const _cwd = (): string => process.cwd();
-
 export const resolveCliPaths = Effect.gen(function* () {
 	const path = yield* Path;
 
-	const cacheDir = yield* Config.string("TSK_HELM_CACHE").pipe(
-		Config.withDefault(path.join(_cwd(), DEFAULT_HELM_CACHE)),
+	const cacheDir = yield* Config.string("KONFIG_HELM_CACHE").pipe(
+		Config.withDefault(path.resolve(DEFAULT_HELM_CACHE)),
 	);
-	const outDir = yield* Config.string("TSK_CRD_OUT_DIR").pipe(
-		Config.withDefault(path.join(_cwd(), DEFAULT_CRD_OUT_DIR)),
+	const outDir = yield* Config.string("KONFIG_CRD_OUT_DIR").pipe(
+		Config.withDefault(path.resolve(DEFAULT_CRD_OUT_DIR)),
 	);
-	const chartsDir = yield* Config.string("TSK_CHARTS_DIR").pipe(
-		Config.withDefault(path.join(_cwd(), DEFAULT_CHARTS_DIR)),
+	const chartsDir = yield* Config.string("KONFIG_CHARTS_DIR").pipe(
+		Config.withDefault(path.resolve(DEFAULT_CHARTS_DIR)),
 	);
-	const minVersion = yield* Config.string("TSK_HELM_MIN_VERSION").pipe(
+	const minVersion = yield* Config.string("KONFIG_HELM_MIN_VERSION").pipe(
 		Config.withDefault(DEFAULT_MIN_HELM_VERSION),
 	);
 

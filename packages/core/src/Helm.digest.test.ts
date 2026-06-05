@@ -37,11 +37,11 @@ describe("Helm.release digest verification", () => {
 
 	beforeEach(async () => {
 		fixture = await _setupFixture();
-		process.env.TSK_HELM_CACHE = fixture.cacheDir;
+		process.env.KONFIG_HELM_CACHE = fixture.cacheDir;
 	});
 
 	afterEach(async () => {
-		delete process.env.TSK_HELM_CACHE;
+		delete process.env.KONFIG_HELM_CACHE;
 		await fs.rm(fixture.cacheDir, { recursive: true, force: true });
 	});
 

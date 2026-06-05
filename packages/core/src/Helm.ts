@@ -1,4 +1,3 @@
-import * as crypto from "node:crypto";
 import { Config, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -98,12 +97,42 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): RawYaml[] => {
 const _normalizeDigest = (digest: string): string =>
 	digest.startsWith("sha256:") ? digest : `sha256:${digest}`;
 
+const _toHex = (buf: ArrayBuffer): string => {
+	const view = new Uint8Array(buf);
+	let hex = "";
+	for (let i = 0; i < view.length; i++) {
+		hex += (view[i] ?? 0).toString(16).padStart(2, "0");
+	}
+	return hex;
+};
+
+// Minimal local typing for `crypto.subtle.digest`. The base tsconfig is
+// `lib: ["ES2022"]` (no DOM), so `BufferSource` / `Crypto` are not declared;
+// we define just enough to drive the runtime call without dragging the
+// whole DOM lib in.
+interface _SubtleCrypto {
+	readonly digest: (algorithm: "SHA-256", data: ArrayBufferView) => Promise<ArrayBuffer>;
+}
+interface _CryptoGlobal {
+	readonly subtle: _SubtleCrypto;
+}
+
+/**
+ * SHA-256 the file at `filePath` via Web Crypto API (`crypto.subtle.digest`).
+ * `crypto.subtle` is a runtime global on Node ≥ 20 and on Bun; no
+ * `node:crypto` import is needed, which keeps the file portable across
+ * the runtimes Effect targets.
+ */
 const _hashFile = (filePath: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const bytes = yield* fs.readFile(filePath);
-		const hash = crypto.createHash("sha256").update(bytes).digest("hex");
-		return `sha256:${hash}`;
+		const subtle = unsafeCoerce<_CryptoGlobal>(
+			(globalThis as unknown as { readonly crypto: unknown }).crypto,
+			"globalThis.crypto is provided by the runtime (Node ≥ 20, Bun) — typed via local _CryptoGlobal interface",
+		).subtle;
+		const digest = yield* Effect.promise(() => subtle.digest("SHA-256", bytes));
+		return `sha256:${_toHex(digest)}`;
 	});
 
 interface _VerifyDigestInput {
@@ -186,8 +215,8 @@ export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {
 			const path = yield* Path;
 			const spawner = yield* ChildProcessSpawner;
 
-			const cacheDir = yield* Config.string("TSK_HELM_CACHE").pipe(
-				Config.withDefault(path.join(process.cwd(), ".konfig", "helm-cache")),
+			const cacheDir = yield* Config.string("KONFIG_HELM_CACHE").pipe(
+				Config.withDefault(path.resolve(".konfig", "helm-cache")),
 			);
 			yield* fs.makeDirectory(cacheDir, { recursive: true });
 
