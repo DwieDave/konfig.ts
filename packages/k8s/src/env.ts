@@ -17,7 +17,7 @@ export interface EnvVarSource {
 
 /**
  * Container env-var entry. The phantom `N` records the literal env-var
- * name at the type level so `defineContainer` can detect duplicates
+ * name at the type level so `Container` can detect duplicates
  * across the entry list. The default `N = string` preserves loose-typed
  * call sites.
  */
@@ -98,7 +98,7 @@ export interface RawEnvInput<N extends string> {
  *   ]
  *
  * Each constructor captures the literal env-var name (`N`) so
- * `defineContainer` can detect duplicate entries across the env list.
+ * `Container` can detect duplicate entries across the env list.
  */
 export const EnvVar = {
 	value: <const N extends string>(input: ValueEnvInput<N>): EnvVar<N> => ({

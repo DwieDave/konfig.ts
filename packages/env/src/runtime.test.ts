@@ -1,19 +1,19 @@
 import { ConfigProvider, Effect, Redacted } from "effect";
 import { describe, expect, it } from "vitest";
-import { defineEnvironment } from "./environment";
-import { defineLiteral } from "./literal";
-import { defineSecret } from "./secret";
+import { Environment } from "./environment";
+import { Literal } from "./literal";
+import { Secret } from "./secret";
 import { runtime } from "./runtime";
 
 describe("Environment.runtime (decoder)", () => {
 	it("decodes a single bundle from a ConfigProvider in one effect", async () => {
-		const env = defineEnvironment({
-			db: defineSecret({
+		const env = Environment.define({
+			db: Secret.define({
 				name: "db-creds",
 				namespace: "app",
 				env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
 			}),
-			port: defineLiteral({ envName: "PORT", value: 8080 }),
+			port: Literal.define({ envName: "PORT", value: 8080 }),
 		});
 
 		const program = runtime(env).pipe(

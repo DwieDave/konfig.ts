@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { NodeServices } from "@effect/platform-node";
 import { coerce, Yaml } from "@konfig.ts/core";
-import { defineSecret, SecretSource } from "@konfig.ts/env";
+import { SecretSource } from "@konfig.ts/env";
 import { BackendSourceMissing, Secret } from "@konfig.ts/k8s";
 import { Effect, Exit, Layer, Stream } from "effect";
 import { type Command, isStandardCommand } from "effect/unstable/process/ChildProcess";
@@ -56,7 +56,7 @@ const _makeStubSpawner = (sink: SpawnerSink, output = STUB_SEALED_YAML) =>
 			}),
 	});
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },

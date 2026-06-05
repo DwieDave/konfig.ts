@@ -2,7 +2,7 @@
 //
 // `EnvVar.fromSecret({ ref, key })` constrains `key` to the union K carried by
 // the ref. `Secret.make({ stringData })` infers K from the literal record
-// keys; `Environment.bind`'s secret members carry K from `defineSecret`.
+// keys; `Environment.bind`'s secret members carry K from `Secret`.
 
 import type { SecretRef, SecretRefKeys, SecretRefName } from "@konfig.ts/core";
 import { EnvVar, Secret } from "@konfig.ts/k8s";

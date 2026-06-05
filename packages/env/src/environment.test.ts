@@ -2,30 +2,30 @@ import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, Redacted } from "effect";
 import { describe, expect } from "vitest";
 import { EnvNameCollision } from "./entry";
-import { defineDownward } from "./downward";
-import { defineEnvironment } from "./environment";
-import { defineLiteral } from "./literal";
-import { defineSecret } from "./secret";
+import { Downward } from "./downward";
+import { Environment } from "./environment";
+import { Literal } from "./literal";
+import { Secret } from "./secret";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
 });
 
-const sessionKey = defineSecret({
+const sessionKey = Secret.define({
 	name: "session-key",
 	namespace: "prod",
 	env: { value: "SESSION_KEY" },
 });
 
-const port = defineLiteral({ envName: "PORT", value: 8080 });
+const port = Literal.define({ envName: "PORT", value: 8080 });
 
-const podName = defineDownward({ envName: "POD_NAME", fieldPath: "metadata.name" });
+const podName = Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" });
 
-describe("defineEnvironment", () => {
+describe("Environment", () => {
 	it("bundles entries and re-exposes them via .members", () => {
-		const env = defineEnvironment({ db: dbCreds, session: sessionKey, port, pod: podName });
+		const env = Environment.define({ db: dbCreds, session: sessionKey, port, pod: podName });
 		expect(env._kind).toBe("Environment");
 		expect(env.members.db).toBe(dbCreds);
 		expect(env.members.session).toBe(sessionKey);
@@ -34,14 +34,14 @@ describe("defineEnvironment", () => {
 	});
 
 	it("flattens all member envClaims", () => {
-		const env = defineEnvironment({ db: dbCreds, port });
+		const env = Environment.define({ db: dbCreds, port });
 		const names = env.envClaims.map((c) => c.envName).sort();
 		expect(names).toEqual(["DATABASE_PASSWORD", "DATABASE_URL", "PORT"]);
 	});
 
 	it.effect("yields a record of all member values in one go", () =>
 		Effect.gen(function* () {
-			const env = defineEnvironment({
+			const env = Environment.define({
 				db: dbCreds,
 				session: sessionKey,
 				port,
@@ -70,20 +70,20 @@ describe("defineEnvironment", () => {
 	);
 
 	it("throws EnvNameCollision when two entries claim the same env name", () => {
-		const a = defineSecret({
+		const a = Secret.define({
 			name: "a",
 			namespace: "x",
 			env: { url: "SHARED" },
 		});
-		const b = defineLiteral({ envName: "SHARED", value: "literal" });
-		expect(() => defineEnvironment({ a, b })).toThrow(EnvNameCollision);
+		const b = Literal.define({ envName: "SHARED", value: "literal" });
+		expect(() => Environment.define({ a, b })).toThrow(EnvNameCollision);
 	});
 
 	it("collision error names the conflicting entries", () => {
-		const a = defineSecret({ name: "a", namespace: "x", env: { url: "SHARED" } });
-		const b = defineSecret({ name: "b", namespace: "x", env: { val: "SHARED" } });
+		const a = Secret.define({ name: "a", namespace: "x", env: { url: "SHARED" } });
+		const b = Secret.define({ name: "b", namespace: "x", env: { val: "SHARED" } });
 		try {
-			defineEnvironment({ a, b });
+			Environment.define({ a, b });
 			throw new Error("expected throw");
 		} catch (e) {
 			expect(e).toBeInstanceOf(EnvNameCollision);
@@ -96,8 +96,8 @@ describe("defineEnvironment", () => {
 	});
 
 	it("a SecretEntry may live in multiple bundles (no copy)", () => {
-		const envA = defineEnvironment({ db: dbCreds });
-		const envB = defineEnvironment({ db: dbCreds });
+		const envA = Environment.define({ db: dbCreds });
+		const envB = Environment.define({ db: dbCreds });
 		expect(envA.members.db).toBe(envB.members.db);
 	});
 });

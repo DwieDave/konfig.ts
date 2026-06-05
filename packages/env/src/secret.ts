@@ -32,7 +32,7 @@ export interface DefineSecretInput<
 // oxlint-disable-next-line app/no-type-assertion
 const _cast = <T>(value: unknown): T => value as T;
 
-export const defineSecret = <
+const _define = <
 	const N extends string,
 	const E extends Readonly<Record<string, string>>,
 >(
@@ -73,3 +73,20 @@ export const defineSecret = <
 };
 
 export type AnySecretEntry = SecretEntry<string, string, Readonly<Record<string, string>>>;
+
+/**
+ * `Secret` value namespace (env-contracts package).
+ *
+ *   const dbCreds = Secret.define({
+ *     name: "db-creds",
+ *     namespace: "app",
+ *     env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
+ *   });
+ *
+ * The k8s package re-exports this merged with its own `Secret.make` /
+ * `Secret.bind`, so importing `Secret` from `@konfig.ts/k8s` exposes
+ * `define` alongside the manifest/binder constructors.
+ */
+export const Secret = {
+	define: _define,
+};

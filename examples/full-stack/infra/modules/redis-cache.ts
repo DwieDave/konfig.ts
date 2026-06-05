@@ -1,6 +1,6 @@
 import { Application } from "@konfig.ts/argocd";
 import {
-	defineContainer,
+	Container,
 	Deployment,
 	NetworkPolicy,
 	Port,
@@ -17,7 +17,7 @@ export interface RedisCacheOptions {
  * Redis cache sidecar — demonstrates round-1 prototypes 1 and 2
  * end-to-end without going through `Workload.web`.
  *
- *   - `defineContainer({ ports: [Port.make({ name: "redis", ... })] })`
+ *   - `Container.define({ ports: [Port.make({ name: "redis", ... })] })`
  *     captures the literal port-name union ("redis") and constrains
  *     the readiness probe's `tcpSocket.port` to it.
  *
@@ -47,7 +47,7 @@ export const defineRedisCache = (opts: RedisCacheOptions) =>
 		namespace: "app",
 		source: opts.source,
 		build: Effect.gen(function* () {
-			const redisContainer = defineContainer({
+			const redisContainer = Container.define({
 				name: "redis",
 				image: "docker.io/library/redis:7-alpine",
 				ports: [Port.make({ name: "redis", containerPort: 6379 })],

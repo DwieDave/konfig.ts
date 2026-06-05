@@ -128,7 +128,7 @@ export type HasSecrets<M extends Readonly<Record<string, EnvMember>>> = true ext
  * with no secrets are omitted entirely (no key needed).
  *
  * Together with `HasSecrets`, this enforces at compile time that every
- * `defineSecret` reachable from the bundle is acknowledged at bind
+ * `Secret` reachable from the bundle is acknowledged at bind
  * time — adding a new secret to the env contract forces every call
  * site to update.
  */
@@ -148,7 +148,7 @@ export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
 
 /**
  * Per-literal value override for bind time. Keyed by member name, typed
- * to each literal's declared `T`. Useful when a `defineLiteral` is a
+ * to each literal's declared `T`. Useful when a `Literal` is a
  * runtime contract (carries a `schema: Config.string(envName)` for app
  * code to yield) but the manifest's emitted value differs per env —
  * e.g. `CLIENT_URL`, `S3_ENDPOINT`, host/URL literals.
@@ -197,7 +197,7 @@ interface _BindEnvironmentInputBase<
  * `secrets` flips between required and optional based on whether `M`
  * actually contains any secrets. A bundle of literals/downwards only
  * has nothing to bind, so `secrets` stays optional. A bundle with even
- * one `defineSecret` (directly or nested) forces the caller to supply
+ * one `Secret` (directly or nested) forces the caller to supply
  * every secret member — and for each member, either a `backend` or a
  * `source` (see `SecretMemberOptions`).
  */

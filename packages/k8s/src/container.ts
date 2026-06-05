@@ -27,7 +27,7 @@ import type { Volume, VolumeMount, VolumeNamesOf } from "./volume";
  * container to have an explicit image).
  *
  * `ports[i].name` accepts the branded `PortName<string>` from `Port.make(...)`
- * as well as a raw string; the typed builder `defineContainer` is the
+ * as well as a raw string; the typed builder `Container` is the
  * link that captures the literal name union for cross-reference checks.
  */
 export interface ContainerInput
@@ -54,7 +54,7 @@ export interface ContainerInput
 	readonly ports?: ReadonlyArray<ContainerPort | { readonly containerPort: number; readonly name?: string; readonly protocol?: "TCP" | "UDP" | "SCTP" }>;
 	/**
 	 * Probes accept either the upstream K8s shape or konfig's branded
-	 * `ProbeTarget<string>` (from `defineContainer`). The two are
+	 * `ProbeTarget<string>` (from `Container`). The two are
 	 * structurally close — the union lets a `ContainerSpec` flow
 	 * through `Workload.web`'s containers slot without a cast.
 	 */
@@ -63,7 +63,7 @@ export interface ContainerInput
 	readonly startupProbe?: K8sContainer["startupProbe"] | ProbeTarget<string>;
 	/**
 	 * Volume mounts accept the upstream K8s shape or konfig's branded
-	 * `VolumeMount<string>` (from `defineContainer` / `mountRef`). Same
+	 * `VolumeMount<string>` (from `Container` / `mountRef`). Same
 	 * rationale as the probe widening above.
 	 */
 	readonly volumeMounts?:
@@ -151,48 +151,56 @@ type EnvDupCheck<Envs extends ReadonlyArray<EnvVar<string>>> =
 			};
 
 /**
- * Strongly-typed container builder. Captures the union of named ports
- * (from `port({ name, ... })`) as `Ports`, the union of mounted volume
- * names (from `mountRef(...)`) as `Mounts`, and validates that the
- * `env` list has no duplicate env-var names. The first two phantoms
- * travel on `ContainerSpec`; `definePod` checks the container's Mounts
- * against the pod's declared volume names.
+ * `Container` value namespace.
+ *
+ *   const apiContainer = Container.define({
+ *     name: "api",
+ *     image: apiImage,
+ *     ports: [Port.make({ name: "http", containerPort: 8080 })],
+ *     readinessProbe: { httpGet: { port: Port.ref("http") } },
+ *     env: [...],
+ *   });
+ *
+ * `Container.define` captures the union of named ports (from
+ * `Port.make`) as `Ports`, the union of mounted volume names (from
+ * `Volume.mountRef`) as `Mounts`, and validates that the `env` list
+ * has no duplicate env-var names. The first two phantoms travel on
+ * `ContainerSpec`; `Pod.define` checks the container's Mounts against
+ * the pod's declared volume names.
  *
  * Duplicate env names are caught at the call site via a template-literal
- * error message — see `EnvDupCheck`. K8s' last-wins semantics for env
- * collisions are invisible at runtime; surfacing them at compile time
- * is the win.
- *
- * With no volumeMounts and no env, all phantoms collapse to `never` —
- * the container makes no volume / no name claims and slots in anywhere.
+ * error message — see `EnvDupCheck`. With no volumeMounts and no env,
+ * all phantoms collapse to `never` so the container slots into any pod.
  */
-export const defineContainer = <
-	const Ports extends ReadonlyArray<ContainerPort<string>>,
-	const Mounts extends ReadonlyArray<VolumeMount<string>> = readonly [],
-	const Envs extends ReadonlyArray<EnvVar<string>> = readonly [],
->(
-	input: DefineContainerInput<Ports, Mounts, Envs>,
-): ContainerSpec<NamesOf<Ports>, MountNamesOf<Mounts>> => {
-	type P = NamesOf<Ports>;
-	type M = MountNamesOf<Mounts>;
-	const out: ContainerSpec<P, M> = {
-		...input,
-		ports: input.ports as unknown as ReadonlyArray<ContainerPort<P>>,
-		readinessProbe: input.readinessProbe,
-		livenessProbe: input.livenessProbe,
-		startupProbe: input.startupProbe,
-		volumeMounts: input.volumeMounts as unknown as ReadonlyArray<VolumeMount<M>>,
-		env: input.env as unknown as ReadonlyArray<EnvVar<string>> | undefined,
-	};
-	return out;
+export const Container = {
+	define: <
+		const Ports extends ReadonlyArray<ContainerPort<string>>,
+		const Mounts extends ReadonlyArray<VolumeMount<string>> = readonly [],
+		const Envs extends ReadonlyArray<EnvVar<string>> = readonly [],
+	>(
+		input: DefineContainerInput<Ports, Mounts, Envs>,
+	): ContainerSpec<NamesOf<Ports>, MountNamesOf<Mounts>> => {
+		type P = NamesOf<Ports>;
+		type M = MountNamesOf<Mounts>;
+		const out: ContainerSpec<P, M> = {
+			...input,
+			ports: input.ports as unknown as ReadonlyArray<ContainerPort<P>>,
+			readinessProbe: input.readinessProbe,
+			livenessProbe: input.livenessProbe,
+			startupProbe: input.startupProbe,
+			volumeMounts: input.volumeMounts as unknown as ReadonlyArray<VolumeMount<M>>,
+			env: input.env as unknown as ReadonlyArray<EnvVar<string>> | undefined,
+		};
+		return out;
+	},
 };
 
 /**
- * Pod builder. Takes a tuple of `Volume`s and a list of containers
- * whose `Mounts` phantom is checked against the declared volume names
- * via `NoInfer`. A container referencing an undeclared volume — or a
- * typo — fails at the call site rather than at pod-startup time with
- * "container references volume not found."
+ * `Pod.define` input. The pod declares a tuple of `Volume`s and lists
+ * containers whose `Mounts` phantom is checked against the declared
+ * volume names via `NoInfer`. A container referencing an undeclared
+ * volume — or a typo — fails at the call site rather than at pod-startup
+ * time with "container references volume not found."
  */
 export interface DefinePodInput<V extends ReadonlyArray<Volume<string>>> {
 	readonly volumes: V;
@@ -205,14 +213,6 @@ export interface DefinedPod<MountNames extends string> {
 	readonly containers: ReadonlyArray<ContainerSpec<string, MountNames>>;
 	readonly initContainers?: ReadonlyArray<ContainerSpec<string, MountNames>>;
 }
-
-export const definePod = <const V extends ReadonlyArray<Volume<string>>>(
-	input: DefinePodInput<V>,
-): DefinedPod<VolumeNamesOf<V>> => ({
-	volumes: input.volumes as unknown as ReadonlyArray<Volume<VolumeNamesOf<V>>>,
-	containers: input.containers,
-	initContainers: input.initContainers,
-});
 
 /**
  * Pod spec input — extends K8s PodSpec but tightens the fields where
@@ -239,13 +239,26 @@ export interface PodSpecInput
 /**
  * `Pod` value namespace.
  *
+ *   const pod = Pod.define({
+ *     volumes: [Volume.empty({ name: "config" })],
+ *     containers: [Container.define({ ..., volumeMounts: [...] })],
+ *   });
+ *
  *   imagePullSecrets: [Pod.imagePullSecret(ghcrRef)],
  *
- * Atomic constructors for sub-fields of `PodSpec` that need brand
- * checking. Today: `imagePullSecret(ref)` returns the `{ name: SecretRef }`
- * entry consumed by Deployment / StatefulSet / Job / CronJob workloads.
+ * - `Pod.define(input)` ties container `volumeMounts[i].name` to the
+ *   pod's declared volume names via `NoInfer`.
+ * - `Pod.imagePullSecret(ref)` returns the `{ name: SecretRef }` entry
+ *   consumed by Deployment / StatefulSet / Job / CronJob workloads.
  */
 export const Pod = {
+	define: <const V extends ReadonlyArray<Volume<string>>>(
+		input: DefinePodInput<V>,
+	): DefinedPod<VolumeNamesOf<V>> => ({
+		volumes: input.volumes as unknown as ReadonlyArray<Volume<VolumeNamesOf<V>>>,
+		containers: input.containers,
+		initContainers: input.initContainers,
+	}),
 	imagePullSecret: (ref: SecretRef<string>): { readonly name: SecretRef<string> } => ({
 		name: ref,
 	}),

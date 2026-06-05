@@ -1,4 +1,4 @@
-import { defineDownward, defineEnvironment, defineLiteral } from "@konfig.ts/env";
+import { Downward, Environment, Literal } from "@konfig.ts/env";
 import { Config } from "effect";
 import { dbCreds, jwtKey, s3Creds } from "./secrets";
 
@@ -7,29 +7,29 @@ import { dbCreds, jwtKey, s3Creds } from "./secrets";
  *
  * Mixes every contract atom konfig.ts/env provides:
  *   - perEnv*: values that change per environment (HTTP_PORT, LOG_LEVEL)
- *   - defineLiteral: values baked into the manifest (NODE_ENV)
- *   - defineDownward: Kubernetes downward-API fields (POD_NAME)
- *   - defineSecret: external creds bound to a backend at composition time
+ *   - Literal: values baked into the manifest (NODE_ENV)
+ *   - Downward: Kubernetes downward-API fields (POD_NAME)
+ *   - Secret: external creds bound to a backend at composition time
  */
-export const apiEnv = defineEnvironment({
+export const apiEnv = Environment.define({
 	db: dbCreds,
 	s3: s3Creds,
 	jwt: jwtKey,
-	http: defineEnvironment({
-		port: defineLiteral({
+	http: Environment.define({
+		port: Literal.define({
 			envName: "HTTP_PORT",
 			value: 8080,
 			schema: Config.number("HTTP_PORT").pipe(Config.withDefault(8080)),
 		}),
-		logLevel: defineLiteral({
+		logLevel: Literal.define({
 			envName: "LOG_LEVEL",
 			value: "info",
 			schema: Config.string("LOG_LEVEL").pipe(Config.withDefault("info")),
 		}),
 	}),
-	runtime: defineEnvironment({
-		nodeEnv: defineLiteral({ envName: "NODE_ENV", value: "production" }),
-		podName: defineDownward({ envName: "POD_NAME", fieldPath: "metadata.name" }),
+	runtime: Environment.define({
+		nodeEnv: Literal.define({ envName: "NODE_ENV", value: "production" }),
+		podName: Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" }),
 	}),
 });
 
@@ -39,22 +39,22 @@ export const apiEnv = defineEnvironment({
  *   - no S3, no JWT (worker doesn't serve HTTP)
  *   - extra knob: BATCH_SIZE
  */
-export const workerEnv = defineEnvironment({
+export const workerEnv = Environment.define({
 	db: dbCreds,
-	worker: defineEnvironment({
-		batchSize: defineLiteral({
+	worker: Environment.define({
+		batchSize: Literal.define({
 			envName: "BATCH_SIZE",
 			value: 100,
 			schema: Config.number("BATCH_SIZE").pipe(Config.withDefault(100)),
 		}),
-		concurrency: defineLiteral({
+		concurrency: Literal.define({
 			envName: "CONCURRENCY",
 			value: 4,
 			schema: Config.number("CONCURRENCY").pipe(Config.withDefault(4)),
 		}),
 	}),
-	runtime: defineEnvironment({
-		nodeEnv: defineLiteral({ envName: "NODE_ENV", value: "production" }),
-		podName: defineDownward({ envName: "POD_NAME", fieldPath: "metadata.name" }),
+	runtime: Environment.define({
+		nodeEnv: Literal.define({ envName: "NODE_ENV", value: "production" }),
+		podName: Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" }),
 	}),
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defineContainer, definePod } from "./container";
+import { Container, Pod } from "./container";
 import { Port } from "./ports";
 import { Volume } from "./volume";
 
@@ -15,12 +15,12 @@ describe("Volume.empty / Volume.mountRef", () => {
 	});
 });
 
-describe("definePod", () => {
+describe("Pod", () => {
 	it("wires container volumeMounts to declared volumes by name", () => {
-		const pod = definePod({
+		const pod = Pod.define({
 			volumes: [Volume.empty({ name: "config" }), Volume.empty({ name: "data" })],
 			containers: [
-				defineContainer({
+				Container.define({
 					name: "app",
 					image: "ghcr.io/example/app:1.0.0",
 					ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -40,10 +40,10 @@ describe("definePod", () => {
 	});
 
 	it("works with no volumes / no mounts", () => {
-		const pod = definePod({
+		const pod = Pod.define({
 			volumes: [],
 			containers: [
-				defineContainer({
+				Container.define({
 					name: "app",
 					image: "x",
 					ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -55,10 +55,10 @@ describe("definePod", () => {
 	});
 
 	it("supports initContainers under the same mount-name constraint", () => {
-		const pod = definePod({
+		const pod = Pod.define({
 			volumes: [Volume.empty({ name: "data" })],
 			initContainers: [
-				defineContainer({
+				Container.define({
 					name: "init",
 					image: "busybox",
 					ports: [],
@@ -66,7 +66,7 @@ describe("definePod", () => {
 				}),
 			],
 			containers: [
-				defineContainer({
+				Container.define({
 					name: "app",
 					image: "x",
 					ports: [Port.make({ name: "http", containerPort: 8080 })],

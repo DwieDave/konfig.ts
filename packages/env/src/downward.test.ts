@@ -1,11 +1,11 @@
 import { it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
 import { describe, expect } from "vitest";
-import { defineDownward } from "./downward";
+import { Downward } from "./downward";
 
-describe("defineDownward", () => {
+describe("Downward", () => {
 	it("carries metadata", () => {
-		const pod = defineDownward({ envName: "POD_NAME", fieldPath: "metadata.name" });
+		const pod = Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" });
 		expect(pod._kind).toBe("Downward");
 		expect(pod.envName).toBe("POD_NAME");
 		expect(pod.fieldPath).toBe("metadata.name");
@@ -16,7 +16,7 @@ describe("defineDownward", () => {
 
 	it.effect("yields the env var the downward-API entry will set", () =>
 		Effect.gen(function* () {
-			const pod = defineDownward({ envName: "POD_NAME", fieldPath: "metadata.name" });
+			const pod = Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" });
 			const v = yield* pod;
 			expect(v).toBe("api-7c9d8");
 		}).pipe(

@@ -1,6 +1,5 @@
 import { it } from "@effect/vitest";
 import { coerce, Yaml } from "@konfig.ts/core";
-import { defineSecret } from "@konfig.ts/env";
 import { Secret } from "@konfig.ts/k8s";
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
@@ -8,7 +7,7 @@ import { describe, expect, it as vitestIt } from "vitest";
 import { ExternalSecrets } from "./backend";
 import type { ExternalSecret } from "./crd";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },

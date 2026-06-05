@@ -1,31 +1,31 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
-	defineDownward,
-	defineEnvironment,
-	defineLiteral,
-	defineSecret,
+	Downward,
+	Environment,
+	Literal,
+	Secret,
 	SecretSource,
 } from "@konfig.ts/env";
 import { Environment, Workload } from "@konfig.ts/k8s";
 import { RenderContext, Yaml } from "@konfig.ts/core";
 import { ConfigProvider, Context, Effect, Layer, Redacted } from "effect";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
 });
 
-const sessionKey = defineSecret({
+const sessionKey = Secret.define({
 	name: "session-key",
 	namespace: "prod",
 	env: { value: "SESSION_KEY" },
 });
 
-const port = defineLiteral({ envName: "PORT", value: 8080 });
-const podName = defineDownward({ envName: "POD_NAME", fieldPath: "metadata.name" });
+const port = Literal.define({ envName: "PORT", value: 8080 });
+const podName = Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" });
 
-const apiEnv = defineEnvironment({
+const apiEnv = Environment.define({
 	db: dbCreds,
 	session: sessionKey,
 	port,
@@ -33,7 +33,7 @@ const apiEnv = defineEnvironment({
 });
 
 // Environment.bind enforces that every secret in apiEnv is provided
-// here — adding a new defineSecret to the bundle forces this call to
+// here — adding a new Secret to the bundle forces this call to
 // supply either a `backend` or a `source` for it. The source-only path
 // is what test/local renders use; production renders pair the source
 // with a `backend` so a Secret manifest is emitted (see example 05).

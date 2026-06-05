@@ -1,6 +1,7 @@
 import { it } from "@effect/vitest";
 import { coerce, Yaml } from "@konfig.ts/core";
-import { defineSecret, SecretSource } from "@konfig.ts/env";
+import { SecretSource } from "@konfig.ts/env";
+import { Secret } from "./index";
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Logger } from "effect";
 import { describe, expect, it as vitestIt } from "vitest";
@@ -9,7 +10,7 @@ import { BackendSourceMissing } from "./backend";
 import { NativeSecret } from "./nativeSecret";
 import { bindSecret } from "./secretBind";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
@@ -102,7 +103,7 @@ describe("NativeSecret.backend", () => {
 	it.effect("source failure surfaces as RenderError", () =>
 		Effect.gen(function* () {
 			const bound = bindSecret({
-				secret: defineSecret({
+				secret: Secret.define({
 					name: "missing",
 					namespace: "prod",
 					env: { x: "MISSING_ENV_NEVER_SET" },

@@ -5,7 +5,7 @@ import type { ConfigMapRef, PvcRef, SecretRef } from "@konfig.ts/core";
  * Branded volume name — a string carrying the literal `N` in its
  * phantom. Constructed by the volume factories
  * (`Volume.empty`, `Volume.fromSecret`, …) and `Volume.mountRef`. Lets
- * `VolumeMount<Mounts>` and `definePod` constrain a container's
+ * `VolumeMount<Mounts>` and `Pod` constrain a container's
  * `volumeMounts[i].name` to volumes that the pod actually declares.
  */
 declare const VolumeNameBrand: unique symbol;
@@ -78,7 +78,7 @@ export interface VolumeFromPvcInput<N extends string, PvcN extends string> {
  *   ],
  *
  * All four constructors capture the literal `name` in the returned
- * `Volume<N>` brand; `definePod` infers the union and constrains each
+ * `Volume<N>` brand; `Pod` infers the union and constrains each
  * container's `volumeMounts[i].name` to it.
  */
 export const Volume = {

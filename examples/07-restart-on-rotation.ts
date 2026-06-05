@@ -1,11 +1,11 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { RenderContext, Yaml } from "@konfig.ts/core";
-import { defineSecret, SecretSource } from "@konfig.ts/env";
+import { SecretSource } from "@konfig.ts/env";
 import { ExternalSecrets } from "@konfig.ts/external-secrets";
 import { hashSecretValues, Secret, Workload } from "@konfig.ts/k8s";
 import { Effect } from "effect";
 
-const sessionKey = defineSecret({
+const sessionKey = Secret.define({
 	name: "session-key",
 	namespace: "prod",
 	env: { value: "SESSION_KEY" },

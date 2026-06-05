@@ -2,7 +2,7 @@ import { render, RenderContext } from "@konfig.ts/core";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { Service } from "./network";
-import { definePodSet } from "./podSet";
+import { PodSet } from "./podSet";
 import { NetworkPolicy } from "./policy";
 import { Selector } from "./selector";
 import { Deployment } from "./workload";
@@ -84,11 +84,11 @@ describe("NetworkPolicy.fromPodSet", () => {
 	});
 });
 
-describe("definePodSet", () => {
+describe("PodSet", () => {
 	it("emits a coherent Deployment + Service + NetworkPolicy from one selector", async () => {
 		const apiPods = Selector.make({ app: "api", tier: "web" });
 		const dbPods = Selector.make({ app: "postgres" });
-		const trio = definePodSet({
+		const trio = PodSet.define({
 			podSet: apiPods,
 			deployment: {
 				name: "api",

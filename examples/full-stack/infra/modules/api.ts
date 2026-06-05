@@ -1,6 +1,6 @@
 import { Application } from "@konfig.ts/argocd";
 import { Dep } from "@konfig.ts/core";
-import { defineContainer, Environment, EnvVar, Port, Workload } from "@konfig.ts/k8s";
+import { Container, Environment, EnvVar, Port, Workload } from "@konfig.ts/k8s";
 import { Sops } from "@konfig.ts/sops";
 import { apiEnv } from "@example/env-contracts";
 import { Effect } from "effect";
@@ -21,7 +21,7 @@ export interface ApiOptions {
  *     `BuiltImageRef<"api">` provided by `defineApiBuild` (modules/builds.ts).
  *     Forgetting to list `apiBuild` in `fromModules({ modules })` surfaces
  *     as a `_konfig_unsatisfied` hint at `AppOfApps.entrypoint`.
- *   - `defineContainer({ ports, env })` brands the port-name union
+ *   - `Container.define({ ports, env })` brands the port-name union
  *     ("http") and validates the env list for duplicate names. A typo'd
  *     `Port.ref(...)` on the readiness probe is a compile error; a
  *     duplicate env name surfaces a human-readable hint inline.
@@ -66,7 +66,7 @@ export const defineApi = (opts: ApiOptions) =>
 				},
 			});
 
-			const apiContainer = defineContainer({
+			const apiContainer = Container.define({
 				name: "api",
 				image: apiImage,
 				ports: [Port.make({ name: "http", containerPort: 8080 })],

@@ -5,7 +5,7 @@
 
 import type { BuiltImageRef, BuiltImageRefApp, Dep } from "@konfig.ts/core";
 import { Dep as DepNS } from "@konfig.ts/core";
-import { defineContainer, Port } from "@konfig.ts/k8s";
+import { Container, Port } from "@konfig.ts/k8s";
 import { Effect } from "effect";
 
 type Expect<T extends true> = T;
@@ -27,13 +27,13 @@ type _ApiLayerOut = Expect<
 >;
 
 // 3 · Container.image accepts both raw strings and branded refs.
-const _branded = defineContainer({
+const _branded = Container.define({
 	name: "api",
 	image: apiImage,
 	ports: [Port.make({ name: "http", containerPort: 8080 })],
 });
 
-const _raw = defineContainer({
+const _raw = Container.define({
 	name: "postgres",
 	image: "docker.io/bitnami/postgresql:16.0.0",
 	ports: [Port.make({ name: "tcp", containerPort: 5432 })],

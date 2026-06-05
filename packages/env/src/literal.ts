@@ -34,12 +34,12 @@ export interface DefineLiteralInput<EnvName extends string, T> {
 // oxlint-disable-next-line app/no-type-assertion
 const _cast = <T>(value: unknown): T => value as T;
 
-export const defineLiteral = <const EnvName extends string, T = string>(
+const _define = <const EnvName extends string, T = string>(
 	input: DefineLiteralInput<EnvName, T>,
 ): LiteralEntry<EnvName, T> => {
 	const userSerialize = input.serialize ?? ((v: T) => String(v));
 	// Erase the parameter type to `unknown` for the stored function — see
-	// the LiteralEntry doc for the variance rationale. defineLiteral's
+	// the LiteralEntry doc for the variance rationale. Literal's
 	// own type signature still enforces `T` at the user-facing call site.
 	const serialize = (value: unknown): string => userSerialize(_cast<T>(value));
 	const serialized = userSerialize(input.value);
@@ -65,3 +65,15 @@ export const defineLiteral = <const EnvName extends string, T = string>(
 };
 
 export type AnyLiteralEntry = LiteralEntry<string, unknown>;
+
+/**
+ * `Literal` value namespace.
+ *
+ *   const port = Literal.define({
+ *     envName: "PORT", value: 8080,
+ *     schema: Config.number("PORT").pipe(Config.withDefault(8080)),
+ *   });
+ */
+export const Literal = {
+	define: _define,
+};

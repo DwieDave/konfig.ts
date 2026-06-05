@@ -1,7 +1,7 @@
 import { render, RenderContext } from "@konfig.ts/core";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { defineContainer } from "./container";
+import { Container } from "./container";
 import { Service } from "./network";
 import { Port } from "./ports";
 
@@ -27,9 +27,9 @@ describe("Port.make / Port.ref", () => {
 	});
 });
 
-describe("defineContainer", () => {
+describe("Container", () => {
 	it("returns a ContainerSpec whose ports are the input array", () => {
-		const c = defineContainer({
+		const c = Container.define({
 			name: "api",
 			image: "ghcr.io/example/api:1.0.0",
 			ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -46,7 +46,7 @@ describe("defineContainer", () => {
 	});
 
 	it("numeric probe port is accepted", () => {
-		const c = defineContainer({
+		const c = Container.define({
 			name: "api",
 			image: "x",
 			ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -57,7 +57,7 @@ describe("defineContainer", () => {
 });
 
 describe("Service.fromContainer", () => {
-	const api = defineContainer({
+	const api = Container.define({
 		name: "api",
 		image: "x",
 		ports: [

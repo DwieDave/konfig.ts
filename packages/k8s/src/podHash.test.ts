@@ -1,11 +1,11 @@
 import { it } from "@effect/vitest";
-import { defineEnvironment, defineSecret, SecretSource } from "@konfig.ts/env";
+import { SecretSource } from "@konfig.ts/env";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Redacted } from "effect";
 import { describe, expect, it as vitestIt } from "vitest";
 import { Environment, hashSecretValues, Secret } from "./index";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
@@ -90,13 +90,13 @@ describe("Secret.bind values service", () => {
 });
 
 describe("Environment.bind valuesLayer", () => {
-	const sessionKey = defineSecret({
+	const sessionKey = Secret.define({
 		name: "session-key",
 		namespace: "prod",
 		env: { value: "SESSION_KEY" },
 	});
 
-	const apiEnv = defineEnvironment({ db: dbCreds, session: sessionKey });
+	const apiEnv = Environment.define({ db: dbCreds, session: sessionKey });
 
 	it.effect("aggregates per-member values layers; yields both via tags", () =>
 		Effect.gen(function* () {

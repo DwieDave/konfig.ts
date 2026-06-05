@@ -1,6 +1,6 @@
 import { Application } from "@konfig.ts/argocd";
 import { Dep, type Manifest } from "@konfig.ts/core";
-import { defineContainer, Deployment, Environment } from "@konfig.ts/k8s";
+import { Container, Deployment, Environment } from "@konfig.ts/k8s";
 import { Sops } from "@konfig.ts/sops";
 import { workerEnv } from "@example/env-contracts";
 import { Effect } from "effect";
@@ -16,7 +16,7 @@ export interface WorkerOptions {
  *
  * Same round-2 typing flow as `api.ts`, minus the Service and ports
  * (the worker doesn't serve HTTP). Yields `Dep.Image("worker")` and
- * uses `defineContainer` so duplicate env names in the worker's
+ * uses `Container` so duplicate env names in the worker's
  * spec would fail at compile time with the `_konfig_duplicate_env_names`
  * hint.
  *
@@ -45,7 +45,7 @@ export const defineWorker = (opts: WorkerOptions) =>
 				},
 			});
 
-			const workerContainer = defineContainer({
+			const workerContainer = Container.define({
 				name: "worker",
 				image: workerImage,
 				ports: [],

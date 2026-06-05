@@ -1,21 +1,21 @@
-import { defineDownward, defineEnvironment, defineLiteral, defineSecret, SecretSource } from "@konfig.ts/env";
+import { Downward, Literal, SecretSource } from "@konfig.ts/env";
 import { describe, expect, it } from "vitest";
 import { Environment, Secret } from "./index";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
 });
 
-const sessionKey = defineSecret({
+const sessionKey = Secret.define({
 	name: "session-key",
 	namespace: "prod",
 	env: { value: "SESSION_KEY" },
 });
 
-const port = defineLiteral({ envName: "PORT", value: 8080 });
-const podName = defineDownward({ envName: "POD_NAME", fieldPath: "metadata.name" });
+const port = Literal.define({ envName: "PORT", value: 8080 });
+const podName = Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" });
 
 // Reusable source-only opts — every secret member must supply a backend
 // or a source, so tests that only care about envVars / namespace use a
@@ -48,7 +48,7 @@ describe("Secret.bind", () => {
 });
 
 describe("Environment.bind", () => {
-	const apiEnv = defineEnvironment({
+	const apiEnv = Environment.define({
 		db: dbCreds,
 		session: sessionKey,
 		port,
@@ -84,7 +84,7 @@ describe("Environment.bind", () => {
 	});
 
 	it("works with a single-member bundle", () => {
-		const env = defineEnvironment({ db: dbCreds });
+		const env = Environment.define({ db: dbCreds });
 		const bound = Environment.bind({ env, secrets: { db: dbCredsOpts } });
 		expect(bound.envVars).toHaveLength(2);
 		expect(bound.members.db.ref).toBe("db-creds");
@@ -124,12 +124,12 @@ describe("Secret.bind namespace override", () => {
 });
 
 describe("Environment.bind nested groups", () => {
-	const dbHost = defineLiteral({ envName: "DB_HOST", value: "" });
-	const dbPort = defineLiteral({ envName: "DB_PORT", value: 0 });
-	const apiPort = defineLiteral({ envName: "API_PORT", value: 8080 });
+	const dbHost = Literal.define({ envName: "DB_HOST", value: "" });
+	const dbPort = Literal.define({ envName: "DB_PORT", value: 0 });
+	const apiPort = Literal.define({ envName: "API_PORT", value: 8080 });
 
-	const apiEnv = defineEnvironment({
-		db: defineEnvironment({
+	const apiEnv = Environment.define({
+		db: Environment.define({
 			creds: dbCreds,
 			host: dbHost,
 			port: dbPort,
@@ -182,9 +182,9 @@ describe("Environment.bind nested groups", () => {
 });
 
 describe("Environment.bind literal value overrides", () => {
-	const clientUrl = defineLiteral({ envName: "CLIENT_URL", value: "" });
-	const replicas = defineLiteral({ envName: "REPLICAS", value: 0 });
-	const env = defineEnvironment({ db: dbCreds, clientUrl, replicas });
+	const clientUrl = Literal.define({ envName: "CLIENT_URL", value: "" });
+	const replicas = Literal.define({ envName: "REPLICAS", value: 0 });
+	const env = Environment.define({ db: dbCreds, clientUrl, replicas });
 	const envSecrets = { db: dbCredsOpts } as const;
 
 	it("a missing override falls back to the declared value", () => {
@@ -227,7 +227,7 @@ describe("Environment.bind literal value overrides", () => {
 	});
 
 	it("a literal-only bundle binds without a secrets field", () => {
-		const litOnly = defineEnvironment({ clientUrl, replicas });
+		const litOnly = Environment.define({ clientUrl, replicas });
 		const bound = Environment.bind({ env: litOnly });
 		const byName = new Map(bound.envVars.map((e) => [e.name, e]));
 		expect(byName.get("CLIENT_URL")?.value).toBe("");
@@ -235,12 +235,12 @@ describe("Environment.bind literal value overrides", () => {
 	});
 
 	it("custom serialize fn is reused for overrides", () => {
-		const lit = defineLiteral({
+		const lit = Literal.define({
 			envName: "LIST",
 			value: ["a"] as ReadonlyArray<string>,
 			serialize: (xs: ReadonlyArray<string>) => xs.join(","),
 		});
-		const e = defineEnvironment({ lit });
+		const e = Environment.define({ lit });
 		const bound = Environment.bind({ env: e, literals: { lit: ["a", "b", "c"] } });
 		const entry = bound.envVars.find((v) => v.name === "LIST");
 		expect(entry?.value).toBe("a,b,c");

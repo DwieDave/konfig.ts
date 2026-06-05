@@ -8,8 +8,8 @@ import type { EnvironmentShape } from "./layer";
  *
  * This is the runtime half of an env contract — the same `apiEnv`
  * bundle that drives `Environment.bind` in the konfig modules drives
- * this decode in the running app. Add a new `defineLiteral` /
- * `defineSecret` to the bundle and the runtime call surfaces it
+ * this decode in the running app. Add a new `Literal` /
+ * `Secret` to the bundle and the runtime call surfaces it
  * automatically; remove one and the runtime call no longer reads it.
  *
  *   const config = yield* Environment.runtime(apiEnv);

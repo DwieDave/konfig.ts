@@ -1,25 +1,25 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { RenderContext, Yaml } from "@konfig.ts/core";
-import { defineEnvironment, defineLiteral, defineSecret } from "@konfig.ts/env";
+import { Literal } from "@konfig.ts/env";
 import { ExternalSecrets } from "@konfig.ts/external-secrets";
 import { Environment, Secret, Workload } from "@konfig.ts/k8s";
 import { Effect } from "effect";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
 });
 
-const sessionKey = defineSecret({
+const sessionKey = Secret.define({
 	name: "session-key",
 	namespace: "prod",
 	env: { value: "SESSION_KEY" },
 });
 
-const port = defineLiteral({ envName: "PORT", value: 8080 });
+const port = Literal.define({ envName: "PORT", value: 8080 });
 
-const apiEnv = defineEnvironment({ db: dbCreds, session: sessionKey, port });
+const apiEnv = Environment.define({ db: dbCreds, session: sessionKey, port });
 
 const apiEnvK8s = Environment.bind({
 	env: apiEnv,
@@ -40,7 +40,7 @@ const apiEnvK8s = Environment.bind({
 	},
 });
 
-const ghcrPull = defineSecret({
+const ghcrPull = Secret.define({
 	name: "ghcr-pull",
 	namespace: "infra",
 	env: { dockerconfig: "DOCKERCONFIGJSON" },

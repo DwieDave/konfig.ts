@@ -1,10 +1,10 @@
-// Compile-time assertions for port-name branding. `defineContainer`
+// Compile-time assertions for port-name branding. `Container`
 // captures the literal port-name union as a phantom on `ContainerSpec`,
 // and `Service.fromContainer` propagates it to the typed `ServicePortSpec`.
 // A mistyped probe port or `targetPort` fails at compile time.
 
 import type { ContainerSpec, NamesOf } from "@konfig.ts/k8s";
-import { defineContainer, Port, Service } from "@konfig.ts/k8s";
+import { Container, Port, Service } from "@konfig.ts/k8s";
 
 type Expect<T extends true> = T;
 type Equal<X, Y> =
@@ -17,8 +17,8 @@ type PortsTuple = readonly [
 ];
 type _Names = Expect<Equal<NamesOf<PortsTuple>, "http" | "metrics">>;
 
-// 2 · `defineContainer` returns `ContainerSpec<"http" | "metrics">`.
-const api = defineContainer({
+// 2 · `Container` returns `ContainerSpec<"http" | "metrics">`.
+const api = Container.define({
 	name: "api",
 	image: "x",
 	ports: [
@@ -29,7 +29,7 @@ const api = defineContainer({
 type _ApiSpec = Expect<Equal<typeof api, ContainerSpec<"http" | "metrics", never>>>;
 
 // 3 · Probe port — declared name OK.
-const okProbe = defineContainer({
+const okProbe = Container.define({
 	name: "api",
 	image: "x",
 	ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -38,7 +38,7 @@ const okProbe = defineContainer({
 void okProbe;
 
 // 4 · Probe port — undeclared name fails.
-const badProbe = defineContainer({
+const badProbe = Container.define({
 	name: "api",
 	image: "x",
 	ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -50,7 +50,7 @@ const badProbe = defineContainer({
 void badProbe;
 
 // 5 · Probe — bare number always accepted.
-const numericProbe = defineContainer({
+const numericProbe = Container.define({
 	name: "api",
 	image: "x",
 	ports: [Port.make({ name: "http", containerPort: 8080 })],

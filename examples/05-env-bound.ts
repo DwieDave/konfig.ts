@@ -1,23 +1,23 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { RenderContext, Yaml } from "@konfig.ts/core";
 import {
-	defineEnvironment,
-	defineLiteral,
-	defineSecret,
+	Environment,
+	Literal,
+	Secret,
 	SecretSource,
 } from "@konfig.ts/env";
 import { Environment, NativeSecret, Workload } from "@konfig.ts/k8s";
 import { Effect } from "effect";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
 });
 
-const port = defineLiteral({ envName: "PORT", value: 8080 });
+const port = Literal.define({ envName: "PORT", value: 8080 });
 
-const apiEnv = defineEnvironment({ db: dbCreds, port });
+const apiEnv = Environment.define({ db: dbCreds, port });
 
 const apiEnvK8s = Environment.bind({
 	env: apiEnv,

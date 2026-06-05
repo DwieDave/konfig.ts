@@ -40,7 +40,7 @@ export interface PortInput<N extends string> {
  *
  * - `Port.make(input)` constructs a named container port; the literal
  *   `name` is captured in the returned `ContainerPort<N>` brand so
- *   `defineContainer` can infer the port-name union and constrain
+ *   `Container` can infer the port-name union and constrain
  *   cross-references (probes, Service.targetPort).
  * - `Port.ref(name)` returns the brand alone, for probe targets and
  *   `targetPort` references that need to name an existing declared port.

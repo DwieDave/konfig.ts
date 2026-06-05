@@ -1,10 +1,10 @@
 // Compile-time assertions for Selector<L> coherence. Two distinct
 // selectors are not assignable to each other; the typed K8s variants
 // (Deployment.fromPodSet / Service.fromPodSet / NetworkPolicy.fromPodSet /
-// definePodSet) refuse to mix label sets across resources.
+// PodSet) refuse to mix label sets across resources.
 
 import type { Selector as SelectorT, SelectorLabels } from "@konfig.ts/k8s";
-import { definePodSet, Deployment, Selector, Service } from "@konfig.ts/k8s";
+import { PodSet, Deployment, Selector, Service } from "@konfig.ts/k8s";
 
 type Expect<T extends true> = T;
 type Equal<X, Y> =
@@ -39,12 +39,12 @@ const _okSvc = Service.fromPodSet({
 	ports: [{ port: 80 }],
 });
 
-// 4 · `definePodSet` infers L from `podSet` and rejects a mismatched
+// 4 · `PodSet` infers L from `podSet` and rejects a mismatched
 //     sub-resource. Here, attempting to claim a fixed-label deployment
 //     for a different bundle is the kind of error we want to catch —
 //     the umbrella's L is inferred from `podSet`, so the sub-input is
 //     implicitly typed to it (no separate bundle to mismatch).
-const _okTrio = definePodSet({
+const _okTrio = PodSet.define({
 	podSet: apiPods,
 	deployment: {
 		name: "api",

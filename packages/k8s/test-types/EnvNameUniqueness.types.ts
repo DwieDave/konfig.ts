@@ -1,12 +1,12 @@
 // Compile-time assertions for env-name duplicate detection on
-// `defineContainer({ env })`. K8s last-wins on duplicate env names —
+// `Container.define({ env })`. K8s last-wins on duplicate env names —
 // surfacing them at the call site replaces a silent runtime bug with
 // a `_konfig_duplicate_env_names` hint sentence.
 
-import { defineContainer, EnvVar, Port } from "@konfig.ts/k8s";
+import { Container, EnvVar, Port } from "@konfig.ts/k8s";
 
 // 1 · Happy path — three distinct env names.
-const _good = defineContainer({
+const _good = Container.define({
 	name: "api",
 	image: "ghcr.io/example/api:1.0.0",
 	ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -19,7 +19,7 @@ const _good = defineContainer({
 
 // 2 · BROKEN — "PORT" appears twice; the env-dup hint sentence
 //     surfaces inline in the TS error.
-const _dup = defineContainer({
+const _dup = Container.define({
 	name: "api",
 	image: "x",
 	ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -33,7 +33,7 @@ const _dup = defineContainer({
 
 // 3 · BROKEN — two pairs of duplicates; both names appear in the
 //     sentence's union.
-const _dups = defineContainer({
+const _dups = Container.define({
 	name: "api",
 	image: "x",
 	ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -47,13 +47,13 @@ const _dups = defineContainer({
 });
 
 // 4 · Empty env / no env — degenerate case, ok.
-const _empty = defineContainer({
+const _empty = Container.define({
 	name: "api",
 	image: "x",
 	ports: [Port.make({ name: "http", containerPort: 8080 })],
 });
 
-const _emptyArr = defineContainer({
+const _emptyArr = Container.define({
 	name: "api",
 	image: "x",
 	ports: [Port.make({ name: "http", containerPort: 8080 })],

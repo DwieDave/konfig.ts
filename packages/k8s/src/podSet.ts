@@ -11,8 +11,8 @@ import { Service, type ServiceFromPodSetInput } from "./network";
 import { Deployment, type DeploymentFromPodSetInput } from "./workload";
 
 /**
- * Umbrella authoring helper: emit a coherent Deployment + Service +
- * (optional) NetworkPolicy from a single `Selector`. Every resource
+ * `PodSet.define` input. Drives a coherent Deployment + Service +
+ * (optional) NetworkPolicy from a single `Selector` — every resource
  * derives its selector from `podSet`, so the trio cannot drift.
  */
 export interface DefinePodSetInput<L extends Readonly<Record<string, string>>> {
@@ -28,29 +28,45 @@ type PodSetOutput =
 	| readonly [K8sDeployment, K8sNetworkPolicy]
 	| readonly [K8sDeployment];
 
-export const definePodSet = <L extends Readonly<Record<string, string>>>(
-	input: DefinePodSetInput<L>,
-): Manifest.Manifest<PodSetOutput> => {
-	const deployment = Deployment.fromPodSet({ podSet: input.podSet, ...input.deployment });
-	const service =
-		input.service !== undefined
-			? Service.fromPodSet({ podSet: input.podSet, ...input.service })
-			: undefined;
-	const netPol =
-		input.netPol !== undefined
-			? NetworkPolicy.fromPodSet({ podSet: input.podSet, ...input.netPol })
-			: undefined;
+/**
+ * `PodSet` value namespace.
+ *
+ *   const trio = PodSet.define({
+ *     podSet: redisCachePods,
+ *     deployment: { ... },
+ *     service: { ... },
+ *     netPol: { ... },
+ *   });
+ *
+ * Umbrella over `Deployment.fromPodSet`, `Service.fromPodSet`, and
+ * `NetworkPolicy.fromPodSet` — emits whichever subset of the trio the
+ * input specifies, all rooted at one `Selector`.
+ */
+export const PodSet = {
+	define: <L extends Readonly<Record<string, string>>>(
+		input: DefinePodSetInput<L>,
+	): Manifest.Manifest<PodSetOutput> => {
+		const deployment = Deployment.fromPodSet({ podSet: input.podSet, ...input.deployment });
+		const service =
+			input.service !== undefined
+				? Service.fromPodSet({ podSet: input.podSet, ...input.service })
+				: undefined;
+		const netPol =
+			input.netPol !== undefined
+				? NetworkPolicy.fromPodSet({ podSet: input.podSet, ...input.netPol })
+				: undefined;
 
-	return Manifest.make<PodSetOutput>((ctx) =>
-		Effect.gen(function* () {
-			const d = yield* deployment.render(ctx);
-			const s = service !== undefined ? yield* service.render(ctx) : undefined;
-			const n = netPol !== undefined ? yield* netPol.render(ctx) : undefined;
-			if (s !== undefined && n !== undefined)
-				return [d, s, n] as readonly [K8sDeployment, K8sService, K8sNetworkPolicy];
-			if (s !== undefined) return [d, s] as readonly [K8sDeployment, K8sService];
-			if (n !== undefined) return [d, n] as readonly [K8sDeployment, K8sNetworkPolicy];
-			return [d] as readonly [K8sDeployment];
-		}),
-	);
+		return Manifest.make<PodSetOutput>((ctx) =>
+			Effect.gen(function* () {
+				const d = yield* deployment.render(ctx);
+				const s = service !== undefined ? yield* service.render(ctx) : undefined;
+				const n = netPol !== undefined ? yield* netPol.render(ctx) : undefined;
+				if (s !== undefined && n !== undefined)
+					return [d, s, n] as readonly [K8sDeployment, K8sService, K8sNetworkPolicy];
+				if (s !== undefined) return [d, s] as readonly [K8sDeployment, K8sService];
+				if (n !== undefined) return [d, n] as readonly [K8sDeployment, K8sNetworkPolicy];
+				return [d] as readonly [K8sDeployment];
+			}),
+		);
+	},
 };

@@ -1,8 +1,8 @@
-// Compile-time assertions for VolumeName<N> + definePod: container
+// Compile-time assertions for VolumeName<N> + Pod: container
 // volumeMounts referring to undeclared volumes fail at the call site.
 
 import type { DefinedPod, Volume as VolumeT, VolumeNamesOf } from "@konfig.ts/k8s";
-import { defineContainer, definePod, Port, Volume } from "@konfig.ts/k8s";
+import { Container, Pod, Port, Volume } from "@konfig.ts/k8s";
 
 type Expect<T extends true> = T;
 type Equal<X, Y> =
@@ -16,12 +16,12 @@ type _CfgN = Expect<Equal<typeof cfg, VolumeT<"config">>>;
 type Vs = readonly [VolumeT<"config">, VolumeT<"data">];
 type _Names = Expect<Equal<VolumeNamesOf<Vs>, "config" | "data">>;
 
-// 3 · `definePod` infers the pod's volume-name union from the volumes
+// 3 · `Pod` infers the pod's volume-name union from the volumes
 //     tuple and surfaces it on `DefinedPod<...>`.
-const goodPod = definePod({
+const goodPod = Pod.define({
 	volumes: [Volume.empty({ name: "config" }), Volume.empty({ name: "data" })],
 	containers: [
-		defineContainer({
+		Container.define({
 			name: "app",
 			image: "x",
 			ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -35,11 +35,11 @@ const goodPod = definePod({
 type _PodNames = Expect<Equal<typeof goodPod, DefinedPod<"config" | "data">>>;
 
 // 4 · BROKEN — container mounts a name not declared on the pod.
-const _typo = definePod({
+const _typo = Pod.define({
 	volumes: [Volume.empty({ name: "config" })],
 	containers: [
 		// @ts-expect-error - "cnofig" is not in declared volume names ("config").
-		defineContainer({
+		Container.define({
 			name: "app",
 			image: "x",
 			ports: [Port.make({ name: "http", containerPort: 8080 })],
@@ -49,10 +49,10 @@ const _typo = definePod({
 });
 
 // 5 · BROKEN — cross-pod mount reference.
-const _otherPod = definePod({
+const _otherPod = Pod.define({
 	volumes: [Volume.empty({ name: "logs" })],
 	containers: [
-		defineContainer({
+		Container.define({
 			name: "log",
 			image: "x",
 			ports: [],
@@ -60,11 +60,11 @@ const _otherPod = definePod({
 		}),
 	],
 });
-const _crossPod = definePod({
+const _crossPod = Pod.define({
 	volumes: [Volume.empty({ name: "config" })],
 	containers: [
 		// @ts-expect-error - "logs" was declared on _otherPod, not this one.
-		defineContainer({
+		Container.define({
 			name: "app",
 			image: "x",
 			ports: [],
@@ -74,10 +74,10 @@ const _crossPod = definePod({
 });
 
 // 6 · Empty volumes — containers may have no volumeMounts; ok.
-const _empty = definePod({
+const _empty = Pod.define({
 	volumes: [],
 	containers: [
-		defineContainer({
+		Container.define({
 			name: "app",
 			image: "x",
 			ports: [],

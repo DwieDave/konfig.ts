@@ -1,10 +1,10 @@
 import { it } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Redacted } from "effect";
 import { describe, expect } from "vitest";
-import { defineSecret } from "./secret";
+import { Secret } from "./secret";
 
-describe("defineSecret", () => {
-	const dbCreds = defineSecret({
+describe("Secret", () => {
+	const dbCreds = Secret.define({
 		name: "db-creds",
 		namespace: "prod",
 		env: {

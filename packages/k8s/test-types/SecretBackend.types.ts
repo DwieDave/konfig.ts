@@ -2,13 +2,13 @@
 // and `Environment.bind`'s discriminated input shape.
 
 import type { Manifest } from "@konfig.ts/core";
-import type { defineSecret, SecretSource } from "@konfig.ts/env";
+import type { SecretSource } from "@konfig.ts/env";
 import type {
 	BackendEmitInput,
 	BackendTag,
 	SecretBackend,
 } from "@konfig.ts/k8s";
-import { Environment } from "@konfig.ts/k8s";
+import { Environment, Secret } from "@konfig.ts/k8s";
 
 type Expect<T extends true> = T;
 type Equal<X, Y> =
@@ -46,11 +46,11 @@ type _BackendEmitInput = Expect<
 
 // 4 · A bundle without secrets makes Environment.bind's `secrets`
 //     field optional; with a secret it becomes required.
-const noSecrets = (() => null as unknown as ReturnType<typeof defineSecret>) /* satisfies guard */;
+const noSecrets = (() => null as unknown as ReturnType<typeof Secret.define>) /* satisfies guard */;
 void noSecrets;
 
 declare const dbCreds: ReturnType<
-	typeof defineSecret<"db-creds", { readonly url: "DATABASE_URL" }>
+	typeof Secret.define<"db-creds", { readonly url: "DATABASE_URL" }>
 >;
 
 declare const lit: { readonly _kind: "Literal" };

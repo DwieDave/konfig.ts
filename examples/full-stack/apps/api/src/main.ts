@@ -8,7 +8,7 @@
  * reads the same env vars at process start and decodes them into the
  * typed record below).
  *
- * Add a new `defineLiteral` to the bundle and both sides surface it
+ * Add a new `Literal` to the bundle and both sides surface it
  * automatically; rename one and the typechecker flags both call sites.
  */
 import { apiEnv } from "@example/env-contracts";

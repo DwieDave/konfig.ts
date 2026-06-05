@@ -38,7 +38,7 @@ export interface BindSecretInput<
 	readonly annotations?: Readonly<Record<string, string>>;
 	/**
 	 * Override the contract's baked-in `namespace` for this bind. Useful
-	 * when the same `defineSecret` declaration is consumed across multiple
+	 * when the same `Secret` declaration is consumed across multiple
 	 * k8s namespaces (e.g. prod / staging / local of the same workload)
 	 * — the runtime read is namespace-independent, but each binding emits
 	 * its manifest into a different namespace.

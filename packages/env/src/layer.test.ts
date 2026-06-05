@@ -1,20 +1,20 @@
 import { it } from "@effect/vitest";
 import { ConfigProvider, Context, Effect, Redacted } from "effect";
 import { describe, expect } from "vitest";
-import { defineEnvironment } from "./environment";
+import { Environment } from "./environment";
 import { environmentLayer, type EnvironmentShape } from "./layer";
-import { defineLiteral } from "./literal";
-import { defineSecret } from "./secret";
+import { Literal } from "./literal";
+import { Secret } from "./secret";
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
 });
 
-const port = defineLiteral({ envName: "PORT", value: 8080 });
+const port = Literal.define({ envName: "PORT", value: 8080 });
 
-const apiEnv = defineEnvironment({ db: dbCreds, port });
+const apiEnv = Environment.define({ db: dbCreds, port });
 type ApiEnvShape = EnvironmentShape<typeof apiEnv.members>;
 
 class ApiEnv extends Context.Service<ApiEnv, ApiEnvShape>()("ApiEnv") {}
@@ -41,7 +41,7 @@ describe("environmentLayer", () => {
 	it.effect("yields are typed end-to-end", () =>
 		Effect.gen(function* () {
 			const env = yield* ApiEnv;
-			// `port` is number (defineLiteral<"PORT", number>) — not string.
+			// `port` is number (Literal<"PORT", number>) — not string.
 			const portPlus: number = env.port + 1;
 			expect(portPlus).toBe(8081);
 		}).pipe(Effect.provide(environmentLayer(ApiEnv, apiEnv)), Effect.provide(fakeEnv)),

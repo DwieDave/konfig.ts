@@ -1,27 +1,26 @@
 export {
 	type AnyEnvironment,
 	type EnvMember,
-	type Environment,
+	Environment,
 	type MemberValue,
-	defineEnvironment,
 } from "./environment";
 export {
 	type AnyDownwardEntry,
 	type DefineDownwardInput,
+	Downward,
 	type DownwardEntry,
-	defineDownward,
 } from "./downward";
 export {
 	type AnyLiteralEntry,
 	type DefineLiteralInput,
+	Literal,
 	type LiteralEntry,
-	defineLiteral,
 } from "./literal";
 export {
 	type AnySecretEntry,
 	type DefineSecretInput,
+	Secret,
 	type SecretEntry,
-	defineSecret,
 } from "./secret";
 export {
 	type EnvClaim,

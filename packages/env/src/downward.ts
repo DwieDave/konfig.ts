@@ -19,7 +19,7 @@ export interface DefineDownwardInput<EnvName extends string> {
 	readonly fieldPath: string;
 }
 
-export const defineDownward = <const EnvName extends string>(
+const _define = <const EnvName extends string>(
 	input: DefineDownwardInput<EnvName>,
 ): DownwardEntry<EnvName> => {
 	const parser = Config.string(input.envName);
@@ -40,3 +40,12 @@ export const defineDownward = <const EnvName extends string>(
 };
 
 export type AnyDownwardEntry = DownwardEntry<string>;
+
+/**
+ * `Downward` value namespace.
+ *
+ *   const podName = Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" });
+ */
+export const Downward = {
+	define: _define,
+};

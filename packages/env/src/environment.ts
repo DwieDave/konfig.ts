@@ -11,12 +11,12 @@ import type { AnyLiteralEntry, LiteralEntry } from "./literal";
 import type { AnySecretEntry, SecretEntry } from "./secret";
 
 /**
- * Union of every kind that can be a member of a `defineEnvironment`.
+ * Union of every kind that can be a member of a `Environment`.
  *
  * Nesting: `Environment` itself is a valid `EnvMember`, so bundles can
  * group related secrets / literals / downward fields into sub-records.
  * The yielded record matches the nesting structure — e.g. `env.db.host`,
- * `env.db.password` for a bundle `{db: defineEnvironment({host, password})}`.
+ * `env.db.password` for a bundle `{db: Environment.define({host, password})}`.
  * `Environment.bind` walks nested groups recursively when emitting
  * envVars + secret manifests, and `SecretMembersOpts` / `LiteralMembersOpts`
  * accept matching nested override shapes.
@@ -109,7 +109,7 @@ type _AnyCollision<M extends Readonly<Record<string, EnvMember>>> = {
 }[keyof M];
 
 type _EnvNameCollisionError<Name extends string> = {
-	readonly _konfig_error: `defineEnvironment: envName "${Name}" is claimed by multiple members`;
+	readonly _konfig_error: `Environment: envName "${Name}" is claimed by multiple members`;
 };
 
 type _CheckCollisions<M extends Readonly<Record<string, EnvMember>>> = [
@@ -118,7 +118,7 @@ type _CheckCollisions<M extends Readonly<Record<string, EnvMember>>> = [
 	? M
 	: _EnvNameCollisionError<Extract<_AnyCollision<M>, string>>;
 
-export const defineEnvironment = <const M extends Readonly<Record<string, EnvMember>>>(
+const _define = <const M extends Readonly<Record<string, EnvMember>>>(
 	members: M & _CheckCollisions<M>,
 ): Environment<M> => {
 	const envClaims = _collectClaims(members);
@@ -137,4 +137,21 @@ export const defineEnvironment = <const M extends Readonly<Record<string, EnvMem
 			envClaims,
 		},
 	});
+};
+
+/**
+ * `Environment` value namespace (env-contracts package).
+ *
+ *   const apiEnv = Environment.define({
+ *     db: Secret.define({ ... }),
+ *     port: Literal.define({ ... }),
+ *     pod: Downward.define({ ... }),
+ *   });
+ *
+ * The k8s package re-exports this merged with its own `Environment.bind`
+ * / `Environment.runtime`, so importing `Environment` from `@konfig.ts/k8s`
+ * exposes `define` alongside the binder + runtime decoder.
+ */
+export const Environment = {
+	define: _define,
 };

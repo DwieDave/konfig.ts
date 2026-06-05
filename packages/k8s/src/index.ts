@@ -1,13 +1,12 @@
 
 export * as K8s from "./.generated/k8s-types";
 export {
+	Container,
 	type ContainerInput,
 	type ContainerSpec,
-	defineContainer,
 	type DefineContainerInput,
 	type DefinedPod,
 	type DefinePodInput,
-	definePod,
 	Pod,
 	type PodSpecInput,
 } from "./container";
@@ -49,12 +48,36 @@ export {
 	type ServiceAccountInput,
 	type ServiceAccountManifest,
 } from "./identity";
-import { runtime as envRuntime } from "@konfig.ts/env";
+import {
+	Environment as _EnvironmentContract,
+	runtime as envRuntime,
+	Secret as _SecretContract,
+} from "@konfig.ts/env";
 import { Secret as _SecretIdentity } from "./identity";
 import { bindSecret } from "./secretBind";
 import { bindEnvironment } from "./environmentBind";
-export const Secret = { ..._SecretIdentity, bind: bindSecret };
-export const Environment = { bind: bindEnvironment, runtime: envRuntime };
+
+/**
+ * `Secret` value namespace — merges the env-contracts side (`define`)
+ * with the K8s side (`make`, `bind`, identity helpers). Importing
+ * `Secret` from `@konfig.ts/k8s` gives you the full surface:
+ *
+ *   Secret.define({ name, namespace, env })  — env contract (from @konfig.ts/env)
+ *   Secret.make({ name, namespace, stringData })  — K8s Secret manifest
+ *   Secret.bind({ secret, backend, source })  — env-to-manifest binder
+ */
+export const Secret = { ..._SecretContract, ..._SecretIdentity, bind: bindSecret };
+
+/**
+ * `Environment` value namespace — merges `define` (env-contracts) with
+ * `bind` + `runtime` (K8s). The same `Environment` symbol carries the
+ * declaration, the manifest binder, and the runtime decoder.
+ */
+export const Environment = {
+	..._EnvironmentContract,
+	bind: bindEnvironment,
+	runtime: envRuntime,
+};
 export type {
 	BindSecretInput,
 	DeclaredSecret,
@@ -134,4 +157,4 @@ export {
 export * as Workload from "./workloadHelpers";
 export { Selector } from "./selector";
 export type { SelectorLabels } from "./selector";
-export { type DefinePodSetInput, definePodSet } from "./podSet";
+export { type DefinePodSetInput, PodSet } from "./podSet";

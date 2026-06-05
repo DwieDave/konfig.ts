@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { NodeServices } from "@effect/platform-node";
 import { coerce, Yaml } from "@konfig.ts/core";
-import { defineSecret, SecretSource } from "@konfig.ts/env";
+import { SecretSource } from "@konfig.ts/env";
 import { Secret } from "@konfig.ts/k8s";
 import { SealedSecrets } from "@konfig.ts/sealed-secrets";
 import { Effect, Exit, Layer, Stream } from "effect";
@@ -89,7 +89,7 @@ const _makeStubSpawner = (
 			}),
 	});
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "prod",
 	env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
@@ -195,7 +195,7 @@ describe("Sops.source error handling", () => {
 			const respond = (): never => {
 				throw new Error("sops not installed");
 			};
-			const oneKey = defineSecret({
+			const oneKey = Secret.define({
 				name: "one-key",
 				namespace: "prod",
 				env: { url: "URL" },

@@ -35,7 +35,7 @@ export interface MakeEntryInput<C extends Config.Config<unknown>, M extends obje
 // oxlint-disable-next-line app/no-type-assertion
 const _cast = <T>(value: unknown): T => value as T;
 
-// Each defineSecret/defineLiteral/defineDownward produces a yieldable
+// Each Secret/Literal/Downward produces a yieldable
 // Config (an "atom" in state-management terms) intersected with its pure
 // metadata. _makeEntry is the internal helper that does the merge.
 export const _makeEntry = <C extends Config.Config<unknown>, M extends object>(

@@ -1,4 +1,4 @@
-import { defineSecret } from "@konfig.ts/env";
+import { Secret } from "@konfig.ts/env";
 
 /**
  * Postgres connection credentials.
@@ -12,7 +12,7 @@ import { defineSecret } from "@konfig.ts/env";
  * and let devspace populate plaintext out-of-band). The bundle itself
  * stays storage-agnostic.
  */
-export const dbCreds = defineSecret({
+export const dbCreds = Secret.define({
 	name: "db-creds",
 	namespace: "app",
 	env: {
@@ -25,7 +25,7 @@ export const dbCreds = defineSecret({
 /**
  * S3 access for the api's media uploads. Only the api consumes this.
  */
-export const s3Creds = defineSecret({
+export const s3Creds = Secret.define({
 	name: "s3-creds",
 	namespace: "app",
 	env: {
@@ -37,7 +37,7 @@ export const s3Creds = defineSecret({
 /**
  * JWT signing key. Only the api needs it (worker doesn't issue tokens).
  */
-export const jwtKey = defineSecret({
+export const jwtKey = Secret.define({
 	name: "jwt-signing-key",
 	namespace: "app",
 	env: {
@@ -53,7 +53,7 @@ export const jwtKey = defineSecret({
  * `Secret.bind` (no Environment binding — the secret has no env-var
  * mappings beyond the dockerconfigjson blob itself).
  */
-export const ghcrPull = defineSecret({
+export const ghcrPull = Secret.define({
 	name: "ghcr-pull",
 	namespace: "app",
 	env: {
