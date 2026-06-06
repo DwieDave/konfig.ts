@@ -380,7 +380,7 @@ const _boxWidth = (n: LayoutNodeData, edges: ReadonlyArray<LayoutEdgeData>): num
 	const outCount = _outgoingCount(n.name, edges);
 	const inCount = _incomingCount(n.name, edges);
 	const outSpace = 2 * outCount + 1;
-	const inSpace = inCount > 0 ? node.name.length + 4 + 2 * inCount : 0;
+	const inSpace = 2 * inCount + 1;
 	return Math.max(nameWidth, midWidth, outSpace, inSpace, 5);
 };
 
@@ -542,27 +542,25 @@ const _computeNodeSlots = (
 		if (ax === bx) return a.from.localeCompare(b.from);
 		return ax - bx;
 	});
-	const nameLen = real.name.length;
-	const trailingStart = laid.boxStartX + 3 + nameLen + 1;
-	const trailingEnd = laid.boxStartX + laid.boxWidth - 2;
-	const trailingAvail = trailingEnd - trailingStart + 1;
-	const inSlotMinX = trailingAvail >= inOrdered.length
-		? trailingStart
-		: laid.boxStartX + 1;
-	const inSlotMaxX = trailingEnd;
-	const inIdeals = inOrdered.map((e) => {
-		const parentSlot =
-			slotsByNode.get(e.from)?.outgoingSlotX.get(laid.data.name);
-		if (parentSlot !== undefined) return parentSlot;
-		const pn = positions.get(e.from);
-		return pn ? _nodeCenter(pn) : _nodeCenter(laid);
-	});
-	const inSlotXs = _allocateMonotonic(inIdeals, inSlotMinX, inSlotMaxX, 2);
+	const M = inOrdered.length;
 	const incoming = new Map<string, number>();
-	inOrdered.forEach((e, i) => {
-		const x = inSlotXs[i];
-		if (x !== undefined) incoming.set(e.from, x);
-	});
+	if (M > 0) {
+		const slotMinX = laid.boxStartX + 1;
+		const slotMaxX = laid.boxStartX + laid.boxWidth - 2;
+		const boxCenter = laid.boxStartX + Math.floor(laid.boxWidth / 2);
+		const innerSpan = Math.max(1, laid.boxWidth - 2);
+		const spacing = M > 1 ? innerSpan / (M + 1) : 0;
+		const inIdeals = inOrdered.map((_e, i) => {
+			if (M === 1) return boxCenter;
+			return Math.round(boxCenter + (i - (M - 1) / 2) * spacing);
+		});
+		const inSlotXs = _allocateMonotonic(inIdeals, slotMinX, slotMaxX, 2);
+		inOrdered.forEach((e, i) => {
+			const x = inSlotXs[i];
+			if (x !== undefined) incoming.set(e.from, x);
+		});
+	}
+	void real;
 	return { outgoingSlotX: outgoing, incomingSlotX: incoming };
 };
 
@@ -580,20 +578,19 @@ const _renderBoxLines = (
 		const line = `${left}│${right}`;
 		return [line, line, line];
 	}
+	void incomingSlotsByX;
 	const outSet = new Set(outgoingSlotsByX.map((x) => x - laid.boxStartX));
-	const inSet = new Set(incomingSlotsByX.map((x) => x - laid.boxStartX));
 	const nameLen = real.name.length;
 	const topChars = Array.from({ length: w }, (_unused, i) => {
 		if (i === 0) return "┌";
 		if (i === w - 1) return "┐";
-		if (i === 1) return inSet.has(1) ? "┴" : "─";
+		if (i === 1) return "─";
 		if (i === 2) return " ";
 		if (i >= 3 && i < 3 + nameLen) {
 			const idx = i - 3;
 			return real.name[idx] ?? "?";
 		}
 		if (i === 3 + nameLen) return " ";
-		if (inSet.has(i)) return "┴";
 		return "─";
 	}).join("");
 	const buildSeg = real.hasBuildScript ? BUILD_TOKEN : "";
