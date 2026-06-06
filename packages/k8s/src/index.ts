@@ -155,6 +155,8 @@ export {
 } from "./workload";
 
 export * as Workload from "./workloadHelpers";
+export * as Bundle from "./Bundle";
+export type { BundleHandle } from "./Bundle";
 export { Selector } from "./selector";
 export type { SelectorLabels } from "./selector";
 export { type DefinePodSetInput, PodSet } from "./podSet";
