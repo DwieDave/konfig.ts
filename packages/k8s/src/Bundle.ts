@@ -96,7 +96,7 @@ type _NsExcludes<Ns extends string> = [Ns] extends [never]
  *  - the build callback's `R` channel becomes the handle's `In` after
  *    subtracting what this bundle provides itself.
  *
- * Pair with `Bundle.fromModules` (Task 5) to compose multiple bundles
+ * Pair with `Bundle.fromModules` to compose multiple bundles
  * and have the dep-graph residual checked at `Bundle.entrypoint`.
  */
 export const define = <
