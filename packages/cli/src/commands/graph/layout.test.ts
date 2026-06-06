@@ -143,8 +143,8 @@ describe("renderGraph — multi-connector bottom edge", () => {
 	});
 });
 
-describe("renderGraph — incoming arrows", () => {
-	it("draws a ▼ arrow above a child for an incoming runtime edge", () => {
+describe("renderGraph — incoming connectors", () => {
+	it("draws a ┴ stem on a child's top edge for an incoming runtime edge", () => {
 		const out = renderGraph({
 			nodes: [
 				node("@s/api", "packages/api"),
@@ -155,6 +155,7 @@ describe("renderGraph — incoming arrows", () => {
 			width: 200,
 			withDev: false,
 		});
+		expect(out).toContain("┴");
 		expect(out).toContain("▼");
 	});
 });

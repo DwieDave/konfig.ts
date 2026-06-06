@@ -29,7 +29,7 @@ export interface CycleInput {
 
 const GUTTER = 3;
 const BUILD_TOKEN = "build";
-const BOX_ROWS = 3;
+const BOX_ROWS = 4;
 const MIN_ROUTE_ROWS = 3;
 const DUMMY_WIDTH = 3;
 
@@ -375,13 +375,13 @@ const _boxWidth = (n: LayoutNodeData, edges: ReadonlyArray<LayoutEdgeData>): num
 	if (n.real === null) return DUMMY_WIDTH;
 	const node = n.real;
 	const buildSeg = node.hasBuildScript ? BUILD_TOKEN.length + 1 : 0;
-	const nameWidth = node.name.length + 5;
+	const nameRowWidth = node.name.length + 4;
 	const midWidth = node.relDir.length + buildSeg + 4;
 	const outCount = _outgoingCount(n.name, edges);
 	const inCount = _incomingCount(n.name, edges);
 	const outSpace = 2 * outCount + 1;
 	const inSpace = 2 * inCount + 1;
-	return Math.max(nameWidth, midWidth, outSpace, inSpace, 5);
+	return Math.max(nameRowWidth, midWidth, outSpace, inSpace, 5);
 };
 
 interface LaidNode {
@@ -568,7 +568,7 @@ const _renderBoxLines = (
 	laid: LaidNode,
 	outgoingSlotsByX: ReadonlyArray<number>,
 	incomingSlotsByX: ReadonlyArray<number>,
-): [string, string, string] => {
+): [string, string, string, string] => {
 	const real = laid.data.real;
 	const w = laid.boxWidth;
 	if (real === null) {
@@ -576,35 +576,30 @@ const _renderBoxLines = (
 		const left = " ".repeat(offset);
 		const right = " ".repeat(Math.max(0, w - offset - 1));
 		const line = `${left}│${right}`;
-		return [line, line, line];
+		return [line, line, line, line];
 	}
-	void incomingSlotsByX;
 	const outSet = new Set(outgoingSlotsByX.map((x) => x - laid.boxStartX));
-	const nameLen = real.name.length;
+	const inSet = new Set(incomingSlotsByX.map((x) => x - laid.boxStartX));
 	const topChars = Array.from({ length: w }, (_unused, i) => {
 		if (i === 0) return "┌";
 		if (i === w - 1) return "┐";
-		if (i === 1) return "─";
-		if (i === 2) return " ";
-		if (i >= 3 && i < 3 + nameLen) {
-			const idx = i - 3;
-			return real.name[idx] ?? "?";
-		}
-		if (i === 3 + nameLen) return " ";
+		if (inSet.has(i)) return "┴";
 		return "─";
 	}).join("");
-	const buildSeg = real.hasBuildScript ? BUILD_TOKEN : "";
 	const innerWidth = w - 4;
-	const padCount = Math.max(0, innerWidth - real.relDir.length - buildSeg.length);
-	const pad = " ".repeat(padCount);
-	const mid = `│ ${real.relDir}${pad}${buildSeg} │`;
+	const namePadCount = Math.max(0, innerWidth - real.name.length);
+	const nameRow = `│ ${real.name}${" ".repeat(namePadCount)} │`;
+	const buildSeg = real.hasBuildScript ? BUILD_TOKEN : "";
+	const midPadCount = Math.max(0, innerWidth - real.relDir.length - buildSeg.length);
+	const midPad = " ".repeat(midPadCount);
+	const midRow = `│ ${real.relDir}${midPad}${buildSeg} │`;
 	const botChars = Array.from({ length: w }, (_unused, i) => {
 		if (i === 0) return "└";
 		if (i === w - 1) return "┘";
 		if (outSet.has(i)) return "┬";
 		return "─";
 	}).join("");
-	return [topChars, mid, botChars];
+	return [topChars, nameRow, midRow, botChars];
 };
 
 class CharGrid {
@@ -700,7 +695,7 @@ const _renderHeader = (
 	const parts: string[] = [`${realCount} workspaces`];
 	parts.push(`${runtimeCount} runtime edge${runtimeCount === 1 ? "" : "s"}`);
 	if (withDev) parts.push(`${devCount} dev edge${devCount === 1 ? "" : "s"}`);
-	if (reduce) parts.push("reduced");
+	if (!reduce) parts.push("full");
 	return `${label}  ·  ${parts.join("  ·  ")}`;
 };
 
@@ -813,9 +808,10 @@ const _renderDag = (
 			const outSlots = slots ? Array.from(slots.outgoingSlotX.values()) : [];
 			const inSlots = slots ? Array.from(slots.incomingSlotX.values()) : [];
 			const lines = _renderBoxLines(ln, outSlots, inSlots);
-			grid.putString(ln.boxStartX, topRow, lines[0]);
-			grid.putString(ln.boxStartX, topRow + 1, lines[1]);
-			grid.putString(ln.boxStartX, topRow + 2, lines[2]);
+			for (let r = 0; r < lines.length; r++) {
+				const line = lines[r];
+				if (line !== undefined) grid.putString(ln.boxStartX, topRow + r, line);
+			}
 		}
 	}
 	for (const [boundary, boundaryEdges] of edgesByBoundary) {
@@ -945,8 +941,8 @@ export const renderGraph = (input: RenderInput): string => {
 	const initialLayers = _groupLayers(layoutNodes);
 	const orderedLayers = _barycenterReorder(initialLayers, layoutEdges);
 	const layout = _layoutLayers(orderedLayers, layoutEdges);
-	const runtimeCount = input.edges.filter((e) => e.kind === "runtime").length;
-	const devCount = input.edges.filter((e) => e.kind === "dev").length;
+	const runtimeCount = edges.filter((e) => e.kind === "runtime").length;
+	const devCount = edges.filter((e) => e.kind === "dev").length;
 	const showBuild = nodes.some((n) => n.hasBuildScript);
 	const header = _renderHeader(
 		input.target,

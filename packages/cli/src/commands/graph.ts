@@ -88,9 +88,9 @@ export const graphCommand = Command.make(
 			Flag.withDescription("also draw devDependency edges (annotated with ▽)"),
 			Flag.withDefault(false),
 		),
-		reduce: Flag.boolean("reduce").pipe(
+		full: Flag.boolean("full").pipe(
 			Flag.withDescription(
-				"hide transitively-implied edges (e.g. drop A→C when A→B→C exists)",
+				"show every direct edge (default hides transitively-implied edges, e.g. A→C when A→B→C exists)",
 			),
 			Flag.withDefault(false),
 		),
@@ -139,7 +139,7 @@ export const graphCommand = Command.make(
 				target: targetName,
 				width,
 				withDev: args.withDev,
-				reduce: args.reduce,
+				reduce: !args.full,
 			});
 			yield* Console.log(out);
 		}).pipe(
