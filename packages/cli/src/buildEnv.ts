@@ -192,11 +192,10 @@ export const renderEnv = (input: RenderEnvInput) =>
 					argo: undefined,
 				}));
 
-		// Render every child's manifests in parallel — each Application's
-		// build Effect already spawns helm/sops concurrently, so the
-		// inter-child concurrency layer multiplies the wall-time win on cold
-		// caches without affecting cache-hit cost. Bounded at 4 to keep the
-		// helm/sops subprocess count manageable.
+		// Render every child's manifests in parallel — for argo children that's
+		// Application's helm/sops fan-out; for bundles it's just the manifest
+		// renderers. Bounded at 4 to keep the helm/sops subprocess count
+		// manageable.
 		const perAppFiles = yield* Effect.all(
 			children.map((child) =>
 				Effect.gen(function* () {

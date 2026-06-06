@@ -51,8 +51,10 @@ export default Bundle.entrypoint(Bundle.fromModules({ modules: [api] as const })
 
 			const rendered = yield* renderEnv({ cfg, envName: "test", ctx });
 			const filePaths = rendered.files.map((f) => path.relative(rendered.outDirAbs, f.path));
-			expect(filePaths.some((p) => p.startsWith("api/"))).toBe(true);
-			expect(filePaths.some((p) => p.startsWith("Application-"))).toBe(false);
+			const apiFiles = filePaths.filter((p) => p.startsWith("api/"));
+			const applicationFiles = filePaths.filter((p) => p.startsWith("Application-"));
+			expect(apiFiles.length).toBeGreaterThan(0);
+			expect(applicationFiles).toEqual([]);
 			return rendered;
 		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
