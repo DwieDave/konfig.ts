@@ -2,7 +2,7 @@ import { Dep } from "@konfig.ts/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import * as Bundle from "./Bundle";
-import { define } from "./Bundle";
+import { define, entrypoint, fromModules } from "./Bundle";
 
 describe("Bundle.make", () => {
 	it("constructs a Bundle with the given fields", () => {
@@ -82,5 +82,69 @@ describe("Bundle.define", () => {
 		await Effect.runPromise(
 			program.pipe(Effect.provide(handle.layer)) as Effect.Effect<void, never, never>,
 		);
+	});
+});
+
+describe("Bundle.fromModules", () => {
+	it("composes bundles in listed order and exposes the merged result", async () => {
+		const a = define({
+			name: "a",
+			namespace: "ns-a",
+			build: () => [{ kind: "ConfigMap", metadata: { name: "a" } }],
+		});
+		const b = define({
+			name: "b",
+			namespace: "ns-b",
+			build: () => [{ kind: "ConfigMap", metadata: { name: "b" } }],
+		});
+
+		const program = fromModules({ modules: [a, b] as const });
+		const result = await Effect.runPromise(program);
+		expect(result.name).toBe("bundles");
+		expect(result.bundles.map((x) => x.name)).toEqual(["a", "b"]);
+	});
+
+	it("supplies a sibling's Provide to a later module's Need", async () => {
+		const provider = define({
+			name: "provider",
+			namespace: "infra",
+			build: () => [],
+			provides: Dep.provideSecret("shared"),
+		});
+		const consumer = define({
+			name: "consumer",
+			namespace: "app",
+			build: Effect.gen(function* () {
+				const ref = yield* Dep.Secret("shared");
+				return [{ kind: "ConfigMap", metadata: { name: ref } }];
+			}),
+		});
+
+		const program = fromModules({ modules: [provider, consumer] as const });
+		const result = await Effect.runPromise(program);
+		const consumerBundle = result.bundles.find((x) => x.name === "consumer");
+		expect(consumerBundle?.manifests[0]).toEqual({
+			kind: "ConfigMap",
+			metadata: { name: "shared" },
+		});
+	});
+
+	it("passes through entrypoint when every Need is met", async () => {
+		const m = define({
+			name: "m",
+			namespace: "ns",
+			build: () => [],
+		});
+		const program = fromModules({ modules: [m] as const });
+		const wrapped = entrypoint(program);
+		const result = await Effect.runPromise(wrapped);
+		expect(result.bundles[0]?.name).toBe("m");
+	});
+
+	it("honors a custom result name", async () => {
+		const m = define({ name: "m", namespace: "ns", build: () => [] });
+		const program = fromModules({ name: "platform", modules: [m] as const });
+		const result = await Effect.runPromise(program);
+		expect(result.name).toBe("platform");
 	});
 });

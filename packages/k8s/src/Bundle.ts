@@ -1,4 +1,10 @@
-import { type AnyRenderError, Dep, unsafeCoerce } from "@konfig.ts/core";
+import {
+	type AnyRenderError,
+	Compose,
+	Dep,
+	type Manifest as CoreManifest,
+	unsafeCoerce,
+} from "@konfig.ts/core";
 import { type Context, Effect, Layer } from "effect";
 
 /**
@@ -157,5 +163,83 @@ export const define = <
 	>(
 		_attachLayerToTag(tag, layer),
 		"narrow generic BundleHandle from the attachLayerToTag helper's loose Tag arg",
+	);
+};
+
+export interface BundleSetResult {
+	readonly name: string;
+	readonly bundles: ReadonlyArray<Bundle>;
+}
+
+export interface BundleSetMakeOptions {
+	readonly name?: string;
+	readonly bundles: ReadonlyArray<Bundle>;
+}
+
+export const makeSet = (opts: BundleSetMakeOptions): BundleSetResult => ({
+	name: opts.name ?? "bundles",
+	bundles: opts.bundles,
+});
+
+/**
+ * Phantom check that rejects a `Bundle.fromModules` program whose `R`
+ * channel still carries unmet dep-graph Needs. Bound to the
+ * "Bundle.fromModules" API label so the `_konfig_unsatisfied` hint
+ * guides the user to the right call site.
+ */
+export const entrypoint = Compose.makeResidualEntrypoint("Bundle.fromModules");
+
+// `any` in the AnyHandle upper bound: Effect's Layer is contravariant in
+// its first parameter and `BundleHandle` is invariant at the inference
+// site. `unknown` rejects concrete subtypes; `any` is bivariant — the
+// canonical "any handle" upper bound.
+// oxlint-disable-next-line app/no-type-assertion
+type AnyHandle = BundleHandle<any, any, any>;
+
+export type ResidualIn<T extends ReadonlyArray<AnyHandle>> = Compose.ResidualIn<T>;
+
+export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>> {
+	readonly name?: string;
+	readonly modules: Ms;
+}
+
+/**
+ * One-list composition for an argo-agnostic bundle set. Yields each
+ * module's `Bundle` in tuple order, then wires the merged provider layer
+ * with `Compose.composeLayers`. The returned Effect's R channel is the
+ * residual unmet Needs after the fold (`Compose.ResidualIn<Ms>`),
+ * which `entrypoint` rejects unless empty.
+ *
+ * **Order matters.** List providers before their consumers. A consumer
+ * placed before its provider leaves an unmet `Need` in the residual,
+ * which surfaces at `entrypoint` as a `_konfig_unsatisfied` hint.
+ */
+export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>>(
+	opts: FromModulesOptions<Ms>,
+): Effect.Effect<
+	BundleSetResult,
+	AnyRenderError,
+	ResidualIn<Ms> | CoreManifest.RenderServices
+> => {
+	const program = Effect.gen(function* () {
+		const bundles: Bundle[] = [];
+		for (const mod of opts.modules) {
+			const b = yield* mod;
+			bundles.push(b);
+		}
+		return makeSet({ name: opts.name, bundles });
+	});
+
+	const wired = Compose.composeLayers(opts.modules);
+
+	return unsafeCoerce<
+		Effect.Effect<
+			BundleSetResult,
+			AnyRenderError,
+			ResidualIn<Ms> | CoreManifest.RenderServices
+		>
+	>(
+		Effect.provide(program, wired),
+		"the runtime Effect is the same; only the static R channel is narrowed to ResidualIn<Ms> by the fold-as-type",
 	);
 };
