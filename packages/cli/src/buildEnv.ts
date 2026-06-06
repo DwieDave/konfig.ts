@@ -14,6 +14,7 @@ import {
 	unsafeCoerce,
 	Yaml,
 } from "@konfig.ts/core";
+import type { Bundle } from "@konfig.ts/k8s";
 import { Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -51,6 +52,11 @@ const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
 		return entry;
 	});
 
+type EnvResult = AppOfAppsResult | Bundle.BundleSetResult;
+
+const _isAppOfApps = (r: EnvResult): r is AppOfAppsResult =>
+	unsafeCoerce<{ apps?: unknown }>(r, "discriminator probe — reads optional `apps` to tell the argo shape apart from the bundle shape").apps !== undefined;
+
 const _loadEnv = (entry: string) =>
 	Effect.gen(function* () {
 		const mod = yield* Effect.tryPromise({
@@ -61,9 +67,9 @@ const _loadEnv = (entry: string) =>
 		if (program === undefined) {
 			return yield* Effect.fail(new EnvLoadError({ entry, cause: "default export is missing" }));
 		}
-		const result = yield* unsafeCoerce<Effect.Effect<AppOfAppsResult, AnyRenderError>>(
+		const result = yield* unsafeCoerce<Effect.Effect<EnvResult, AnyRenderError>>(
 			program,
-			"env entry default export is the program Effect — contract documented in core/README.md",
+			"env entry default export is either an AppOfApps or Bundle program Effect — contract documented in core/README.md",
 		);
 		return result;
 	});
@@ -169,19 +175,39 @@ export const renderEnv = (input: RenderEnvInput) =>
 		const appsDirAbs = path.join(outDirAbs, result.name);
 		type AnyManifest = M.Manifest<unknown>;
 
-		// Render every app's manifests in parallel — each Application's
+		// Normalise both AppOfAppsResult (argo) and BundleSetResult (k8s)
+		// into a single `children` list. The `argo` field carries the
+		// `Application` reference only when we're in the argo branch — it
+		// gates the per-child `Application-<name>.yaml` sentinel emission.
+		const isArgo = _isAppOfApps(result);
+		const children = isArgo
+			? result.apps.map((app) => ({
+					name: app.name,
+					manifests: app.manifests,
+					argo: app,
+				}))
+			: result.bundles.map((b) => ({
+					name: b.name,
+					manifests: b.manifests,
+					argo: undefined,
+				}));
+
+		// Render every child's manifests in parallel — each Application's
 		// build Effect already spawns helm/sops concurrently, so the
-		// inter-app concurrency layer multiplies the wall-time win on cold
+		// inter-child concurrency layer multiplies the wall-time win on cold
 		// caches without affecting cache-hit cost. Bounded at 4 to keep the
 		// helm/sops subprocess count manageable.
 		const perAppFiles = yield* Effect.all(
-			result.apps.map((app) =>
+			children.map((child) =>
 				Effect.gen(function* () {
-					const appDir = path.join(outDirAbs, app.name);
+					const appDir = path.join(outDirAbs, child.name);
 					const rendered = yield* Effect.all(
-						app.manifests.map((m) =>
+						child.manifests.map((m) =>
 							render({
-								manifest: unsafeCoerce<AnyManifest>(m, "app.manifests holds Manifest<unknown> by Application contract"),
+								manifest: unsafeCoerce<AnyManifest>(
+									m,
+									"child.manifests holds Manifest<unknown> by Bundle/Application contract",
+								),
 								ctx,
 							}),
 						),
@@ -191,10 +217,16 @@ export const renderEnv = (input: RenderEnvInput) =>
 					for (const value of rendered) {
 						out.push(..._collectOutputs({ value, appDir, pathJoin: path.join }));
 					}
-					out.push({
-						path: path.join(appsDirAbs, applicationCRFilename(app)),
-						content: serializeApplicationCR({ app, target: result.target, defaults: result.defaults }),
-					});
+					if (isArgo && child.argo !== undefined) {
+						out.push({
+							path: path.join(appsDirAbs, applicationCRFilename(child.argo)),
+							content: serializeApplicationCR({
+								app: child.argo,
+								target: result.target,
+								defaults: result.defaults,
+							}),
+						});
+					}
 					return out;
 				}),
 			),
