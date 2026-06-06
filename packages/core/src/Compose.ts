@@ -11,7 +11,7 @@ import type { AnyRenderError } from "./RenderError";
  * …) supplies its own wider handle interface — the carried value type
  * is irrelevant to the fold itself.
  */
-// oxlint-disable-next-line app/no-explicit-any
+// oxlint-disable-next-line app/no-type-assertion
 export interface ComposeHandle<Out = any, In = any> {
 	readonly layer: Layer.Layer<Out, AnyRenderError, In>;
 }
@@ -20,12 +20,12 @@ export interface ComposeHandle<Out = any, In = any> {
 // its first parameter and `ComposeHandle` is invariant at the inference
 // site. `unknown` rejects concrete subtypes; `any` is bivariant — the
 // canonical "any handle" upper bound.
-// oxlint-disable-next-line app/no-explicit-any
+// oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = ComposeHandle<any, any>;
 
-// oxlint-disable-next-line app/no-explicit-any
+// oxlint-disable-next-line app/no-type-assertion
 type OutOfHandle<H> = H extends ComposeHandle<infer Out, any> ? Out : never;
-// oxlint-disable-next-line app/no-explicit-any
+// oxlint-disable-next-line app/no-type-assertion
 type InOfHandle<H> = H extends ComposeHandle<any, infer In> ? In : never;
 
 /**

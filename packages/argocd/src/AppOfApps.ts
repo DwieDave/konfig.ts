@@ -55,7 +55,7 @@ export const entrypoint = Compose.makeResidualEntrypoint("AppOfApps.fromModules"
 // its first parameter and `ApplicationHandle` is invariant at the inference
 // site. `unknown` rejects concrete subtypes; `any` is bivariant — the
 // canonical "any handle" upper bound.
-// oxlint-disable-next-line app/no-explicit-any
+// oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = ApplicationHandle<any, any, any>;
 
 /**
