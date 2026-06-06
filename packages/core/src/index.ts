@@ -18,6 +18,7 @@ export type {
 } from "./deps";
 export * as Dep from "./deps";
 export { BuiltImageRef } from "./deps";
+export * as Compose from "./Compose";
 export {
 	type DiffFormat,
 	type DiffResult,
