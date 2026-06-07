@@ -1,4 +1,4 @@
-import { render, RenderContext } from "@konfig.ts/core";
+import { renderManifest, RenderContext } from "@konfig.ts/core";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { Container } from "./container";
@@ -77,7 +77,7 @@ describe("Service.fromContainer", () => {
 				{ port: 9090, targetPort: Port.ref("metrics") },
 			],
 		});
-		const out = await _run(render({ manifest: svc, ctx }));
+		const out = await _run(renderManifest({ manifest: svc, ctx }));
 		expect(out.kind).toBe("Service");
 		expect(out.spec?.selector).toEqual({ app: "api" });
 		expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: "http" });

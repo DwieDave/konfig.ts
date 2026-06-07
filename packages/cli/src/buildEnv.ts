@@ -11,7 +11,7 @@ import {
 	parseYaml,
 	type RenderContext,
 	type ResolvedKonfigConfig,
-	render,
+	renderManifest,
 	unsafeCoerce,
 	Yaml,
 } from "@konfig.ts/core";
@@ -202,7 +202,7 @@ export const renderEnv = (input: RenderEnvInput) =>
 					const appDir = path.join(outDirAbs, child.name);
 					const rendered = yield* Effect.all(
 						child.manifests.map((m) =>
-							render({
+							renderManifest({
 								manifest: unsafeCoerce<AnyManifest>(
 									m,
 									"child.manifests holds Manifest<unknown> by Bundle/Application contract",

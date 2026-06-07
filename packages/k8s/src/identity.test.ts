@@ -1,4 +1,4 @@
-import { RenderContext, render, Yaml } from "@konfig.ts/core";
+import { RenderContext, renderManifest, Yaml } from "@konfig.ts/core";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { ConfigMap, Namespace, Secret, ServiceAccount } from "./identity";
@@ -33,7 +33,7 @@ describe("identity constructors expose .ref for downstream wiring", () => {
 			name: "sops",
 			annotations: { "argocd.argoproj.io/sync-options": "Prune=false" },
 		});
-		const out = await _run(render({ manifest: ns, ctx }));
+		const out = await _run(renderManifest({ manifest: ns, ctx }));
 		const yaml = Yaml.serialize({ value: out });
 		expect(yaml).toContain("apiVersion: v1");
 		expect(yaml).toContain("kind: Namespace");

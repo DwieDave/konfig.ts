@@ -75,5 +75,5 @@ export {
 	HelmVersionTooLow,
 	RenderError,
 } from "./RenderError";
-export { render } from "./render";
+export { renderManifest } from "./renderManifest";
 export * as Yaml from "./yaml";

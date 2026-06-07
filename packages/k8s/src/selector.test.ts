@@ -1,4 +1,4 @@
-import { render, RenderContext } from "@konfig.ts/core";
+import { renderManifest, RenderContext } from "@konfig.ts/core";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { Service } from "./network";
@@ -28,7 +28,7 @@ describe("Deployment.fromPodSet", () => {
 			replicas: 2,
 			template: { spec: { containers: [{ name: "api", image: "x" }] } },
 		});
-		const out = await _run(render({ manifest: dep, ctx }));
+		const out = await _run(renderManifest({ manifest: dep, ctx }));
 		expect(out.spec?.selector.matchLabels).toEqual({ app: "api", tier: "web" });
 		expect(out.spec?.template.metadata?.labels).toEqual({ app: "api", tier: "web" });
 		expect(out.spec?.replicas).toBe(2);
@@ -45,7 +45,7 @@ describe("Deployment.fromPodSet", () => {
 				spec: { containers: [{ name: "api", image: "x" }] },
 			},
 		});
-		const out = await _run(render({ manifest: dep, ctx }));
+		const out = await _run(renderManifest({ manifest: dep, ctx }));
 		expect(out.spec?.template.metadata?.labels).toEqual({ app: "api", version: "v1" });
 	});
 });
@@ -59,7 +59,7 @@ describe("Service.fromPodSet", () => {
 			podSet: apiPods,
 			ports: [{ port: 80, targetPort: 8080 }],
 		});
-		const out = await _run(render({ manifest: svc, ctx }));
+		const out = await _run(renderManifest({ manifest: svc, ctx }));
 		expect(out.spec?.selector).toEqual({ app: "api" });
 		expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: 8080 });
 	});
@@ -76,7 +76,7 @@ describe("NetworkPolicy.fromPodSet", () => {
 			policyTypes: ["Ingress"],
 			ingress: [{ from: [{ podSet: dbPods }] }],
 		});
-		const out = await _run(render({ manifest: np, ctx }));
+		const out = await _run(renderManifest({ manifest: np, ctx }));
 		expect(out.spec?.podSelector.matchLabels).toEqual({ app: "api" });
 		expect(out.spec?.ingress?.[0]?.from?.[0]?.podSelector?.matchLabels).toEqual({
 			app: "postgres",
@@ -103,7 +103,7 @@ describe("PodSet", () => {
 				ingress: [{ from: [{ podSet: dbPods }] }],
 			},
 		});
-		const out = await _run(render({ manifest: trio, ctx }));
+		const out = await _run(renderManifest({ manifest: trio, ctx }));
 		expect(out).toHaveLength(3);
 		const [dep, svc, np] = out;
 		expect(dep.spec?.selector.matchLabels).toEqual({ app: "api", tier: "web" });
