@@ -150,13 +150,18 @@ Reads as `render((ctx) => program(ctx))`. Closure form covers both
 
 ### Package boundary
 
-`render` imports `NodeServices` from `@effect/platform-node`. At
-implementation time, verify whether `@konfig.ts/core` already depends on
-`@effect/platform-node` (the CLI render path almost certainly does). If
-core is meant to stay platform-agnostic, the fallback home is
-`@konfig.ts/k8s`, which is the package every workload example imports
-anyway. Implementation chooses based on the existing dep graph, not on
-a fresh dependency.
+`render` lives in `@konfig.ts/core` to give users a single import path.
+This requires two adjustments to the package:
+
+1. **`@effect/platform-node` promotes from devDependency to
+   peerDependency** on `@konfig.ts/core`. Consumers who don't run on
+   Node pay no runtime cost (peer deps are install-time), and the
+   readme already implies a Node target (`engines.node >= 20`).
+2. **The existing `render({ manifest, ctx })` helper renames to
+   `renderManifest`** to free the `render` slot. The existing helper
+   has exactly one in-tree caller (`packages/cli/src/buildEnv.ts:205`),
+   which migrates in the same commit. The rename is a breaking change
+   to `@konfig.ts/core`'s public API; called out in the CHANGELOG.
 
 ### Ripple effects
 
@@ -164,6 +169,9 @@ a fresh dependency.
   same change, and the new `helm-digest-verify.ts` is written against
   it from the start. Otherwise the codebase ships two boilerplate
   styles.
+- The existing `render` helper renames to `renderManifest`; its one
+  in-tree caller (`packages/cli/src/buildEnv.ts:205`) updates in the
+  same commit.
 - `examples/full-stack/` is audited for the same boilerplate and
   migrated where it appears.
 - New entry in `docs/public-api.md` for `render`.
