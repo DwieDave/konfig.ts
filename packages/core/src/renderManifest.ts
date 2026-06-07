@@ -3,10 +3,10 @@ import type { Manifest, RenderServices } from "./Manifest";
 import type { RenderContext } from "./RenderContext";
 import type { AnyRenderError } from "./RenderError";
 
-export interface RenderInput<A> {
+export interface RenderManifestInput<A> {
 	readonly manifest: Manifest<A>;
 	readonly ctx: RenderContext;
 }
-export const render = <A>(
-	input: RenderInput<A>,
+export const renderManifest = <A>(
+	input: RenderManifestInput<A>,
 ): Effect.Effect<A, AnyRenderError, RenderServices> => input.manifest.render(input.ctx);
