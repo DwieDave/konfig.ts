@@ -1,10 +1,9 @@
-import {
-	type AnyRenderError,
-	Compose,
-	Dep,
-	type Manifest as CoreManifest,
-	unsafeCoerce,
-} from "@konfig.ts/core";
+import { unsafeCoerce } from "./_cast";
+import * as Compose from "./Compose";
+import * as Dep from "./deps";
+import type * as CoreManifest from "./Manifest";
+import type * as Module from "./Module";
+import type { AnyRenderError } from "./RenderError";
 import { type Context, Effect, Layer } from "effect";
 
 /**
@@ -53,17 +52,34 @@ export interface BundleHandle<Name extends string, Out, In>
 }
 
 /**
- * Resolves to `T` if it is a string literal (or template-literal pattern),
- * and to a branded error type if it is the bare `string` widening. Mirrors
- * `Application.LiteralName` in spirit — konfig's dep graph keys every
- * `Provide<"App", Name>` slot by literal `Name`, and a wrapper that lets
- * `Name` widen to `string` collapses every bundle into the same slot.
+ * Higher-kinded handle constructor that maps `Module`'s
+ * `(Name, Ns, R, Extra)` slots onto a `BundleHandle`. Lets
+ * `Module.fixedNs({ target: Bundle.target, … })` /
+ * `Module.dynamicNs({ target: Bundle.target, … })` return
+ * strongly-typed `BundleHandle`s.
  */
-export type LiteralName<T extends string> = string extends T
-	? {
-			readonly _konfig_error: "Bundle name/namespace must be a string literal. Make the wrapper generic (`<const Name extends string>`) and forward via `Bundle.LiteralName<Name>`.";
-		}
-	: T;
+export interface HandleKind extends Module.HandleKind {
+	readonly Handle: BundleHandle<
+		this["_Name"] & string,
+		| Dep.Provide<"App", this["_Name"] & string>
+		| Dep.Provide<"Namespace", this["_Ns"] & string>
+		| (this["_Extra"] & unknown),
+		Exclude<
+			this["_R"] & unknown,
+			| Dep.Need<"Namespace", this["_Ns"] & string>
+			| (this["_Extra"] & unknown)
+		>
+	>;
+}
+
+/**
+ * Re-export of {@link Module.LiteralName} — preserved as
+ * `Bundle.LiteralName` so existing wrapper code keeps working.
+ * konfig's dep graph keys every `Provide<"App", Name>` slot by literal
+ * `Name`; a wrapper that lets `Name` widen to `string` collapses every
+ * bundle into the same slot.
+ */
+export type LiteralName<T extends string> = Module.LiteralName<T>;
 
 export interface BundleDefineOptions<
 	Name extends string,
@@ -88,8 +104,9 @@ type _NsExcludes<Ns extends string> = [Ns] extends [never]
 	: Dep.Need<"Namespace", Ns>;
 
 /**
- * Build a typed handle for a k8s bundle (group of manifests). Same
- * compile-time guarantees as `Application.define` minus argo's
+ * Build a typed handle for a manifest bundle — a name + optional
+ * namespace + a set of manifests, plus dep-graph wiring. Same
+ * compile-time guarantees as argocd's `Application.define` minus
  * `source: ArgoSource` / `syncPolicy` / sync-wave annotations:
  *  - the literal `Name` flows into `Dep.Provide<"App", Name>`,
  *  - the optional literal namespace flows into `Dep.Provide<"Namespace", Ns>`,
@@ -98,6 +115,11 @@ type _NsExcludes<Ns extends string> = [Ns] extends [never]
  *
  * Pair with `Bundle.fromModules` to compose multiple bundles
  * and have the dep-graph residual checked at `Bundle.entrypoint`.
+ *
+ * For `Module.fixedNs` / `Module.dynamicNs` use, see `Bundle.target`
+ * — it adapts this `define` so namespace is required (Module wrappers
+ * always thread a namespace through), which lets the dep-graph drop
+ * the `Provide<"Namespace", never>` cell the optional shape needs.
  */
 export const define = <
 	const Name extends string,
@@ -166,6 +188,31 @@ export const define = <
 	);
 };
 
+/**
+ * `Module.Target` adapter for `Bundle.define`. `Module.fixedNs` /
+ * `Module.dynamicNs` always pass a namespace through, so this adapter
+ * requires `namespace` (whereas `Bundle.define` itself accepts it as
+ * optional) — pinning `Ns` to a real literal lets the dep-graph emit
+ * a concrete `Provide<"Namespace", Ns>` cell on the resulting handle.
+ *
+ * ```ts
+ * const defineCache = Module.fixedNs({
+ *   target: Bundle.target,
+ *   namespace: "cache",
+ *   build: ({ name, namespace }) => [ ... ],
+ * });
+ * ```
+ */
+export const target: Module.Target<HandleKind, Record<never, never>, Record<never, never>> = {
+	define: <const Name extends string, const Ns extends string, R = never, Extra = never>(
+		args: Module.DefineBaseArgs<Name, Ns, R, Extra>,
+	) =>
+		unsafeCoerce<Module.ApplyHandle<HandleKind, Name, Ns, R, Extra>>(
+			define<Name, Ns, R, Extra>(args),
+			"target requires namespace so Ns is always a string literal; under that constraint Bundle.define's _NsProvides<Ns> reduces to Provide<\"Namespace\", Ns>, matching HandleKind",
+		),
+};
+
 export interface BundleSetResult {
 	readonly name: string;
 	readonly bundles: ReadonlyArray<Bundle>;
@@ -204,7 +251,7 @@ export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>> {
 }
 
 /**
- * One-list composition for an argo-agnostic bundle set. Yields each
+ * One-list composition for a backend-agnostic bundle set. Yields each
  * module's `Bundle` in tuple order, then wires the merged provider layer
  * with `Compose.composeLayers`. The returned Effect's R channel is the
  * residual unmet Needs after the fold (`Compose.ResidualIn<Ms>`),

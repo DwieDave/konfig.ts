@@ -1,6 +1,7 @@
+import { Module } from "@konfig.ts/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { Application, Module, Sync } from "./index";
+import { Application, Sync } from "./index";
 
 const source: Application.ArgoSource = {
 	repoURL: "ssh://git@github.com/example/infra.git",
@@ -19,8 +20,9 @@ const runHandle = <Name extends string, Out, In>(
 		),
 	);
 
-describe("Module.fixedNs", () => {
+describe("Module.fixedNs({ target: Application.target, ... })", () => {
 	const defineSops = Module.fixedNs({
+		target: Application.target,
 		namespace: "sops",
 		annotations: Sync.wave(-1),
 		build: ({ name, namespace }, opts: { readonly note?: string }) => [
@@ -62,8 +64,9 @@ describe("Module.fixedNs", () => {
 
 	it("accepts an Effect-returning build", () => {
 		const defineWithEffect = Module.fixedNs({
+			target: Application.target,
 			namespace: "demo",
-			build: ({ name, namespace }, _opts: {}) =>
+			build: ({ name, namespace }, _opts: Record<never, never>) =>
 				Effect.succeed([{ kind: "Cm", name, namespace }]),
 		});
 
@@ -80,8 +83,9 @@ describe("Module.fixedNs", () => {
 	});
 });
 
-describe("Module.dynamicNs", () => {
+describe("Module.dynamicNs({ target: Application.target, ... })", () => {
 	const defineApi = Module.dynamicNs({
+		target: Application.target,
 		annotations: Sync.wave(1),
 		build: ({ name, namespace }, opts: { readonly image: string }) => [
 			{ kind: "Deployment", name, namespace, image: opts.image },

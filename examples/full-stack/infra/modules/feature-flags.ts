@@ -1,10 +1,6 @@
-import { Application } from "@konfig.ts/argocd";
+import { Application, Sync } from "@konfig.ts/argocd";
+import { Module } from "@konfig.ts/core";
 import { ConfigMap } from "@konfig.ts/k8s";
-import { Effect } from "effect";
-
-export interface FeatureFlagsOptions {
-	readonly source: Application.ArgoSource;
-}
 
 /**
  * `app/feature-flags` ConfigMap.
@@ -29,11 +25,9 @@ export const featureFlags = ConfigMap.make({
 	},
 });
 
-export const defineFeatureFlags = (opts: FeatureFlagsOptions) =>
-	Application.define({
-		name: "feature-flags",
-		namespace: "app",
-		source: opts.source,
-		annotations: { "argocd.argoproj.io/sync-wave": "-1" },
-		build: Effect.succeed([featureFlags]),
-	});
+export const defineFeatureFlags = Module.fixedNs({
+	target: Application.target,
+	namespace: "app",
+	annotations: Sync.wave(-1),
+	build: (_ctx, _opts: Record<never, never>) => [featureFlags],
+});

@@ -59,8 +59,11 @@ export {
 	type ResolvedKonfigConfig,
 	ServicesConfig,
 } from "./konfigConfig";
+export type { BundleHandle, BundleSetResult } from "./Bundle";
+export * as Bundle from "./Bundle";
 export type { EmbedYamlSource, RawYaml } from "./Manifest";
 export * as Manifest from "./Manifest";
+export * as Module from "./Module";
 export { RenderContext } from "./RenderContext";
 export {
 	type AnyRenderError,

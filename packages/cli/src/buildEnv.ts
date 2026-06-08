@@ -6,6 +6,7 @@ import {
 } from "@konfig.ts/argocd";
 import {
 	type AnyRenderError,
+	type Bundle,
 	type Manifest as M,
 	parseYaml,
 	type RenderContext,
@@ -14,7 +15,6 @@ import {
 	unsafeCoerce,
 	Yaml,
 } from "@konfig.ts/core";
-import type { Bundle } from "@konfig.ts/k8s";
 import { Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";

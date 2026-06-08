@@ -1,6 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Dep } from "@konfig.ts/core";
-import { Bundle } from "@konfig.ts/k8s";
+import { Bundle, Dep } from "@konfig.ts/core";
 import { Effect } from "effect";
 
 const infra = Bundle.define({

@@ -14,15 +14,15 @@ import { defineWorker } from "../modules/worker";
  *
  * Lists every module once, in dependency order (providers first). The
  * type-level dep check fires at `AppOfApps.entrypoint` for both
- * `Dep.Need<"Secret", _>` and `Dep.Need<"Image", _>` (the latter
- * shipped in round-2 prototype 8 — workloads `yield* Dep.Image(app)`,
- * the build modules `provides: Dep.provideImage(...)`).
+ * `Dep.Need<"Secret", _>` and `Dep.Need<"Image", _>` (workloads
+ * `yield* Dep.Image(app)`, the build modules' `provides:
+ * Dep.provideImage(...)`).
  *
  * Forgetting `apiBuild` or `imagePulls` from the modules list surfaces
  * the friendlier hint:
  *   _konfig_unsatisfied: "Missing provider for Image \"api\"…"
  *
- * See `broken.ts` and `broken-image.ts` for worked examples.
+ * See `broken.ts` for a worked example.
  */
 
 const branch = "main";
@@ -35,23 +35,49 @@ const src = (name: string) => ({
 
 const sopsBase = "infra/secrets";
 
-const sopsOperator = defineSopsOperator({ source: src("sops-operator") });
-const imagePulls = defineImagePulls({ source: src("image-pulls"), sopsBase });
-const featureFlags = defineFeatureFlags({ source: src("feature-flags") });
-const postgres = definePostgres({ source: src("postgres"), storageGi: 20 });
+const sopsOperator = defineSopsOperator({
+	name: "sops-secrets-operator",
+	source: src("sops-operator"),
+});
+const imagePulls = defineImagePulls({
+	name: "image-pulls",
+	source: src("image-pulls"),
+	sopsBase,
+});
+const featureFlags = defineFeatureFlags({
+	name: "feature-flags",
+	source: src("feature-flags"),
+});
+const postgres = definePostgres({
+	name: "postgres",
+	source: src("postgres"),
+	storageGi: 20,
+});
 const apiBuild = defineApiBuild({
+	name: "api-build",
 	source: src("api-build"),
 	registry: "ghcr.io/example",
 	tag: "1.0.0",
 });
 const workerBuild = defineWorkerBuild({
+	name: "worker-build",
 	source: src("worker-build"),
 	registry: "ghcr.io/example",
 	tag: "1.0.0",
 });
-const api = defineApi({ source: src("api"), replicas: 2, sopsBase });
-const worker = defineWorker({ source: src("worker"), replicas: 1, sopsBase });
-const redisCache = defineRedisCache({ source: src("redis-cache") });
+const api = defineApi({
+	name: "api",
+	source: src("api"),
+	replicas: 2,
+	sopsBase,
+});
+const worker = defineWorker({
+	name: "worker",
+	source: src("worker"),
+	replicas: 1,
+	sopsBase,
+});
+const redisCache = defineRedisCache({ name: "redis-cache", source: src("redis-cache") });
 
 export default AppOfApps.entrypoint(
 	AppOfApps.fromModules({

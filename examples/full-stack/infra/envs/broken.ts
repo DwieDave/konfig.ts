@@ -7,7 +7,7 @@
  * `ApplicationHandle`'s environment slot. `AppOfApps.entrypoint`
  * requires every Need to be satisfied; with `imagePulls` and the
  * build modules omitted from `fromModules({ modules })`, the residual
- * surfaces as the round-2 friendlier hint on the input parameter:
+ * surfaces as the friendlier hint on the input parameter:
  *
  *   Property '_konfig_unsatisfied' is missing in type ...
  *   but required in type '{ readonly _konfig_unsatisfied:
@@ -34,11 +34,13 @@ const src = (name: string) => ({
 });
 
 const api = defineApi({
+	name: "api",
 	source: src("api"),
 	replicas: 1,
 	sopsBase: "infra/secrets",
 });
 const worker = defineWorker({
+	name: "worker",
 	source: src("worker"),
 	replicas: 1,
 	sopsBase: "infra/secrets",

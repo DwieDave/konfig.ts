@@ -24,7 +24,8 @@ describe("renderEnv: BundleSetResult env", () => {
 			const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-bundle-" });
 
 			const envBody = `
-import { Bundle, ConfigMap } from "@konfig.ts/k8s";
+import { Bundle } from "@konfig.ts/core";
+import { ConfigMap } from "@konfig.ts/k8s";
 const api = Bundle.define({
 	name: "api",
 	namespace: "app",

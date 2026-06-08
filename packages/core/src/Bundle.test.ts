@@ -1,8 +1,8 @@
-import { Dep } from "@konfig.ts/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import * as Bundle from "./Bundle";
 import { define, entrypoint, fromModules } from "./Bundle";
+import * as Dep from "./deps";
 
 describe("Bundle.make", () => {
 	it("constructs a Bundle with the given fields", () => {

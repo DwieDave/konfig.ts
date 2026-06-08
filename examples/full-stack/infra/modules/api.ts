@@ -1,13 +1,12 @@
 import { Application } from "@konfig.ts/argocd";
-import { Dep } from "@konfig.ts/core";
+import { Dep, Module } from "@konfig.ts/core";
 import { Container, Environment, EnvVar, Port, Workload } from "@konfig.ts/k8s";
 import { Sops } from "@konfig.ts/sops";
 import { apiEnv } from "@example/env-contracts";
 import { Effect } from "effect";
 import { featureFlags } from "./feature-flags";
 
-export interface ApiOptions {
-	readonly source: Application.ArgoSource;
+export interface ApiOpts {
 	readonly replicas: number;
 	readonly sopsBase: string;
 }
@@ -35,18 +34,17 @@ export interface ApiOptions {
  *     duplicate-detection guards us against shadowing one of bind's
  *     names by accident.
  */
-export const defineApi = (opts: ApiOptions) =>
-	Application.define({
-		name: "api",
-		namespace: "app",
-		source: opts.source,
-		build: Effect.gen(function* () {
+export const defineApi = Module.fixedNs({
+	target: Application.target,
+	namespace: "app",
+	build: ({ name, namespace }, opts: ApiOpts) =>
+		Effect.gen(function* () {
 			const ghcrRef = yield* Dep.Secret("ghcr-pull");
 			const apiImage = yield* Dep.Image("api");
 
 			const bound = Environment.bind({
 				env: apiEnv,
-				namespace: "app",
+				namespace,
 				secrets: {
 					db: {
 						backend: Sops.passthrough({
@@ -67,29 +65,23 @@ export const defineApi = (opts: ApiOptions) =>
 			});
 
 			const apiContainer = Container.define({
-				name: "api",
+				name,
 				image: apiImage,
 				ports: [Port.make({ name: "http", containerPort: 8080 })],
 				env: [
 					...bound.envVars,
-					// EnvVar.fromSecretForPod ties the db ref's namespace ("app")
-					// to this pod's namespace. Crossing namespaces is a compile error.
 					EnvVar.fromSecretForPod({
 						name: "DATABASE_URL_PRIMARY",
 						ref: bound.members.db.ref,
 						key: "url",
-						podNamespace: "app",
+						podNamespace: namespace,
 					}),
-					// EnvVar.fromConfigMap with a typed ref: `key` is constrained
-					// to the keys declared on featureFlags ("NEW_UI" | "BETA_DASHBOARD"
-					// | "DARK_MODE"). Renaming a key in feature-flags.ts breaks
-					// this call site at compile time.
 					EnvVar.fromConfigMap({
 						name: "FEATURE_NEW_UI",
 						ref: featureFlags.ref,
 						key: "NEW_UI",
 					}),
-					EnvVar.value({ name: "API_NAME", value: "api" }),
+					EnvVar.value({ name: "API_NAME", value: name }),
 				],
 				readinessProbe: {
 					httpGet: { path: "/healthz", port: Port.ref("http") },
@@ -98,8 +90,8 @@ export const defineApi = (opts: ApiOptions) =>
 			});
 
 			const workload = Workload.web({
-				name: "api",
-				namespace: "app",
+				name,
+				namespace,
 				deployment: {
 					replicas: opts.replicas,
 					imagePullSecrets: [{ name: ghcrRef }],
@@ -112,4 +104,4 @@ export const defineApi = (opts: ApiOptions) =>
 
 			return [...bound.manifests, workload];
 		}),
-	});
+});

@@ -38,11 +38,21 @@ const _isInlineCallback = (
 	context: Parameters<Rule["create"]>[0],
 	node: AstNode,
 ): boolean => {
+	// A function is an "inline callback" if it lives in an expression position
+	// nested under a Call/New (directly, in an array, or in a config object literal).
+	// Walk up past Property / ObjectExpression / ArrayExpression — those are
+	// transparent containers for an inline value — until we hit either the
+	// Call/New (exempt) or anything else (not exempt).
 	const ancestors = context.sourceCode.getAncestors(node);
-	const parent = ancestors[ancestors.length - 1];
-	if (!parent) return false;
-	if (parent.type === "CallExpression" || parent.type === "NewExpression") return true;
-	if (parent.type === "ArrayExpression") return true;
+	for (let i = ancestors.length - 1; i >= 0; i--) {
+		const p = ancestors[i];
+		if (!p) return false;
+		const t = p.type;
+		if (t === "CallExpression" || t === "NewExpression") return true;
+		if (t === "ArrayExpression") continue;
+		if (t === "ObjectExpression" || t === "Property") continue;
+		return false;
+	}
 	return false;
 };
 

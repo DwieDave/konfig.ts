@@ -1,9 +1,8 @@
-import { Application } from "@konfig.ts/argocd";
-import { Helm } from "@konfig.ts/core";
+import { Application, Sync } from "@konfig.ts/argocd";
+import { Helm, Module } from "@konfig.ts/core";
 import { Namespace } from "@konfig.ts/k8s";
 
-export interface PostgresOptions {
-	readonly source: Application.ArgoSource;
+export interface PostgresOpts {
 	readonly storageGi: number;
 }
 
@@ -14,44 +13,42 @@ export interface PostgresOptions {
  *
  * The `app` namespace it creates is implicitly provided via
  * `Application.define` (the `namespace` argument flows into the
- * Dep.Provide<"Namespace", "app"> output type), so consumer modules
+ * `Dep.Provide<"Namespace", "app">` output type), so consumer modules
  * declaring `namespace: "app"` won't double-create the Namespace.
  */
-export const definePostgres = (opts: PostgresOptions) =>
-	Application.define({
-		name: "postgres",
-		namespace: "app",
-		source: opts.source,
-		annotations: { "argocd.argoproj.io/sync-wave": "-1" },
-		build: () => {
-			const ns = Namespace.make({ name: "app" });
+export const definePostgres = Module.fixedNs({
+	target: Application.target,
+	namespace: "app",
+	annotations: Sync.wave(-1),
+	build: ({ name, namespace }, opts: PostgresOpts) => {
+		const ns = Namespace.make({ name: namespace });
 
-			const release = Helm.release({
-				repo: "https://charts.bitnami.com/bitnami",
-				chart: "postgresql",
-				releaseName: "postgres",
-				version: "16.0.0",
-				digest: "sha256:483dc159c5fb377c29026d363153cc904a7f77109d524881eed64098637b9bd4",
-				namespace: "app",
-				values: {
-					auth: {
-						database: "app",
-						username: "app",
-						existingSecret: "db-creds",
-						secretKeys: {
-							adminPasswordKey: "password",
-							userPasswordKey: "password",
-						},
-					},
-					primary: {
-						persistence: {
-							enabled: true,
-							size: `${opts.storageGi}Gi`,
-						},
+		const release = Helm.release({
+			repo: "https://charts.bitnami.com/bitnami",
+			chart: "postgresql",
+			releaseName: name,
+			version: "16.0.0",
+			digest: "sha256:483dc159c5fb377c29026d363153cc904a7f77109d524881eed64098637b9bd4",
+			namespace,
+			values: {
+				auth: {
+					database: "app",
+					username: "app",
+					existingSecret: "db-creds",
+					secretKeys: {
+						adminPasswordKey: "password",
+						userPasswordKey: "password",
 					},
 				},
-			});
+				primary: {
+					persistence: {
+						enabled: true,
+						size: `${opts.storageGi}Gi`,
+					},
+				},
+			},
+		});
 
-			return [ns, release];
-		},
-	});
+		return [ns, release];
+	},
+});

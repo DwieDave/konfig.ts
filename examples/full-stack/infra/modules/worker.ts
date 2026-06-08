@@ -1,12 +1,11 @@
 import { Application } from "@konfig.ts/argocd";
-import { Dep, type Manifest } from "@konfig.ts/core";
+import { Dep, type Manifest, Module } from "@konfig.ts/core";
 import { Container, Deployment, Environment } from "@konfig.ts/k8s";
 import { Sops } from "@konfig.ts/sops";
 import { workerEnv } from "@example/env-contracts";
 import { Effect } from "effect";
 
-export interface WorkerOptions {
-	readonly source: Application.ArgoSource;
+export interface WorkerOpts {
 	readonly replicas: number;
 	readonly sopsBase: string;
 }
@@ -24,18 +23,17 @@ export interface WorkerOptions {
  * would emit the SopsSecret manifest a second time, but the AppOfApps
  * deduplicates by (kind, namespace, name) at render time.
  */
-export const defineWorker = (opts: WorkerOptions) =>
-	Application.define({
-		name: "worker",
-		namespace: "app",
-		source: opts.source,
-		build: Effect.gen(function* () {
+export const defineWorker = Module.fixedNs({
+	target: Application.target,
+	namespace: "app",
+	build: ({ name, namespace }, opts: WorkerOpts) =>
+		Effect.gen(function* () {
 			const ghcrRef = yield* Dep.Secret("ghcr-pull");
 			const workerImage = yield* Dep.Image("worker");
 
 			const bound = Environment.bind({
 				env: workerEnv,
-				namespace: "app",
+				namespace,
 				secrets: {
 					db: {
 						backend: Sops.passthrough({
@@ -46,19 +44,19 @@ export const defineWorker = (opts: WorkerOptions) =>
 			});
 
 			const workerContainer = Container.define({
-				name: "worker",
+				name,
 				image: workerImage,
 				ports: [],
 				env: bound.envVars,
 			});
 
 			const deployment = Deployment.make({
-				name: "worker",
-				namespace: "app",
+				name,
+				namespace,
 				replicas: opts.replicas,
-				selector: { matchLabels: { app: "worker" } },
+				selector: { matchLabels: { app: name } },
 				template: {
-					metadata: { labels: { app: "worker" } },
+					metadata: { labels: { app: name } },
 					spec: {
 						imagePullSecrets: [{ name: ghcrRef }],
 						containers: [workerContainer],
@@ -72,4 +70,4 @@ export const defineWorker = (opts: WorkerOptions) =>
 			];
 			return out;
 		}),
-	});
+});

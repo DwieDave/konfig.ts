@@ -1,11 +1,10 @@
-import { Application } from "@konfig.ts/argocd";
-import { Dep } from "@konfig.ts/core";
+import { Application, Sync } from "@konfig.ts/argocd";
+import { Dep, Module } from "@konfig.ts/core";
 import { Secret } from "@konfig.ts/k8s";
 import { Sops } from "@konfig.ts/sops";
 import { ghcrPull } from "@example/env-contracts";
 
-export interface ImagePullsOptions {
-	readonly source: Application.ArgoSource;
+export interface ImagePullsOpts {
 	readonly sopsBase: string;
 }
 
@@ -23,20 +22,18 @@ export interface ImagePullsOptions {
  *     out at render time, so this works offline. To re-encrypt on every
  *     render, swap for `Sops.backend({ recipients })` + `Sops.source`.
  */
-export const defineImagePulls = (opts: ImagePullsOptions) =>
-	Application.define({
-		name: "image-pulls",
-		namespace: "app",
-		source: opts.source,
-		annotations: { "argocd.argoproj.io/sync-wave": "-1" },
-		provides: Dep.provideSecret("ghcr-pull"),
-		build: () => {
-			const bound = Secret.bind({
-				secret: ghcrPull,
-				backend: Sops.passthrough({
-					file: `${opts.sopsBase}/SopsSecret-ghcr-pull.yaml`,
-				}),
-			});
-			return bound.manifest === undefined ? [] : [bound.manifest];
-		},
-	});
+export const defineImagePulls = Module.fixedNs({
+	target: Application.target,
+	namespace: "app",
+	annotations: Sync.wave(-1),
+	provides: Dep.provideSecret("ghcr-pull"),
+	build: (_ctx, opts: ImagePullsOpts) => {
+		const bound = Secret.bind({
+			secret: ghcrPull,
+			backend: Sops.passthrough({
+				file: `${opts.sopsBase}/SopsSecret-ghcr-pull.yaml`,
+			}),
+		});
+		return bound.manifest === undefined ? [] : [bound.manifest];
+	},
+});
