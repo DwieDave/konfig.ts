@@ -41,7 +41,7 @@ export const defineApi = Module.fixedNs({
 		Effect.gen(function* () {
 			const ghcrRef = yield* Dep.Secret("ghcr-pull");
 			const apiImage = yield* Dep.Image("api");
-
+      
 			const bound = Environment.bind({
 				env: apiEnv,
 				namespace,

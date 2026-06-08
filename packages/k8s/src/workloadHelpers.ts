@@ -1,6 +1,6 @@
 
 import type { Manifest, SecretRef } from "@konfig.ts/core";
-import { Manifest as M } from "@konfig.ts/core";
+import { Manifest as M, unsafeCoerce } from "@konfig.ts/core";
 import { Effect } from "effect";
 import type {
 	CronJob as K8sCronJob,
@@ -11,10 +11,23 @@ import type {
 	ServiceAccount as K8sServiceAccount,
 	ServicePort as K8sServicePort,
 } from "./.generated/k8s-types";
-import type { ContainerInput } from "./container";
+import type { ContainerInput, ContainerSpec } from "./container";
 import { Ingress, type IngressTLSInput, Service } from "./network";
+import type { ServicePortSpec } from "./ports";
 import type { Volume } from "./volume";
 import { CronJob, Deployment } from "./workload";
+
+/**
+ * Union of port names declared by every `ContainerSpec` in `Cs`. Raw
+ * `ContainerInput` entries (no `Container.define`) contribute `never`,
+ * so untyped containers don't widen the result — they just don't add
+ * any named-port options to the Service. With every container untyped,
+ * the union collapses to `never` and `targetPort` is effectively
+ * `number`-only, matching Kubernetes' behaviour when no port is named.
+ */
+type _PortNamesOfContainers<Cs extends ReadonlyArray<ContainerInput>> = {
+	readonly [K in keyof Cs]: Cs[K] extends ContainerSpec<infer P, string> ? P : never;
+}[number];
 
 /**
  * Reloader integration shorthand. konfig's secret-hash annotations
@@ -66,7 +79,7 @@ const _reloaderAnnotations = (
 	return out;
 };
 
-interface WebInput {
+interface WebInput<Cs extends ReadonlyArray<ContainerInput>> {
 	readonly name: string;
 	readonly namespace: string;
 	readonly labels?: Readonly<Record<string, string>>;
@@ -75,7 +88,7 @@ interface WebInput {
 	readonly reloader?: ReloaderOption;
 	readonly deployment: {
 		readonly replicas?: number;
-		readonly containers: ReadonlyArray<ContainerInput>;
+		readonly containers: Cs;
 		readonly volumes?: ReadonlyArray<Volume>;
 		readonly imagePullSecrets?: ReadonlyArray<{ readonly name: SecretRef<string> }>;
 		readonly serviceAccountName?: string;
@@ -83,7 +96,7 @@ interface WebInput {
 		readonly podAnnotations?: Readonly<Record<string, string>>;
 	};
 	readonly service: {
-		readonly ports: ReadonlyArray<K8sServicePort>;
+		readonly ports: ReadonlyArray<ServicePortSpec<NoInfer<_PortNamesOfContainers<Cs>>>>;
 		readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer";
 	};
 	readonly ingress?: {
@@ -94,8 +107,8 @@ interface WebInput {
 	};
 }
 
-export const web = (
-	input: WebInput,
+export const web = <const Cs extends ReadonlyArray<ContainerInput>>(
+	input: WebInput<Cs>,
 ): Manifest.Manifest<
 	readonly [K8sDeployment, K8sService] | readonly [K8sDeployment, K8sService, K8sIngress]
 > => {
@@ -128,7 +141,10 @@ export const web = (
 		annotations: input.annotations,
 		selector: selectorLabels,
 		type: input.service.type ?? "ClusterIP",
-		ports: input.service.ports,
+		ports: unsafeCoerce<ReadonlyArray<K8sServicePort>>(
+			input.service.ports,
+			"ServicePortSpec<Ports> structurally matches K8sServicePort; the PortName<Ports> brand on targetPort is a phantom whose runtime value is the underlying string",
+		),
 	});
 
 	if (input.ingress === undefined) {
