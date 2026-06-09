@@ -76,4 +76,5 @@ export {
 	RenderError,
 } from "./RenderError";
 export { renderManifest } from "./renderManifest";
+export { render, type RenderOptions } from "./render";
 export * as Yaml from "./yaml";
