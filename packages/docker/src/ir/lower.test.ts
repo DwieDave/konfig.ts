@@ -94,6 +94,25 @@ describe("lower (bun fixture)", () => {
 		}).pipe(Effect.provide(NodeServices.layer)),
 	);
 
+	it.effect("dev stage copies sharedRootFiles like the builder stage does", () =>
+		Effect.gen(function* () {
+			const spec: DockerSpec = {
+				...minimalSpec(`${FIXTURES}bun/packages/app`),
+				sharedRootFiles: ["tsconfig.base.json"],
+				dev: { cmd: ["bun", "--watch", "main.ts"] },
+			};
+			const bundle = yield* lower(spec);
+			const dev = bundle.dev?.stages.find((s) => s.name === "dev");
+			expect(dev).toBeDefined();
+			const sharedCopies = (dev?.instructions ?? []).filter(
+				(i) =>
+					i._tag === "Copy" &&
+					(i as { src: ReadonlyArray<string> }).src.includes("tsconfig.base.json"),
+			);
+			expect(sharedCopies.length).toBe(1);
+		}).pipe(Effect.provide(NodeServices.layer)),
+	);
+
 	it.effect("workspaceSourceAll expands to per-workspace COPYs (excluding target)", () =>
 		Effect.gen(function* () {
 			const spec: DockerSpec = {

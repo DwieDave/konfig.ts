@@ -627,6 +627,9 @@ const _devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage =>
 	// dev installs scripts (no --ignore-scripts) so binaries are usable
 	const devInstall = pm.pmImpl.installCommand.filter((s) => s !== "--ignore-scripts");
 	instructions.push({ _tag: "Run", cmd: devInstall.join(" ") });
+	for (const path of spec.sharedRootFiles ?? []) {
+		instructions.push({ _tag: "Copy", src: [path], dst: `./${path}` });
+	}
 	for (const ws of ctx.closure) {
 		instructions.push({ _tag: "Copy", src: [ws.relDir], dst: `./${ws.relDir}` });
 	}
