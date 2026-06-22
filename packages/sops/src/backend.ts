@@ -125,7 +125,18 @@ const _passthrough = <N extends string, K extends string>(
 						cause,
 					}),
 			});
-			return yield* _decodeSopsSecret(parsed);
+			const decoded = yield* _decodeSopsSecret(parsed);
+			// Emit the SopsSecret in the namespace the bundle binds it to, not
+			// the one baked into the file on disk. They coincide for every
+			// fixed-namespace env (a no-op restamp); it lets a per-worktree
+			// local namespace (`local-<slug>`) reuse one on-disk secret. Safe
+			// only because these files are sops `mac_only_encrypted`, so
+			// `metadata.namespace` is outside the MAC and the operator still
+			// verifies + decrypts after the restamp.
+			return {
+				...decoded,
+				metadata: { ...decoded.metadata, namespace: input.base.namespace },
+			};
 		}),
 	);
 
