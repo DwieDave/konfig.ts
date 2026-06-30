@@ -506,7 +506,7 @@ const _platformAtomToIR = (
 const _runnerStage = (
 	spec: DockerSpec,
 	ctx: LowerContext,
-	_pm: PmContext,
+	pm: PmContext,
 ): Stage => {
 	const runner: RunnerSpec = spec.runner;
 	const user = _userInstructions(runner.user);
@@ -529,11 +529,12 @@ const _runnerStage = (
 	// the node_modules comes from the slim `prod-deps` stage instead of
 	// `builder` so dev deps are excluded from the final image.
 	const usesWorkspaceSource = expandedCopy.some((c) => c._tag === "WorkspaceSource");
+	const chown = user.chown ? { chown: user.chown } : {};
+	const nodeModulesFrom = runner.production ? "prod-deps" : "builder";
 	if (usesWorkspaceSource && !usesCustomBase) {
-		const chown = user.chown ? { chown: user.chown } : {};
 		instructions.push({
 			_tag: "Copy",
-			from: runner.production ? "prod-deps" : "builder",
+			from: nodeModulesFrom,
 			src: ["/app/node_modules"],
 			dst: "/app/node_modules",
 			...chown,
@@ -546,6 +547,26 @@ const _runnerStage = (
 			instr = { ...instr, chown: user.chown };
 		}
 		instructions.push(instr);
+	}
+	// Under an isolated linker (e.g. bun), each workspace keeps its OWN
+	// node_modules — a tree of symlinks into the shared /app/node_modules/.bun
+	// store. The root copy above is not enough: the target app's node_modules
+	// is never pulled in (only its build artifacts are), so its direct deps
+	// would be unresolvable at runtime. Closure workspaces' node_modules must
+	// also come from `nodeModulesFrom` (not the dev `builder`) so their store
+	// symlinks stay consistent with the root store. `ctx.closure` includes the
+	// target. WorkspaceSource source copies above bring the dir minus
+	// node_modules (dockerignored from context / overwritten here).
+	if (usesWorkspaceSource && !usesCustomBase && pm.pmImpl.nodeModulesLayout !== "hoisted") {
+		for (const ws of ctx.closure) {
+			instructions.push({
+				_tag: "Copy",
+				from: nodeModulesFrom,
+				src: [`/app/${ws.relDir}/node_modules`],
+				dst: `/app/${ws.relDir}/node_modules`,
+				...chown,
+			});
+		}
 	}
 	// runner.removePaths is applied IN the source stage (prod-deps or
 	// builder) so the deletion shrinks layer size — NOT here in the

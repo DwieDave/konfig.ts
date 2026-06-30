@@ -128,10 +128,41 @@ describe("lower (bun fixture)", () => {
 			const wsCopies = runner.instructions.filter(
 				(i) =>
 					i._tag === "Copy" &&
-					(i as { src: ReadonlyArray<string> }).src.some((s) => s.startsWith("/app/packages/")),
+					(i as { src: ReadonlyArray<string> }).src.some(
+						(s) => s.startsWith("/app/packages/") && !s.endsWith("/node_modules"),
+					),
 			);
 			// Closure has shared, util, app — workspaceSourceAll excludes target (app), so 2 entries.
 			expect(wsCopies.length).toBe(2);
+		}).pipe(Effect.provide(NodeServices.layer)),
+	);
+
+	it.effect("isolated linker copies each closure workspace's node_modules (incl. target) from the deps stage", () =>
+		Effect.gen(function* () {
+			const spec: DockerSpec = {
+				...minimalSpec(`${FIXTURES}bun/packages/app`),
+				runner: {
+					workdir: "/app/packages/app",
+					production: true,
+					copy: [{ _tag: "WorkspaceSourceAll" }],
+					cmd: ["bun", "run", "main.ts"],
+				},
+			};
+			const bundle = yield* lower(spec);
+			const runner = bundle.prod.stages.find((s) => s.name === "runner")!;
+			const nmCopies = runner.instructions.filter(
+				(i) =>
+					i._tag === "Copy" &&
+					(i as { src: ReadonlyArray<string> }).src.some((s) => s.endsWith("/node_modules")),
+			) as ReadonlyArray<{ from?: string; src: ReadonlyArray<string> }>;
+			// root + every closure workspace (shared, util, app/target) = 4.
+			expect(nmCopies.length).toBe(4);
+			// All sourced from the production deps stage, never the dev builder.
+			expect(nmCopies.every((c) => c.from === "prod-deps")).toBe(true);
+			// The target app's own node_modules is included (the bug this guards).
+			expect(
+				nmCopies.some((c) => c.src.includes("/app/packages/app/node_modules")),
+			).toBe(true);
 		}).pipe(Effect.provide(NodeServices.layer)),
 	);
 
