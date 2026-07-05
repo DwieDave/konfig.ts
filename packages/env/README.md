@@ -16,20 +16,20 @@ both ends into one declaration:
 
 ```ts
 // shared/secrets.ts — imported by both sides
-import { defineSecret, defineEnvironment, defineLiteral } from "@konfig.ts/env";
+import { defineEnvironment, defineLiteral, defineSecret } from "@konfig.ts/env"
 
 export const dbCreds = defineSecret({
   name: "db-creds",
   namespace: "prod",
   env: {
     url: "DATABASE_URL",
-    password: "DATABASE_PASSWORD",
-  },
-});
+    password: "DATABASE_PASSWORD"
+  }
+})
 
-export const port = defineLiteral({ envName: "PORT", value: 8080 });
+export const port = defineLiteral({ envName: "PORT", value: 8080 })
 
-export const apiEnv = defineEnvironment({ db: dbCreds, port });
+export const apiEnv = defineEnvironment({ db: dbCreds, port })
 ```
 
 ## Entries and environments
@@ -45,14 +45,14 @@ with `.members` re-exposing each named entry.
 
 ```ts
 // runtime pod code
-import { Effect, Redacted } from "effect";
-import { dbCreds, apiEnv } from "./secrets";
+import { Effect, Redacted } from "effect"
+import { apiEnv, dbCreds } from "./secrets"
 
-const program = Effect.gen(function* () {
-  const env = yield* apiEnv;          // { db: { url: Redacted, password: Redacted }, port: number }
-  const db  = yield* dbCreds;          // { url: Redacted, password: Redacted }
-  const url = yield* dbCreds.fields.url; // Redacted<string>
-});
+const program = Effect.gen(function*() {
+  const env = yield* apiEnv // { db: { url: Redacted, password: Redacted }, port: number }
+  const db = yield* dbCreds // { url: Redacted, password: Redacted }
+  const url = yield* dbCreds.fields.url // Redacted<string>
+})
 ```
 
 ## Bound on the konfig side
@@ -64,16 +64,16 @@ container:
 
 ```ts
 // konfig-side infra code
-import { Secret, Environment, Workload } from "@konfig.ts/k8s";
+import { Environment, Secret, Workload } from "@konfig.ts/k8s"
 
-const apiEnvK8s = Environment.bind({ env: apiEnv });
+const apiEnvK8s = Environment.bind({ env: apiEnv })
 
 Workload.web({
   /* ... */
   deployment: {
-    containers: [{ name: "api", image: "...", env: apiEnvK8s.envVars }],
-  },
-});
+    containers: [{ name: "api", image: "...", env: apiEnvK8s.envVars }]
+  }
+})
 ```
 
 ## Status
@@ -82,3 +82,19 @@ Phase 1 of the secret refactor — see `.docs/secret-refactoring/plan.md`.
 Entries, bundles, env-var wiring only. Backends (ExternalSecrets,
 SealedSecrets, Sops) and the `source` / `values` accessors land in
 later phases.
+
+## Requirements
+
+konfig.ts builds on [Effect](https://effect.website/), which is still in
+beta. Until Effect ships a stable 4.x, you must install the exact beta
+konfig is developed against:
+
+- **`effect@4.0.0-beta.70`** — required.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
+  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
+  omit it.
+
+The peer dependency is pinned to the exact version on purpose: Effect's beta
+line makes breaking changes between builds, so a looser range would surface
+as `ERESOLVE` install conflicts rather than a working install. This pin will
+relax to a caret range once Effect reaches a stable 4.x.

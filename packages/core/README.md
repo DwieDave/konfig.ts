@@ -17,8 +17,8 @@ produces an `A`:
 ```ts
 interface Manifest<A> {
   readonly render: (
-    ctx: RenderContext,
-  ) => Effect.Effect<A, AnyRenderError, RenderServices>;
+    ctx: RenderContext
+  ) => Effect.Effect<A, AnyRenderError, RenderServices>
 }
 ```
 
@@ -29,13 +29,13 @@ Errors are a tagged union: `RenderError`, `EmbedYamlReadError`,
 
 Constructors:
 
-| Op | Behaviour |
-|---|---|
-| `Manifest.make(run)` | Lift a `ctx → A \| Effect<A>` into a Manifest. |
-| `Manifest.combine({ a, b })` | Render `a` and `b` concurrently into a tuple. |
-| `Manifest.concat(...ms)` | Flatten an array of Manifests into one. |
-| `Manifest.whenever({ cond, thunk })` | Optional inclusion. |
-| `Manifest.embedYaml(source)` | Pass through verbatim YAML (file or literal). |
+| Op                                   | Behaviour                                      |
+| ------------------------------------ | ---------------------------------------------- |
+| `Manifest.make(run)`                 | Lift a `ctx → A \| Effect<A>` into a Manifest. |
+| `Manifest.combine({ a, b })`         | Render `a` and `b` concurrently into a tuple.  |
+| `Manifest.concat(...ms)`             | Flatten an array of Manifests into one.        |
+| `Manifest.whenever({ cond, thunk })` | Optional inclusion.                            |
+| `Manifest.embedYaml(source)`         | Pass through verbatim YAML (file or literal).  |
 
 The `Manifest<A>` itself is not where dependency-tracking happens — it
 just carries data and effect failures. The compile-time graph lives
@@ -68,19 +68,19 @@ composition, not inside an Application's body.
 ## `Dep.*` — tracked kinds
 
 ```ts
-import { Dep } from "@konfig.ts/core";
+import { Dep } from "@konfig.ts/core"
 ```
 
-| Kind | Service | Provided value |
-|---|---|---|
-| `Dep.App<Name>(name)` | `Need<"App", Name>` | `Application` record |
-| `Dep.Application<Name>(name)` | `Need<"Application", Name>` | `Name` literal |
-| `Dep.Namespace<Name>(name)` | `Need<"Namespace", Name>` | `Name` literal |
-| `Dep.Secret<Name>(name)` | `Need<"Secret", Name>` | `SecretRef<Name>` brand |
-| `Dep.SecretValues<Name, K>(name)` | `Need<"SecretValues", Name>` | `{ readonly [k in K]: Redacted<string> }` |
-| `Dep.ConfigMap<Name>(name)` | `Need<"ConfigMap", Name>` | `ConfigMapRef<Name>` brand |
-| `Dep.ServiceAccount<Name>(name)` | `Need<"ServiceAccount", Name>` | `ServiceAccountRef<Name>` brand |
-| `Dep.Pvc<Name>(name)` | `Need<"Pvc", Name>` | `PvcRef<Name>` brand |
+| Kind                              | Service                        | Provided value                            |
+| --------------------------------- | ------------------------------ | ----------------------------------------- |
+| `Dep.App<Name>(name)`             | `Need<"App", Name>`            | `Application` record                      |
+| `Dep.Application<Name>(name)`     | `Need<"Application", Name>`    | `Name` literal                            |
+| `Dep.Namespace<Name>(name)`       | `Need<"Namespace", Name>`      | `Name` literal                            |
+| `Dep.Secret<Name>(name)`          | `Need<"Secret", Name>`         | `SecretRef<Name>` brand                   |
+| `Dep.SecretValues<Name, K>(name)` | `Need<"SecretValues", Name>`   | `{ readonly [k in K]: Redacted<string> }` |
+| `Dep.ConfigMap<Name>(name)`       | `Need<"ConfigMap", Name>`      | `ConfigMapRef<Name>` brand                |
+| `Dep.ServiceAccount<Name>(name)`  | `Need<"ServiceAccount", Name>` | `ServiceAccountRef<Name>` brand           |
+| `Dep.Pvc<Name>(name)`             | `Need<"Pvc", Name>`            | `PvcRef<Name>` brand                      |
 
 For each kind there's a matching `provideX` helper (`provideSecret`,
 `provideNamespace`, …) that emits a `Layer.Layer<Provide<K, N>>`.
@@ -135,8 +135,8 @@ a `BoundaryDecodeError` with `schema: label`. Use at the seams where
 untyped input enters a module:
 
 ```ts
-const decodeApiOptions = boundary({ schema: ApiOptions, label: "api" });
-const cfg = yield* decodeApiOptions(input);
+const decodeApiOptions = boundary({ schema: ApiOptions, label: "api" })
+const cfg = yield * decodeApiOptions(input)
 ```
 
 Every place that previously did `coerce<T>(YAML.parse(stdout))` over
@@ -163,3 +163,19 @@ src/
     ├── index.ts
     └── serialize.ts      stable YAML serializer + filenameFor
 ```
+
+## Requirements
+
+konfig.ts builds on [Effect](https://effect.website/), which is still in
+beta. Until Effect ships a stable 4.x, you must install the exact beta
+konfig is developed against:
+
+- **`effect@4.0.0-beta.70`** — required.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
+  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
+  omit it.
+
+The peer dependency is pinned to the exact version on purpose: Effect's beta
+line makes breaking changes between builds, so a looser range would surface
+as `ERESOLVE` install conflicts rather than a working install. This pin will
+relax to a caret range once Effect reaches a stable 4.x.

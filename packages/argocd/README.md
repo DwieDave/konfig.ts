@@ -9,20 +9,20 @@ Builds on `@konfig.ts/core`'s `Manifest<A, R, P>` algebra. Each `Application.mak
 ### `Application<R, P>` + `Application.make`
 
 ```ts
-import { Application, AppOfApps, SyncWave } from "@konfig.ts/argocd";
+import { Application, AppOfApps, SyncWave } from "@konfig.ts/argocd"
 
 const sops = Application.make({
   name: "sops-secrets-operator",
   namespace: "argocd",
-  manifests: [helmRelease, namespace],   // Manifest<...>[] — R/P aggregated automatically
+  manifests: [helmRelease, namespace], // Manifest<...>[] — R/P aggregated automatically
   source: {
     repoURL: "ssh://git@github.com/example/infra.git",
     targetRevision: "main",
-    path: "./infra/k8s/manifests/prod/sops-secrets-operator",
+    path: "./infra/k8s/manifests/prod/sops-secrets-operator"
   },
   syncPolicy: { automated: { prune: false, selfHeal: false } },
-  annotations: SyncWave(-1),             // spread any annotation object here
-});
+  annotations: SyncWave(-1) // spread any annotation object here
+})
 ```
 
 `Application.make` infers `R` and `P` from the tuple of manifests — no manual annotation needed.
@@ -34,31 +34,31 @@ Building per-module wrappers (`defineKeycloak`, `defineApi`, etc.) by hand means
 **Fixed namespace** — for modules whose namespace is part of their identity (e.g. `cert-manager` always installs into `cert-manager`):
 
 ```ts
-import { Module, SyncWave } from "@konfig.ts/argocd";
-import { Helm, Namespace } from "@konfig.ts/k8s";
+import { Module, SyncWave } from "@konfig.ts/argocd"
+import { Helm, Namespace } from "@konfig.ts/k8s"
 
 export const defineSopsOperator = Module.fixedNs({
   namespace: "sops",
   annotations: SyncWave(-1),
   build: ({ namespace }, opts: { readonly resources?: ResourceLimits }) => [
     Namespace.make({ name: namespace }),
-    Helm.release({ chart: "sops-secrets-operator", values: { resources: opts.resources } }),
-  ],
-});
+    Helm.release({ chart: "sops-secrets-operator", values: { resources: opts.resources } })
+  ]
+})
 ```
 
 Call sites need no generic decl either:
 
 ```ts
 const sops = defineSopsOperator({
-  name: "sops-secrets-operator",        // literal preserved through to ApplicationHandle<"sops-secrets-operator", ...>
-  source: src("sops-secrets-operator"),
-});
+  name: "sops-secrets-operator", // literal preserved through to ApplicationHandle<"sops-secrets-operator", ...>
+  source: src("sops-secrets-operator")
+})
 
 const sopsStaging = defineSopsOperator({
-  name: "sops-secrets-operator-staging",  // different literal, different dep-graph slot
-  source: src("sops-secrets-operator-staging"),
-});
+  name: "sops-secrets-operator-staging", // different literal, different dep-graph slot
+  source: src("sops-secrets-operator-staging")
+})
 ```
 
 Passing a bare `string` for `name` is rejected at compile time with a descriptive error from `Application.LiteralName`.
@@ -69,20 +69,20 @@ Passing a bare `string` for `name` is rejected at compile time with a descriptiv
 export const defineApi = Module.dynamicNs({
   annotations: SyncWave(1),
   build: ({ name, namespace }, opts: { readonly image: string; readonly host: string }) =>
-    Effect.gen(function* () {
+    Effect.gen(function*() {
       // ... build manifests using opts.image, opts.host, etc.
-      return [/* manifests */];
-    }),
-});
+      return [/* manifests */]
+    })
+})
 
 // call site:
 const api = defineApi({
   name: "api",
-  namespace: "prod",                    // literal namespace — preserved
+  namespace: "prod", // literal namespace — preserved
   source: src("api"),
   image: e.api,
-  host: cluster.domain,
-});
+  host: cluster.domain
+})
 ```
 
 The `build` callback can return either a synchronous `ReadonlyArray<unknown>` or an `Effect<readonly unknown[], AnyRenderError, R>`. Effect-based builds get their `R` propagated into the resulting `ApplicationHandle`'s requirements.
@@ -96,11 +96,11 @@ const prod = AppOfApps.make({
   target: {
     repoURL: "ssh://git@github.com/example/infra.git",
     branch: "main",
-    rootPath: "./infra/k8s/manifests/prod",
+    rootPath: "./infra/k8s/manifests/prod"
   },
   defaults: { destination: { server: "https://kubernetes.default.svc" } },
-  apps: [sops, certManager, web],
-});
+  apps: [sops, certManager, web]
+})
 ```
 
 Return type: `AppOfAppsResult`.
@@ -110,11 +110,11 @@ The cross-app dependency check fires **at the call site itself**: `AppOfApps.mak
 ### Sync helpers
 
 ```ts
-import { SyncWave, Hook, SyncOptions } from "@konfig.ts/argocd";
+import { Hook, SyncOptions, SyncWave } from "@konfig.ts/argocd"
 
-SyncWave(-1)           // → { "argocd.argoproj.io/sync-wave": "-1" }
-Hook("PreSync")        // → { "argocd.argoproj.io/hook": "PreSync" }
-SyncOptions(["CreateNamespace=true"])  // → { "argocd.argoproj.io/sync-options": "..." }
+SyncWave(-1) // → { "argocd.argoproj.io/sync-wave": "-1" }
+Hook("PreSync") // → { "argocd.argoproj.io/hook": "PreSync" }
+SyncOptions(["CreateNamespace=true"]) // → { "argocd.argoproj.io/sync-options": "..." }
 ```
 
 Spread any of these into `Application.make`'s `annotations` field.
@@ -122,12 +122,12 @@ Spread any of these into `Application.make`'s `annotations` field.
 ### CR emission
 
 ```ts
-import { serializeApplicationCR, applicationCRFilename } from "@konfig.ts/argocd";
+import { applicationCRFilename, serializeApplicationCR } from "@konfig.ts/argocd"
 
-const yaml = serializeApplicationCR(app, target, defaults);
+const yaml = serializeApplicationCR(app, target, defaults)
 // → YAML string matching nixidy's Application-<name>.yaml shape exactly
 
-const filename = applicationCRFilename(app);
+const filename = applicationCRFilename(app)
 // → "Application-<name>.yaml"
 ```
 
@@ -135,25 +135,41 @@ const filename = applicationCRFilename(app);
 
 ## Types
 
-| Export | Description |
-|---|---|
-| `Application<R, P>` | The typed Application node |
-| `Application.make(opts)` | Aggregate R/P from manifests |
-| `Application.define(opts)` | Build an `ApplicationHandle` whose `.layer` provides `Provide<"App" \| "Application" \| "Namespace", ...>` |
-| `Application.LiteralName<T>` | Brand that resolves to `T` if it's a string literal, or a branded error type if `T` widened to `string` |
-| `Module.fixedNs(config)` | Factory: typed wrapper with a baked-in namespace, zero generics at the call site |
-| `Module.dynamicNs(config)` | Factory: typed wrapper with a per-instance namespace, zero generics at the call site |
-| `AppOfApps.make(opts)` | Verify dep graph at the call site; return `AppOfAppsResult` |
-| `AppOfAppsResult` | Runtime shape passed to the renderer |
-| `MissingDeps<Apps>` | Type-level union of `RequiredDep` tags not covered by siblings (`never` when satisfied) |
-| `RequiredDep<K, N>` | A single missing dep — kind+name pair surfaced in error messages |
-| `SyncWave(n)` | Annotation helper |
-| `Hook(phase)` | Annotation helper |
-| `SyncOptions(opts)` | Annotation helper |
-| `serializeApplicationCR(app, target, defaults)` | Emit YAML string |
-| `applicationCRFilename(app)` | `Application-<name>.yaml` |
-| `emitApplicationCR(app, target, defaults)` | Emit as `Manifest<string, Empty, Single<"Application", Name>>` |
+| Export                                          | Description                                                                                                |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `Application<R, P>`                             | The typed Application node                                                                                 |
+| `Application.make(opts)`                        | Aggregate R/P from manifests                                                                               |
+| `Application.define(opts)`                      | Build an `ApplicationHandle` whose `.layer` provides `Provide<"App" \| "Application" \| "Namespace", ...>` |
+| `Application.LiteralName<T>`                    | Brand that resolves to `T` if it's a string literal, or a branded error type if `T` widened to `string`    |
+| `Module.fixedNs(config)`                        | Factory: typed wrapper with a baked-in namespace, zero generics at the call site                           |
+| `Module.dynamicNs(config)`                      | Factory: typed wrapper with a per-instance namespace, zero generics at the call site                       |
+| `AppOfApps.make(opts)`                          | Verify dep graph at the call site; return `AppOfAppsResult`                                                |
+| `AppOfAppsResult`                               | Runtime shape passed to the renderer                                                                       |
+| `MissingDeps<Apps>`                             | Type-level union of `RequiredDep` tags not covered by siblings (`never` when satisfied)                    |
+| `RequiredDep<K, N>`                             | A single missing dep — kind+name pair surfaced in error messages                                           |
+| `SyncWave(n)`                                   | Annotation helper                                                                                          |
+| `Hook(phase)`                                   | Annotation helper                                                                                          |
+| `SyncOptions(opts)`                             | Annotation helper                                                                                          |
+| `serializeApplicationCR(app, target, defaults)` | Emit YAML string                                                                                           |
+| `applicationCRFilename(app)`                    | `Application-<name>.yaml`                                                                                  |
+| `emitApplicationCR(app, target, defaults)`      | Emit as `Manifest<string, Empty, Single<"Application", Name>>`                                             |
 
 ## Status
 
 M3 of the `konfig-typesafe-k8s` workflow. The M4 CLI writer pipes `serializeApplicationCR` output to `apps/Application-<name>.yaml`. The M5 k8s primitives feed into `Application.make`'s `manifests` array.
+
+## Requirements
+
+konfig.ts builds on [Effect](https://effect.website/), which is still in
+beta. Until Effect ships a stable 4.x, you must install the exact beta
+konfig is developed against:
+
+- **`effect@4.0.0-beta.70`** — required.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
+  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
+  omit it.
+
+The peer dependency is pinned to the exact version on purpose: Effect's beta
+line makes breaking changes between builds, so a looser range would surface
+as `ERESOLVE` install conflicts rather than a working install. This pin will
+relax to a caret range once Effect reaches a stable 4.x.

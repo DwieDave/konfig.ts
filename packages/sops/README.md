@@ -18,12 +18,28 @@ credentials are whatever the file's `sops:` block declares.
 
 ## Three compose-cases
 
-| Case | Source | Backend | Notes |
-|---|---|---|---|
-| A | `Sops.source({...})` | `SealedSecrets.backend({...})` | git holds a sops file; cluster receives a SealedSecret. Two layers of encryption guard different surfaces. |
-| B | any (e.g. `SecretSource.fromConfig`) | `Sops.backend({recipients})` | konfig encrypts to the in-cluster sops-secrets-operator's recipients. |
-| C | none | `Sops.passthrough({file})` | encrypted file already shaped like a SopsSecret body; konfig only renders the CR shell. |
+| Case | Source                               | Backend                        | Notes                                                                                                      |
+| ---- | ------------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| A    | `Sops.source({...})`                 | `SealedSecrets.backend({...})` | git holds a sops file; cluster receives a SealedSecret. Two layers of encryption guard different surfaces. |
+| B    | any (e.g. `SecretSource.fromConfig`) | `Sops.backend({recipients})`   | konfig encrypts to the in-cluster sops-secrets-operator's recipients.                                      |
+| C    | none                                 | `Sops.passthrough({file})`     | encrypted file already shaped like a SopsSecret body; konfig only renders the CR shell.                    |
 
 ## Status
 
 Phase 3c of the secret refactor — see `.docs/secret-refactoring/plan.md`.
+
+## Requirements
+
+konfig.ts builds on [Effect](https://effect.website/), which is still in
+beta. Until Effect ships a stable 4.x, you must install the exact beta
+konfig is developed against:
+
+- **`effect@4.0.0-beta.70`** — required.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
+  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
+  omit it.
+
+The peer dependency is pinned to the exact version on purpose: Effect's beta
+line makes breaking changes between builds, so a looser range would surface
+as `ERESOLVE` install conflicts rather than a working install. This pin will
+relax to a caret range once Effect reaches a stable 4.x.

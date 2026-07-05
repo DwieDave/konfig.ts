@@ -83,6 +83,17 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Re-apply workspace:* rewrite (dry-run pack's postpack reverts it)
+        # Each package's `prepack` strips the src/bun export conditions and its
+        # `postpack` restores package.json via `git checkout` — which also
+        # reverts the earlier workspace→exact rewrite. The dry-run pack loop
+        # above therefore leaves every package.json back at its committed
+        # `workspace:*`. Re-apply the rewrite so the publish tarballs carry
+        # exact internal-dep pins. Within the publish loop below, a package's
+        # postpack only reverts that (already-published) package, so packages
+        # later in the loop keep their rewrite until their turn.
+        run: node scripts/rewrite-workspace-deps.cjs
+
       - name: Publish in dependency order
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
