@@ -1,0 +1,6 @@
+{
+  "name": "fix-nested-glob-root",
+  "private": true,
+  "packageManager": "bun@1.3.5",
+  "workspaces": ["packages/**"]
+}

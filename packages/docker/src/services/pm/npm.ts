@@ -1,12 +1,13 @@
-import type { PackageManager } from "../PackageManager";
+import type { PackageManager } from "../PackageManager"
 
 export const npm: PackageManager = {
-	_tag: "Npm",
-	lockfileNames: ["package-lock.json"],
-	auxFiles: [".npmrc"],
-	installCommand: ["npm", "ci", "--ignore-scripts"],
-	productionFlag: ["--omit=dev"],
-	nodeModulesLayout: "isolated",
-	depsImage: ({ runtimeImage }) => runtimeImage,
-	prependDepsRuns: () => [],
-};
+  _tag: "Npm",
+  lockfileNames: ["package-lock.json"],
+  auxFiles: [".npmrc"],
+  installCommand: ["npm", "ci", "--ignore-scripts"],
+  prodInstallCommand: ["npm", "install", "--ignore-scripts"],
+  productionFlag: ["--omit=dev"],
+  nodeModulesLayout: "isolated",
+  depsImage: ({ runtimeImage }) => runtimeImage,
+  prependDepsRuns: () => []
+}
