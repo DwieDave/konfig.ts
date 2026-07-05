@@ -79,6 +79,16 @@ jobs:
       - name: Build packages
         run: bun run build
 
+      - name: Bundle the built dist for the verify job
+        run: tar -czf built-dist.tar.gz packages/*/dist
+
+      - name: Upload built dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-dist
+          path: built-dist.tar.gz
+          retention-days: 7
+
       - name: "Rewrite workspace:* and catalog: protocol deps to concrete versions"
         run: node scripts/rewrite-workspace-deps.cjs
 
@@ -111,22 +121,25 @@ jobs:
             packages/*/dist/**/*
 
   verify-reproducible:
-    name: verify published tarballs match source tree
+    name: verify published tarballs match the built dist
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout tagged source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
-      - name: Fetch published packages and diff against the locally built dist
+      - name: Download the dist built by the publish job
+        uses: actions/download-artifact@v4
+        with:
+          name: built-dist
+
+      - name: Unpack the built dist
+        run: tar -xzf built-dist.tar.gz
+
+      - name: Fetch published tarballs and diff against the built dist
         run: |
           set -euo pipefail
           TAG_VERSION="${GITHUB_REF##*/v}"
@@ -135,12 +148,11 @@ jobs:
             mkdir -p "/tmp/verify-${pkg}"
             npm pack "@konfig.ts/${pkg}@${TAG_VERSION}" --pack-destination "/tmp/verify-${pkg}/"
             tar -xzf "/tmp/verify-${pkg}/"*.tgz -C "/tmp/verify-${pkg}/"
-            # Compare published contents to the local build.
-            # `package/dist` should byte-match what we built; differences
-            # here mean an out-of-band substitution happened between
-            # publish and verify.
+            # The published dist must byte-match the dist the publish job built
+            # (npm packs dist/ verbatim). A difference means the tarball on the
+            # registry was substituted or altered after the build.
             diff -r "/tmp/verify-${pkg}/package/dist" "packages/${pkg}/dist" \
-              && echo "OK — @konfig.ts/${pkg}@${TAG_VERSION} matches source" \
-              || (echo "::error::@konfig.ts/${pkg}@${TAG_VERSION} does NOT match its tagged source" && exit 1)
+              && echo "OK — @konfig.ts/${pkg}@${TAG_VERSION} matches the built dist" \
+              || (echo "::error::@konfig.ts/${pkg}@${TAG_VERSION} does NOT match the dist built in the publish job" && exit 1)
             echo "::endgroup::"
           done
