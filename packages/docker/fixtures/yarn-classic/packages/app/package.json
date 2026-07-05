@@ -1,10 +1,14 @@
 {
-	"name": "@fix/app",
-	"version": "0.0.0",
-	"dependencies": {
-		"@fix/util": "1.0.0"
-	},
-	"scripts": {
-		"build": "echo build"
-	}
+  "name": "@fix/app",
+  "version": "0.0.0",
+  "dependencies": {
+    "@fix/util": "1.0.0"
+  },
+  "scripts": {
+    "build": "echo build"
+  },
+  "engines": {
+    "yarn": "1.22.22",
+    "node": "22"
+  }
 }

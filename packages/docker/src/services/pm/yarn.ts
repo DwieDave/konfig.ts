@@ -1,9 +1,9 @@
-import type { PackageManager } from "../PackageManager";
+import type { PackageManager } from "../PackageManager"
 
-export type YarnVariant = "classic" | "berry";
+export type YarnVariant = "classic" | "berry"
 
 export interface YarnOptions {
-	readonly variant: YarnVariant;
+  readonly variant: YarnVariant
 }
 
 /**
@@ -21,20 +21,23 @@ export interface YarnOptions {
  *    — this is the surface a 1.x release will need to harden.
  */
 export const yarn = (opts: YarnOptions): PackageManager => {
-	const isBerry = opts.variant === "berry";
-	return {
-		_tag: "Yarn",
-		lockfileNames: ["yarn.lock"],
-		auxFiles: isBerry ? [".yarnrc.yml", ".yarnrc"] : [".yarnrc"],
-		installCommand: isBerry
-			? ["yarn", "install", "--immutable"]
-			: ["yarn", "install", "--frozen-lockfile", "--ignore-scripts"],
-		productionFlag: isBerry ? [] : ["--production"],
-		nodeModulesLayout: "hoisted",
-		depsImage: ({ runtimeImage }) => runtimeImage,
-		prependDepsRuns: (version) =>
-			version === ""
-				? []
-				: [`corepack enable yarn && corepack prepare yarn@${version} --activate`],
-	};
-};
+  const isBerry = opts.variant === "berry"
+  return {
+    _tag: "Yarn",
+    lockfileNames: ["yarn.lock"],
+    auxFiles: isBerry ? [".yarnrc.yml", ".yarnrc"] : [".yarnrc"],
+    installCommand: isBerry
+      ? ["yarn", "install", "--immutable"]
+      : ["yarn", "install", "--frozen-lockfile", "--ignore-scripts"],
+    prodInstallCommand: isBerry
+      ? ["yarn", "install"]
+      : ["yarn", "install", "--ignore-scripts"],
+    productionFlag: isBerry ? [] : ["--production"],
+    nodeModulesLayout: "hoisted",
+    depsImage: ({ runtimeImage }) => runtimeImage,
+    prependDepsRuns: (version) =>
+      version === ""
+        ? []
+        : [`corepack enable yarn && corepack prepare yarn@${version} --activate`]
+  }
+}
