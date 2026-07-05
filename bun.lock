@@ -81,7 +81,7 @@
     },
     "packages/argocd": {
       "name": "@konfig.ts/argocd",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
       },
@@ -99,7 +99,7 @@
     },
     "packages/cli": {
       "name": "@konfig.ts/cli",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "bin": {
         "konfig": "./dist/main.mjs",
       },
@@ -124,7 +124,7 @@
     },
     "packages/core": {
       "name": "@konfig.ts/core",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "yaml": "catalog:",
       },
@@ -148,7 +148,7 @@
     },
     "packages/docker": {
       "name": "@konfig.ts/docker",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "yaml": "catalog:",
@@ -168,7 +168,7 @@
     },
     "packages/env": {
       "name": "@konfig.ts/env",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
       },
@@ -186,7 +186,7 @@
     },
     "packages/external-secrets": {
       "name": "@konfig.ts/external-secrets",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/k8s": "workspace:*",
@@ -206,7 +206,7 @@
     },
     "packages/k8s": {
       "name": "@konfig.ts/k8s",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/env": "workspace:*",
@@ -235,7 +235,7 @@
     },
     "packages/sealed-secrets": {
       "name": "@konfig.ts/sealed-secrets",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/k8s": "workspace:*",
@@ -257,7 +257,7 @@
     },
     "packages/sops": {
       "name": "@konfig.ts/sops",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/env": "workspace:*",
