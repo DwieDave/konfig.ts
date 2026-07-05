@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { coerce, Yaml } from "@konfig.ts/core";
+import { Yaml } from "@konfig.ts/core";
 import { SecretSource } from "@konfig.ts/env";
 import { Secret } from "./index";
 import { NodeServices } from "@effect/platform-node";
@@ -9,6 +9,8 @@ import type { Secret as K8sSecret } from "./.generated/k8s-types";
 import { BackendSourceMissing } from "./backend";
 import { NativeSecret } from "./nativeSecret";
 import { bindSecret } from "./secretBind";
+
+const coerce = <T>(value: unknown): T => value as T;
 
 const dbCreds = Secret.define({
 	name: "db-creds",
