@@ -1,6 +1,5 @@
-
-import { type AnyRenderError, Dep, type Module, unsafeCoerce } from "@konfig.ts/core";
-import { type Context, Effect, Layer } from "effect";
+import { type AnyRenderError, Dep, type Module, unsafeCoerce } from "@konfig.ts/core"
+import { type Context, Effect, Layer } from "effect"
 
 /**
  * Mutate-attach a `layer` field to an Effect Context.Tag so that both
@@ -11,66 +10,67 @@ import { type Context, Effect, Layer } from "effect";
  * breaking every define* factory.
  */
 const _attachLayerToTag = <
-	Tag extends object,
-	Out,
-	Err,
-	In,
+  Tag extends object,
+  Out,
+  Err,
+  In
 >(
-	tag: Tag,
-	layer: Layer.Layer<Out, Err, In>,
+  tag: Tag,
+  layer: Layer.Layer<Out, Err, In>
 ): Tag & { readonly layer: Layer.Layer<Out, Err, In> } =>
-	unsafeCoerce<Tag & { readonly layer: Layer.Layer<Out, Err, In> }>(
-		Object.assign(tag, { layer }),
-		"Effect Context.Tag is callable + extensible; Object.assign mutates in place and the cast widens the public type",
-	);
+  unsafeCoerce<Tag & { readonly layer: Layer.Layer<Out, Err, In> }>(
+    Object.assign(tag, { layer }),
+    "Effect Context.Tag is callable + extensible; Object.assign mutates in place and the cast widens the public type"
+  )
 
 export interface ArgoSource {
-	readonly repoURL: string;
-	readonly targetRevision: string;
-	readonly path: string;
+  readonly repoURL: string
+  readonly targetRevision: string
+  readonly path: string
 }
 
 export interface SyncPolicy {
-	readonly automated?: {
-		readonly prune?: boolean;
-		readonly selfHeal?: boolean;
-		readonly allowEmpty?: boolean;
-	};
-	readonly syncOptions?: ReadonlyArray<string>;
-	readonly retry?: {
-		readonly limit?: number;
-		readonly backoff?: {
-			readonly duration?: string;
-			readonly factor?: number;
-			readonly maxDuration?: string;
-		};
-	};
+  readonly automated?: {
+    readonly prune?: boolean
+    readonly selfHeal?: boolean
+    readonly allowEmpty?: boolean
+  }
+  readonly syncOptions?: ReadonlyArray<string>
+  readonly retry?: {
+    readonly limit?: number
+    readonly backoff?: {
+      readonly duration?: string
+      readonly factor?: number
+      readonly maxDuration?: string
+    }
+  }
 }
 
 export interface BuildMetadata {
-	readonly source?: string;
-	readonly dockerfile?: string;
-	readonly imageName?: string;
-	readonly image?: string;
-	readonly cacheScope?: string;
-	readonly extraTriggerPaths?: ReadonlyArray<string>;
-	readonly preview?: {
-		readonly deployment?: string;
-		readonly url?: { readonly label?: string; readonly host?: string };
-	};
+  readonly source?: string
+  readonly dockerfile?: string
+  readonly imageName?: string
+  readonly image?: string
+  readonly cacheScope?: string
+  readonly extraTriggerPaths?: ReadonlyArray<string>
+  readonly preview?: {
+    readonly deployment?: string
+    readonly url?: { readonly label?: string; readonly host?: string }
+  }
 }
 
 export interface Application {
-	readonly name: string;
-	readonly namespace: string;
-	readonly manifests: ReadonlyArray<unknown>;
-	readonly source: ArgoSource;
-	readonly syncPolicy?: SyncPolicy;
-	readonly build?: BuildMetadata;
-	readonly annotations?: Readonly<Record<string, string>>;
+  readonly name: string
+  readonly namespace: string
+  readonly manifests: ReadonlyArray<unknown>
+  readonly source: ArgoSource
+  readonly project?: string
+  readonly syncPolicy?: SyncPolicy
+  readonly build?: BuildMetadata
+  readonly annotations?: Readonly<Record<string, string>>
 }
 
-export type Any = Application;
+export type Any = Application
 
 /**
  * Re-export of {@link Module.LiteralName} — preserved as
@@ -87,31 +87,34 @@ export type Any = Application;
  *     opts: { appName: Application.LiteralName<Name>; ... },
  *   ) => Application.define({ name: opts.appName, ... });
  */
-export type LiteralName<T extends string> = Module.LiteralName<T>;
+export type LiteralName<T extends string> = Module.LiteralName<T>
 
 export interface ApplicationMakeOptions {
-	readonly name: string;
-	readonly namespace: string;
-	readonly manifests: ReadonlyArray<unknown>;
-	readonly source: ArgoSource;
-	readonly syncPolicy?: SyncPolicy;
-	readonly build?: BuildMetadata;
-	readonly annotations?: Readonly<Record<string, string>>;
+  readonly name: string
+  readonly namespace: string
+  readonly manifests: ReadonlyArray<unknown>
+  readonly source: ArgoSource
+  readonly project?: string
+  readonly syncPolicy?: SyncPolicy
+  readonly build?: BuildMetadata
+  readonly annotations?: Readonly<Record<string, string>>
 }
 
 export const make = (opts: ApplicationMakeOptions): Application => ({
-	name: opts.name,
-	namespace: opts.namespace,
-	manifests: opts.manifests,
-	source: opts.source,
-	...(opts.syncPolicy !== undefined ? { syncPolicy: opts.syncPolicy } : {}),
-	...(opts.build !== undefined ? { build: opts.build } : {}),
-	...(opts.annotations !== undefined ? { annotations: opts.annotations } : {}),
-});
+  name: opts.name,
+  namespace: opts.namespace,
+  manifests: opts.manifests,
+  source: opts.source,
+  ...(opts.project !== undefined ? { project: opts.project } : {}),
+  ...(opts.syncPolicy !== undefined ? { syncPolicy: opts.syncPolicy } : {}),
+  ...(opts.build !== undefined ? { build: opts.build } : {}),
+  ...(opts.annotations !== undefined ? { annotations: opts.annotations } : {})
+})
 
 export interface ApplicationHandle<Name extends string, Out, In>
-	extends Context.Service<Dep.Need<"App", Name>, Application> {
-	readonly layer: Layer.Layer<Out, AnyRenderError, In>;
+  extends Context.Service<Dep.Need<"App", Name>, Application>
+{
+  readonly layer: Layer.Layer<Out, AnyRenderError, In>
 }
 
 /**
@@ -122,20 +125,19 @@ export interface ApplicationHandle<Name extends string, Out, In>
  * about argocd's types.
  */
 export interface HandleKind extends Module.HandleKind {
-	readonly Handle: ApplicationHandle<
-		this["_Name"] & string,
-		| Dep.Provide<"App", this["_Name"] & string>
-		| Dep.Provide<"Application", this["_Name"] & string>
-		| Dep.Provide<"Namespace", this["_Ns"] & string>
-		| (this["_Extra"] & unknown)
-		,
-		Exclude<
-			this["_R"] & unknown,
-			| Dep.Need<"Application", this["_Name"] & string>
-			| Dep.Need<"Namespace", this["_Ns"] & string>
-			| (this["_Extra"] & unknown)
-		>
-	>;
+  readonly Handle: ApplicationHandle<
+    this["_Name"] & string,
+    | Dep.Provide<"App", this["_Name"] & string>
+    | Dep.Provide<"Application", this["_Name"] & string>
+    | Dep.Provide<"Namespace", this["_Ns"] & string>
+    | (this["_Extra"] & unknown),
+    Exclude<
+      this["_R"] & unknown,
+      | Dep.Need<"Application", this["_Name"] & string>
+      | Dep.Need<"Namespace", this["_Ns"] & string>
+      | (this["_Extra"] & unknown)
+    >
+  >
 }
 
 /**
@@ -144,9 +146,10 @@ export interface HandleKind extends Module.HandleKind {
  * `Module.fixedNs(Application, { ... })` alongside the build callback.
  */
 export interface ExtraConfig {
-	readonly syncPolicy?: SyncPolicy;
-	readonly buildMetadata?: BuildMetadata;
-	readonly annotations?: Readonly<Record<string, string>>;
+  readonly project?: string
+  readonly syncPolicy?: SyncPolicy
+  readonly buildMetadata?: BuildMetadata
+  readonly annotations?: Readonly<Record<string, string>>
 }
 
 /**
@@ -154,92 +157,94 @@ export interface ExtraConfig {
  * argocd needs the Application's git source for every instance.
  */
 export interface ExtraCallArgs {
-	readonly source: ArgoSource;
+  readonly source: ArgoSource
 }
 
 export interface ApplicationDefineOptions<Name extends string, Ns extends string, R, Extra> {
-	readonly name: LiteralName<Name>;
-	readonly namespace: LiteralName<Ns>;
-	readonly source: ArgoSource;
-	readonly syncPolicy?: SyncPolicy;
-	readonly buildMetadata?: BuildMetadata;
-	readonly annotations?: Readonly<Record<string, string>>;
-	readonly build:
-		| Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
-		| (() => ReadonlyArray<unknown>);
-	readonly provides?: Layer.Layer<Extra>;
+  readonly name: LiteralName<Name>
+  readonly namespace: LiteralName<Ns>
+  readonly source: ArgoSource
+  readonly project?: string
+  readonly syncPolicy?: SyncPolicy
+  readonly buildMetadata?: BuildMetadata
+  readonly annotations?: Readonly<Record<string, string>>
+  readonly build:
+    | Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
+    | (() => ReadonlyArray<unknown>)
+  readonly provides?: Layer.Layer<Extra>
 }
 
 export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["define"] = <
-	const Name extends string,
-	const Ns extends string,
-	R = never,
-	Extra = never,
+  const Name extends string,
+  const Ns extends string,
+  R = never,
+  Extra = never
 >(
-	opts: ApplicationDefineOptions<Name, Ns, R, Extra>,
+  opts: ApplicationDefineOptions<Name, Ns, R, Extra>
 ): ApplicationHandle<
-	Name,
-	| Dep.Provide<"App", Name>
-	| Dep.Provide<"Application", Name>
-	| Dep.Provide<"Namespace", Ns>
-	| Extra,
-	Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
+  Name,
+  | Dep.Provide<"App", Name>
+  | Dep.Provide<"Application", Name>
+  | Dep.Provide<"Namespace", Ns>
+  | Extra,
+  Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
 > => {
-	const name = unsafeCoerce<Name>(
-		opts.name,
-		"LiteralName<Name> resolves to Name itself once the call typechecks",
-	);
-	const namespace = unsafeCoerce<Ns>(
-		opts.namespace,
-		"LiteralName<Ns> resolves to Ns itself once the call typechecks",
-	);
-	const tag = Dep.App<Name, Application>(name);
+  const name = unsafeCoerce<Name>(
+    opts.name,
+    "LiteralName<Name> resolves to Name itself once the call typechecks"
+  )
+  const namespace = unsafeCoerce<Ns>(
+    opts.namespace,
+    "LiteralName<Ns> resolves to Ns itself once the call typechecks"
+  )
+  const tag = Dep.App<Name, Application>(name)
 
-	const ownsLayer = Layer.mergeAll(
-		Layer.succeed(Dep.Application(name))(name),
-		Layer.succeed(Dep.Namespace(namespace))(namespace),
-	);
+  const ownsLayer = Layer.mergeAll(
+    Layer.succeed(Dep.Application(name))(name),
+    Layer.succeed(Dep.Namespace(namespace))(namespace)
+  )
 
-	const internalLayer =
-		opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer;
+  const internalLayer = opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer
 
-	const buildEffect: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> = Effect.isEffect(
-		opts.build,
-	)
-		? opts.build
-		: Effect.sync(opts.build);
+  const buildEffect: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> = Effect.isEffect(
+      opts.build
+    )
+    ? opts.build
+    : Effect.sync(opts.build)
 
-	const appLayer = Layer.effect(
-		tag,
-		buildEffect.pipe(
-			Effect.map((manifests) =>
-				make({
-					name,
-					namespace,
-					manifests,
-					source: opts.source,
-					syncPolicy: opts.syncPolicy,
-					build: opts.buildMetadata,
-					annotations: opts.annotations,
-				}),
-			),
-		),
-	).pipe(Layer.provide(internalLayer));
+  const appLayer = Layer.effect(
+    tag,
+    buildEffect.pipe(
+      Effect.map((manifests) =>
+        make({
+          name,
+          namespace,
+          manifests,
+          source: opts.source,
+          project: opts.project,
+          syncPolicy: opts.syncPolicy,
+          build: opts.buildMetadata,
+          annotations: opts.annotations
+        })
+      )
+    )
+  ).pipe(Layer.provide(internalLayer))
 
-	const layer =
-		opts.provides !== undefined
-			? Layer.mergeAll(appLayer, ownsLayer, opts.provides)
-			: Layer.mergeAll(appLayer, ownsLayer);
+  const layer = opts.provides !== undefined
+    ? Layer.mergeAll(appLayer, ownsLayer, opts.provides)
+    : Layer.mergeAll(appLayer, ownsLayer)
 
-	return unsafeCoerce<ApplicationHandle<
-		Name,
-		| Dep.Provide<"App", Name>
-		| Dep.Provide<"Application", Name>
-		| Dep.Provide<"Namespace", Ns>
-		| Extra,
-		Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
-	>>(_attachLayerToTag(tag, layer), "narrow generic ApplicationHandle from the attachLayerToTag helper's loose Tag arg");
-};
+  return unsafeCoerce<
+    ApplicationHandle<
+      Name,
+      | Dep.Provide<"App", Name>
+      | Dep.Provide<"Application", Name>
+      | Dep.Provide<"Namespace", Ns>
+      | Extra,
+      Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
+    >
+  >(_attachLayerToTag(tag, layer), "narrow generic ApplicationHandle from the attachLayerToTag helper's loose Tag arg")
+}
 
 /**
  * `Module.Target` adapter for `Application.define`. Lets
@@ -255,4 +260,4 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
  * });
  * ```
  */
-export const target: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs> = { define };
+export const target: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs> = { define }
