@@ -8,7 +8,7 @@ All notable changes to konfig.ts are documented here. Format:
 
 The 0.0.x experimentation is being squashed into a single
 "Initial release" entry on 1.0.0. Until then, this section tracks
-the work milestones from `.docs/review-plan.md`.
+the work milestones from `.docs/workflows/review-plan.md`.
 
 ### Added
 
@@ -45,7 +45,7 @@ the work milestones from `.docs/review-plan.md`.
 - M3: real digests on the example's chart pins.
 - M3: multi-cluster example overlays (`prod-eu.ts`, `prod-us.ts`).
 - M3: failing-example gallery covers six error categories.
-- M3: top-level README + `docs/architecture.md` rewrite.
+- M3: top-level README + `.docs/architecture.md` rewrite.
 - M5: sops decryption per file (replaces per-key sops --extract
   loop).
 - M5: parallel inter-app render via `Effect.all([...], { concurrency:

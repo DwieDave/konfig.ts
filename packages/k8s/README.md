@@ -1,154 +1,96 @@
 # @konfig.ts/k8s
 
-Kubernetes resource constructors with branded references on top of
-`@konfig.ts/core`'s `Manifest<A>` carrier. The brands are where the
-package earns its keep: cross-resource invariants (env-var → Secret,
-volume → ConfigMap, Ingress TLS → Secret) are checked at the type level,
-and the `Dep.*` tracking propagates needs/provides through Effect
-`Layer`s.
+Kubernetes resource builders with branded references. Cross-resource links — an
+env var to a Secret, a volume to a ConfigMap, Ingress TLS to a Secret — are
+checked at the type level, so a workload pointing at a Secret nobody creates is
+a compile error, not a failed `argocd sync`.
 
-## Branded references
+## Install
+
+```bash
+bun add @konfig.ts/k8s
+```
+
+## Usage
+
+Compose a container and a web workload (Deployment + Service, plus an Ingress
+if you add one):
 
 ```ts
-import { ConfigMapRef, SecretRef, ServiceAccountRef } from "@konfig.ts/k8s"
+import { Container, EnvVar, Port, Secret, Workload } from "@konfig.ts/k8s"
 
-const apiCreds = SecretRef.of("api-creds") // SecretRef<"api-creds">
-const cfg = ConfigMapRef.of("oauth-templates") // ConfigMapRef<"oauth-templates">
-const sa = ServiceAccountRef.of("api") // ServiceAccountRef<"api">
+const apiCreds = Secret.make({
+  name: "api-creds",
+  namespace: "prod",
+  stringData: { url: "postgres://…" }
+}) // apiCreds.ref is a SecretRef<"api-creds">
+
+const api = Container.define({
+  name: "api",
+  image: "ghcr.io/example/api:1.0.0",
+  ports: [Port.make({ name: "http", containerPort: 8080 })],
+  env: [
+    // ref is branded — a raw string, or a Secret in the wrong namespace, won't compile
+    EnvVar.fromSecretForPod({ name: "DATABASE_URL", ref: apiCreds.ref, key: "url", podNamespace: "prod" }),
+    EnvVar.value({ name: "LOG_LEVEL", value: "info" })
+  ],
+  readinessProbe: { httpGet: { path: "/healthz", port: Port.ref("http") } }
+})
+
+const workload = Workload.web({
+  name: "api",
+  namespace: "prod",
+  deployment: { replicas: 2, containers: [api] },
+  service: { ports: [{ port: 80, targetPort: Port.ref("http") }] }
+})
 ```
 
-Each ref carries the resource _name_ in its type parameter. The
-enforcement points (env var `secretKeyRef` / `configMapKeyRef`, volume
-secret, volume configMap, `imagePullSecret`, Ingress TLS) all accept the
-branded type and reject raw strings.
+## What's inside
 
-## Identity constructors expose `.ref`
+**Branded refs** — `SecretRef`, `ConfigMapRef`, `ServiceAccountRef`, `PvcRef`.
+Identity constructors (`Secret.make`, `ConfigMap.make`, …) expose a typed
+`.ref`; the enforcement points (env `secretKeyRef`, volumes, `imagePullSecrets`,
+Ingress TLS) take the brand and reject raw strings.
 
-```ts
-const apiSecret = Secret.make({ name: "api-creds", namespace: "prod", stringData: {...} });
-// apiSecret.ref is a SecretRef<"api-creds">
-```
+**Env vars** — `EnvVar.value`, `EnvVar.fromSecretForPod`, `EnvVar.fromConfigMap`.
+Duplicate names in one container's `env` are caught at compile time.
 
-The `.ref` accessor means consumers wire the brand through without
-restating the name:
+**Ports** — `Port.make({ name, containerPort })` and `Port.ref(name)` brand the
+port-name union, so a probe or Service targeting a typo'd port won't compile.
 
-```ts
-const env = secretEnv("DATABASE_URL", { ref: apiSecret.ref, key: "url" })
-```
+**Workloads** — `Workload.web` (Deployment + Service + optional Ingress) and
+`Workload.cron` (CronJob + private ServiceAccount) cover the common shapes. The
+lower-level `Deployment` / `StatefulSet` / `Job` / `CronJob` / `Service` /
+`Ingress` and the identity / RBAC / policy constructors are there for bespoke
+resources.
 
-## Env-var helpers
+**Env contracts & secrets** — `Environment.bind` and `Secret.bind` turn a
+[`@konfig.ts/env`](../env) contract into the Deployment env block plus a secret
+backend's CRs ([sops](../sops), [sealed-secrets](../sealed-secrets),
+[external-secrets](../external-secrets), or the built-in `NativeSecret`).
 
-| Helper                                      | Rejects raw string for |
-| ------------------------------------------- | ---------------------- |
-| `valueEnv(name, value)`                     | n/a                    |
-| `secretEnv(name, {ref, key, optional?})`    | `ref`                  |
-| `configMapEnv(name, {ref, key, optional?})` | `ref`                  |
-| `rawEnv({name, value?, valueFrom?})`        | n/a (escape hatch)     |
+**Secret rotation** — `Workload.web({ reloader: "stakater" })` annotates for
+[Stakater Reloader](https://github.com/stakater/Reloader) (rolls on in-cluster
+change); `hashSecretValues` stamps a pod-spec hash that rolls on re-render.
 
-## Volume helpers
+## Internals
 
-| Helper                              |
-| ----------------------------------- |
-| `volumeFromSecret(name, ref)`       |
-| `volumeFromConfigMap(name, ref)`    |
-| `emptyDirVolume(name, opts?)`       |
-| `pvcVolume(name, claimName, opts?)` |
-
-## Constructors
-
-Workload-tier (`Deployment.make`, `StatefulSet.make`, `Job.make`,
-`CronJob.make`) accept typed containers, `Volume`s,
-`imagePullSecrets: { name: SecretRef<N> }[]`, and
-`serviceAccountName: ServiceAccountRef | string`.
-
-Network-tier (`Service.make`, `Ingress.make`). Ingress TLS uses the
-`ingressTLS(secretName, hosts?)` helper for branded refs.
-
-Identity-tier (`Namespace.make`, `ServiceAccount.make`, `ConfigMap.make`,
-`Secret.make`) return constructors whose returned record carries the
-typed `.ref`.
-
-Policy-tier (`PersistentVolume.make`, `PersistentVolumeClaim.make`,
-`NetworkPolicy.make`, `ClusterRole.make`, `ClusterRoleBinding.make`,
-`Role.make`, `RoleBinding.make`) — simple constructors with no extra
-dependencies.
-
-## Higher-level: `Workload.web` and `Workload.cron`
-
-Built for the workload shapes consumers need today — not speculative.
-
-`Workload.web(...)` composes Deployment + Service + (optional) Ingress
-with derived labels (`app: <name>`). `Workload.cron(...)` composes
-CronJob + ServiceAccount (the SA is private to the cron).
-
-## Secret rotation — build-time hash vs runtime Reloader
-
-konfig provides two complementary stories for restarting pods when a
-Secret or ConfigMap they consume changes:
-
-- **Build time** (`hashSecretValues` / `pod-hash` annotation). A SHA of
-  the secret material lives on the pod spec; re-rendering after a
-  rotation produces a new hash, so the Deployment's pod template
-  changes and Kubernetes rolls. Fast feedback, deterministic — but only
-  fires when konfig re-renders.
-
-- **Runtime** (`Workload.web({ reloader: "stakater" })`). Emits
-  `reloader.stakater.com/auto: "true"` on the Deployment so
-  [Stakater Reloader](https://github.com/stakater/Reloader) watches
-  every referenced Secret/ConfigMap and patches the workload when the
-  in-cluster object changes. Pair with `ExternalSecrets` or a
-  controller that updates Secrets out-of-band.
-
-Pick build-time hashes for stateless render → apply pipelines; pick
-Reloader when secrets rotate independently of CI. They compose — a
-config-managed Secret with `reloader: "stakater"` rolls on both
-re-render and on out-of-band updates.
-
-## Secret backends — `SecretBackend<N, K>`
-
-`SecretBackend` is the contract Sops / SealedSecrets / ExternalSecrets
-implement. `Secret.bind({ secret, backend, source? })` ties an env-bundle
-secret to a backend emission. `backend.requiresSource` is `true` for
-Sops and SealedSecrets (they need plaintext at render time) and `false`
-for ExternalSecrets (it just emits an `ExternalSecret` CR pointing at a
-remote store).
-
-## k8s 1.30 types
-
-Re-exported from `kubernetes-types@1.30.0` under
-`src/.generated/k8s-types/`. We pin to the cluster minor and ship the
-re-export rather than rolling our own OpenAPI codegen.
-
-## Layout
-
-```
-src/
-├── index.ts                  barrel
-├── .generated/k8s-types/     thin re-export from kubernetes-types
-├── refs.ts                   SecretRef, ConfigMapRef, ServiceAccountRef
-├── env.ts                    secretEnv, configMapEnv, valueEnv, rawEnv
-├── volume.ts                 volumeFromSecret, volumeFromConfigMap, ...
-├── container.ts              ContainerInput, PodSpecInput, imagePullSecret
-├── identity.ts               Namespace, ServiceAccount, ConfigMap, Secret
-├── workload.ts               Deployment, StatefulSet, Job, CronJob
-├── network.ts                Service, Ingress, ingressTLS
-├── policy.ts                 PV, PVC, NetworkPolicy, RBAC
-├── workloadHelpers.ts        Workload.web, Workload.cron
-└── backend.ts                SecretBackend contract + Secret.bind
-```
+Built on `@konfig.ts/core`'s `Manifest<A>` carrier; refs and `Dep.*` needs
+propagate through Effect `Layer`s. Raw Kubernetes types are re-exported as the
+`K8s` namespace (pinned `kubernetes-types@1.30.0`). See
+[`.docs/architecture.md`](../../.docs/architecture.md).
 
 ## Requirements
 
-konfig.ts builds on [Effect](https://effect.website/), which is still in
-beta. Until Effect ships a stable 4.x, you must install the exact beta
-konfig is developed against:
+konfig.ts is built on [Effect](https://effect.website/), currently in beta.
+Until Effect ships a stable 4.x, install the exact beta konfig.ts is built
+against:
 
-- **`effect@4.0.0-beta.70`** — required.
-- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
-  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
-  omit it.
+- **`effect@4.0.0-beta.70`** — required by every package.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only when you call
+  `render()` (the Node filesystem/subprocess entrypoint); manifest-only
+  consumers can omit it (it is declared as an optional peer).
 
-The peer dependency is pinned to the exact version on purpose: Effect's beta
-line makes breaking changes between builds, so a looser range would surface
-as `ERESOLVE` install conflicts rather than a working install. This pin will
-relax to a caret range once Effect reaches a stable 4.x.
+The pin is exact on purpose: Effect's beta line makes breaking changes between
+builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
+to a caret range once Effect reaches a stable 4.x.

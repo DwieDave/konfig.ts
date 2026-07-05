@@ -18,6 +18,7 @@
     "**/build",
     "**/docs",
     "**/coverage",
+    ".docs",
     "packages/**/CHANGELOG.md",
     "!scratchpad/**/*",
     ".agents",

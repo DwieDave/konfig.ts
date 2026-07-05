@@ -13,7 +13,7 @@ Triggered by a `vX.Y.Z` tag. Runs:
 
 1. **Verify tag → version match.** Every `packages/*/package.json` must
    declare the version that the tag names. konfig.ts uses lockstep
-   versioning (see `docs/versioning.md`), so this is one check
+   versioning (see `.docs/versioning.md`), so this is one check
    repeated 9×.
 2. **`bun run check` + `bun run test` + `bun run build`** — the same
    gates as CI, run on the tagged commit's tree.

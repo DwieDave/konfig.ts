@@ -1,198 +1,87 @@
 # @konfig.ts/docker
 
-Workspace-graph-aware Dockerfile generator for konfig.ts monorepos. Write a
-single declarative spec next to your target's `package.json`; the package
-resolves the transitive workspace closure and emits both the production
-multi-stage Dockerfile and the development single-stage Dockerfile.
+Workspace-graph-aware Dockerfile generator for konfig.ts monorepos. Write one
+declarative spec next to your app; the package resolves the app's transitive
+workspace closure and emits a production multi-stage Dockerfile and a dev
+single-stage one — no hand-maintained `COPY` lists.
 
-Backed by [Effect](https://effect.website/), built on the same patterns as
-`@konfig.ts/core` (`Manifest`, `Schema`, tagged errors, `Effect.Service`).
+## Install
 
-## Quickstart
+```bash
+bun add -d @konfig.ts/docker
+```
 
-1. Install the package as a `devDependency` in the target workspace:
+The app's `package.json` must set `engines.<runtime>` (e.g. `engines.bun`) —
+that's where the runner image tag comes from. Missing it is a hard error
+(`EngineVersionMissing`).
 
-   ```jsonc
-   // apps/my-app/package.json
-   {
-     "name": "@my/app",
-     "engines": {
-       "bun": "1.3.5",
-     },
-     "scripts": {
-       "build": "tsc -p tsconfig.json",
-     },
-     "devDependencies": {
-       "@konfig.ts/docker": "workspace:*",
-     },
-   }
-   ```
+## Usage
 
-   The `engines.<runtime>` field is **required** — that's where the runner
-   image tag comes from. Missing it is a hard error (`EngineVersionMissing`).
-   For `bun PM + bun runtime`, a single `engines.bun` field covers both.
+Author the spec at `<app>/docker.ts`:
 
-2. Author the spec at `apps/my-app/docker.ts`:
+```ts
+import { Docker } from "@konfig.ts/docker"
 
-   ```ts
-   import { Docker } from "@konfig.ts/docker"
+export default Docker.app({
+  target: "apps/api",
+  runner: {
+    production: true, // re-install prod-only deps for the closure
+    workdir: "/app/apps/api",
+    copy: [Docker.copy.workspaceSourceAll()], // keep workspace source for bun's export conditions
+    expose: 8080,
+    cmd: ["bun", "run", "src/main.ts"]
+  },
+  dev: { cmd: ["bun", "--watch", "src/main.ts"], expose: 8080 }
+})
+```
 
-   export default Docker.app({
-     target: "apps/my-app",
-     runner: {
-       workdir: "/app/apps/my-app",
-       copy: [
-         Docker.copy.builderArtifact("dist", "dist"),
-         Docker.copy.workspaceSourceAll() // for bun's "bun"/"source" export condition
-       ],
-       expose: 4000,
-       cmd: ["bun", "run", "dist/main.js"]
-     },
-     dev: {
-       cmd: ["bun", "--watch", "main.ts"],
-       expose: 4000
-     }
-   })
-   ```
+Generate the Dockerfiles, then build with the **monorepo root** as the Docker
+context (workspace `COPY`s only resolve from there):
 
-3. Generate:
+```bash
+konfig docker preview apps/api      # render to stdout
+konfig docker write apps/api        # writes apps/api/Dockerfile + Dockerfile.dev
+konfig docker diff apps/api         # non-zero exit if the on-disk files drifted
 
-   ```
-   bun konfig docker write apps/my-app
-   ```
+docker build -f apps/api/Dockerfile .
+```
 
-   This emits `apps/my-app/Dockerfile` and `apps/my-app/Dockerfile.dev`.
-   Build with the **monorepo root** as the docker context:
+Production is a four-stage build (`base → deps → builder → runner`): `deps`
+installs from the full workspace set, `builder` copies only the target's
+closure and runs the build, `runner` is non-root, pinned to `engines.<runtime>`,
+and copies only what the spec declares. Dev is a single `base → dev` stage.
 
-   ```
-   docker build -f apps/my-app/Dockerfile .
-   ```
+## Spec atoms
 
-## CLI
+| Family               | Constructors                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `Docker.app`         | `Docker.app(spec)` — the spec entrypoint                                                              |
+| `Docker.copy`        | `builderArtifact(src, dst)`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, opts?)` |
+| `Docker.runtime`     | `bun({ alpine? })`, `node({ alpine? })` — defaults from the PM; `alpine` defaults `true`              |
+| `Docker.pm`          | `bun()`, `npm()`, `pnpm()` — optional; auto-detected from the root `package.json` + lockfile          |
+| `Docker.build`       | `script(name)`, `command(argv)`, `none()` — defaults to `script("build")` if present                  |
+| `Docker.healthcheck` | `httpGet({ path, port, … })`, `command(argv, opts?)`                                                  |
+| `Docker.user`        | `nonRoot({ uid?, gid?, name? })`, `root()` — a non-root user is injected if you omit one              |
+| `Docker.platform`    | `linuxAmd64()`, `linuxArm64()`, `multi(values)`                                                       |
 
-| Command                                                      | Purpose                |
-| ------------------------------------------------------------ | ---------------------- |
-| `konfig docker preview <target> [--prod-only                 | --dev-only]`           |
-| `konfig docker write <target> [--out-dir <dir>] [--prod-only | --dev-only] [--force]` |
-| `konfig docker diff <target> [--format summary               | detail                 |
+## Scope
 
-The CLI also takes a global `--debug` flag (matches `konfig build|diff`).
-
-## Atom reference
-
-Every atom returns a tagged data object validated by the spec Schema.
-
-| Family               | Constructors                                                                                                              | Notes                                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `Docker.app`         | `Docker.app(spec)`                                                                                                        | Wraps the spec in a `DockerApp` brand.                                                                        |
-| `Docker.pm`          | `bun()`, `npm()`, `pnpm()`                                                                                                | Optional; auto-detected from root `package.json#packageManager` + lockfile.                                   |
-| `Docker.runtime`     | `bun({alpine?})`, `node({alpine?})`                                                                                       | Optional; defaults to `bun` for bun PM, `node` for npm/pnpm. `alpine` defaults to `true`.                     |
-| `Docker.build`       | `script(name)`, `command(argv)`, `none()`                                                                                 | Optional; defaults to `script("build")` if target has one, else `none()`.                                     |
-| `Docker.copy`        | `builderArtifact(src, dst, {chown?})`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, {from?, chown?})` | `workspaceSourceAll` expands to per-workspace `workspaceSource` for every closure member except the target.   |
-| `Docker.healthcheck` | `httpGet({path, port, interval?, timeout?, retries?, startPeriod?})`, `command(argv, opts?)`                              |                                                                                                               |
-| `Docker.user`        | `nonRoot({uid?, gid?, name?})`, `root()`                                                                                  | Lower injects `nonRoot()` if the user does not specify one. Defaults: uid/gid 1001, name "app".               |
-| `Docker.platform`    | `linuxAmd64()`, `linuxArm64()`, `multi(values)`                                                                           | Single platforms become `--platform=...` on `FROM`. v1 does not emit buildx-specific syntax for `multi(...)`. |
-
-## What the package generates
-
-Production: four stages — `base → deps → builder → runner`.
-
-- `base` pins the runtime image from `engines.<runtime>`.
-- `deps` copies **every** workspace `package.json` in the monorepo (this is
-  required — npm/bun/pnpm refuse to install if any workspace is missing),
-  then runs the install command (`bun install --ignore-scripts`,
-  `npm ci --ignore-scripts`, or `pnpm install --frozen-lockfile --ignore-scripts`).
-- `builder` copies the **transitive workspace closure**'s `node_modules`
-  from the `deps` stage (per-workspace, or single-root for pnpm hoisted),
-  copies the closure's source trees, and runs the build script.
-- `runner` runs as a non-root user (uid 1001 by default), sets
-  `NODE_ENV=production` unless overridden, exposes the declared ports,
-  copies what the spec declared, and runs the declared command.
-
-Development: two stages — `base → dev` — installs everything inline and
-runs the `dev.cmd`.
-
-## Best-practice defaults (AC-8)
-
-- Non-root `USER` with `addgroup -S / adduser -S` (alpine-native).
-- `node_modules` and source COPYs are per-workspace, not `COPY . .`.
-- No `:latest` tags; every image is pinned via `engines.<runtime>`.
-- `CMD` in JSON-array (exec) form.
-- No build-time tools leak into the runner — runner copies only what the
-  spec declares.
-
-## Errors
-
-`AnyDockerError` is a discriminated union of 11 variants:
-`MonorepoRootNotFound`, `WorkspaceNotFound`, `UnsupportedPm`,
-`CircularWorkspaceDep`, `EngineVersionMissing`, `SpecDecodeError`,
-`BuildScriptMissing`, `WorkspaceSourceUnknown`, `SharedRootFileMissing`,
-`DockerWriteRefused`, `DockerWriteError`.
-
-## FAQ
-
-**Why `engines.<runtime>` instead of a Corepack `packageManager` field?**
-
-Corepack works fine for detecting which PM you're using, but pinning the
-runtime image tag is a separate, image-level concern. `engines` is the
-existing source of truth most monorepos already maintain, and making it
-required forces the version to live in one obvious place.
-
-**Why does the deps stage copy every workspace, not just the closure?**
-
-All three v1 PMs (bun, npm, pnpm) refuse to run `install` if any workspace
-listed in the root manifest is missing from disk. The deps stage's purpose
-is to get the install working; it has to mirror the full workspace set.
-Only the **builder** stage's `node_modules` and source COPYs are scoped to
-the closure.
-
-**Why is `workspaceSource(...)` explicit instead of auto-detected?**
-
-Bun's `"bun"` / `"source"` export conditions resolve `workspace:*` imports
-to `./src/index.ts` at runtime, which means some images need to keep the
-workspace source trees alongside the prebuilt `dist/`. There's no reliable
-static signal that says "this image needs source at runtime" — parsing
-every transitive `exports` block is flaky. So the spec author opts in
-explicitly with `Docker.copy.workspaceSource(name)` or
-`Docker.copy.workspaceSourceAll()`.
-
-**Why is the build context the monorepo root?**
-
-Workspace COPYs only work from there — `apps/foo/Dockerfile`'s reference
-to `references/konfig.ts/packages/core` is meaningless from the
-`apps/foo/` directory. The CLI's `write` command emits a comment noting
-this; build with `docker build -f apps/foo/Dockerfile <monorepo-root>`.
-
-## Non-goals (v1)
-
-- Image building, pushing, tagging, signing — the package only emits
-  Dockerfiles.
-- BuildKit-specific syntax (`# syntax=`, `--mount=type=cache`,
-  `--mount=type=secret`, heredocs).
-- The `yarn` PM (admits future addition as a sibling impl).
-- Auto-detection of `workspaceSource` requirements.
-- Auto-detection of exposed ports.
-- External-dependency pruning (`bun install --filter`, `pnpm deploy`).
-- `.dockerignore` generation.
-- Multi-arch buildx orchestration (the platform atom sets `--platform`,
-  not buildx invocation).
-
-## License
-
-MIT
+Emits Dockerfiles only — no image building, pushing, tagging, or signing, and no
+BuildKit-specific syntax. `yarn` is not yet a supported PM. `AnyDockerError` is
+the discriminated union of failure modes (`MonorepoRootNotFound`,
+`EngineVersionMissing`, `CircularWorkspaceDep`, …).
 
 ## Requirements
 
-konfig.ts builds on [Effect](https://effect.website/), which is still in
-beta. Until Effect ships a stable 4.x, you must install the exact beta
-konfig is developed against:
+konfig.ts is built on [Effect](https://effect.website/), currently in beta.
+Until Effect ships a stable 4.x, install the exact beta konfig.ts is built
+against:
 
-- **`effect@4.0.0-beta.70`** — required.
-- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
-  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
-  omit it.
+- **`effect@4.0.0-beta.70`** — required by every package.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only when you call
+  `render()` (the Node filesystem/subprocess entrypoint); manifest-only
+  consumers can omit it (it is declared as an optional peer).
 
-The peer dependency is pinned to the exact version on purpose: Effect's beta
-line makes breaking changes between builds, so a looser range would surface
-as `ERESOLVE` install conflicts rather than a working install. This pin will
-relax to a caret range once Effect reaches a stable 4.x.
+The pin is exact on purpose: Effect's beta line makes breaking changes between
+builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
+to a caret range once Effect reaches a stable 4.x.

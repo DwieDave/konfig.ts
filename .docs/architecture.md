@@ -114,36 +114,39 @@ The return type is the algebra:
 `Application.define` writes the `Out` brands and subtracts its
 self-provided pairs (App, Application, Namespace) from the `In`.
 
-Composing handles:
+Composing handles — `AppOfApps.fromModules` merges each module's
+`Layer` and returns the app-of-apps Effect whose `R` carries every
+still-unmet `Need`:
 
 ```ts
-const program = Effect.gen(function* () {
-  const a = yield* api;            // a: Application
-  const b = yield* worker;
-  return AppOfApps.make({ ..., apps: [a, b] });
-}).pipe(Effect.provide(Layer.mergeAll(api.layer, worker.layer, imagePulls.layer)));
-
-export default AppOfApps.entrypoint(program);
-//                              ^^^ requires program's R to be `never`
+export default AppOfApps.entrypoint(
+  AppOfApps.fromModules({
+    target,
+    defaults,
+    modules: [api, worker, imagePulls],   // providers + consumers, any order
+  }),
+);
+//  ^ entrypoint requires the composed program's leftover R to be `never`
 ```
 
-If `imagePulls.layer` is missing, `program` has a leftover
-`Need<"Secret", "ghcr-pull">` in its `R` channel, and `entrypoint`
-rejects it with a TypeScript error. See
+If `imagePulls` is missing from `modules`, the composed program keeps a
+leftover `Need<"Secret", "ghcr-pull">` in its `R` channel, and
+`entrypoint` rejects it at compile time with a `_konfig_unsatisfied`
+hint. See
 [`examples/full-stack/infra/envs/broken.ts`](../examples/full-stack/infra/envs/broken.ts).
 
 ## `Environment` — env contracts as one source of truth
 
 `@konfig.ts/env` builds a tree of yieldable Configs:
 
-- `defineSecret({ name, namespace, env: { url: "DATABASE_URL", ... } })`
+- `Secret.define({ name, namespace, env: { url: "DATABASE_URL", ... } })`
   produces a `SecretEntry` whose `env` record maps logical key → env
   var name.
-- `defineLiteral({ envName, value, schema? })` is a constant value with
+- `Literal.define({ envName, value, schema? })` is a constant value with
   an optional `Config.string`-based runtime schema.
-- `defineDownward({ envName, fieldPath })` reads a K8s downward-API
+- `Downward.define({ envName, fieldPath })` reads a K8s downward-API
   field at pod-spec emission time.
-- `defineEnvironment({ ... })` composes them into a bundle.
+- `Environment.define({ ... })` composes them into a bundle.
 
 The bundle is both a `Config<EnvironmentShape<M>>` (consumed at
 runtime) AND carries the metadata `Environment.bind` needs to emit the
@@ -192,9 +195,7 @@ is compared to `opts.digest` on every load; mismatch fails with
 ## CLI
 
 The CLI is built on `effect/unstable/cli`. The unstable surface is
-isolated behind `packages/cli/src/_unstable.ts`; see
-[`compat.md`](../compat.md) for the full list of unstable modules and
-the policy for bumping.
+isolated behind `packages/cli/src/_unstable.ts`.
 
 Commands:
 
@@ -205,8 +206,9 @@ Commands:
 | `konfig diff <env>` | Structural diff vs. a baseline. Multi-doc aware. |
 | `konfig crd extract/verify` | CRD codegen from Helm charts (input-validated argv, never `/bin/sh -c`). |
 | `konfig helm fetch` | Pre-pull every chart's tarball. |
-| `konfig docker diff/write <appPath>` | Workspace-graph-aware Dockerfile generation. |
-| `konfig set <env> <key=val>` | Apply per-env image overrides. |
+| `konfig docker preview/write/diff <appPath>` | Workspace-graph-aware Dockerfile generation. |
+| `konfig set <env> <app> <imageRef>` | Update one image tag in `images.json`. |
+| `konfig graph` | Print the workspace dependency graph (`--dev` includes devDeps). |
 
 Flags shared across `build`/`validate`/`diff`:
 
@@ -244,13 +246,13 @@ that locks the `attachLayerToTag` cast in place.
 
 ```
 packages/
-├── core/             Manifest, Helm, Dep.*, KonfigConfig, diff, YAML
-├── env/              defineSecret/Literal/Downward/Environment + runtime
+├── core/             Manifest, Helm, Dep.*, Module, Bundle/Compose, KonfigConfig, diff, YAML
+├── env/              Secret/Literal/Downward/Environment (.define) + runtime
 ├── k8s/              Workload/Service/Ingress + branded refs + SecretBackend
 ├── sops/             Sops.source + Sops.backend (Schema-validated stdout)
 ├── sealed-secrets/   SealedSecrets.backend (Schema-validated kubeseal stdout)
 ├── external-secrets/ ExternalSecrets.backend
-├── argocd/           Application.define, AppOfApps.entrypoint, Module.fixedNs/dynamicNs
+├── argocd/           Application.define/.target, AppOfApps.fromModules/entrypoint, Sync.*
 ├── docker/           Workspace graph + Dockerfile IR for Bun/Npm/Pnpm/Yarn
 ├── cli/              `konfig` binary
 └── oxc/              house-style lint rules (oxlint plugins)

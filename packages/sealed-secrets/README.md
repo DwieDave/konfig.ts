@@ -1,40 +1,31 @@
 # @konfig.ts/sealed-secrets
 
-`SealedSecret` CR backend powered by `kubeseal`.
+[Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) backend for
+konfig.ts. Encrypts secret values with `kubeseal` at render time and emits a
+`SealedSecret` CR that only the in-cluster controller can decrypt — so the
+encrypted manifest is safe to commit to git.
 
-## What it does
+## Install
 
-Pairs with `Secret.bind` / `Environment.bind` from `@konfig.ts/k8s` to
-emit `bitnami.com/v1alpha1` `SealedSecret` manifests. At render time
-konfig:
+```bash
+bun add @konfig.ts/sealed-secrets
+```
 
-1. Resolves the bound `SecretSource` to plaintext values (held only in
-   `Redacted<string>` in-memory).
-2. Constructs a plain `Secret` manifest.
-3. Pipes it to `kubeseal` over stdin with the configured public cert.
-4. Parses the returned YAML and emits the `SealedSecret` CR.
-
-The plaintext never lands on disk. The encrypted payload that _does_ is
-safe to commit because only the in-cluster sealed-secrets controller's
-private key can decrypt it.
-
-## Host-tool requirement
-
-Requires the `kubeseal` CLI on the konfig host. Cert resolution order:
-
-1. `opts.certPath`
-2. `$KUBESEAL_CERT` env var
-
-If neither is present the render fails fast with `KubesealCertMissing`.
+Needs the `kubeseal` CLI on the machine that runs `konfig build`, plus the
+controller's public cert — resolved from `certPath`, else `$KUBESEAL_CERT`.
+Missing cert fails fast with `KubesealCertMissing`.
 
 ## Usage
 
+Bind a secret contract (`Secret.define`, from `@konfig.ts/env`) to the backend
+and give it a `source` for the plaintext to seal:
+
 ```ts
-import { defineSecret, SecretSource } from "@konfig.ts/env"
+import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
 import { SealedSecrets } from "@konfig.ts/sealed-secrets"
 
-const dbCreds = defineSecret({
+const dbCreds = Secret.define({
   name: "db-creds",
   namespace: "prod",
   env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" }
@@ -44,35 +35,43 @@ const bound = Secret.bind({
   secret: dbCreds,
   backend: SealedSecrets.backend({ scope: "strict" }),
   source: SecretSource.fromConfig({
-    keys: ["url", "password"] as const,
+    keys: ["url", "password"],
     envName: (k) => `DB_${k.toUpperCase()}`
   })
 })
+// bound.manifest is the SealedSecret CR.
 ```
+
+At render time konfig resolves the source to plaintext (held only in
+`Redacted<string>` in memory), builds a plain `Secret`, pipes it to `kubeseal`
+over stdin, and emits the returned `SealedSecret`. The plaintext never lands on
+disk.
 
 ## Options
 
-| Field      | Default          | Notes                                                                                                                   |
-| ---------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `scope`    | `"strict"`       | `strict` requires same name + namespace; `namespace-wide` allows rename within ns; `cluster-wide` allows move across ns |
-| `certPath` | `$KUBESEAL_CERT` | path to the sealed-secrets controller's public cert                                                                     |
+| Field      | Default          | Notes                                                                                          |
+| ---------- | ---------------- | ---------------------------------------------------------------------------------------------- |
+| `scope`    | `"strict"`       | `strict` = same name + namespace; `namespace-wide` = rename within ns; `cluster-wide` = any ns |
+| `certPath` | `$KUBESEAL_CERT` | path to the sealed-secrets controller's public cert                                            |
 
-## Status
+## Internals
 
-Phase 3b of the secret refactor — see `.docs/secret-refactoring/plan.md`.
+Backends implement the `SecretBackend<N, K, RequiresSource>` contract from
+`@konfig.ts/k8s`; `requiresSource: true` makes `source` a compile-time
+requirement. See the `Environment` section of
+[`.docs/architecture.md`](../../.docs/architecture.md).
 
 ## Requirements
 
-konfig.ts builds on [Effect](https://effect.website/), which is still in
-beta. Until Effect ships a stable 4.x, you must install the exact beta
-konfig is developed against:
+konfig.ts is built on [Effect](https://effect.website/), currently in beta.
+Until Effect ships a stable 4.x, install the exact beta konfig.ts is built
+against:
 
-- **`effect@4.0.0-beta.70`** — required.
-- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
-  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
-  omit it.
+- **`effect@4.0.0-beta.70`** — required by every package.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only when you call
+  `render()` (the Node filesystem/subprocess entrypoint); manifest-only
+  consumers can omit it (it is declared as an optional peer).
 
-The peer dependency is pinned to the exact version on purpose: Effect's beta
-line makes breaking changes between builds, so a looser range would surface
-as `ERESOLVE` install conflicts rather than a working install. This pin will
-relax to a caret range once Effect reaches a stable 4.x.
+The pin is exact on purpose: Effect's beta line makes breaking changes between
+builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
+to a caret range once Effect reaches a stable 4.x.

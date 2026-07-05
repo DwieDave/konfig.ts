@@ -1,100 +1,88 @@
 # @konfig.ts/env
 
-Yieldable environment entries — the shared definition layer between
-konfig manifest emission and the pod's runtime Effect application.
+One declaration for a pod's environment, shared by both sides of the wire: the
+Kubernetes manifest that injects the env vars, and the app code that decodes
+them at startup. Name `DATABASE_URL` once — rename it in one place and the
+typechecker flags every consumer.
 
-## Why
+## Install
 
-A pod's environment variables live in two places today:
+```bash
+bun add @konfig.ts/env
+```
 
-- The konfig manifest (`secretEnv({ name: "DATABASE_URL", ... })`,
-  `valueEnv`, `configMapEnv`).
-- The pod's runtime code (`Config.redacted("DATABASE_URL")`).
+## Usage
 
-The env-var name `"DATABASE_URL"` is duplicated. This package collapses
-both ends into one declaration:
+Declare the contract once, in a module both sides import:
 
 ```ts
-// shared/secrets.ts — imported by both sides
-import { defineEnvironment, defineLiteral, defineSecret } from "@konfig.ts/env"
+import { Downward, Environment, Literal, Secret } from "@konfig.ts/env"
 
-export const dbCreds = defineSecret({
+export const dbCreds = Secret.define({
   name: "db-creds",
   namespace: "prod",
-  env: {
-    url: "DATABASE_URL",
-    password: "DATABASE_PASSWORD"
-  }
+  env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" }
 })
 
-export const port = defineLiteral({ envName: "PORT", value: 8080 })
-
-export const apiEnv = defineEnvironment({ db: dbCreds, port })
+export const apiEnv = Environment.define({
+  db: dbCreds,
+  http: Environment.define({
+    port: Literal.define({ envName: "HTTP_PORT", value: 8080 }),
+    logLevel: Literal.define({ envName: "LOG_LEVEL", value: "info" })
+  }),
+  runtime: Environment.define({
+    nodeEnv: Literal.define({ envName: "NODE_ENV", value: "production" }),
+    podName: Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" })
+  })
+})
 ```
 
-## Entries and environments
-
-Every `defineSecret` / `defineLiteral` / `defineDownward` call returns
-an **entry** — a yieldable Effect `Config<...>` intersected with the
-pure binding metadata (`name`, `namespace`, `env`/`envName`). Each
-entry is its own state-management-style atom: pull it standalone, or
-group it.
-
-`defineEnvironment({...})` is a **bundle** — also a yieldable Config,
-with `.members` re-exposing each named entry.
+Then use the same `apiEnv` from both sides. `bind` (manifest) and `runtime`
+(process) both live in `@konfig.ts/k8s`:
 
 ```ts
-// runtime pod code
-import { Effect, Redacted } from "effect"
-import { apiEnv, dbCreds } from "./secrets"
+// infra module — emit the Deployment env block + the secret backend's CRs
+import { Environment } from "@konfig.ts/k8s"
+const bound = Environment.bind({ env: apiEnv, namespace: "prod", secrets: { db: { backend } } })
+// bound.envVars → container env;  bound.manifests → the CRs
 
-const program = Effect.gen(function*() {
-  const env = yield* apiEnv // { db: { url: Redacted, password: Redacted }, port: number }
-  const db = yield* dbCreds // { url: Redacted, password: Redacted }
-  const url = yield* dbCreds.fields.url // Redacted<string>
-})
+// app process — decode the same vars at startup, into a typed record
+import { Environment } from "@konfig.ts/k8s"
+import { Effect } from "effect"
+const config = await Effect.runPromise(Environment.runtime(apiEnv))
+console.log(`listening on :${config.http.port}`)
 ```
 
-## Bound on the konfig side
+## Atoms
 
-`@konfig.ts/k8s` provides `Secret.bind({secret})` and
-`Environment.bind({env})` for the manifest-side wiring. They consume
-the same shared entries and produce ready-to-spread `envVars` for the
-container:
+| Constructor          | Produces                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `Secret.define`      | a secret contract (`{ name, namespace, env }`), bound to a backend at compose time |
+| `Literal.define`     | a constant (`{ envName, value, schema? }`) baked into the manifest                 |
+| `Downward.define`    | a Kubernetes downward-API field (`{ envName, fieldPath }`)                         |
+| `Environment.define` | a bundle of the above — nestable; the single source of truth for both sides        |
+| `SecretSource`       | plaintext sources for backends: `.fromConfig`, `.literal`, `.fromCommand`          |
 
-```ts
-// konfig-side infra code
-import { Environment, Secret, Workload } from "@konfig.ts/k8s"
+Two members claiming the same `envName` is a compile-time error
+(`EnvNameCollision`) — caught before it can silently shadow another.
 
-const apiEnvK8s = Environment.bind({ env: apiEnv })
+## Internals
 
-Workload.web({
-  /* ... */
-  deployment: {
-    containers: [{ name: "api", image: "...", env: apiEnvK8s.envVars }]
-  }
-})
-```
-
-## Status
-
-Phase 1 of the secret refactor — see `.docs/secret-refactoring/plan.md`.
-Entries, bundles, env-var wiring only. Backends (ExternalSecrets,
-SealedSecrets, Sops) and the `source` / `values` accessors land in
-later phases.
+An atom is a yieldable Effect `Config` intersected with its binding metadata; a
+bundle is a `Config` over the whole tree. See the `Environment` section of
+[`.docs/architecture.md`](../../.docs/architecture.md).
 
 ## Requirements
 
-konfig.ts builds on [Effect](https://effect.website/), which is still in
-beta. Until Effect ships a stable 4.x, you must install the exact beta
-konfig is developed against:
+konfig.ts is built on [Effect](https://effect.website/), currently in beta.
+Until Effect ships a stable 4.x, install the exact beta konfig.ts is built
+against:
 
-- **`effect@4.0.0-beta.70`** — required.
-- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
-  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
-  omit it.
+- **`effect@4.0.0-beta.70`** — required by every package.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only when you call
+  `render()` (the Node filesystem/subprocess entrypoint); manifest-only
+  consumers can omit it (it is declared as an optional peer).
 
-The peer dependency is pinned to the exact version on purpose: Effect's beta
-line makes breaking changes between builds, so a looser range would surface
-as `ERESOLVE` install conflicts rather than a working install. This pin will
-relax to a caret range once Effect reaches a stable 4.x.
+The pin is exact on purpose: Effect's beta line makes breaking changes between
+builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
+to a caret range once Effect reaches a stable 4.x.
