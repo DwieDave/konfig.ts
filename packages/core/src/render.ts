@@ -3,7 +3,9 @@ import { Effect, Layer } from "effect";
 import { RenderContext } from "./RenderContext";
 
 export interface RenderOptions<RIn = never> {
+	/** Render-context env (default `"prod"`). Keys output dirs and bundle entries. */
 	readonly env?: string;
+	/** Extra layer merged with `NodeServices.layer` before running the program. Use for `ConfigProvider` mocks, custom service tags, etc. */
 	readonly layers?: Layer.Layer<RIn, never, never>;
 }
 
