@@ -41,6 +41,11 @@ jobs:
           TAG_VERSION="${TAG#v}"
           echo "Tag → ${TAG} → version ${TAG_VERSION}"
           for pkg in packages/*/package.json; do
+            IS_PRIVATE=$(node -e "console.log(require('./'+process.argv[1]).private === true)" "$pkg")
+            if [ "$IS_PRIVATE" = "true" ]; then
+              echo "skip (private, not published): $pkg"
+              continue
+            fi
             PKG_VERSION=$(node -e "console.log(require('./'+process.argv[1]).version)" "$pkg")
             if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
               echo "::error file=$pkg::version $PKG_VERSION does not match tag $TAG_VERSION"
