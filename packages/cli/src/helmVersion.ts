@@ -1,6 +1,6 @@
-import { HelmVersionTooLow } from "@konfig.ts/core";
+import { HelmVersionTooLow, runProcessString } from "@konfig.ts/core";
 import { Effect } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "./_unstable";
+import { ChildProcess } from "./_unstable";
 import semver from "semver";
 
 /**
@@ -16,11 +16,10 @@ export const _parseHelmVersion = (output: string): string | null => {
 
 export const assertHelmVersion = (minVersion: string) =>
 	Effect.gen(function* () {
-		const spawner = yield* ChildProcessSpawner;
 		const cmd = ChildProcess.make("helm", ["version", "--short"]);
-		const stdout = yield* spawner
-			.string(cmd)
-			.pipe(Effect.mapError(() => new HelmVersionTooLow({ required: minVersion, found: "not found" })));
+		const stdout = yield* runProcessString(cmd, { allowEmptyStdout: false }).pipe(
+			Effect.mapError(() => new HelmVersionTooLow({ required: minVersion, found: "not found" })),
+		);
 
 		const found = _parseHelmVersion(stdout);
 		if (!found) {

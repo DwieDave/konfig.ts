@@ -1,7 +1,8 @@
+import { runProcessExit } from "@konfig.ts/core";
 import { Console, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
-import { ChildProcess, ChildProcessSpawner, Command, Flag } from "../_unstable";
+import { ChildProcess, Command, Flag } from "../_unstable";
 import { loadChartRegistry } from "../chartRegistry";
 import { resolveCliPaths } from "../cliConfig";
 import { assertHelmVersion } from "../helmVersion";
@@ -17,7 +18,6 @@ const _fetchOne = (input: FetchOneInput) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
 		const path = yield* Path;
-		const spawner = yield* ChildProcessSpawner;
 
 		yield* fs.makeDirectory(input.cacheDir, { recursive: true });
 		const cachedTgz = path.join(input.cacheDir, `${input.chart}-${input.version}.tgz`);
@@ -34,7 +34,7 @@ const _fetchOne = (input: FetchOneInput) =>
 			"--destination",
 			input.cacheDir,
 		]);
-		yield* spawner.exitCode(cmd);
+		yield* runProcessExit(cmd);
 	});
 
 export const helmFetchCommand = Command.make(
