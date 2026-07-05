@@ -17,14 +17,14 @@ Backed by [Effect](https://effect.website/), built on the same patterns as
    {
      "name": "@my/app",
      "engines": {
-       "bun": "1.3.5"
+       "bun": "1.3.5",
      },
      "scripts": {
-       "build": "tsc -p tsconfig.json"
+       "build": "tsc -p tsconfig.json",
      },
      "devDependencies": {
-       "@konfig.ts/docker": "workspace:*"
-     }
+       "@konfig.ts/docker": "workspace:*",
+     },
    }
    ```
 
@@ -35,7 +35,7 @@ Backed by [Effect](https://effect.website/), built on the same patterns as
 2. Author the spec at `apps/my-app/docker.ts`:
 
    ```ts
-   import { Docker } from "@konfig.ts/docker";
+   import { Docker } from "@konfig.ts/docker"
 
    export default Docker.app({
      target: "apps/my-app",
@@ -43,16 +43,16 @@ Backed by [Effect](https://effect.website/), built on the same patterns as
        workdir: "/app/apps/my-app",
        copy: [
          Docker.copy.builderArtifact("dist", "dist"),
-         Docker.copy.workspaceSourceAll(),   // for bun's "bun"/"source" export condition
+         Docker.copy.workspaceSourceAll() // for bun's "bun"/"source" export condition
        ],
        expose: 4000,
-       cmd: ["bun", "run", "dist/main.js"],
+       cmd: ["bun", "run", "dist/main.js"]
      },
      dev: {
        cmd: ["bun", "--watch", "main.ts"],
-       expose: 4000,
-     },
-   });
+       expose: 4000
+     }
+   })
    ```
 
 3. Generate:
@@ -70,11 +70,11 @@ Backed by [Effect](https://effect.website/), built on the same patterns as
 
 ## CLI
 
-| Command | Purpose |
-|---|---|
-| `konfig docker preview <target> [--prod-only|--dev-only]` | Render Dockerfile(s) to stdout |
-| `konfig docker write <target> [--out-dir <dir>] [--prod-only|--dev-only] [--force]` | Atomically write `Dockerfile` + `Dockerfile.dev`. Refuses to overwrite a destination missing the `# konfig-managed:` marker unless `--force` is passed. Skips the rename when on-disk + emitted match (idempotent re-runs). |
-| `konfig docker diff <target> [--format summary|detail|json]` | Diff would-emit vs on-disk; non-zero exit on drift. Hash fast-path skips re-rendering when the generation header hash matches. |
+| Command                                                      | Purpose                |
+| ------------------------------------------------------------ | ---------------------- |
+| `konfig docker preview <target> [--prod-only                 | --dev-only]`           |
+| `konfig docker write <target> [--out-dir <dir>] [--prod-only | --dev-only] [--force]` |
+| `konfig docker diff <target> [--format summary               | detail                 |
 
 The CLI also takes a global `--debug` flag (matches `konfig build|diff`).
 
@@ -82,16 +82,16 @@ The CLI also takes a global `--debug` flag (matches `konfig build|diff`).
 
 Every atom returns a tagged data object validated by the spec Schema.
 
-| Family | Constructors | Notes |
-|---|---|---|
-| `Docker.app` | `Docker.app(spec)` | Wraps the spec in a `DockerApp` brand. |
-| `Docker.pm` | `bun()`, `npm()`, `pnpm()` | Optional; auto-detected from root `package.json#packageManager` + lockfile. |
-| `Docker.runtime` | `bun({alpine?})`, `node({alpine?})` | Optional; defaults to `bun` for bun PM, `node` for npm/pnpm. `alpine` defaults to `true`. |
-| `Docker.build` | `script(name)`, `command(argv)`, `none()` | Optional; defaults to `script("build")` if target has one, else `none()`. |
-| `Docker.copy` | `builderArtifact(src, dst, {chown?})`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, {from?, chown?})` | `workspaceSourceAll` expands to per-workspace `workspaceSource` for every closure member except the target. |
-| `Docker.healthcheck` | `httpGet({path, port, interval?, timeout?, retries?, startPeriod?})`, `command(argv, opts?)` | |
-| `Docker.user` | `nonRoot({uid?, gid?, name?})`, `root()` | Lower injects `nonRoot()` if the user does not specify one. Defaults: uid/gid 1001, name "app". |
-| `Docker.platform` | `linuxAmd64()`, `linuxArm64()`, `multi(values)` | Single platforms become `--platform=...` on `FROM`. v1 does not emit buildx-specific syntax for `multi(...)`. |
+| Family               | Constructors                                                                                                              | Notes                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `Docker.app`         | `Docker.app(spec)`                                                                                                        | Wraps the spec in a `DockerApp` brand.                                                                        |
+| `Docker.pm`          | `bun()`, `npm()`, `pnpm()`                                                                                                | Optional; auto-detected from root `package.json#packageManager` + lockfile.                                   |
+| `Docker.runtime`     | `bun({alpine?})`, `node({alpine?})`                                                                                       | Optional; defaults to `bun` for bun PM, `node` for npm/pnpm. `alpine` defaults to `true`.                     |
+| `Docker.build`       | `script(name)`, `command(argv)`, `none()`                                                                                 | Optional; defaults to `script("build")` if target has one, else `none()`.                                     |
+| `Docker.copy`        | `builderArtifact(src, dst, {chown?})`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, {from?, chown?})` | `workspaceSourceAll` expands to per-workspace `workspaceSource` for every closure member except the target.   |
+| `Docker.healthcheck` | `httpGet({path, port, interval?, timeout?, retries?, startPeriod?})`, `command(argv, opts?)`                              |                                                                                                               |
+| `Docker.user`        | `nonRoot({uid?, gid?, name?})`, `root()`                                                                                  | Lower injects `nonRoot()` if the user does not specify one. Defaults: uid/gid 1001, name "app".               |
+| `Docker.platform`    | `linuxAmd64()`, `linuxArm64()`, `multi(values)`                                                                           | Single platforms become `--platform=...` on `FROM`. v1 does not emit buildx-specific syntax for `multi(...)`. |
 
 ## What the package generates
 
@@ -180,3 +180,19 @@ this; build with `docker build -f apps/foo/Dockerfile <monorepo-root>`.
 ## License
 
 MIT
+
+## Requirements
+
+konfig.ts builds on [Effect](https://effect.website/), which is still in
+beta. Until Effect ships a stable 4.x, you must install the exact beta
+konfig is developed against:
+
+- **`effect@4.0.0-beta.70`** — required.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
+  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
+  omit it.
+
+The peer dependency is pinned to the exact version on purpose: Effect's beta
+line makes breaking changes between builds, so a looser range would surface
+as `ERESOLVE` install conflicts rather than a working install. This pin will
+relax to a caret range once Effect reaches a stable 4.x.

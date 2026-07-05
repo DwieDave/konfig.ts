@@ -74,37 +74,37 @@ export default AppOfApps.entrypoint(program);
 The same env contract on both sides:
 
 ```ts
-import { defineEnvironment, defineLiteral, defineSecret } from "@konfig.ts/env";
-import { Environment } from "@konfig.ts/k8s";
+import { defineEnvironment, defineLiteral, defineSecret } from "@konfig.ts/env"
+import { Environment } from "@konfig.ts/k8s"
 
 export const apiEnv = defineEnvironment({
   db: defineSecret({ name: "db-creds", namespace: "prod", env: { url: "DATABASE_URL" } }),
-  port: defineLiteral({ envName: "HTTP_PORT", value: 8080 }),
-});
+  port: defineLiteral({ envName: "HTTP_PORT", value: 8080 })
+})
 
 // In a konfig module — emit the Deployment env block + the Secret CR:
-Environment.bind({ env: apiEnv, secrets: { db: { backend: sopsBackend, source: sopsSource } } });
+Environment.bind({ env: apiEnv, secrets: { db: { backend: sopsBackend, source: sopsSource } } })
 
 // In the app process — decode the same env vars at startup:
-const config = await Effect.runPromise(Environment.runtime(apiEnv));
-console.log(`api listening on :${config.port}`);
+const config = await Effect.runPromise(Environment.runtime(apiEnv))
+console.log(`api listening on :${config.port}`)
 ```
 
 ## Packages
 
-| Package | Description |
-| --- | --- |
-| [`@konfig.ts/core`](./packages/core) | `Manifest<A>`, `Helm.release` with digest verification, structural diff, stable YAML, `Dep.*` kinds |
-| [`@konfig.ts/k8s`](./packages/k8s) | Kubernetes resource builders with branded refs; `Workload.web`/`Workload.cron`; `SecretBackend<N, K, RequiresSource>` |
-| [`@konfig.ts/env`](./packages/env) | `defineSecret`/`defineLiteral`/`defineDownward`/`defineEnvironment`; `Environment.runtime` decoder |
-| [`@konfig.ts/sops`](./packages/sops) | `Sops.source` + `Sops.backend`; SopsSecret schema; recipient validation (no `,` smuggling) |
-| [`@konfig.ts/sealed-secrets`](./packages/sealed-secrets) | SealedSecret CR backend; shells out to `kubeseal` with schema-validated stdout |
-| [`@konfig.ts/external-secrets`](./packages/external-secrets) | ExternalSecret CR backend (no source required) |
-| [`@konfig.ts/argocd`](./packages/argocd) | `Application.define` (Effect Context.Tag + Layer); `AppOfApps.entrypoint`; `Module.fixedNs`/`Module.dynamicNs` |
-| [`@konfig.ts/docker`](./packages/docker) | Workspace-graph-aware Dockerfile generator; Bun/Npm/Pnpm/Yarn |
-| [`@konfig.ts/cli`](./packages/cli) | `konfig build`, `validate`, `diff`, `crd`, `helm`, `docker`, `set` |
+| Package                                                      | Description                                                                                                           |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| [`@konfig.ts/core`](./packages/core)                         | `Manifest<A>`, `Helm.release` with digest verification, structural diff, stable YAML, `Dep.*` kinds                   |
+| [`@konfig.ts/k8s`](./packages/k8s)                           | Kubernetes resource builders with branded refs; `Workload.web`/`Workload.cron`; `SecretBackend<N, K, RequiresSource>` |
+| [`@konfig.ts/env`](./packages/env)                           | `defineSecret`/`defineLiteral`/`defineDownward`/`defineEnvironment`; `Environment.runtime` decoder                    |
+| [`@konfig.ts/sops`](./packages/sops)                         | `Sops.source` + `Sops.backend`; SopsSecret schema; recipient validation (no `,` smuggling)                            |
+| [`@konfig.ts/sealed-secrets`](./packages/sealed-secrets)     | SealedSecret CR backend; shells out to `kubeseal` with schema-validated stdout                                        |
+| [`@konfig.ts/external-secrets`](./packages/external-secrets) | ExternalSecret CR backend (no source required)                                                                        |
+| [`@konfig.ts/argocd`](./packages/argocd)                     | `Application.define` (Effect Context.Tag + Layer); `AppOfApps.entrypoint`; `Module.fixedNs`/`Module.dynamicNs`        |
+| [`@konfig.ts/docker`](./packages/docker)                     | Workspace-graph-aware Dockerfile generator; Bun/Npm/Pnpm/Yarn                                                         |
+| [`@konfig.ts/cli`](./packages/cli)                           | `konfig build`, `validate`, `diff`, `crd`, `helm`, `docker`, `set`                                                    |
 
-## What this is *not*
+## What this is _not_
 
 - **Not a kustomize replacement** for cases where you already have
   hand-written YAML and want to overlay it. konfig owns the manifest
@@ -117,6 +117,22 @@ console.log(`api listening on :${config.port}`);
 - **Not a `helm` replacement.** It calls helm. Helm charts you depend
   on stay charts; the integration just lifts each templated document
   as a `RawYaml` `Manifest`.
+
+## Requirements
+
+konfig.ts is built on [Effect](https://effect.website/), which is still in
+beta. Until Effect ships a stable 4.x, every `@konfig.ts/*` package requires
+the exact beta it is developed against:
+
+- **`effect@4.0.0-beta.70`** — required by every package.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
+  (the Node filesystem/subprocess entrypoint in `@konfig.ts/core`);
+  manifest-only consumers can omit it (it is declared as an optional peer).
+
+The peer dependency is pinned to the exact version on purpose: Effect's beta
+line makes breaking changes between builds, so a looser range would surface
+as `ERESOLVE` install conflicts rather than a working install. This pin will
+relax to a caret range once Effect reaches a stable 4.x.
 
 ## Quickstart
 

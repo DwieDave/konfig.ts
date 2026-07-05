@@ -1,14 +1,14 @@
 {
-	"extends": "./tsconfig.json",
-	"compilerOptions": {
-		"emitDeclarationOnly": true,
-		"declaration": true,
-		"declarationMap": true,
-		"composite": false,
-		"incremental": false,
-		"declarationDir": "./dist",
-		"rootDir": "./src"
-	},
-	"include": ["./src/**/*.ts"],
-	"exclude": ["./node_modules/**/*", "./dist/**/*", "./src/**/*.test.ts"]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": false,
+    "composite": false,
+    "incremental": false,
+    "declarationDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["./src/**/*.ts"],
+  "exclude": ["./node_modules/**/*", "./dist/**/*", "./src/**/*.test.ts"]
 }

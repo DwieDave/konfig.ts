@@ -1,52 +1,52 @@
 {
-	"name": "@konfig.ts/cli",
-	"version": "0.0.1",
-	"description": "konfig CLI — build, validate, diff, and set commands for konfig.ts configurations.",
-	"license": "MIT",
-	"author": "David Stahl-Gruber",
-	"homepage": "https://github.com/DwieDave/konfig.ts#readme",
-	"bugs": "https://github.com/DwieDave/konfig.ts/issues",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/DwieDave/konfig.ts.git",
-		"directory": "packages/cli"
-	},
-	"keywords": ["kubernetes", "k8s", "argocd", "cli", "konfig"],
-	"type": "module",
-	"bin": {
-		"konfig": "./dist/main.mjs"
-	},
-	"files": ["dist", "README.md", "LICENSE"],
-	"engines": {
-		"node": ">=20"
-	},
-	"publishConfig": {
-		"access": "public"
-	},
-	"scripts": {
-		"build": "tsdown ./src/main.ts --format=esm --target=node20 --sourcemap --clean --no-dts && chmod +x dist/main.mjs",
-		"check": "tsc -p tsconfig.check.json --noEmit",
-		"test": "bunx vitest run $(rg --files src -g '*.test.ts')",
-		"lint": "oxlint",
-		"lint:apply": "oxlint --fix",
-		"prepublishOnly": "bun run build"
-	},
-	"dependencies": {
-		"@effect/platform-node": "catalog:",
-		"@konfig.ts/argocd": "workspace:*",
-		"@konfig.ts/core": "workspace:*",
-		"@konfig.ts/docker": "workspace:*",
-		"@konfig.ts/k8s": "workspace:*",
-		"effect": "catalog:",
-		"json-schema-to-typescript": "^15.0.4",
-		"semver": "^7.7.2",
-		"yaml": "catalog:"
-	},
-	"devDependencies": {
-		"@effect/vitest": "catalog:",
-		"@types/bun": "catalog:",
-		"@types/semver": "^7.5.8",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	}
+  "name": "@konfig.ts/cli",
+  "version": "0.0.1",
+  "description": "konfig CLI — build, validate, diff, and set commands for konfig.ts configurations.",
+  "license": "MIT",
+  "author": "David Stahl-Gruber",
+  "homepage": "https://github.com/DwieDave/konfig.ts#readme",
+  "bugs": "https://github.com/DwieDave/konfig.ts/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DwieDave/konfig.ts.git",
+    "directory": "packages/cli"
+  },
+  "keywords": ["kubernetes", "k8s", "argocd", "cli", "konfig"],
+  "type": "module",
+  "bin": {
+    "konfig": "./dist/main.mjs"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown ./src/main.ts --format=esm --target=node20 --sourcemap --clean --no-dts && chmod +x dist/main.mjs",
+    "check": "tsc -p tsconfig.check.json --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint",
+    "lint:apply": "oxlint --fix",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@konfig.ts/argocd": "workspace:*",
+    "@konfig.ts/core": "workspace:*",
+    "@konfig.ts/docker": "workspace:*",
+    "@konfig.ts/k8s": "workspace:*",
+    "effect": "catalog:",
+    "json-schema-to-typescript": "^15.0.4",
+    "semver": "^7.7.2",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/semver": "^7.5.8",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
 }

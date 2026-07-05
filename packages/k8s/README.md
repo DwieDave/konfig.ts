@@ -10,14 +10,14 @@ and the `Dep.*` tracking propagates needs/provides through Effect
 ## Branded references
 
 ```ts
-import { SecretRef, ConfigMapRef, ServiceAccountRef } from "@konfig.ts/k8s";
+import { ConfigMapRef, SecretRef, ServiceAccountRef } from "@konfig.ts/k8s"
 
-const apiCreds = SecretRef.of("api-creds");           // SecretRef<"api-creds">
-const cfg      = ConfigMapRef.of("oauth-templates");  // ConfigMapRef<"oauth-templates">
-const sa       = ServiceAccountRef.of("api");         // ServiceAccountRef<"api">
+const apiCreds = SecretRef.of("api-creds") // SecretRef<"api-creds">
+const cfg = ConfigMapRef.of("oauth-templates") // ConfigMapRef<"oauth-templates">
+const sa = ServiceAccountRef.of("api") // ServiceAccountRef<"api">
 ```
 
-Each ref carries the resource *name* in its type parameter. The
+Each ref carries the resource _name_ in its type parameter. The
 enforcement points (env var `secretKeyRef` / `configMapKeyRef`, volume
 secret, volume configMap, `imagePullSecret`, Ingress TLS) all accept the
 branded type and reject raw strings.
@@ -33,25 +33,25 @@ The `.ref` accessor means consumers wire the brand through without
 restating the name:
 
 ```ts
-const env = secretEnv("DATABASE_URL", { ref: apiSecret.ref, key: "url" });
+const env = secretEnv("DATABASE_URL", { ref: apiSecret.ref, key: "url" })
 ```
 
 ## Env-var helpers
 
-| Helper | Rejects raw string for |
-|---|---|
-| `valueEnv(name, value)` | n/a |
-| `secretEnv(name, {ref, key, optional?})` | `ref` |
-| `configMapEnv(name, {ref, key, optional?})` | `ref` |
-| `rawEnv({name, value?, valueFrom?})` | n/a (escape hatch) |
+| Helper                                      | Rejects raw string for |
+| ------------------------------------------- | ---------------------- |
+| `valueEnv(name, value)`                     | n/a                    |
+| `secretEnv(name, {ref, key, optional?})`    | `ref`                  |
+| `configMapEnv(name, {ref, key, optional?})` | `ref`                  |
+| `rawEnv({name, value?, valueFrom?})`        | n/a (escape hatch)     |
 
 ## Volume helpers
 
-| Helper |
-|---|
-| `volumeFromSecret(name, ref)` |
-| `volumeFromConfigMap(name, ref)` |
-| `emptyDirVolume(name, opts?)` |
+| Helper                              |
+| ----------------------------------- |
+| `volumeFromSecret(name, ref)`       |
+| `volumeFromConfigMap(name, ref)`    |
+| `emptyDirVolume(name, opts?)`       |
 | `pvcVolume(name, claimName, opts?)` |
 
 ## Constructors
@@ -136,3 +136,19 @@ src/
 ├── workloadHelpers.ts        Workload.web, Workload.cron
 └── backend.ts                SecretBackend contract + Secret.bind
 ```
+
+## Requirements
+
+konfig.ts builds on [Effect](https://effect.website/), which is still in
+beta. Until Effect ships a stable 4.x, you must install the exact beta
+konfig is developed against:
+
+- **`effect@4.0.0-beta.70`** — required.
+- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
+  (the Node filesystem/subprocess entrypoint); manifest-only consumers can
+  omit it.
+
+The peer dependency is pinned to the exact version on purpose: Effect's beta
+line makes breaking changes between builds, so a looser range would surface
+as `ERESOLVE` install conflicts rather than a working install. This pin will
+relax to a caret range once Effect reaches a stable 4.x.
