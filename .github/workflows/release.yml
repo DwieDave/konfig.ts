@@ -79,7 +79,7 @@ jobs:
       - name: Build packages
         run: bun run build
 
-      - name: Rewrite workspace:* to exact versions for publish
+      - name: "Rewrite workspace:* and catalog: protocol deps to concrete versions"
         run: node scripts/rewrite-workspace-deps.cjs
 
       - name: Verify published-artifact contents (dry-run pack)
@@ -89,14 +89,6 @@ jobs:
             (cd "$dir" && npm pack --dry-run --json) | tee "/tmp/pack-$(basename "$dir").json"
             echo "::endgroup::"
           done
-
-      - name: Re-assert workspace:* rewrite before publishing (idempotent)
-        # Belt-and-suspenders: guarantee every package.json still carries exact
-        # internal-dep pins right before the publish loop. `prepack-exports.mjs`
-        # restores package.json from a byte backup (not `git checkout`), so the
-        # dry-run pack above already preserves the rewrite; this step is a no-op
-        # in the normal path and only re-applies if pack ever reverts it.
-        run: node scripts/rewrite-workspace-deps.cjs
 
       - name: Publish in dependency order (OIDC trusted publishing)
         run: |
