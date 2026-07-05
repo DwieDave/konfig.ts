@@ -30,7 +30,7 @@ other package's version. We accept that, given the dependency graph.
 Workspace dependencies are declared as `"workspace:*"` in source. At
 publish time, `workspace:*` is rewritten to the exact published
 version (handled by the release workflow — see
-[`.github/README.md`](../.github/README.md)).
+[`.github/workflows/README.md`](../.github/workflows/README.md)).
 Consumers of the published packages see exact pins, so a 1.0.0 of
 `@konfig.ts/k8s` always asks for 1.0.0 of `@konfig.ts/core`.
 
@@ -66,7 +66,7 @@ The intended publish flow:
 2. The tag triggers `.github/workflows/release.yml`, which rewrites
    `workspace:*` to the new version and publishes every non-private
    `@konfig.ts/*` package with provenance. See
-   [`.github/README.md`](../.github/README.md) for the full job list.
+   [`.github/workflows/README.md`](../.github/workflows/README.md) for the full job list.
 
 We do NOT use `lerna` or `nx` for release orchestration; the policy
 above is simple enough that a single shell script plus
