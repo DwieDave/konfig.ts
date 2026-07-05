@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/sops",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "sops integration for konfig.ts — Sops.source reads encrypted files at render time; Sops.backend emits SopsSecret CRs.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
