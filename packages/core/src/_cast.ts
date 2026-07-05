@@ -4,7 +4,7 @@
  * the brand is a type-only label that the caller stamps on themselves.
  */
 // oxlint-disable-next-line app/no-banned-type-assertions app/no-type-assertion
-export const brand = <T>(value: string): T => value as unknown as T;
+export const brand = <T>(value: string): T => value as unknown as T
 
 /**
  * Unsafe escape hatch — claim a value has type `T` without runtime
@@ -22,14 +22,4 @@ export const brand = <T>(value: string): T => value as unknown as T;
  * documents intent for readers and audits.
  */
 // oxlint-disable-next-line app/no-type-assertion app/no-multiple-function-params
-export const unsafeCoerce = <T>(value: unknown, _reason: string): T => value as T;
-
-/**
- * @deprecated Prefer `unsafeCoerce(value, reason)` so every site
- * documents WHY the cast is sound, or `boundary(schema)` for values
- * crossing a trust boundary. This alias remains for backwards
- * compatibility with existing 0.0.x call sites and will be removed
- * before 1.0.
- */
-// oxlint-disable-next-line app/no-type-assertion
-export const coerce = <T>(value: unknown): T => value as T;
+export const unsafeCoerce = <T>(value: unknown, _reason: string): T => value as T
