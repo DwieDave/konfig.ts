@@ -24,7 +24,7 @@ const program = Effect.gen(function* () {
 	const ctx = RenderContext.make("prod");
 
 	const sessionValues = yield* sessionKeyK8s.values!;
-	const sessionHash = hashSecretValues({ values: sessionValues });
+	const sessionHash = hashSecretValues({ values: sessionValues, salt: "prod/session-key" });
 
 	const api = Workload.web({
 		name: "api",
