@@ -1,14 +1,27 @@
-import { unsafeCoerce } from "@konfig.ts/core";
+import { ProcessError, runProcessString, unsafeCoerce } from "@konfig.ts/core";
 import { Data, Effect, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "./_unstable";
+import { ChildProcess } from "./_unstable";
 import type { SopsRecipients } from "./crd";
+
+/**
+ * Render the non-sensitive part of a subprocess failure — exit code and a
+ * bounded stderr tail. Never stringifies stdout (which for a sops decrypt
+ * is the plaintext secret) or an arbitrary cause.
+ */
+const _processDetail = (cause: unknown): string => {
+	if (cause instanceof ProcessError) {
+		const tail = cause.stderrTail.trim();
+		return tail.length > 0 ? ` (exit ${cause.exitCode}): ${tail}` : ` (exit ${cause.exitCode})`;
+	}
+	return "";
+};
 
 export class SopsInvocationError extends Data.TaggedError("SopsInvocationError")<{
 	readonly op: "decrypt" | "encrypt" | "extract";
 	readonly cause: unknown;
 }> {
 	get message(): string {
-		return `sops ${this.op} failed: ${String(this.cause)}`;
+		return `sops ${this.op} failed${_processDetail(this.cause)}`;
 	}
 }
 
@@ -39,16 +52,15 @@ export interface SopsExtractInput {
 
 export const sopsExtract = (input: SopsExtractInput) =>
 	Effect.gen(function* () {
-		const spawner = yield* ChildProcessSpawner;
 		const cmd = ChildProcess.make("sops", [
 			"--decrypt",
 			"--extract",
 			input.extract,
 			input.file,
 		]);
-		const stdout = yield* spawner
-			.string(cmd)
-			.pipe(Effect.mapError((cause) => new SopsInvocationError({ op: "extract", cause })));
+		const stdout = yield* runProcessString(cmd).pipe(
+			Effect.mapError((cause) => new SopsInvocationError({ op: "extract", cause })),
+		);
 		return stdout.replace(/\n+$/u, "");
 	}).pipe(Effect.scoped);
 
@@ -58,11 +70,10 @@ export interface SopsDecryptInput {
 
 export const sopsDecrypt = (input: SopsDecryptInput) =>
 	Effect.gen(function* () {
-		const spawner = yield* ChildProcessSpawner;
 		const cmd = ChildProcess.make("sops", ["--decrypt", input.file]);
-		return yield* spawner
-			.string(cmd)
-			.pipe(Effect.mapError((cause) => new SopsInvocationError({ op: "decrypt", cause })));
+		return yield* runProcessString(cmd).pipe(
+			Effect.mapError((cause) => new SopsInvocationError({ op: "decrypt", cause })),
+		);
 	}).pipe(Effect.scoped);
 
 export interface SopsEncryptStdinInput {
@@ -72,7 +83,6 @@ export interface SopsEncryptStdinInput {
 
 export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
 	Effect.gen(function* () {
-		const spawner = yield* ChildProcessSpawner;
 		const encoded = new TextEncoder().encode(input.plaintextYaml);
 		const args = [
 			"--encrypt",
@@ -86,7 +96,7 @@ export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
 		const cmd = ChildProcess.make("sops", args, {
 			stdin: Stream.succeed(unsafeCoerce<Uint8Array>(encoded, "TextEncoder.encode returns Uint8Array — Stream.succeed's inferred type is wider")),
 		});
-		return yield* spawner
-			.string(cmd)
-			.pipe(Effect.mapError((cause) => new SopsInvocationError({ op: "encrypt", cause })));
+		return yield* runProcessString(cmd).pipe(
+			Effect.mapError((cause) => new SopsInvocationError({ op: "encrypt", cause })),
+		);
 	}).pipe(Effect.scoped);

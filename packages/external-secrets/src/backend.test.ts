@@ -1,11 +1,13 @@
 import { it } from "@effect/vitest";
-import { coerce, Yaml } from "@konfig.ts/core";
+import { Yaml } from "@konfig.ts/core";
 import { Secret } from "@konfig.ts/k8s";
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { describe, expect, it as vitestIt } from "vitest";
 import { ExternalSecrets } from "./backend";
 import type { ExternalSecret } from "./crd";
+
+const coerce = <T>(value: unknown): T => value as T;
 
 const dbCreds = Secret.define({
 	name: "db-creds",

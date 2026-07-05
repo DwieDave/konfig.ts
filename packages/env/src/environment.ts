@@ -1,14 +1,9 @@
-import { Config } from "effect";
-import {
-	type EnvClaim,
-	type EntryMarker,
-	type HasEnvClaims,
-	EnvNameCollision,
-	_makeEntry,
-} from "./entry";
-import type { AnyDownwardEntry, DownwardEntry } from "./downward";
-import type { AnyLiteralEntry, LiteralEntry } from "./literal";
-import type { AnySecretEntry, SecretEntry } from "./secret";
+import { unsafeCoerce } from "@konfig.ts/core"
+import { Config } from "effect"
+import type { AnyDownwardEntry, DownwardEntry } from "./downward"
+import { _makeEntry, type EntryMarker, type EnvClaim, EnvNameCollision, type HasEnvClaims } from "./entry"
+import type { AnyLiteralEntry, LiteralEntry } from "./literal"
+import type { AnySecretEntry, SecretEntry } from "./secret"
 
 /**
  * Union of every kind that can be a member of a `Environment`.
@@ -22,49 +17,45 @@ import type { AnySecretEntry, SecretEntry } from "./secret";
  * accept matching nested override shapes.
  */
 export type EnvMember =
-	| AnySecretEntry
-	| AnyLiteralEntry
-	| AnyDownwardEntry
-	| AnyEnvironment;
+  | AnySecretEntry
+  | AnyLiteralEntry
+  | AnyDownwardEntry
+  | AnyEnvironment
 
-export type MemberValue<A> = A extends Config.Config<infer T> ? T : never;
+export type MemberValue<A> = A extends Config.Config<infer T> ? T : never
 
 export interface Environment<M extends Readonly<Record<string, EnvMember>>>
-	extends Config.Config<{ readonly [K in keyof M]: MemberValue<M[K]> }>,
-		EntryMarker<"Environment">,
-		HasEnvClaims {
-	readonly members: M;
+  extends Config.Config<{ readonly [K in keyof M]: MemberValue<M[K]> }>, EntryMarker<"Environment">, HasEnvClaims
+{
+  readonly members: M
 }
 
 // oxlint-disable-next-line app/no-explicit-any
-export type AnyEnvironment = Environment<Readonly<Record<string, any>>>;
-
-// oxlint-disable-next-line app/no-type-assertion
-const _cast = <T>(value: unknown): T => value as T;
+export type AnyEnvironment = Environment<Readonly<Record<string, any>>>
 
 const _collectClaims = (
-	members: Readonly<Record<string, EnvMember>>,
+  members: Readonly<Record<string, EnvMember>>
 ): ReadonlyArray<EnvClaim> => {
-	const byEnvName = new Map<string, string[]>();
-	const out: EnvClaim[] = [];
-	for (const [, entry] of Object.entries(members)) {
-		for (const claim of entry.envClaims) {
-			const prior = byEnvName.get(claim.envName);
-			if (prior === undefined) {
-				byEnvName.set(claim.envName, [claim.label]);
-			} else {
-				prior.push(claim.label);
-			}
-			out.push(claim);
-		}
-	}
-	for (const [envName, labels] of byEnvName) {
-		if (labels.length > 1) {
-			throw new EnvNameCollision({ envName, claims: labels });
-		}
-	}
-	return out;
-};
+  const byEnvName = new Map<string, string[]>()
+  const out: EnvClaim[] = []
+  for (const [, entry] of Object.entries(members)) {
+    for (const claim of entry.envClaims) {
+      const prior = byEnvName.get(claim.envName)
+      if (prior === undefined) {
+        byEnvName.set(claim.envName, [claim.label])
+      } else {
+        prior.push(claim.label)
+      }
+      out.push(claim)
+    }
+  }
+  for (const [envName, labels] of byEnvName) {
+    if (labels.length > 1) {
+      throw new EnvNameCollision({ envName, claims: labels })
+    }
+  }
+  return out
+}
 
 /**
  * Compile-time envName collision check (best-effort, complements the
@@ -79,65 +70,65 @@ const _collectClaims = (
  * check is just the early-warning layer.
  */
 type _EnvNamesOfMember<E> = E extends SecretEntry<
-	infer _N,
-	infer _K,
-	infer Envs
->
-	? Envs extends Readonly<Record<string, infer V extends string>>
-		? V
-		: never
-	: E extends LiteralEntry<infer EnvName, infer _T>
-		? EnvName
-		: E extends DownwardEntry<infer EnvName>
-			? EnvName
-			: never;
+  infer _N,
+  infer _K,
+  infer Envs
+> ? Envs extends Readonly<Record<string, infer V extends string>> ? V
+  : never
+  : E extends LiteralEntry<infer EnvName, infer _T> ? EnvName
+  : E extends DownwardEntry<infer EnvName> ? EnvName
+  : never
 
 type _OthersEnvNames<
-	M extends Readonly<Record<string, EnvMember>>,
-	K extends keyof M,
+  M extends Readonly<Record<string, EnvMember>>,
+  K extends keyof M
 > = {
-	[Other in keyof M]: Other extends K ? never : _EnvNamesOfMember<M[Other]>;
-}[keyof M];
+  [Other in keyof M]: Other extends K ? never : _EnvNamesOfMember<M[Other]>
+}[keyof M]
 
 type _CollisionForKey<
-	M extends Readonly<Record<string, EnvMember>>,
-	K extends keyof M,
-> = Extract<_EnvNamesOfMember<M[K]>, _OthersEnvNames<M, K>>;
+  M extends Readonly<Record<string, EnvMember>>,
+  K extends keyof M
+> = Extract<_EnvNamesOfMember<M[K]>, _OthersEnvNames<M, K>>
 
 type _AnyCollision<M extends Readonly<Record<string, EnvMember>>> = {
-	[K in keyof M]: _CollisionForKey<M, K>;
-}[keyof M];
+  [K in keyof M]: _CollisionForKey<M, K>
+}[keyof M]
 
 type _EnvNameCollisionError<Name extends string> = {
-	readonly _konfig_error: `Environment: envName "${Name}" is claimed by multiple members`;
-};
+  readonly _konfig_error: `Environment: envName "${Name}" is claimed by multiple members`
+}
 
 type _CheckCollisions<M extends Readonly<Record<string, EnvMember>>> = [
-	_AnyCollision<M>,
-] extends [never]
-	? M
-	: _EnvNameCollisionError<Extract<_AnyCollision<M>, string>>;
+  _AnyCollision<M>
+] extends [never] ? M
+  : _EnvNameCollisionError<Extract<_AnyCollision<M>, string>>
 
 const _define = <const M extends Readonly<Record<string, EnvMember>>>(
-	members: M & _CheckCollisions<M>,
+  members: M & _CheckCollisions<M>
 ): Environment<M> => {
-	const envClaims = _collectClaims(members);
+  const envClaims = _collectClaims(members)
 
-	const root = _cast<
-		Config.Config<{
-			readonly [K in keyof M]: MemberValue<M[K]>;
-		}>
-	>(Config.all(members));
+  const root = unsafeCoerce<
+    Config.Config<
+      {
+        readonly [K in keyof M]: MemberValue<M[K]>
+      }
+    >
+  >(
+    Config.all(members),
+    "Config.all over the members record yields a Config of the mapped record whose values are each member's MemberValue"
+  )
 
-	return _makeEntry({
-		config: root,
-		metadata: {
-			_kind: "Environment" as const,
-			members,
-			envClaims,
-		},
-	});
-};
+  return _makeEntry({
+    config: root,
+    metadata: {
+      _kind: "Environment" as const,
+      members,
+      envClaims
+    }
+  })
+}
 
 /**
  * `Environment` value namespace (env-contracts package).
@@ -153,5 +144,5 @@ const _define = <const M extends Readonly<Record<string, EnvMember>>>(
  * exposes `define` alongside the binder + runtime decoder.
  */
 export const Environment = {
-	define: _define,
-};
+  define: _define
+}
