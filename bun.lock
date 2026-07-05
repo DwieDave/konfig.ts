@@ -81,7 +81,7 @@
     },
     "packages/argocd": {
       "name": "@konfig.ts/argocd",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
       },
@@ -99,7 +99,7 @@
     },
     "packages/cli": {
       "name": "@konfig.ts/cli",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "bin": {
         "konfig": "./dist/main.mjs",
       },
@@ -124,7 +124,10 @@
     },
     "packages/core": {
       "name": "@konfig.ts/core",
-      "version": "0.0.1",
+      "version": "0.0.2",
+      "dependencies": {
+        "yaml": "catalog:",
+      },
       "devDependencies": {
         "@effect/platform-node": "catalog:",
         "@effect/vitest": "catalog:",
@@ -138,12 +141,14 @@
       "peerDependencies": {
         "@effect/platform-node": "4.0.0-beta.70",
         "effect": "4.0.0-beta.70",
-        "yaml": "^2.8.3",
       },
+      "optionalPeers": [
+        "@effect/platform-node",
+      ],
     },
     "packages/docker": {
       "name": "@konfig.ts/docker",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "yaml": "catalog:",
@@ -163,7 +168,7 @@
     },
     "packages/env": {
       "name": "@konfig.ts/env",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
       },
@@ -181,7 +186,7 @@
     },
     "packages/external-secrets": {
       "name": "@konfig.ts/external-secrets",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/k8s": "workspace:*",
@@ -201,11 +206,11 @@
     },
     "packages/k8s": {
       "name": "@konfig.ts/k8s",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/env": "workspace:*",
-        "kubernetes-types": "1.30.0",
+        "kubernetes-types": "~1.30.0",
       },
       "devDependencies": {
         "@effect/platform-node": "catalog:",
@@ -230,11 +235,11 @@
     },
     "packages/sealed-secrets": {
       "name": "@konfig.ts/sealed-secrets",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/k8s": "workspace:*",
-        "yaml": "^2.8.3",
+        "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/platform-node": "catalog:",
@@ -252,12 +257,12 @@
     },
     "packages/sops": {
       "name": "@konfig.ts/sops",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/env": "workspace:*",
         "@konfig.ts/k8s": "workspace:*",
-        "yaml": "^2.8.3",
+        "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/platform-node": "catalog:",

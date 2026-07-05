@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/external-secrets",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "ExternalSecret CR backend for konfig.ts — emits external-secrets.io/v1beta1 manifests bound to atoms from @konfig.ts/env.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
