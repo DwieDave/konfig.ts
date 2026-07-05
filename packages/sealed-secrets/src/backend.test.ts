@@ -1,14 +1,23 @@
 import { it } from "@effect/vitest";
 import { NodeServices } from "@effect/platform-node";
-import { coerce, Yaml } from "@konfig.ts/core";
+import { Yaml } from "@konfig.ts/core";
 import { SecretSource } from "@konfig.ts/env";
 import { BackendSourceMissing, Secret } from "@konfig.ts/k8s";
-import { Effect, Exit, Layer, Stream } from "effect";
+import { Effect, Exit, Layer, Sink, Stream } from "effect";
 import { type Command, isStandardCommand } from "effect/unstable/process/ChildProcess";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import {
+	type ChildProcessHandle,
+	ChildProcessSpawner,
+	ExitCode,
+	makeHandle,
+	make as makeSpawner,
+	ProcessId,
+} from "effect/unstable/process/ChildProcessSpawner";
 import { describe, expect, it as vitestIt } from "vitest";
 import { SealedSecrets } from "./backend";
 import type { SealedSecret } from "./crd";
+
+const coerce = <T>(value: unknown): T => value as T;
 
 const STUB_SEALED_YAML = `
 apiVersion: bitnami.com/v1alpha1
@@ -32,14 +41,25 @@ interface SpawnerSink {
 	lastStdin?: string;
 }
 
+const _handleForOutput = (output: string): ChildProcessHandle =>
+	makeHandle({
+		pid: ProcessId(1),
+		exitCode: Effect.succeed(ExitCode(0)),
+		isRunning: Effect.succeed(false),
+		kill: () => Effect.void,
+		stdin: Sink.drain,
+		stdout: Stream.make(new TextEncoder().encode(output)),
+		stderr: Stream.empty,
+		all: Stream.make(new TextEncoder().encode(output)),
+		getInputFd: () => Sink.drain,
+		getOutputFd: () => Stream.empty,
+		unref: Effect.succeed(Effect.void),
+	} as ChildProcessHandle);
+
 const _makeStubSpawner = (sink: SpawnerSink, output = STUB_SEALED_YAML) =>
-	Layer.succeed(ChildProcessSpawner, {
-		spawn: () => Effect.die("spawn not used"),
-		exitCode: () => Effect.die("exitCode not used"),
-		streamString: () => Stream.fail(coerce("streamString not used")),
-		streamLines: () => Stream.fail(coerce("streamLines not used")),
-		lines: () => Effect.die("lines not used"),
-		string: (cmd: Command) =>
+	Layer.succeed(
+		ChildProcessSpawner,
+		makeSpawner((cmd: Command) =>
 			Effect.gen(function* () {
 				sink.lastCmd = cmd;
 				if (isStandardCommand(cmd)) {
@@ -52,9 +72,10 @@ const _makeStubSpawner = (sink: SpawnerSink, output = STUB_SEALED_YAML) =>
 						sink.lastStdin = new TextDecoder().decode(new Uint8Array(merged));
 					}
 				}
-				return output;
-			}),
-	});
+				return _handleForOutput(output);
+			})
+		),
+	);
 
 const dbCreds = Secret.define({
 	name: "db-creds",

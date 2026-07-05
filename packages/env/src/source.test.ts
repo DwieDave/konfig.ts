@@ -1,7 +1,46 @@
 import { it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Redacted } from "effect";
+import { ConfigProvider, Effect, Exit, Layer, Redacted, Sink, Stream } from "effect";
+import type { Command } from "effect/unstable/process/ChildProcess";
+import {
+	type ChildProcessHandle,
+	ChildProcessSpawner,
+	ExitCode,
+	makeHandle,
+	make as makeSpawner,
+	ProcessId,
+} from "effect/unstable/process/ChildProcessSpawner";
 import { describe, expect } from "vitest";
 import { SecretSource, SecretSourceError } from "./source";
+
+interface FakeProc {
+	readonly stdout?: string;
+	readonly stderr?: string;
+	readonly exitCode?: number;
+}
+
+const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s));
+
+const _fakeSpawner = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
+	Layer.succeed(
+		ChildProcessSpawner,
+		makeSpawner((_command: Command) =>
+			Effect.succeed(
+				makeHandle({
+					pid: ProcessId(1),
+					exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
+					isRunning: Effect.succeed(false),
+					kill: () => Effect.void,
+					stdin: Sink.drain,
+					stdout: _bytes(proc.stdout ?? ""),
+					stderr: _bytes(proc.stderr ?? ""),
+					all: _bytes(""),
+					getInputFd: () => Sink.drain,
+					getOutputFd: () => Stream.empty,
+					unref: Effect.succeed(Effect.void),
+				}) as ChildProcessHandle,
+			)
+		),
+	);
 
 describe("SecretSource.fromConfig", () => {
 	it.effect("resolves each key via Config.redacted", () =>
@@ -78,6 +117,51 @@ describe("SecretSource.literal", () => {
 		const k: "url" = src.keys[0] as "url";
 		expect(k).toBe("url");
 	});
+});
+
+describe("SecretSource.fromCommand", () => {
+	it.effect("returns the redacted, newline-trimmed stdout on success", () =>
+		Effect.gen(function* () {
+			const src = SecretSource.fromCommand({
+				keys: ["token"] as const,
+				run: () => ({ cmd: "get-secret", args: [] }),
+			});
+			const v = yield* src.resolve.pipe(Effect.provide(_fakeSpawner({ stdout: "s3cr3t\n\n" })));
+			expect(Redacted.value(v.token)).toBe("s3cr3t");
+		}),
+	);
+
+	it.effect("a non-zero exit surfaces as SecretSourceError (never a redacted empty)", () =>
+		Effect.gen(function* () {
+			const src = SecretSource.fromCommand({
+				keys: ["token"] as const,
+				run: () => ({ cmd: "get-secret", args: [] }),
+			});
+			const r = yield* Effect.exit(
+				src.resolve.pipe(Effect.provide(_fakeSpawner({ stdout: "", stderr: "denied", exitCode: 1 }))),
+			);
+			expect(Exit.isFailure(r)).toBe(true);
+			if (Exit.isFailure(r)) {
+				expect(JSON.stringify(r.cause)).toContain("SecretSourceError");
+			}
+		}),
+	);
+
+	it.effect("empty stdout on a zero exit fails rather than yielding Redacted.make(\"\")", () =>
+		Effect.gen(function* () {
+			const src = SecretSource.fromCommand({
+				keys: ["token"] as const,
+				run: () => ({ cmd: "get-secret", args: [] }),
+			});
+			const r = yield* Effect.exit(
+				src.resolve.pipe(Effect.provide(_fakeSpawner({ stdout: "   \n", exitCode: 0 }))),
+			);
+			expect(Exit.isFailure(r)).toBe(true);
+			if (Exit.isFailure(r)) {
+				expect(JSON.stringify(r.cause)).toContain("SecretSourceError");
+			}
+		}),
+	);
 });
 
 describe("SecretSource error shape", () => {
