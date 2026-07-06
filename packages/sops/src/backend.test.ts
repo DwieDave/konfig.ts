@@ -165,6 +165,81 @@ describe("Sops.passthrough (case C)", () => {
         yield* fs.remove(tmpFile)
       }
     }).pipe(Effect.provide(NodeServices.layer)))
+
+  const partialFile = (body: string, encryptedRegex: string) =>
+    `
+apiVersion: isindir.github.com/v1alpha3
+kind: SopsSecret
+metadata:
+  name: db-creds
+  namespace: prod
+spec:
+  secretTemplates:
+    - name: db-creds
+      type: Opaque
+      stringData:
+${body}
+sops:
+  encrypted_regex: ${JSON.stringify(encryptedRegex)}
+  age:
+    - recipient: age1mockstub
+      enc: STUB
+`.trim()
+
+  const renderPassthrough = (contents: string) =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const tmpFile = `${process.cwd()}/.tmp-sops-passthrough-partial.yaml`
+      yield* fs.writeFileString(tmpFile, contents)
+      try {
+        const bound = Secret.bind({
+          secret: dbCreds,
+          backend: Sops.passthrough({ file: tmpFile })
+        })
+        return yield* Effect.exit(bound.manifest!.render(ctx))
+      } finally {
+        yield* fs.remove(tmpFile)
+      }
+    })
+
+  it.effect("accepts a partially-encrypted file: keys outside encrypted_regex may be plaintext", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderPassthrough(partialFile(
+        `        url: plain-username\n        password: ENC[AES256_GCM,data:STUB==,type:str]`,
+        "^(password)$"
+      ))
+      expect(Exit.isSuccess(exit)).toBe(true)
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("rejects a partially-encrypted file whose regex-matched key is plaintext", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderPassthrough(partialFile(
+        `        url: plain\n        password: leaked-plaintext`,
+        "^(password)$"
+      ))
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(JSON.stringify(exit.cause)).toContain("ENC[")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("still requires ENC[ everywhere when encrypted_regex matches a container key (stringData subtree)", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderPassthrough(partialFile(
+        `        url: plain\n        password: ENC[AES256_GCM,data:STUB==,type:str]`,
+        "^(stringData|data)$"
+      ))
+      expect(Exit.isFailure(exit)).toBe(true)
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("rejects a file whose encrypted_regex is not a valid regex", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderPassthrough(partialFile(
+        `        url: plain\n        password: plain`,
+        "([" // invalid regex — must fail closed, not fall through to plaintext
+      ))
+      expect(Exit.isFailure(exit)).toBe(true)
+    }).pipe(Effect.provide(NodeServices.layer)))
 })
 
 describe("Sops.source (case A: sops source → SealedSecrets backend)", () => {

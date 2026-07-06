@@ -17,20 +17,51 @@ const _decodeSopsSecret = boundary({
 })
 
 // Fail-closed: every value we hand to the operator MUST be a sops ciphertext,
-// which is always wrapped as `ENC[AES256_GCM,data:...]`. If sops ever returns a
-// document whose values are not so wrapped (misconfiguration, unexpected output
-// shape), we refuse to emit rather than leak plaintext dressed up as a secret.
+// which is always wrapped as `ENC[AES256_GCM,data:...]` — UNLESS the document
+// was partially encrypted via `encrypted_regex`, in which case only keys the
+// regex selects carry ciphertext and the rest are intentionally plaintext.
+// sops semantics: a matching key encrypts its whole subtree, so a value needs
+// ENC[ if the regex matches its own key OR any ancestor key on the path
+// (spec / secretTemplates / stringData / data). No `encrypted_regex` in the
+// sops block → everything must be encrypted, as before.
 const _ENC_MARKER = "ENC["
+
+const _encryptedRegex = (
+  secret: SopsSecret,
+  label: string
+): Effect.Effect<RegExp | undefined, RenderError> => {
+  const sops = secret.sops as Record<string, unknown> | undefined
+  const raw = sops?.["encrypted_regex"]
+  if (raw === undefined || raw === null) return Effect.succeed(undefined)
+  if (typeof raw !== "string") {
+    return Effect.fail(
+      new RenderError({ message: `${label}: sops.encrypted_regex is not a string` })
+    )
+  }
+  return Effect.try({
+    try: () => new RegExp(raw),
+    catch: (cause) =>
+      new RenderError({
+        message: `${label}: sops.encrypted_regex is not a valid regex`,
+        cause
+      })
+  })
+}
+
+// ponytail: encrypted_regex only; add encrypted_suffix/unencrypted_* if a repo ever uses them
 const _assertEncrypted = (
   secret: SopsSecret,
   label: string
 ): Effect.Effect<void, RenderError> =>
   Effect.gen(function*() {
+    const regex = yield* _encryptedRegex(secret, label)
     for (const template of secret.spec.secretTemplates) {
-      for (const record of [template.stringData, template.data]) {
+      for (const [container, record] of [["stringData", template.stringData], ["data", template.data]] as const) {
         if (record === undefined) continue
         for (const [key, value] of Object.entries(record)) {
-          if (!value.startsWith(_ENC_MARKER)) {
+          const mustEncrypt = regex === undefined
+            || ["spec", "secretTemplates", container, key].some((segment) => regex.test(segment))
+          if (mustEncrypt && !value.startsWith(_ENC_MARKER)) {
             return yield* Effect.fail(
               new RenderError({
                 message:
