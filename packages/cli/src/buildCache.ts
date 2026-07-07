@@ -4,6 +4,7 @@ import { Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import * as crypto from "node:crypto"
+import * as nodePath from "node:path"
 
 export class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
   readonly path: string
@@ -51,6 +52,10 @@ const _ctxSignature = (ctx: RenderContext): string => {
  *    scripts, templates, and data files can all feed a render — (sorted
  *    by path so the hash is deterministic across runs; node_modules,
  *    dist, and .konfig are skipped).
+ *  - Every file/directory listed in `cfg.config.cacheInclude` (resolved
+ *    relative to the konfig.json dir) — inputs outside the konfig root.
+ *    Entries may be glob patterns (`../shared/**\/*.yaml`, Node glob
+ *    syntax); non-glob entries are plain files or directories.
  *  - The konfig.json contents (via `cfg.config` serialized).
  *  - The render context (cluster, k8sVersion, sorted flags) — these
  *    thread into every `renderManifest` call and change the output, so
@@ -86,6 +91,25 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
     const rootAbs = path.join(cfg.configDir, cfg.config.root)
     const files: string[] = []
     yield* _collectFiles(rootAbs, files)
+    for (const extra of cfg.config.cacheInclude ?? []) {
+      const abs = path.isAbsolute(extra) ? extra : path.join(cfg.configDir, extra)
+      if (_GLOB_CHARS.test(extra)) {
+        // Glob entry: walk the longest static prefix via FileSystem, then
+        // filter with Node's native glob matcher (node >= 22).
+        const candidates: string[] = []
+        yield* _collectFiles(_globBase(abs, path.sep), candidates)
+        for (const c of candidates) {
+          if (nodePath.matchesGlob(c, abs)) files.push(c)
+        }
+      } else {
+        const stat = yield* fs.stat(abs).pipe(Effect.orElseSucceed(() => null))
+        if (stat?.type === "Directory") {
+          yield* _collectFiles(abs, files)
+        } else if (stat?.type === "File") {
+          files.push(abs)
+        }
+      }
+    }
     files.sort()
     for (const f of files) {
       // Raw bytes, not readFileString: lossy UTF-8 decode would map distinct
@@ -98,6 +122,18 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
 
     return hash.digest("hex")
   })
+
+const _GLOB_CHARS = /[*?[{]/
+
+/** Longest leading path prefix of `pattern` with no glob metacharacters. */
+const _globBase = (pattern: string, sep: string): string => {
+  const staticSegs: string[] = []
+  for (const seg of pattern.split(sep)) {
+    if (_GLOB_CHARS.test(seg)) break
+    staticSegs.push(seg)
+  }
+  return staticSegs.join(sep) || sep
+}
 
 const _collectFiles = (
   dir: string,

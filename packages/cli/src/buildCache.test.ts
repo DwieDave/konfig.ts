@@ -37,7 +37,7 @@ describe("computeOutputHash", () => {
   })
 })
 
-const _cfgFor = (configDir: string): ResolvedKonfigConfig => ({
+const _cfgFor = (configDir: string, cacheInclude: readonly string[] = []): ResolvedKonfigConfig => ({
   configDir,
   config: {
     root: "infra",
@@ -47,7 +47,8 @@ const _cfgFor = (configDir: string): ResolvedKonfigConfig => ({
     outDir: { manifests: "rendered" },
     envs: {},
     crd: { outDir: ".generated/crd" },
-    helm: { cacheDir: ".konfig/helm-cache", minVersion: "3.16.0" }
+    helm: { cacheDir: ".konfig/helm-cache", minVersion: "3.16.0" },
+    cacheInclude
   }
 })
 
@@ -127,6 +128,82 @@ describe("computeInputHash: render-context sensitivity", () => {
       const base = yield* computeInputHash({ cfg, envName: "prod", ctx })
 
       yield* fs.writeFile(blob, new Uint8Array([0xfe]))
+      const edited = yield* computeInputHash({ cfg, envName: "prod", ctx })
+
+      expect(base).not.toBe(edited)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+    await Effect.runPromise(program)
+  })
+
+  it("editing a cacheInclude file outside root shifts the hash; without cacheInclude it does not", async () => {
+    const program = Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
+      yield* fs.makeDirectory(path.join(root, "infra"), { recursive: true })
+      const shared = path.join(root, "shared", "values.yaml")
+      yield* fs.makeDirectory(path.join(root, "shared"), { recursive: true })
+      yield* fs.writeFileString(shared, "a: 1\n")
+      const ctx = RenderContext.make("prod")
+
+      const withInclude = _cfgFor(root, ["shared"])
+      const without = _cfgFor(root)
+      const base = yield* computeInputHash({ cfg: withInclude, envName: "prod", ctx })
+      const blindBase = yield* computeInputHash({ cfg: without, envName: "prod", ctx })
+
+      yield* fs.writeFileString(shared, "a: 2\n")
+      const edited = yield* computeInputHash({ cfg: withInclude, envName: "prod", ctx })
+      const blindEdited = yield* computeInputHash({ cfg: without, envName: "prod", ctx })
+
+      expect(base).not.toBe(edited)
+      expect(blindBase).toBe(blindEdited)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+    await Effect.runPromise(program)
+  })
+
+  it("cacheInclude glob pattern hashes matching files only", async () => {
+    const program = Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
+      yield* fs.makeDirectory(path.join(root, "infra"), { recursive: true })
+      yield* fs.makeDirectory(path.join(root, "shared", "sub"), { recursive: true })
+      const matched = path.join(root, "shared", "sub", "values.yaml")
+      const unmatched = path.join(root, "shared", "sub", "notes.txt")
+      yield* fs.writeFileString(matched, "a: 1\n")
+      yield* fs.writeFileString(unmatched, "one\n")
+      const cfg = _cfgFor(root, ["shared/**/*.yaml"])
+      const ctx = RenderContext.make("prod")
+
+      const base = yield* computeInputHash({ cfg, envName: "prod", ctx })
+
+      yield* fs.writeFileString(unmatched, "two\n")
+      const unmatchedEdit = yield* computeInputHash({ cfg, envName: "prod", ctx })
+      expect(unmatchedEdit).toBe(base)
+
+      yield* fs.writeFileString(matched, "a: 2\n")
+      const matchedEdit = yield* computeInputHash({ cfg, envName: "prod", ctx })
+      expect(matchedEdit).not.toBe(base)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+    await Effect.runPromise(program)
+  })
+
+  it("cacheInclude accepts a single file path", async () => {
+    const program = Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
+      yield* fs.makeDirectory(path.join(root, "infra"), { recursive: true })
+      const extra = path.join(root, "notes.txt")
+      yield* fs.writeFileString(extra, "one\n")
+      const cfg = _cfgFor(root, ["notes.txt"])
+      const ctx = RenderContext.make("prod")
+
+      const base = yield* computeInputHash({ cfg, envName: "prod", ctx })
+      yield* fs.writeFileString(extra, "two\n")
       const edited = yield* computeInputHash({ cfg, envName: "prod", ctx })
 
       expect(base).not.toBe(edited)

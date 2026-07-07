@@ -46,6 +46,7 @@ export default Bundle.entrypoint(Bundle.fromModules({ modules: [api] as const })
 					envs: {},
 					crd: { outDir: ".generated/crd" },
 					helm: { cacheDir: ".konfig/helm-cache", minVersion: "3.16.0" },
+					cacheInclude: [],
 				},
 			};
 			const ctx = RenderContext.make("test");
