@@ -65,6 +65,11 @@ export const KonfigConfig = Schema.Struct({
 			Effect.succeed({ cacheDir: ".konfig/helm-cache", minVersion: "3.16.0" }),
 		),
 	),
+	// Extra files/directories/glob patterns (relative to konfig.json)
+	// hashed into the build cache input on top of everything under
+	// `root` — for inputs that feed a render but live outside the
+	// konfig root. Globs use Node glob syntax (requires node >= 22).
+	cacheInclude: _stringArrayWithKeyDefault([]),
 	diff: Schema.optionalKey(DiffConfig),
 	services: Schema.optionalKey(ServicesConfig),
 	clusters: Schema.optionalKey(Schema.Record(Schema.String, ClusterSpec)),
