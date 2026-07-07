@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout tagged source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # The tag IS the published artifact's content reference.
@@ -59,7 +59,7 @@ jobs:
           bun-version: 1.3.5
 
       - name: Setup Node (trusted publishing needs Node >= 22.14)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -83,7 +83,7 @@ jobs:
         run: tar -czf built-dist.tar.gz packages/*/dist
 
       - name: Upload built dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: built-dist
           path: built-dist.tar.gz
@@ -115,7 +115,7 @@ jobs:
           done
 
       - name: Tag attestations (SLSA provenance)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             packages/*/dist/**/*
@@ -127,12 +127,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
 
       - name: Download the dist built by the publish job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: built-dist
 
