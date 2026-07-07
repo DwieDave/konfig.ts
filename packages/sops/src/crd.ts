@@ -22,7 +22,7 @@ export interface SopsSecret {
 		readonly annotations?: Readonly<Record<string, string>>;
 	};
 	readonly spec: SopsSecretSpec;
-	readonly sops?: unknown;
+	readonly sops?: Readonly<Record<string, unknown>>;
 }
 
 export interface SopsRecipients {
