@@ -47,15 +47,17 @@ const _ctxSignature = (ctx: RenderContext): string => {
  * Compute a SHA-256 over the inputs that could feed an env's render:
  *  - The env's entry file content (resolved per `cfg.config.envs[env]`
  *    or `<root>/env/<env>.ts`).
- *  - Every `.ts` / `.json` file under `cfg.config.root` (sorted by
- *    path so the hash is deterministic across runs).
+ *  - Every file under `cfg.config.root` regardless of extension —
+ *    scripts, templates, and data files can all feed a render — (sorted
+ *    by path so the hash is deterministic across runs; node_modules,
+ *    dist, and .konfig are skipped).
  *  - The konfig.json contents (via `cfg.config` serialized).
  *  - The render context (cluster, k8sVersion, sorted flags) — these
  *    thread into every `renderManifest` call and change the output, so
  *    a build with a different `--k8s-version` / `--cluster` / `--flag`
  *    must be a cache miss.
  *
- * The hash is conservative — touching any TS file under the env root
+ * The hash is conservative — touching any file under the env root
  * invalidates the cache. False negatives only; never a false positive.
  */
 export const computeInputHash = (input: ComputeInputHashInput) =>
@@ -86,7 +88,9 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
     yield* _collectFiles(rootAbs, files)
     files.sort()
     for (const f of files) {
-      const content = yield* fs.readFileString(f).pipe(Effect.orElseSucceed(() => ""))
+      // Raw bytes, not readFileString: lossy UTF-8 decode would map distinct
+      // binary contents to the same string and yield a false cache hit.
+      const content = yield* fs.readFile(f).pipe(Effect.orElseSucceed(() => new Uint8Array()))
       hash.update(`file:${f}\n`)
       hash.update(content)
       hash.update("\n")
@@ -111,9 +115,7 @@ const _collectFiles = (
         if (e === "node_modules" || e === "dist" || e === ".konfig") continue
         yield* _collectFiles(full, out)
       } else if (stat.type === "File") {
-        if (e.endsWith(".ts") || e.endsWith(".json") || e.endsWith(".yaml") || e.endsWith(".yml")) {
-          out.push(full)
-        }
+        out.push(full)
       }
     }
   })
