@@ -87,6 +87,54 @@ describe("computeInputHash: render-context sensitivity", () => {
     await Effect.runPromise(program)
   })
 
+  it("editing a non-.ts/.json/.yaml file (e.g. .sh) under root shifts the hash", async () => {
+    const program = Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
+      const cfg = _cfgFor(root)
+      const infra = path.join(root, "infra")
+      yield* fs.makeDirectory(infra, { recursive: true })
+      const script = path.join(infra, "hook.sh")
+
+      yield* fs.writeFileString(script, "echo one\n")
+      const ctx = RenderContext.make("prod")
+      const base = yield* computeInputHash({ cfg, envName: "prod", ctx })
+
+      yield* fs.writeFileString(script, "echo two\n")
+      const edited = yield* computeInputHash({ cfg, envName: "prod", ctx })
+
+      expect(base).not.toBe(edited)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+    await Effect.runPromise(program)
+  })
+
+  it("distinct binary contents under root shift the hash (no lossy UTF-8 collapse)", async () => {
+    const program = Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
+      const cfg = _cfgFor(root)
+      const infra = path.join(root, "infra")
+      yield* fs.makeDirectory(infra, { recursive: true })
+      const blob = path.join(infra, "data.bin")
+
+      // 0xFF and 0xFE are both invalid standalone UTF-8; a lossy string
+      // decode maps both to U+FFFD, collapsing the difference.
+      yield* fs.writeFile(blob, new Uint8Array([0xff]))
+      const ctx = RenderContext.make("prod")
+      const base = yield* computeInputHash({ cfg, envName: "prod", ctx })
+
+      yield* fs.writeFile(blob, new Uint8Array([0xfe]))
+      const edited = yield* computeInputHash({ cfg, envName: "prod", ctx })
+
+      expect(base).not.toBe(edited)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+    await Effect.runPromise(program)
+  })
+
   it("differing cluster and flags each shift the hash", async () => {
     const program = Effect.gen(function*() {
       const fs = yield* FileSystem
