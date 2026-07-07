@@ -30,8 +30,7 @@ const _encryptedRegex = (
   secret: SopsSecret,
   label: string
 ): Effect.Effect<RegExp | undefined, RenderError> => {
-  const sops = secret.sops as Record<string, unknown> | undefined
-  const raw = sops?.["encrypted_regex"]
+  const raw = secret.sops?.["encrypted_regex"]
   if (raw === undefined || raw === null) return Effect.succeed(undefined)
   if (typeof raw !== "string") {
     return Effect.fail(
