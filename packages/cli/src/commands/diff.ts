@@ -11,6 +11,10 @@ class DiffBaselineMissing extends Data.TaggedError("DiffBaselineMissing")<{
   readonly env: string
 }> {}
 
+class DiffNonEmpty extends Data.TaggedError("DiffNonEmpty")<{
+  readonly env: string
+}> {}
+
 /**
  * Recursively collect every `.yaml` file under `baselineDir` into a
  * flat `{ relativePath: content }` map, joining nested directory names
@@ -63,7 +67,7 @@ export const diffCommand = Command.make(
       const path = yield* Path
 
       if (cfg.config.diff === undefined) {
-        return yield* Effect.fail(new DiffBaselineMissing({ env: args.env }))
+        return yield* new DiffBaselineMissing({ env: args.env })
       }
 
       const rendered = yield* renderEnv({ cfg, envName: args.env, ctx })
@@ -87,7 +91,7 @@ export const diffCommand = Command.make(
       const result = diffFiles({ left, right })
       if (hasDifferences(result)) {
         yield* Console.log(formatDiff({ result, format: args.format }))
-        return yield* Effect.fail(new Error(`Diff non-empty for env '${args.env}'`))
+        return yield* new DiffNonEmpty({ env: args.env })
       }
       yield* Console.log(`OK — env '${args.env}' matches baseline`)
     })

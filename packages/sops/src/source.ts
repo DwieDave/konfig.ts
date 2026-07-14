@@ -50,13 +50,11 @@ const _source = <const K extends string>(
 		for (const key of input.keys) {
 			const value = extract(key, parsed);
 			if (typeof value !== "string") {
-				return yield* Effect.fail(
-					new SecretSourceError({
+				return yield* new SecretSourceError({
 						source: "Sops",
 						key,
 						cause: `extracted value for "${key}" is not a string`,
-					}),
-				);
+					});
 			}
 			out[key] = Redacted.make(value);
 		}

@@ -102,22 +102,18 @@ export const runProcessString = (
 	Effect.gen(function* () {
 		const result = yield* _spawnCollect(command);
 		if (result.exitCode !== 0) {
-			return yield* Effect.fail(
-				new ProcessError({
+			return yield* new ProcessError({
 					command: _commandLabel(command),
 					exitCode: result.exitCode,
 					stderrTail: _tail(result.stderr),
-				}),
-			);
+				});
 		}
 		if (options?.allowEmptyStdout !== true && result.stdout.trim().length === 0) {
-			return yield* Effect.fail(
-				new ProcessError({
+			return yield* new ProcessError({
 					command: _commandLabel(command),
 					exitCode: result.exitCode,
 					stderrTail: _tail(result.stderr),
-				}),
-			);
+				});
 		}
 		return result.stdout;
 	});
@@ -133,12 +129,10 @@ export const runProcessExit = (
 	Effect.gen(function* () {
 		const result = yield* _spawnCollect(command);
 		if (result.exitCode !== 0) {
-			return yield* Effect.fail(
-				new ProcessError({
+			return yield* new ProcessError({
 					command: _commandLabel(command),
 					exitCode: result.exitCode,
 					stderrTail: _tail(result.stderr),
-				}),
-			);
+				});
 		}
 	});

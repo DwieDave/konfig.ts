@@ -63,7 +63,7 @@ export const prepareContext = (
     const root = yield* findRoot(spec.target)
     const all = yield* allWorkspaces(root)
     const target = _lookupTarget(all, spec.target, root)
-    if (!target) return yield* Effect.fail(new WorkspaceNotFound({ target: spec.target }))
+    if (!target) return yield* new WorkspaceNotFound({ target: spec.target })
     const detectedPm = yield* detectPm(root)
     const closure = yield* closureOf({ all, target: target.name })
     const hasPatchesDir = yield* fs
@@ -132,18 +132,14 @@ export const validateSpec = (
     const closureNames = new Set<string>(ctx.closure.map((w) => w.name))
     for (const c of spec.runner.copy) {
       if (c._tag === "WorkspaceSource" && !closureNames.has(c.name)) {
-        return yield* Effect.fail(
-          new WorkspaceSourceUnknown({ target: ctx.target.name, missingWorkspace: c.name })
-        )
+        return yield* new WorkspaceSourceUnknown({ target: ctx.target.name, missingWorkspace: c.name })
       }
     }
 
     if (spec.build?._tag === "BuildScript") {
       const script = spec.build.script
       if (!ctx.target.pkg.scripts?.[script]) {
-        return yield* Effect.fail(
-          new BuildScriptMissing({ target: ctx.target.name, script })
-        )
+        return yield* new BuildScriptMissing({ target: ctx.target.name, script })
       }
     }
 
@@ -152,9 +148,7 @@ export const validateSpec = (
         .exists(p.join(ctx.root, path))
         .pipe(Effect.orElseSucceed(() => false))
       if (!ok) {
-        return yield* Effect.fail(
-          new SharedRootFileMissing({ target: ctx.target.name, path })
-        )
+        return yield* new SharedRootFileMissing({ target: ctx.target.name, path })
       }
     }
   })
@@ -283,21 +277,17 @@ const _resolveDefaults = (
       : true
     const pmVersion = _readEngineVersion(ctx.target, _pmEngineKey(pmKind))
     if (!pmVersion) {
-      return yield* Effect.fail(
-        new EngineVersionMissing({
+      return yield* new EngineVersionMissing({
           target: ctx.target.name,
           engineField: `engines.${_pmEngineKey(pmKind)}`
         })
-      )
     }
     const runtimeVersion = _readEngineVersion(ctx.target, _runtimeEngineKey(runtimeKind))
     if (!runtimeVersion) {
-      return yield* Effect.fail(
-        new EngineVersionMissing({
+      return yield* new EngineVersionMissing({
           target: ctx.target.name,
           engineField: `engines.${_runtimeEngineKey(runtimeKind)}`
         })
-      )
     }
     const pm = _pmImpl(pmKind, {
       layout: ctx.detectedPm.pnpmLayout ?? "isolated",

@@ -52,7 +52,7 @@ export const setCommand = Command.make(
       if (!(args.env in current.envs)) {
         const known = Object.keys(current.envs)
         yield* Effect.logError(`unknown env '${args.env}'. Known: ${known.join(", ")}`)
-        return yield* Effect.fail(new SetUnknownEnv({ env: args.env, known }))
+        return yield* new SetUnknownEnv({ env: args.env, known })
       }
 
       const next: ImagesConfig = {

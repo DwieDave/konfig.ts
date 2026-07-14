@@ -117,20 +117,16 @@ export const graphCommand = Command.make(
 				const raw = args.target.value;
 				const resolved = _resolveTargetName(workspaces, raw);
 				if (!resolved) {
-					return yield* Effect.fail(
-						new GraphTargetNotFound({
+					return yield* new GraphTargetNotFound({
 							target: raw,
 							candidates: workspaces.map((w) => w.name),
-						}),
-					);
+						});
 				}
 				targetName = resolved;
 			}
 			const cycle = detectCycle({ nodes, edges, withDev: args.withDev });
 			if (cycle !== null) {
-				return yield* Effect.fail(
-					new CircularWorkspaceDep({ cycle: cycle.slice() }),
-				);
+				return yield* new CircularWorkspaceDep({ cycle: cycle.slice() });
 			}
 			const width = _detectWidth(args.width);
 			const out = renderGraph({
@@ -143,27 +139,23 @@ export const graphCommand = Command.make(
 			});
 			yield* Console.log(out);
 		}).pipe(
-			Effect.catchTag("GraphTargetNotFound", (err) =>
-				Effect.gen(function* () {
-					yield* Console.error(
-						`error: workspace '${err.target}' not found. Available workspaces:`,
-					);
-					for (const name of err.candidates) yield* Console.error(`  ${name}`);
-					return yield* Effect.fail(
-						new Error(`graph: target '${err.target}' not found`),
-					);
-				}),
-			),
-			Effect.catchTag("CircularWorkspaceDep", (err) =>
-				Effect.gen(function* () {
-					yield* Console.error(
-						`error: workspace cycle detected: ${err.cycle.join(" → ")}`,
-					);
-					return yield* Effect.fail(
-						new Error(`graph: workspace cycle detected`),
-					);
-				}),
-			),
+			Effect.catchTags({
+				GraphTargetNotFound: (err) =>
+					Effect.gen(function* () {
+						yield* Console.error(
+							`error: workspace '${err.target}' not found. Available workspaces:`,
+						);
+						for (const name of err.candidates) yield* Console.error(`  ${name}`);
+						return yield* err;
+					}),
+				CircularWorkspaceDep: (err) =>
+					Effect.gen(function* () {
+						yield* Console.error(
+							`error: workspace cycle detected: ${err.cycle.join(" → ")}`,
+						);
+						return yield* err;
+					}),
+			}),
 		),
 ).pipe(
 	Command.withDescription(

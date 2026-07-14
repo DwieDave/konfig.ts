@@ -39,7 +39,7 @@ const EnvValue = Schema.String.check(notASecret)
 
 const EnvRecord = Schema.Record(Schema.String, EnvValue)
 
-const PortNumber = Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65535))
+const PortNumber = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65535))
 
 const ExposeField = Schema.Union([PortNumber, Schema.Array(PortNumber)])
 
@@ -87,14 +87,14 @@ export const HealthcheckAtom = Schema.TaggedUnion({
     port: PortNumber,
     interval: Schema.optionalKey(Schema.String),
     timeout: Schema.optionalKey(Schema.String),
-    retries: Schema.optionalKey(Schema.Number),
+    retries: Schema.optionalKey(Schema.Finite),
     startPeriod: Schema.optionalKey(Schema.String)
   },
   HealthcheckCommand: {
     argv: Schema.Array(Schema.String),
     interval: Schema.optionalKey(Schema.String),
     timeout: Schema.optionalKey(Schema.String),
-    retries: Schema.optionalKey(Schema.Number),
+    retries: Schema.optionalKey(Schema.Finite),
     startPeriod: Schema.optionalKey(Schema.String)
   }
 })
@@ -102,8 +102,8 @@ export type HealthcheckAtom = typeof HealthcheckAtom.Type
 
 export const UserAtom = Schema.TaggedUnion({
   UserNonRoot: {
-    uid: Schema.optionalKey(Schema.Number),
-    gid: Schema.optionalKey(Schema.Number),
+    uid: Schema.optionalKey(Schema.Finite),
+    gid: Schema.optionalKey(Schema.Finite),
     name: Schema.optionalKey(Schema.String)
   },
   UserRoot: {}

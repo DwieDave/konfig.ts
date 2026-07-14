@@ -75,7 +75,7 @@ export const whenever = <A>(input: WheneverInput<A>): Manifest<A | undefined> =>
 		input.cond
 			? input.thunk().render(ctx)
 			: unsafeCoerce<Effect.Effect<A | undefined, AnyRenderError, RenderServices>>(
-					Effect.succeed(undefined),
+					Effect.undefined,
 					"undefined branch — A is the type seen by the consumer when cond=false",
 				),
 	);

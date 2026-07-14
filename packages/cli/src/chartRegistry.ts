@@ -1,3 +1,4 @@
+import { Data, Effect } from "effect"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 
@@ -55,3 +56,16 @@ export const loadChartRegistry = async (
   }
   return entries
 }
+
+export class ChartRegistryError extends Data.TaggedError("ChartRegistryError")<{
+  readonly chartsDir: string
+  readonly cause: unknown
+}> {}
+
+export const loadChartRegistryEffect = (
+  chartsDir: string
+): Effect.Effect<ChartRegistryEntry[], ChartRegistryError> =>
+  Effect.tryPromise({
+    try: () => loadChartRegistry(chartsDir),
+    catch: (cause) => new ChartRegistryError({ chartsDir, cause })
+  })

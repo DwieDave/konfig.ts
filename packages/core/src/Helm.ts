@@ -150,9 +150,7 @@ const _assertHelmMinVersion = (
     const found = _parseVersionTriple(stdout)
     const min = _parseVersionTriple(minVersion)
     if (found === null || (min !== null && _isBelow(found, min))) {
-      return yield* Effect.fail(
-        new HelmVersionTooLow({ required: minVersion, found: stdout.trim() })
-      )
+      return yield* new HelmVersionTooLow({ required: minVersion, found: stdout.trim() })
     }
   })
 
@@ -208,14 +206,12 @@ const _verifyDigest = (input: _VerifyDigestInput) =>
     const actual = yield* _hashFile(input.cachedTgz)
     if (expected !== actual) {
       yield* fs.remove(input.cachedTgz).pipe(Effect.ignore)
-      return yield* Effect.fail(
-        new HelmDigestMismatch({
+      return yield* new HelmDigestMismatch({
           chart: input.opts.chart,
           version: input.opts.version,
           expected,
           actual
         })
-      )
     }
   })
 

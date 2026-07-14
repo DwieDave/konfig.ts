@@ -29,7 +29,7 @@ const _findConfig = (start: string) =>
 			if (exists) return candidate;
 			const parent = path.dirname(current);
 			if (parent === current) {
-				return yield* Effect.fail(new ConfigNotFound({ startedFrom: start }));
+				return yield* new ConfigNotFound({ startedFrom: start });
 			}
 			current = parent;
 		}

@@ -1,9 +1,14 @@
-import { Console, Effect } from "effect";
+import { Console, Data, Effect } from "effect";
 import { Argument, Command, Flag } from "../_unstable";
 import { renderEnv } from "../buildEnv";
 import { resolveConfig } from "../configResolver";
 import { renderContextFlags, renderContextFromFlags } from "../renderContextFlags";
 import { runKubeconform, validateManifestFile } from "../validator";
+
+export class StructuralValidationFailed extends Data.TaggedError("StructuralValidationFailed")<{
+	readonly env: string;
+	readonly issueCount: number;
+}> {}
 
 export const validateCommand = Command.make(
 	"validate",
@@ -40,9 +45,10 @@ export const validateCommand = Command.make(
 						`${issue.file} (doc ${issue.doc}) ${issue.path.join(".")}: ${issue.message}`,
 					);
 				}
-				return yield* Effect.fail(
-					new Error(`validate: ${issues.length} structural issue(s) in env '${args.env}'`),
-				);
+				return yield* new StructuralValidationFailed({
+					env: args.env,
+					issueCount: issues.length,
+				});
 			}
 
 			yield* Console.log(

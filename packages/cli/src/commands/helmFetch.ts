@@ -1,11 +1,13 @@
 import { runProcessExit } from "@konfig.ts/core";
-import { Console, Effect } from "effect";
+import { Console, Data, Effect } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import { ChildProcess, Command, Flag } from "../_unstable";
-import { loadChartRegistry } from "../chartRegistry";
+import { loadChartRegistryEffect } from "../chartRegistry";
 import { resolveCliPaths } from "../cliConfig";
 import { assertHelmVersion } from "../helmVersion";
+
+export class MissingAllFlag extends Data.TaggedError("MissingAllFlag") {}
 
 interface FetchOneInput {
 	readonly repo: string;
@@ -53,14 +55,10 @@ export const helmFetchCommand = Command.make(
 
 			if (!flags.all) {
 				yield* Console.error("Specify --all to fetch all charts");
-				yield* Effect.fail(new Error("Missing --all flag"));
-				return;
+				return yield* new MissingAllFlag();
 			}
 
-			const registry = yield* Effect.tryPromise({
-				try: () => loadChartRegistry(chartsDir),
-				catch: (cause) => new Error(`Failed to load chart registry: ${cause}`),
-			});
+			const registry = yield* loadChartRegistryEffect(chartsDir);
 
 			for (const def of registry) {
 				yield* Console.log(`Fetching ${def.chart}@${def.version}...`);
