@@ -5,8 +5,6 @@ export {
   type SopsDecryptInput,
   sopsEncryptStdin,
   type SopsEncryptStdinInput,
-  sopsExtract,
-  type SopsExtractInput,
   SopsInvocationError
 } from "./sops"
 export { type SopsSourceInput } from "./source"

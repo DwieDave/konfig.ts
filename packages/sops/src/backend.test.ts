@@ -240,6 +240,67 @@ sops:
       ))
       expect(Exit.isFailure(exit)).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
+
+  const namespaceMismatchFile = (macOnlyEncrypted: boolean | undefined) =>
+    `
+apiVersion: isindir.github.com/v1alpha3
+kind: SopsSecret
+metadata:
+  name: db-creds
+  namespace: prod
+spec:
+  secretTemplates:
+    - name: db-creds
+      type: Opaque
+      stringData:
+        url: ENC[AES256_GCM,data:STUBurl==,type:str]
+        password: ENC[AES256_GCM,data:STUBpassword==,type:str]
+sops:
+${macOnlyEncrypted === undefined ? "" : `  mac_only_encrypted: ${macOnlyEncrypted}\n`}  age:
+    - recipient: age1mockstub
+      enc: STUB
+`.trim()
+
+  const stagingCreds = Secret.define({
+    name: "db-creds",
+    namespace: "staging",
+    env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" }
+  })
+  const stagingCtx = { env: "staging" } as const
+
+  const renderStagingPassthrough = (contents: string) =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const tmpFile = `${process.cwd()}/.tmp-sops-passthrough-restamp.yaml`
+      yield* fs.writeFileString(tmpFile, contents)
+      try {
+        const bound = Secret.bind({
+          secret: stagingCreds,
+          backend: Sops.passthrough({ file: tmpFile })
+        })
+        return yield* Effect.exit(bound.manifest!.render(stagingCtx))
+      } finally {
+        yield* fs.remove(tmpFile)
+      }
+    })
+
+  it.effect("refuses to restamp metadata.namespace when the file is not mac_only_encrypted", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderStagingPassthrough(namespaceMismatchFile(undefined))
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(JSON.stringify(exit.cause)).toContain("mac_only_encrypted")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("restamps metadata.namespace when the file is mac_only_encrypted", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderStagingPassthrough(namespaceMismatchFile(true))
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        expect(coerce<SopsSecret>(exit.value).metadata.namespace).toBe("staging")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
 })
 
 describe("Sops.source (case A: sops source → SealedSecrets backend)", () => {

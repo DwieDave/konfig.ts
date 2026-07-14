@@ -43,6 +43,17 @@ export const SopsSecretSpecSchema = Schema.Struct({
   suspend: Schema.optionalKey(Schema.Boolean)
 })
 
+// Only the fields backend.ts reads are enumerated. A real sops block also
+// carries version/lastmodified/mac/pgp/kms/age/etc — the trailing Record
+// keeps those untyped instead of forcing us to model sops's full output shape.
+export const SopsMetadataSchema = Schema.StructWithRest(
+  Schema.Struct({
+    mac_only_encrypted: Schema.optionalKey(Schema.Boolean),
+    encrypted_regex: Schema.optionalKey(Schema.String)
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)]
+)
+
 // Fail-closed decoder for anything we emit as an ENCRYPTED SopsSecret. Unlike a
 // plaintext-shaped document, a genuinely sops-encrypted file ALWAYS carries the
 // top-level `sops` metadata block (recipients, MAC, lastmodified, version). We
@@ -59,5 +70,5 @@ export const SopsEncryptedSecretSchema = Schema.Struct({
     annotations: Schema.optionalKey(_stringRecord)
   }),
   spec: SopsSecretSpecSchema,
-  sops: Schema.Record(Schema.String, Schema.Unknown)
+  sops: SopsMetadataSchema
 })
