@@ -36,7 +36,7 @@ export interface ExternalSecretSpec {
 }
 
 export interface ExternalSecret {
-  readonly apiVersion: "external-secrets.io/v1beta1"
+  readonly apiVersion: "external-secrets.io/v1"
   readonly kind: "ExternalSecret"
   readonly metadata: {
     readonly name: string
