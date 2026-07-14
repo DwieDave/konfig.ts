@@ -1,6 +1,5 @@
 import type { Manifest } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
-import { Data } from "effect"
 
 export type BackendTag =
   | "Sops"
@@ -9,30 +8,27 @@ export type BackendTag =
   | "ExternalSecrets"
   | "NativeSecret"
 
-export interface BackendEmitInput<N extends string, K extends string> {
+export interface BackendEmitInput<
+  N extends string,
+  K extends string,
+  RequiresSource extends boolean = boolean
+> {
   readonly name: N
   readonly namespace: string
   readonly keys: ReadonlyArray<K>
   readonly labels?: Readonly<Record<string, string>>
   readonly annotations?: Readonly<Record<string, string>>
-  readonly source?: SecretSource<K, Manifest.RenderServices>
+  readonly source: RequiresSource extends true ? SecretSource<K, Manifest.RenderServices>
+    : SecretSource<K, Manifest.RenderServices> | undefined
 }
 
 export interface SecretBackend<
   N extends string,
   K extends string,
-  RequiresSource extends boolean = boolean
+  RequiresSource extends boolean = boolean,
+  Out = unknown
 > {
   readonly _tag: BackendTag
   readonly requiresSource: RequiresSource
-  readonly emit: (input: BackendEmitInput<N, K>) => Manifest.Manifest<unknown>
-}
-
-export class BackendSourceMissing extends Data.TaggedError("BackendSourceMissing")<{
-  readonly backend: BackendTag
-  readonly secret: string
-}> {
-  get message(): string {
-    return `backend "${this.backend}" requires a source but none was provided for secret "${this.secret}"`
-  }
+  readonly emit: (input: BackendEmitInput<N, K, RequiresSource>) => Manifest.Manifest<Out>
 }

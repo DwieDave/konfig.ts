@@ -2,12 +2,12 @@ import type { ConfigMapRef, SecretRef } from "@konfig.ts/core"
 
 export interface EnvVarSource {
   readonly secretKeyRef?: {
-    readonly name: string
+    readonly name: SecretRef<string>
     readonly key: string
     readonly optional?: boolean
   }
   readonly configMapKeyRef?: {
-    readonly name: string
+    readonly name: ConfigMapRef<string>
     readonly key: string
     readonly optional?: boolean
   }

@@ -3,8 +3,11 @@ import { Effect } from "effect"
 import type {
   CronJob as K8sCronJob,
   Deployment as K8sDeployment,
+  DeploymentStrategy,
   Job as K8sJob,
-  StatefulSet as K8sStatefulSet
+  PersistentVolumeClaim as K8sPersistentVolumeClaim,
+  StatefulSet as K8sStatefulSet,
+  StatefulSetUpdateStrategy
 } from "./.generated/k8s-types"
 import type { PodSpecInput } from "./container"
 import type { Selector } from "./selector"
@@ -29,7 +32,7 @@ interface SelectorAndTemplate {
 
 export interface DeploymentInput extends WorkloadMeta, SelectorAndTemplate {
   readonly replicas?: number
-  readonly strategy?: unknown
+  readonly strategy?: DeploymentStrategy
   readonly revisionHistoryLimit?: number
   readonly progressDeadlineSeconds?: number
   readonly minReadySeconds?: number
@@ -56,7 +59,7 @@ export interface DeploymentFromPodSetInput<L extends Readonly<Record<string, str
     }
     readonly spec: PodSpecInput
   }
-  readonly strategy?: unknown
+  readonly strategy?: DeploymentStrategy
   readonly revisionHistoryLimit?: number
   readonly progressDeadlineSeconds?: number
   readonly minReadySeconds?: number
@@ -80,10 +83,7 @@ export const Deployment = {
           input.template,
           "konfig PodSpecInput is structurally a K8s PodTemplateSpec body; brand-checked fields lower at construction"
         ),
-        strategy: unsafeCoerce(
-          input.strategy,
-          "DeploymentStrategy is escape-hatch unknown; lift to K8s type for serialization"
-        ),
+        strategy: input.strategy,
         revisionHistoryLimit: input.revisionHistoryLimit,
         progressDeadlineSeconds: input.progressDeadlineSeconds,
         minReadySeconds: input.minReadySeconds
@@ -122,9 +122,9 @@ export const Deployment = {
 export interface StatefulSetInput extends WorkloadMeta, SelectorAndTemplate {
   readonly replicas?: number
   readonly serviceName: string
-  readonly volumeClaimTemplates?: ReadonlyArray<unknown>
+  readonly volumeClaimTemplates?: ReadonlyArray<K8sPersistentVolumeClaim>
   readonly podManagementPolicy?: string
-  readonly updateStrategy?: unknown
+  readonly updateStrategy?: StatefulSetUpdateStrategy
 }
 
 export const StatefulSet = {
@@ -148,10 +148,10 @@ export const StatefulSet = {
         serviceName: input.serviceName,
         volumeClaimTemplates: unsafeCoerce(
           input.volumeClaimTemplates,
-          "StatefulSet volumeClaimTemplates is escape-hatch unknown; lift to K8s type"
+          "ReadonlyArray<K8sPersistentVolumeClaim> is structurally Array<PersistentVolumeClaim>; readonly-to-mutable variance is safe here"
         ),
         podManagementPolicy: input.podManagementPolicy,
-        updateStrategy: unsafeCoerce(input.updateStrategy, "StatefulSetUpdateStrategy is escape-hatch unknown")
+        updateStrategy: input.updateStrategy
       }
     }
     return Manifest.make<K8sStatefulSet>(() => Effect.succeed(resource))

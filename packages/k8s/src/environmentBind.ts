@@ -324,13 +324,43 @@ const _dispatch = (input: _DispatchInput): void =>
     Match.exhaustive
   )
 
+interface _DispatchAllInput {
+  readonly env: AnyEnvironment
+  readonly secretsOpts: Record<string, unknown> | undefined
+  readonly literalsOpts: Record<string, unknown> | undefined
+  readonly namespace: string | undefined
+  readonly acc: _BindAcc
+}
+
+const _dispatchAllMembers = (input: _DispatchAllInput): void => {
+  for (const memberKey of Object.keys(input.env.members)) {
+    const entry = unsafeCoerce<EnvMember>(
+      input.env.members[memberKey],
+      "env.members values are EnvMember by construction"
+    )
+    _dispatch({
+      memberKey,
+      entry,
+      secretsOpts: input.secretsOpts,
+      literalsOpts: input.literalsOpts,
+      namespace: input.namespace,
+      acc: input.acc
+    })
+  }
+}
+
+const _mergeValuesLayers = (layers: ReadonlyArray<_AnyValuesLayer>): _AnyValuesLayer =>
+  unsafeCoerce<_AnyValuesLayer>(
+    layers.length === 0 ? Layer.empty : Layer.mergeAll(layers[0]!, ...layers.slice(1)),
+    "merged Layer over a heterogeneous list of per-secret value layers"
+  )
+
 export const bindEnvironment = <
   const M extends Readonly<Record<string, EnvMember>>,
   const Ns extends string = string
 >(
   input: BindEnvironmentInput<M, Ns>
 ): DeclaredEnvironment<M, Ns> => {
-  const { env } = input
   const acc: _BindAcc = {
     declared: {},
     envVars: [],
@@ -346,27 +376,7 @@ export const bindEnvironment = <
     "discriminated union from BindEnvironmentInput; iterate keys at runtime"
   )
 
-  for (const memberKey of Object.keys(env.members)) {
-    const entry = unsafeCoerce<EnvMember>(
-      env.members[memberKey],
-      "env.members values are EnvMember by construction"
-    )
-    _dispatch({
-      memberKey,
-      entry,
-      secretsOpts,
-      literalsOpts,
-      namespace: input.namespace,
-      acc
-    })
-  }
-
-  const valuesLayer = unsafeCoerce<_AnyValuesLayer>(
-    acc.valuesLayers.length === 0
-      ? Layer.empty
-      : Layer.mergeAll(acc.valuesLayers[0]!, ...acc.valuesLayers.slice(1)),
-    "merged Layer over a heterogeneous list of per-secret value layers"
-  )
+  _dispatchAllMembers({ env: input.env, secretsOpts, literalsOpts, namespace: input.namespace, acc })
 
   return {
     envVars: acc.envVars,
@@ -375,6 +385,6 @@ export const bindEnvironment = <
       acc.declared,
       "declared populated by iterating env.members; each key maps to its DeclaredMember<M[K], Ns>"
     ),
-    valuesLayer
+    valuesLayer: _mergeValuesLayers(acc.valuesLayers)
   }
 }

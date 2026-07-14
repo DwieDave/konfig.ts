@@ -1,11 +1,11 @@
-import { Dep, type Manifest, RenderError, type SecretRef, unsafeCoerce } from "@konfig.ts/core"
+import { Dep, Manifest, RenderError, type SecretRef, unsafeCoerce } from "@konfig.ts/core"
 import type { SecretEntry, SecretSource } from "@konfig.ts/env"
 import { type Context, Effect, type Layer, Layer as L } from "effect"
 import type { SecretBackend } from "./backend"
 import { EnvVar } from "./env"
 import { SecretRef as SecretRefValue } from "./refs"
 
-export interface DeclaredSecret<N extends string, K extends string, Ns extends string = string> {
+interface _DeclaredSecretBase<N extends string, K extends string, Ns extends string> {
   readonly ref: SecretRef<N, K, Ns>
   readonly name: N
   readonly namespace: Ns
@@ -13,17 +13,21 @@ export interface DeclaredSecret<N extends string, K extends string, Ns extends s
   readonly envVars: ReadonlyArray<EnvVar>
   readonly manifest?: Manifest.Manifest<unknown>
   readonly refLayer: Layer.Layer<Dep.Provide<"Secret", N>>
-  // values + layer present iff a source was supplied at bind time.
-  readonly values?: Context.Service<
-    Dep.Need<"SecretValues", N>,
-    Dep.SecretValuesRecord<K>
-  >
-  readonly layer?: Layer.Layer<
-    Dep.Provide<"SecretValues", N>,
-    RenderError,
-    Manifest.RenderServices
-  >
 }
+
+// `values` and `layer` are populated together, iff a source was supplied
+// at bind time — a discriminated union instead of two independent
+// optionals so that can't drift into a "values but no layer" state.
+type _SecretValuesFields<N extends string, K extends string> =
+  | {
+    readonly values: Context.Service<Dep.Need<"SecretValues", N>, Dep.SecretValuesRecord<K>>
+    readonly layer: Layer.Layer<Dep.Provide<"SecretValues", N>, RenderError, Manifest.RenderServices>
+  }
+  | { readonly values?: undefined; readonly layer?: undefined }
+
+export type DeclaredSecret<N extends string, K extends string, Ns extends string = string> =
+  & _DeclaredSecretBase<N, K, Ns>
+  & _SecretValuesFields<N, K>
 
 export interface BindSecretInput<
   N extends string,
@@ -50,6 +54,53 @@ export interface BindSecretInput<
   readonly namespace?: Ns
 }
 
+interface _ValuesLayerInput<N extends string, K extends string> {
+  readonly name: N
+  readonly namespace: string
+  readonly source: SecretSource<K, Manifest.RenderServices>
+}
+
+const _buildValuesLayer = <N extends string, K extends string>(
+  input: _ValuesLayerInput<N, K>
+): {
+  readonly values: Context.Service<Dep.Need<"SecretValues", N>, Dep.SecretValuesRecord<K>>
+  readonly layer: Layer.Layer<Dep.Provide<"SecretValues", N>, RenderError, Manifest.RenderServices>
+} => {
+  const values = Dep.SecretValues<N, K>(input.name)
+  const layer = L.effect(
+    values,
+    input.source.resolve.pipe(
+      Effect.mapError(
+        (cause) =>
+          new RenderError({
+            message: `SecretValues(${input.namespace}/${input.name}): source failed for key "${cause.key}"`,
+            cause
+          })
+      )
+    )
+  )
+  return { values, layer }
+}
+
+const _buildEnvVars = <N extends string, K extends string, Ns extends string>(
+  secret: SecretEntry<N, K, Readonly<Record<K, string>>>,
+  ref: SecretRef<N, K, Ns>
+): EnvVar[] => secret.keys.map((key: K) => EnvVar.fromSecret({ name: secret.env[key], ref, key }))
+
+// `backend`'s RequiresSource is erased to `boolean` at this generic call
+// site, so the compiler can't prove `source` is present the way each
+// concrete backend's own `emit` does. Catch the hole at runtime and fail
+// through the Manifest's Effect channel instead of letting `emit` read
+// `undefined.resolve` and throw.
+const _missingSourceManifest = (backend: { readonly _tag: string }, name: string, namespace: string) =>
+  Manifest.make<unknown>(() =>
+    Effect.fail(
+      new RenderError({
+        message: `backend "${backend._tag}" requires a source but none was provided for secret "${namespace}/${name}"`
+      })
+    )
+  )
+
 export const bindSecret = <
   N extends string,
   K extends string,
@@ -64,11 +115,10 @@ export const bindSecret = <
     "Ns defaults to `string`; the override (if present) is `Ns`, the secret's own namespace is `string` — runtime value either way is a string"
   )
   const ref = SecretRefValue.of<N, K, Ns>(secret.name)
-  const envVars: EnvVar[] = secret.keys.map((key: K) => EnvVar.fromSecret({ name: secret.env[key], ref, key }))
-  const refLayer = Dep.provideSecret(secret.name)
-
   const manifest = input.backend === undefined
     ? undefined
+    : input.backend.requiresSource && input.source === undefined
+    ? _missingSourceManifest(input.backend, secret.name, namespace)
     : input.backend.emit({
       name: secret.name,
       namespace,
@@ -83,26 +133,12 @@ export const bindSecret = <
     name: secret.name,
     namespace,
     keys: secret.keys,
-    envVars,
+    envVars: _buildEnvVars(secret, ref),
     manifest,
-    refLayer
+    refLayer: Dep.provideSecret(secret.name)
   }
 
-  if (input.source === undefined) return out
-
-  const source = input.source
-  const valuesTag = Dep.SecretValues<N, K>(secret.name)
-  const layer = L.effect(
-    valuesTag,
-    source.resolve.pipe(
-      Effect.mapError(
-        (cause) =>
-          new RenderError({
-            message: `SecretValues(${namespace}/${secret.name}): source failed for key "${cause.key}"`,
-            cause
-          })
-      )
-    )
-  )
-  return { ...out, values: valuesTag, layer }
+  return input.source === undefined
+    ? out
+    : { ...out, ..._buildValuesLayer({ name: secret.name, namespace, source: input.source }) }
 }
