@@ -48,19 +48,13 @@
     "postpack": "node ../../scripts/prepack-exports.mjs restore"
   },
   "dependencies": {
+    "@effect/platform-node": "catalog:",
     "yaml": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform-node": "4.0.0-beta.98",
     "effect": "4.0.0-beta.98"
   },
-  "peerDependenciesMeta": {
-    "@effect/platform-node": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "effect": "catalog:",
