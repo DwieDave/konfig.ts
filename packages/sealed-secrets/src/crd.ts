@@ -1,29 +1,13 @@
+import type {
+  SealedSecretSchema,
+  SealedSecretSpecSchema,
+  SealedSecretTemplateSchema
+} from "./schema"
+
 export type SealedSecretScope = "strict" | "namespace-wide" | "cluster-wide"
 
-export interface SealedSecretTemplate {
-  readonly metadata?: {
-    readonly name?: string
-    readonly namespace?: string
-    readonly labels?: Readonly<Record<string, string>>
-    readonly annotations?: Readonly<Record<string, string>>
-  }
-  readonly type?: string
-  readonly immutable?: boolean
-}
+export type SealedSecretTemplate = typeof SealedSecretTemplateSchema.Type
 
-export interface SealedSecretSpec {
-  readonly template?: SealedSecretTemplate
-  readonly encryptedData: Readonly<Record<string, string>>
-}
+export type SealedSecretSpec = typeof SealedSecretSpecSchema.Type
 
-export interface SealedSecret {
-  readonly apiVersion: "bitnami.com/v1alpha1"
-  readonly kind: "SealedSecret"
-  readonly metadata: {
-    readonly name: string
-    readonly namespace: string
-    readonly labels?: Readonly<Record<string, string>>
-    readonly annotations?: Readonly<Record<string, string>>
-  }
-  readonly spec: SealedSecretSpec
-}
+export type SealedSecret = typeof SealedSecretSchema.Type
