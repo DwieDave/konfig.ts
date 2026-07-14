@@ -1,6 +1,6 @@
 import { unsafeCoerce } from "@konfig.ts/core"
 import { Config, type Redacted } from "effect"
-import { _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
+import { _envClaim, _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
 
 export interface SecretEntry<
   N extends string,
@@ -50,10 +50,9 @@ const _define = <
     "Config.all over the per-key redacted fields yields a Config of the mapped record keyed by keyof E & string"
   )
 
-  const envClaims: ReadonlyArray<EnvClaim> = keys.map((key) => ({
-    envName: input.env[key],
-    label: `Secret(${input.name}).${key}`
-  }))
+  const envClaims: ReadonlyArray<EnvClaim> = keys.map((key) =>
+    _envClaim({ envName: input.env[key], label: `Secret(${input.name}).${key}` })
+  )
 
   return _makeEntry({
     config: root,

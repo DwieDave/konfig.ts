@@ -1,6 +1,6 @@
 import { unsafeCoerce } from "@konfig.ts/core"
 import { Config } from "effect"
-import { _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
+import { _envClaim, _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
 
 export interface LiteralEntry<EnvName extends string, T>
   extends Config.Config<T>, EntryMarker<"Literal">, HasEnvClaims
@@ -19,12 +19,23 @@ export interface LiteralEntry<EnvName extends string, T>
   readonly serialize: (value: unknown) => string
 }
 
-export interface DefineLiteralInput<EnvName extends string, T> {
-  readonly envName: EnvName
-  readonly value: T
-  readonly schema?: Config.Config<T>
-  readonly serialize?: (value: T) => string
-}
+/** Types the default `String(v)` serializer can stringify meaningfully. */
+type _Primitive = string | number | boolean | bigint
+
+/**
+ * `serialize` is optional only for primitive `T` (the default `String(v)`
+ * serializer is meaningful there). For any other `T` — objects, arrays,
+ * etc. — `serialize` is required, so a caller can't silently end up with
+ * `"[object Object]"` as the env value.
+ */
+export type DefineLiteralInput<EnvName extends string, T> =
+  & {
+    readonly envName: EnvName
+    readonly value: T
+    readonly schema?: Config.Config<T>
+  }
+  & (T extends _Primitive ? { readonly serialize?: (value: T) => string }
+    : { readonly serialize: (value: T) => string })
 
 const _define = <const EnvName extends string, T = string>(
   input: DefineLiteralInput<EnvName, T>
@@ -50,7 +61,7 @@ const _define = <const EnvName extends string, T = string>(
     )
 
   const envClaims: ReadonlyArray<EnvClaim> = [
-    { envName: input.envName, label: `Literal(${input.envName})` }
+    _envClaim({ envName: input.envName, label: `Literal(${input.envName})` })
   ]
 
   return _makeEntry({

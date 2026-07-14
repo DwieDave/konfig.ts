@@ -33,6 +33,21 @@ export interface Environment<M extends Readonly<Record<string, EnvMember>>>
 // oxlint-disable-next-line app/no-explicit-any
 export type AnyEnvironment = Environment<Readonly<Record<string, any>>>
 
+/**
+ * Flattens every member's `envClaims` and cross-checks for envName
+ * collisions.
+ *
+ * Throws `EnvNameCollision` (a `Data.TaggedError`) synchronously on
+ * collision. `Environment.define` is a synchronous, user-facing config
+ * builder — collisions are an authoring mistake caught at definition
+ * time (typically module load), the same moment `_CheckCollisions`
+ * already flags most of them at compile time. There is no Effect
+ * context to run this in, so surfacing it as `Effect<A, EnvNameCollision>`
+ * would just push callers to unwrap it immediately; a plain throw
+ * (mirroring the type-level check it complements) keeps the API a
+ * direct `M -> Environment<M>` function. Add an Either/Effect variant
+ * only if a caller actually needs to recover from this at runtime.
+ */
 const _collectClaims = (
   members: Readonly<Record<string, EnvMember>>
 ): ReadonlyArray<EnvClaim> => {
