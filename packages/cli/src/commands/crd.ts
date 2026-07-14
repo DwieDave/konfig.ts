@@ -1,10 +1,20 @@
 import * as path from "node:path";
-import { Console, Effect, Option } from "effect";
+import { Console, Data, Effect, Option } from "effect";
 import { Command, Flag } from "../_unstable";
-import { loadChartRegistry } from "../chartRegistry";
+import { loadChartRegistryEffect } from "../chartRegistry";
 import { resolveCliPaths } from "../cliConfig";
 import { extractCrdsEffect, verifyCrdsEffect } from "../crd/extract";
 import { assertHelmVersion } from "../helmVersion";
+
+export class ReleaseNotFound extends Data.TaggedError("ReleaseNotFound")<{
+	readonly releaseId: string;
+}> {}
+
+export class MissingCrdFlags extends Data.TaggedError("MissingCrdFlags") {}
+
+export class CrdDrift extends Data.TaggedError("CrdDrift")<{
+	readonly drifted: ReadonlyArray<string>;
+}> {}
 
 export const crdExtractCommand = Command.make(
 	"extract",
@@ -21,10 +31,7 @@ export const crdExtractCommand = Command.make(
 
 			yield* assertHelmVersion(minVersion);
 
-			const registry = yield* Effect.tryPromise({
-				try: () => loadChartRegistry(chartsDir),
-				catch: (cause) => new Error(`Failed to load chart registry: ${cause}`),
-			});
+			const registry = yield* loadChartRegistryEffect(chartsDir);
 
 			const releaseId = Option.getOrUndefined(flags.release);
 
@@ -34,8 +41,7 @@ export const crdExtractCommand = Command.make(
 					yield* Console.error(
 						`Release '${releaseId}' not found in ${chartsDir}. Available: ${registry.map((r) => r.id).join(", ")}`,
 					);
-					yield* Effect.fail(new Error(`Release not found: ${releaseId}`));
-					return;
+					return yield* new ReleaseNotFound({ releaseId });
 				}
 				yield* Console.log(`Extracting CRDs for ${def.chart}@${def.version}...`);
 				yield* extractCrdsEffect({
@@ -66,7 +72,7 @@ export const crdExtractCommand = Command.make(
 				yield* Console.log(`Done. Generated files in ${outDir}`);
 			} else {
 				yield* Console.error("Specify --release <id> or --all");
-				yield* Effect.fail(new Error("Missing --release or --all flag"));
+				return yield* new MissingCrdFlags();
 			}
 		}),
 ).pipe(Command.withDescription("Extract CRD TypeScript types from Helm charts"));
@@ -77,10 +83,7 @@ export const crdVerifyCommand = Command.make("verify", {}, () =>
 
 		yield* assertHelmVersion(minVersion);
 
-		const registry = yield* Effect.tryPromise({
-			try: () => loadChartRegistry(chartsDir),
-			catch: (cause) => new Error(`Failed to load chart registry: ${cause}`),
-		});
+		const registry = yield* loadChartRegistryEffect(chartsDir);
 
 		if (registry.length === 0) {
 			yield* Console.log("No chart definitions found — nothing to verify");
@@ -103,7 +106,7 @@ export const crdVerifyCommand = Command.make("verify", {}, () =>
 		if (drifted.length > 0) {
 			yield* Console.error(`CRD drift detected in: ${drifted.join(", ")}`);
 			yield* Console.error("Run `konfig crd extract --all` to regenerate");
-			yield* Effect.fail(new Error("CRD drift"));
+			return yield* new CrdDrift({ drifted });
 		} else {
 			yield* Console.log("OK — all CRD files match");
 		}

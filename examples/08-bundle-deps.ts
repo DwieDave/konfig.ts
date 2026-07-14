@@ -30,6 +30,7 @@ const checked = Bundle.entrypoint(
 // `_konfig_unsatisfied` hint.
 const broken = Bundle.fromModules({ modules: [web] as const });
 // @ts-expect-error - Need<"Secret", "ghcr-pull"> is not assignable to RenderServices.
+// @effect-diagnostics-next-line floatingEffect:off — deliberately-broken demo call, never executed
 Bundle.entrypoint(broken);
 
 const report = Effect.gen(function* () {

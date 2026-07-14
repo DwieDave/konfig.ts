@@ -59,22 +59,24 @@ export const validateManifestFile = (
 ): Effect.Effect<ReadonlyArray<ValidationIssue>> =>
   Effect.gen(function*() {
     const issues: ValidationIssue[] = []
-    let docs: ReadonlyArray<unknown>
-    try {
-      // parseYamlAll splits on real YAML document boundaries — a `---`
-      // inside a block scalar stays part of its document, unlike a naive
-      // /^---$/m regex split.
-      docs = parseYamlAll(input.content)
-    } catch (cause) {
+    // parseYamlAll splits on real YAML document boundaries — a `---`
+    // inside a block scalar stays part of its document, unlike a naive
+    // /^---$/m regex split.
+    const docsResult = yield* Effect.result(Effect.try({
+      try: () => parseYamlAll(input.content),
+      catch: (cause) => `YAML parse error: ${String(cause)}`
+    }))
+    if (Result.isFailure(docsResult)) {
       return [
         {
           file: input.file,
           doc: 0,
           path: [],
-          message: `YAML parse error: ${String(cause)}`
+          message: docsResult.failure
         }
       ]
     }
+    const docs = docsResult.success
     let docIndex = -1
     for (const parsed of docs) {
       docIndex++
@@ -149,7 +151,7 @@ export const runKubeconform = (input: KubeconformInput) =>
         )
       )
       if (exitCode !== 0) {
-        return yield* Effect.fail(new KubeconformReportError({ stdout, stderr }))
+        return yield* new KubeconformReportError({ stdout, stderr })
       }
       return stdout
     })

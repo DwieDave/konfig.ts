@@ -6,7 +6,9 @@ import {
 	imagesFor,
 	requireImage,
 } from "@konfig.ts/core";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
+
+class ImagesDecodeRejected extends Data.TaggedError("ImagesDecodeRejected") {}
 
 const raw = {
 	envs: {
@@ -32,30 +34,25 @@ const program = Effect.gen(function* () {
 		`staging.web → ${requireImage({ e: staging, app: "web", envName: "staging" })}`,
 	);
 
-	try {
-		imagesFor({ cfg, env: "preview" });
-	} catch (e) {
-		if (e instanceof ImagesEnvMissing) {
-			yield* Effect.log(`✗ env "${e.env}" not in images.json`);
-		}
-	}
+	yield* Effect.try({
+		try: () => imagesFor({ cfg, env: "preview" }),
+		catch: (e) => (e instanceof ImagesEnvMissing ? e : new ImagesEnvMissing({ env: "preview" })),
+	}).pipe(Effect.catch((e) => Effect.log(`✗ env "${e.env}" not in images.json`)));
 
-	try {
-		requireImage({ e: staging, app: "api", envName: "staging" });
-	} catch (e) {
-		if (e instanceof ImagesAppMissing) {
-			yield* Effect.log(`✗ app "${e.app}" not declared for env "${e.env}"`);
-		}
-	}
+	yield* Effect.try({
+		try: () => requireImage({ e: staging, app: "api", envName: "staging" }),
+		catch: (e) =>
+			e instanceof ImagesAppMissing ? e : new ImagesAppMissing({ env: "staging", app: "api" }),
+	}).pipe(Effect.catch((e) => Effect.log(`✗ app "${e.app}" not declared for env "${e.env}"`)));
 
-	try {
-		decodeImagesSync({
-			envs: { prod: {} },
-			version: 2,
-		});
-	} catch {
-		yield* Effect.log(`✗ unknown top-level key "version" → rejected`);
-	}
+	yield* Effect.try({
+		try: () =>
+			decodeImagesSync({
+				envs: { prod: {} },
+				version: 2,
+			}),
+		catch: () => new ImagesDecodeRejected(),
+	}).pipe(Effect.catch(() => Effect.log(`✗ unknown top-level key "version" → rejected`)));
 });
 
 Effect.runPromise(program);

@@ -31,7 +31,7 @@ const _encryptedRegex = (
   label: string
 ): Effect.Effect<RegExp | undefined, RenderError> => {
   const raw = secret.sops?.["encrypted_regex"]
-  if (raw === undefined || raw === null) return Effect.succeed(undefined)
+  if (raw === undefined || raw === null) return Effect.undefined
   if (typeof raw !== "string") {
     return Effect.fail(
       new RenderError({ message: `${label}: sops.encrypted_regex is not a string` })
@@ -61,8 +61,7 @@ const _assertEncrypted = (
           const mustEncrypt = regex === undefined
             || ["spec", "secretTemplates", container, key].some((segment) => regex.test(segment))
           if (mustEncrypt && !value.startsWith(_ENC_MARKER)) {
-            return yield* Effect.fail(
-              new RenderError({
+            return yield* new RenderError({
                 message:
                   `${label}: refusing to emit — value for "${key}" is not sops-encrypted (missing ${_ENC_MARKER} marker)`,
                 cause: new SopsInvocationError({
@@ -70,7 +69,6 @@ const _assertEncrypted = (
                   cause: "sops output value was not encrypted"
                 })
               })
-            )
           }
         }
       }

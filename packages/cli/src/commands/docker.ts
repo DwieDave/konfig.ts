@@ -67,7 +67,7 @@ const _loadSpec = (
       "dynamic import() returns a module namespace object; .default is typed unknown and guarded by isDockerApp below"
     ).default
     if (!isDockerApp(app)) {
-      return yield* Effect.fail(new SpecNotADockerApp({ specPath: dockerTsPath }))
+      return yield* new SpecNotADockerApp({ specPath: dockerTsPath })
     }
     const root = yield* findRoot(targetAbs)
     const specPath = p.relative(root, dockerTsPath)
@@ -85,14 +85,10 @@ const _writeAtomic = (
 ): Effect.Effect<void, DockerWriteError> =>
   Effect.gen(function*() {
     const tmp = `${path}.tmp.${process.pid}`
-    yield* fs.writeFileString(tmp, content).pipe(
-      Effect.mapError((cause) => new DockerWriteError({ path, cause }))
-    )
-    yield* fs.rename(tmp, path).pipe(
-      Effect.mapError((cause) => new DockerWriteError({ path, cause }))
-    )
+    yield* fs.writeFileString(tmp, content)
+    yield* fs.rename(tmp, path)
     void p
-  })
+  }).pipe(Effect.mapError((cause) => new DockerWriteError({ path, cause })))
 
 const _writeOne = (
   dest: string,
@@ -107,12 +103,10 @@ const _writeOne = (
       const existing = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
       const head = extractHeader(existing)
       if (!head.managed && !force) {
-        return yield* Effect.fail(
-          new DockerWriteRefused({
+        return yield* new DockerWriteRefused({
             path: dest,
             reason: `destination is not konfig-managed (missing marker "${HEADER_MARKER}"). Use --force to overwrite.`
           })
-        )
       }
       if (head.managed && existing === content) return { written: false }
     }
@@ -200,7 +194,7 @@ const _diffOne = (
     })
     if (!hasDifferences(result)) return true
     yield* Console.log(formatDiff({ result, format }))
-    return yield* Effect.fail(new DiffDrift({ target, kind }))
+    return yield* new DiffDrift({ target, kind })
   })
 
 export const diffCommand = Command.make(

@@ -241,15 +241,12 @@ export const readCacheEntry = (input: ReadEntryInput) =>
     if (!exists) return undefined
     const text = yield* fs.readFileString(cacheFile).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    try {
-      const parsed = JSON.parse(text)
-      return unsafeCoerce<BuildCacheEntry>(
-        parsed,
+    return yield* Effect.try(() =>
+      unsafeCoerce<BuildCacheEntry>(
+        JSON.parse(text),
         "parsed JSON shape matches BuildCacheEntry — caller revalidates by recomputing inputHash"
       )
-    } catch {
-      return undefined
-    }
+    ).pipe(Effect.orElseSucceed(() => undefined))
   })
 
 interface WriteEntryInput {

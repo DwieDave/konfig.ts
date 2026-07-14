@@ -61,14 +61,12 @@ const _readPkgJsonIfExists = (
     if (!exists) return undefined
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    try {
-      return unsafeCoerce<PackageJson>(
+    return yield* Effect.try(() =>
+      unsafeCoerce<PackageJson>(
         JSON.parse(text),
         "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses"
       )
-    } catch {
-      return undefined
-    }
+    ).pipe(Effect.orElseSucceed(() => undefined))
   })
 
 const _isMonorepoRoot = (pkg: PackageJson | undefined, hasPnpmYaml: boolean): boolean => {
@@ -94,7 +92,7 @@ export const findRoot = (from: string): Effect.Effect<RootDir, MonorepoRootNotFo
       if (parent === cur) break
       cur = parent
     }
-    return yield* Effect.fail(new MonorepoRootNotFound({ from }))
+    return yield* new MonorepoRootNotFound({ from })
   })
 
 // ──────────────────────────── glob ────────────────────────────
@@ -189,15 +187,13 @@ const _readWorkspacePatterns = (
     if (pnpmExists) {
       const text = yield* fs.readFileString(pnpmPath).pipe(Effect.orElseSucceed(() => ""))
       if (text === "") return []
-      try {
+      return yield* Effect.try((): ReadonlyArray<string> => {
         const parsed = unsafeCoerce<PnpmWorkspaceYaml>(
           parseYaml(text),
           "YAML.parse over a pnpm-workspace.yaml file — defensively typed as PnpmWorkspaceYaml with optional packages"
         )
         return parsed.packages ?? []
-      } catch {
-        return []
-      }
+      }).pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []))
     }
     const pkg = yield* _readPkgJsonIfExists(fs, p, root)
     const ws = pkg?.workspaces
@@ -219,7 +215,7 @@ const _parseWorkspacePackage = (
     const pkgPath = p.join(root, relDir, "package.json")
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    try {
+    return yield* Effect.try((): Workspace | undefined => {
       const pkg = unsafeCoerce<PackageJson>(
         JSON.parse(text),
         "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses"
@@ -231,9 +227,7 @@ const _parseWorkspacePackage = (
         pkg,
         hasBuildScript: Boolean(pkg.scripts?.build)
       }
-    } catch {
-      return undefined
-    }
+    }).pipe(Effect.orElseSucceed(() => undefined))
   })
 
 export const allWorkspaces = (
@@ -347,19 +341,15 @@ export const detectPm = (
     }
     const kinds = new Set(presentLockfiles.map((l) => l.kind))
     if (kinds.size === 0) {
-      return yield* Effect.fail(
-        new UnsupportedPm({
+      return yield* new UnsupportedPm({
           reason: "no packageManager field and no recognized lockfile"
         })
-      )
     }
     if (kinds.size > 1) {
-      return yield* Effect.fail(
-        new UnsupportedPm({
+      return yield* new UnsupportedPm({
           reason: "multiple lockfiles present and no packageManager field to disambiguate",
           candidates: [...kinds]
         })
-      )
     }
     const kind = [...kinds][0]!
     const layout = kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined
@@ -410,7 +400,7 @@ export const closureOf = (
     }
     const lookup = (ref: string): Workspace | undefined => byName.get(ref) ?? byRelDir.get(ref)
     const root = lookup(input.target)
-    if (!root) return yield* Effect.fail(new WorkspaceNotFound({ target: input.target }))
+    if (!root) return yield* new WorkspaceNotFound({ target: input.target })
     const visited = new Set<string>()
     const onStack = new Set<string>()
     const order: Workspace[] = []
@@ -432,6 +422,6 @@ export const closureOf = (
       return undefined
     }
     const err = dfs(root, [])
-    if (err) return yield* Effect.fail(err)
+    if (err) return yield* err
     return order
   })

@@ -23,11 +23,9 @@ export const assertHelmVersion = (minVersion: string) =>
 
 		const found = _parseHelmVersion(stdout);
 		if (!found) {
-			return yield* Effect.fail(
-				new HelmVersionTooLow({ required: minVersion, found: stdout.trim() }),
-			);
+			return yield* new HelmVersionTooLow({ required: minVersion, found: stdout.trim() });
 		}
 		if (!semver.gte(found, minVersion)) {
-			return yield* Effect.fail(new HelmVersionTooLow({ required: minVersion, found }));
+			return yield* new HelmVersionTooLow({ required: minVersion, found });
 		}
 	}).pipe(Effect.scoped);

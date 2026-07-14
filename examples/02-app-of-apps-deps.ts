@@ -60,6 +60,7 @@ const broken = Effect.gen(function* () {
 }).pipe(Effect.provide(web.layer));
 
 // @ts-expect-error  Need<"Secret", "ghcr-pull"> is not assignable to never
+// @effect-diagnostics-next-line floatingEffect:off — deliberately-broken demo call, never executed
 AppOfApps.entrypoint(broken);
 
 const report = Effect.gen(function* () {

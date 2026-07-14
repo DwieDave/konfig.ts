@@ -62,7 +62,7 @@ const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
 
     const exists = yield* fs.exists(entry).pipe(Effect.orElseSucceed(() => false))
     if (!exists) {
-      return yield* Effect.fail(new EnvEntryNotFound({ env: envName, entry }))
+      return yield* new EnvEntryNotFound({ env: envName, entry })
     }
     return entry
   })
@@ -83,7 +83,7 @@ const _loadEnv = (entry: string) =>
     })
     const program = unsafeCoerce<{ default?: unknown }>(mod, "imported module is a plain JS object").default
     if (program === undefined) {
-      return yield* Effect.fail(new EnvLoadError({ entry, cause: "default export is missing" }))
+      return yield* new EnvLoadError({ entry, cause: "default export is missing" })
     }
     const result = yield* unsafeCoerce<Effect.Effect<EnvResult, AnyRenderError>>(
       program,
