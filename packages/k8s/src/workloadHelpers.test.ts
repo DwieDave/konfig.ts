@@ -26,8 +26,9 @@ describe("Workload.web pod labels", () => {
       const dep = coerce<K8sDeployment>(deployment)
       expect(dep.spec?.selector.matchLabels).toEqual({ app: "api" })
       expect(dep.spec?.template.metadata?.labels).toEqual({ app: "api", tier: "web" })
+      expect(dep.spec?.selector.matchLabels).toBeDefined()
       expect(dep.spec?.template.metadata?.labels?.app).toBe(
-        dep.spec?.selector.matchLabels.app
+        dep.spec?.selector.matchLabels?.app
       )
     }).pipe(Effect.provide(NodeServices.layer)))
 })

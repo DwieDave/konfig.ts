@@ -1,12 +1,12 @@
+import { NodeServices } from "@effect/platform-node"
+import { describe, expect, it, layer } from "@effect/vitest"
 import { RenderContext, renderManifest } from "@konfig.ts/core"
 import { Effect } from "effect"
-import { describe, expect, it } from "vitest"
 import { Container } from "./container"
 import { Service } from "./network"
 import { Port } from "./ports"
 
 const ctx = RenderContext.make("test")
-const _run = <A>(eff: Effect.Effect<A, unknown>): Promise<A> => Effect.runPromise(eff as Effect.Effect<A, never, never>)
 
 describe("Port.make / Port.ref", () => {
   it("Port.make carries the literal name as both runtime value and type", () => {
@@ -65,22 +65,25 @@ describe("Service.fromContainer", () => {
     ]
   })
 
-  it("emits a K8s Service from a typed container + port spec", async () => {
-    const svc = Service.fromContainer({
-      name: "api",
-      namespace: "default",
-      selector: { app: "api" },
-      forContainer: api,
-      ports: [
-        { port: 80, targetPort: Port.ref("http") },
-        { port: 9090, targetPort: Port.ref("metrics") }
-      ]
-    })
-    const out = await _run(renderManifest({ manifest: svc, ctx }))
-    expect(out.kind).toBe("Service")
-    expect(out.spec?.selector).toEqual({ app: "api" })
-    expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: "http" })
-    expect(out.spec?.ports?.[1]).toEqual({ port: 9090, targetPort: "metrics" })
+  layer(NodeServices.layer)("rendering", (it) => {
+    it.effect("emits a K8s Service from a typed container + port spec", () =>
+      Effect.gen(function*() {
+        const svc = Service.fromContainer({
+          name: "api",
+          namespace: "default",
+          selector: { app: "api" },
+          forContainer: api,
+          ports: [
+            { port: 80, targetPort: Port.ref("http") },
+            { port: 9090, targetPort: Port.ref("metrics") }
+          ]
+        })
+        const out = yield* renderManifest({ manifest: svc, ctx })
+        expect(out.kind).toBe("Service")
+        expect(out.spec?.selector).toEqual({ app: "api" })
+        expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: "http" })
+        expect(out.spec?.ports?.[1]).toEqual({ port: 9090, targetPort: "metrics" })
+      }))
   })
 
   it("numeric targetPort still works", () => {

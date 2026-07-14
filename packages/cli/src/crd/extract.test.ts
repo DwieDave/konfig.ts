@@ -1,5 +1,6 @@
+import { NodeServices } from "@effect/platform-node"
+import { describe, expect, it, layer } from "@effect/vitest"
 import { Effect, Exit } from "effect"
-import { describe, expect, it } from "vitest"
 import { CrdInputDecodeError, extractCrdsEffect } from "./extract"
 
 const validOpts = {
@@ -11,51 +12,58 @@ const validOpts = {
   cacheDir: "/tmp/konfig-test-cache"
 }
 
-describe("extractCrdsEffect input boundary", () => {
-  it("rejects shell-metachar chart name before any process is spawned", async () => {
-    const exit = await Effect.runPromiseExit(
-      extractCrdsEffect({ ...validOpts, chart: "x; touch /tmp/pwned" })
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      const failure = exit.cause
-      const fails = JSON.stringify(failure)
-      expect(fails).toContain("CrdInputDecodeError")
-    }
-  })
+layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
+  it.effect("rejects shell-metachar chart name before any process is spawned", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        extractCrdsEffect({ ...validOpts, chart: "x; touch /tmp/pwned" })
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const failure = exit.cause
+        const fails = JSON.stringify(failure)
+        expect(fails).toContain("CrdInputDecodeError")
+      }
+    }))
 
-  it("rejects shell-metachar version", async () => {
-    const exit = await Effect.runPromiseExit(
-      extractCrdsEffect({ ...validOpts, version: "1.0.0 && rm -rf /" })
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+  it.effect("rejects shell-metachar version", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        extractCrdsEffect({ ...validOpts, version: "1.0.0 && rm -rf /" })
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+    }))
 
-  it("rejects backtick injection in repo", async () => {
-    const exit = await Effect.runPromiseExit(
-      extractCrdsEffect({
-        ...validOpts,
-        repo: "https://foo.example.com/`whoami`"
-      })
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+  it.effect("rejects backtick injection in repo", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        extractCrdsEffect({
+          ...validOpts,
+          repo: "https://foo.example.com/`whoami`"
+        })
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+    }))
 
-  it("rejects non-http(s)/oci repo schemes", async () => {
-    const exit = await Effect.runPromiseExit(
-      extractCrdsEffect({ ...validOpts, repo: "file:///etc/passwd" })
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+  it.effect("rejects non-http(s)/oci repo schemes", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        extractCrdsEffect({ ...validOpts, repo: "file:///etc/passwd" })
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+    }))
 
-  it("rejects newline injection in chart name", async () => {
-    const exit = await Effect.runPromiseExit(
-      extractCrdsEffect({ ...validOpts, chart: "postgresql\nrm -rf /" })
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+  it.effect("rejects newline injection in chart name", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        extractCrdsEffect({ ...validOpts, chart: "postgresql\nrm -rf /" })
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+    }))
+})
 
-  it("CrdInputDecodeError is a tagged error class", () => {
+describe("CrdInputDecodeError", () => {
+  it("is a tagged error class", () => {
     const err = new CrdInputDecodeError({ cause: "bad" })
     expect(err._tag).toBe("CrdInputDecodeError")
     expect(err.message).toContain("CRD extract inputs rejected by schema")

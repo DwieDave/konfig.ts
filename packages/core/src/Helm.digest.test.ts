@@ -59,7 +59,7 @@ describe("Helm.release digest verification", () => {
     })
 
     const exit = await Effect.runPromiseExit(
-      m.render(RenderContext.make("test")).pipe(Effect.provide(NodeServices.layer))
+      m.render(RenderContext.make("test")).pipe(Effect.provide(NodeServices.layer), Effect.scoped)
     )
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {

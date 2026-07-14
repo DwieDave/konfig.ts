@@ -54,7 +54,7 @@ const _handleForOutput = (output: string): ChildProcessHandle =>
     getInputFd: () => Sink.drain,
     getOutputFd: () => Stream.empty,
     unref: Effect.succeed(Effect.void)
-  } as ChildProcessHandle)
+  })
 
 const _makeStubSpawner = (sink: SpawnerSink, output = STUB_SEALED_YAML) =>
   Layer.succeed(

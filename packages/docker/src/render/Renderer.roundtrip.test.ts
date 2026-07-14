@@ -102,7 +102,7 @@ const parseInstruction = (line: string): Instruction => {
 
 const parseDockerfile = (text: string): Dockerfile => {
   const lines = text.split("\n").filter((l) => l.length > 0 && !l.startsWith("#"))
-  const args: Dockerfile["args"] = []
+  const args: Array<Dockerfile["args"][number]> = []
   const stages: Stage[] = []
   let current: Stage | undefined
   let stageWorkdirSet = false

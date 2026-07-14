@@ -1,16 +1,13 @@
 import { Effect, Layer } from "effect"
 import { describe, expect, expectTypeOf, it } from "vitest"
-import type {
-  ApplicationReq,
-  ConfigMapRef,
-  ConfigMapReq,
-  NamespaceReq,
-  SecretRef,
-  SecretReq,
-  ServiceAccountRef,
-  ServiceAccountReq
-} from "./deps"
+import type { ConfigMapRef, Need, SecretRef, ServiceAccountRef } from "./deps"
 import { Application, ConfigMap, Namespace, Secret, ServiceAccount } from "./deps"
+
+type SecretReq<N extends string> = Need<"Secret", N>
+type ConfigMapReq<N extends string> = Need<"ConfigMap", N>
+type NamespaceReq<N extends string> = Need<"Namespace", N>
+type ServiceAccountReq<N extends string> = Need<"ServiceAccount", N>
+type ApplicationReq<N extends string> = Need<"Application", N>
 
 describe("deps — yieldable Key constructors", () => {
   it("Secret(name): yielding lifts SecretReq<N> into R, layer discharges", async () => {

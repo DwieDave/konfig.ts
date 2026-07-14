@@ -14,9 +14,9 @@ describe("konfig.json schema (T4.1)", () => {
     expect(cfg.cluster).toBe("cluster.ts")
     expect(cfg.modules).toBe("modules")
     expect(cfg.charts).toBe("charts")
-    expect(cfg.crd.outDir).toBe(".generated/crd")
-    expect(cfg.helm.cacheDir).toBe(".konfig/helm-cache")
-    expect(cfg.helm.minVersion).toBe("3.16.0")
+    expect(cfg.crd?.outDir).toBe(".generated/crd")
+    expect(cfg.helm?.cacheDir).toBe(".konfig/helm-cache")
+    expect(cfg.helm?.minVersion).toBe("3.16.0")
     expect(cfg.envs.prod?.entry).toBe("env/prod.ts")
   })
 
@@ -38,8 +38,8 @@ describe("konfig.json schema (T4.1)", () => {
         globalPaths: ["shared/**", "package.json", "bun.lock", "tsconfig.base.json"]
       }
     })
-    expect(cfg.helm.cacheDir).toBe("../../.konfig/helm-cache")
-    expect(cfg.helm.minVersion).toBe("3.16.0")
+    expect(cfg.helm?.cacheDir).toBe("../../.konfig/helm-cache")
+    expect(cfg.helm?.minVersion).toBe("3.16.0")
     expect(cfg.diff?.baseline).toBe("../k8s/manifests")
     expect(cfg.services?.outFile).toBe("../apps.konfig.json")
     expect(cfg.services?.globalPaths?.length).toBe(4)

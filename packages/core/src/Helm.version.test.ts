@@ -59,7 +59,7 @@ const _run = (minVersion: string, proc: FakeProc) =>
   Effect.runPromiseExit(
     _release(minVersion)
       .render(RenderContext.make("test"))
-      .pipe(Effect.provide(_spawnerFor(proc)), Effect.provide(NodeServices.layer))
+      .pipe(Effect.provide(_spawnerFor(proc)), Effect.provide(NodeServices.layer), Effect.scoped)
   )
 
 describe("Helm.release helm-version preflight", () => {

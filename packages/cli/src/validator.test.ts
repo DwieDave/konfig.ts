@@ -1,4 +1,4 @@
-import { Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
 import * as PlatformError from "effect/PlatformError"
 import type { Command } from "effect/unstable/process/ChildProcess"
 import {
@@ -170,8 +170,8 @@ describe("runKubeconform", () => {
       )
     )
     expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit) && exit.cause._tag === "Fail") {
-      const err = exit.cause.error
+    if (Exit.isFailure(exit)) {
+      const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
       expect(err).toBeInstanceOf(KubeconformReportError)
       if (err instanceof KubeconformReportError) {
         expect(err.stdout).toContain("missing required field")
@@ -185,8 +185,8 @@ describe("runKubeconform", () => {
       runKubeconform({ dir: "/rendered" }).pipe(Effect.provide(_spawnFails()))
     )
     expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit) && exit.cause._tag === "Fail") {
-      expect(exit.cause.error).toBeInstanceOf(KubeconformNotFound)
+    if (Exit.isFailure(exit)) {
+      expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBeInstanceOf(KubeconformNotFound)
     }
   })
 })
