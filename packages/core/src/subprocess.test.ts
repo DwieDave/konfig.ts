@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { Command } from "effect/unstable/process/ChildProcess"
 import {
@@ -140,8 +140,8 @@ describe("ProcessError", () => {
         )
       )
       expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit) && exit.cause._tag === "Fail") {
-        const err = exit.cause.error
+      if (Exit.isFailure(exit)) {
+        const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
         expect(err).toBeInstanceOf(ProcessError)
         if (err instanceof ProcessError) {
           expect(err.stderrTail.length).toBeLessThanOrEqual(2048)

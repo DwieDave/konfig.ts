@@ -91,7 +91,7 @@ const _handleForOutput = (output: string): ChildProcessHandle =>
     getInputFd: () => Sink.drain,
     getOutputFd: () => Stream.empty,
     unref: Effect.succeed(Effect.void)
-  } as ChildProcessHandle)
+  })
 
 const _makeStubSpawner = (
   sink: Sink,

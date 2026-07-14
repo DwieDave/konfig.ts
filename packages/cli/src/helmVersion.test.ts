@@ -18,8 +18,10 @@ describe("_parseHelmVersion", () => {
     expect(_parseHelmVersion("helm: not found")).toBe(null)
   })
 
-  it("semver.gte with includePrerelease admits a pre-release that meets minVersion", () => {
-    expect(semver.gte("3.16.0-rc.1", "3.15.0", { includePrerelease: true })).toBe(true)
-    expect(semver.gte("3.16.0-rc.1", "3.16.0", { includePrerelease: true })).toBe(false)
+  it("semver.gte admits a pre-release that meets minVersion", () => {
+    // gte compares two concrete versions, so pre-releases participate without
+    // any option (includePrerelease only exists for range checks).
+    expect(semver.gte("3.16.0-rc.1", "3.15.0")).toBe(true)
+    expect(semver.gte("3.16.0-rc.1", "3.16.0")).toBe(false)
   })
 })

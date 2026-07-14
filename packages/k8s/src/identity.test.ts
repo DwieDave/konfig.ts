@@ -1,10 +1,10 @@
+import { NodeServices } from "@effect/platform-node"
+import { describe, expect, it, layer } from "@effect/vitest"
 import { RenderContext, renderManifest, Yaml } from "@konfig.ts/core"
 import { Effect } from "effect"
-import { describe, expect, it } from "vitest"
 import { ConfigMap, Namespace, Secret, ServiceAccount } from "./identity"
 
 const ctx = RenderContext.make("test")
-const _run = <A>(eff: Effect.Effect<A, unknown>): Promise<A> => Effect.runPromise(eff as Effect.Effect<A, never, never>)
 
 describe("identity constructors expose .ref for downstream wiring", () => {
   it("Namespace exposes its name as `.ref`", () => {
@@ -26,17 +26,20 @@ describe("identity constructors expose .ref for downstream wiring", () => {
     const s = Secret.make({ name: "api-creds", namespace: "prod" })
     expect(s.ref).toBe("api-creds")
   })
+})
 
-  it("rendered Namespace matches the nixidy shape", async () => {
-    const ns = Namespace.make({
-      name: "sops",
-      annotations: { "argocd.argoproj.io/sync-options": "Prune=false" }
-    })
-    const out = await _run(renderManifest({ manifest: ns, ctx }))
-    const yaml = Yaml.serialize({ value: out })
-    expect(yaml).toContain("apiVersion: v1")
-    expect(yaml).toContain("kind: Namespace")
-    expect(yaml).toContain("name: sops")
-    expect(yaml).toContain("argocd.argoproj.io/sync-options: Prune=false")
-  })
+layer(NodeServices.layer)("identity rendering", (it) => {
+  it.effect("rendered Namespace matches the nixidy shape", () =>
+    Effect.gen(function*() {
+      const ns = Namespace.make({
+        name: "sops",
+        annotations: { "argocd.argoproj.io/sync-options": "Prune=false" }
+      })
+      const out = yield* renderManifest({ manifest: ns, ctx })
+      const yaml = Yaml.serialize({ value: out })
+      expect(yaml).toContain("apiVersion: v1")
+      expect(yaml).toContain("kind: Namespace")
+      expect(yaml).toContain("name: sops")
+      expect(yaml).toContain("argocd.argoproj.io/sync-options: Prune=false")
+    }))
 })

@@ -75,6 +75,7 @@ describe("Environment", () => {
       env: { url: "SHARED" }
     })
     const b = Literal.define({ envName: "SHARED", value: "literal" })
+    // @ts-expect-error — envName collision is also a compile-time error
     expect(() => Environment.define({ a, b })).toThrow(EnvNameCollision)
   })
 
@@ -82,6 +83,7 @@ describe("Environment", () => {
     const a = Secret.define({ name: "a", namespace: "x", env: { url: "SHARED" } })
     const b = Secret.define({ name: "b", namespace: "x", env: { val: "SHARED" } })
     try {
+      // @ts-expect-error — envName collision is also a compile-time error
       Environment.define({ a, b })
       throw new Error("expected throw")
     } catch (e) {

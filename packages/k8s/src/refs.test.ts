@@ -57,9 +57,9 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
       namespace: "monitoring",
       stringData: { token: "t" }
     })
-    // @ts-expect-error — SecretRef<*, *, "monitoring"> not assignable to SecretRef<*, *, "app">.
     EnvVar.fromSecretForPod({
       name: "GRAFANA",
+      // @ts-expect-error — SecretRef<*, *, "monitoring"> not assignable to SecretRef<*, *, "app">.
       ref: monCreds.ref,
       key: "token",
       podNamespace: "app"

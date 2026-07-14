@@ -42,8 +42,9 @@ describe("Deployment.fromPodSet", () => {
       // selector label survives; the extra label is still merged in.
       expect(res.spec?.template.metadata?.labels).toEqual({ app: "api", tier: "web" })
       expect(res.spec?.selector.matchLabels).toEqual({ app: "api" })
+      expect(res.spec?.selector.matchLabels).toBeDefined()
       expect(res.spec?.template.metadata?.labels?.app).toBe(
-        res.spec?.selector.matchLabels.app
+        res.spec?.selector.matchLabels?.app
       )
     }).pipe(Effect.provide(NodeServices.layer)))
 })
