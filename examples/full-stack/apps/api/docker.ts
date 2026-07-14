@@ -1,4 +1,4 @@
-import { Docker } from "@konfig.ts/docker";
+import { Docker } from "@konfig.ts/docker"
 
 /**
  * Production multi-stage + dev single-stage Dockerfile for `apps/api`.
@@ -13,30 +13,30 @@ import { Docker } from "@konfig.ts/docker";
  * dev dependencies and unused workspace trees from node_modules.
  */
 export default Docker.app({
-	target: "apps/api",
-	runner: {
-		production: true,
-		workdir: "/app/apps/api",
-		copy: [Docker.copy.workspaceSourceAll()],
-		expose: 8080,
-		cmd: ["bun", "run", "src/main.ts"],
-		env: {
-			// Only contract atoms with literal defaults belong here.
-			// per-env values and secrets come from the Deployment env
-			// block (via Environment.bind in the api infra module).
-			LOG_LEVEL: "info",
-		},
-		healthcheck: {
-			_tag: "HealthcheckHttpGet",
-			path: "/healthz",
-			port: 8080,
-			interval: "15s",
-			timeout: "3s",
-			retries: 3,
-		},
-	},
-	dev: {
-		cmd: ["bun", "--watch", "src/main.ts"],
-		expose: 8080,
-	},
-});
+  target: "apps/api",
+  runner: {
+    production: true,
+    workdir: "/app/apps/api",
+    copy: [Docker.copy.workspaceSourceAll()],
+    expose: 8080,
+    cmd: ["bun", "run", "src/main.ts"],
+    env: {
+      // Only contract atoms with literal defaults belong here.
+      // per-env values and secrets come from the Deployment env
+      // block (via Environment.bind in the api infra module).
+      LOG_LEVEL: "info"
+    },
+    healthcheck: {
+      _tag: "HealthcheckHttpGet",
+      path: "/healthz",
+      port: 8080,
+      interval: "15s",
+      timeout: "3s",
+      retries: 3
+    }
+  },
+  dev: {
+    cmd: ["bun", "--watch", "src/main.ts"],
+    expose: 8080
+  }
+})

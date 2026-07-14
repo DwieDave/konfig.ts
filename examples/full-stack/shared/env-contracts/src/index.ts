@@ -1,2 +1,2 @@
-export { dbCreds, ghcrPull, jwtKey, s3Creds } from "./secrets";
-export { apiEnv, workerEnv } from "./bundles";
+export { apiEnv, workerEnv } from "./bundles"
+export { dbCreds, ghcrPull, jwtKey, s3Creds } from "./secrets"

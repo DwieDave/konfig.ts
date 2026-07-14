@@ -93,10 +93,10 @@ const _fromCommand = <const K extends string>(
       const value = stdout.replace(/\n+$/u, "")
       if (value.length === 0) {
         return yield* new SecretSourceError({
-            source: "fromCommand",
-            key,
-            cause: "secret command produced empty output"
-          })
+          source: "fromCommand",
+          key,
+          cause: "secret command produced empty output"
+        })
       }
       out[key] = Redacted.make(value)
     }

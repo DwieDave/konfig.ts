@@ -1,5 +1,5 @@
 {
-	"name": "fix-pnpm-hoist-root",
-	"private": true,
-	"packageManager": "pnpm@9.7.0"
+  "name": "fix-pnpm-hoist-root",
+  "private": true,
+  "packageManager": "pnpm@9.7.0"
 }

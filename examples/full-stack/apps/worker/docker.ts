@@ -1,4 +1,4 @@
-import { Docker } from "@konfig.ts/docker";
+import { Docker } from "@konfig.ts/docker"
 
 /**
  * Worker Dockerfile. Mirrors apps/api but no port + no healthcheck.
@@ -9,15 +9,15 @@ import { Docker } from "@konfig.ts/docker";
  * touching the source tree.
  */
 export default Docker.app({
-	target: "apps/worker",
-	runner: {
-		production: true,
-		workdir: "/app/apps/worker",
-		copy: [Docker.copy.workspaceSourceAll()],
-		cmd: ["bun", "run", "src/main.ts"],
-		removePaths: ["/app/node_modules/typescript"],
-	},
-	dev: {
-		cmd: ["bun", "--watch", "src/main.ts"],
-	},
-});
+  target: "apps/worker",
+  runner: {
+    production: true,
+    workdir: "/app/apps/worker",
+    copy: [Docker.copy.workspaceSourceAll()],
+    cmd: ["bun", "run", "src/main.ts"],
+    removePaths: ["/app/node_modules/typescript"]
+  },
+  dev: {
+    cmd: ["bun", "--watch", "src/main.ts"]
+  }
+})

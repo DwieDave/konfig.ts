@@ -1,4 +1,4 @@
-import { unsafeCoerce } from "@konfig.ts/core";
+import { unsafeCoerce } from "@konfig.ts/core"
 
 /**
  * Selector — one source of truth for "this pod set."
@@ -15,11 +15,11 @@ import { unsafeCoerce } from "@konfig.ts/core";
  * cross-namespace selectors, or wiring a NetworkPolicy from app A to
  * peer pods B.
  */
-declare const SelectorBrand: unique symbol;
+declare const SelectorBrand: unique symbol
 
 export interface Selector<L extends Readonly<Record<string, string>>> {
-	readonly [SelectorBrand]: L;
-	readonly labels: L;
+  readonly [SelectorBrand]: L
+  readonly labels: L
 }
 
 /**
@@ -28,11 +28,11 @@ export interface Selector<L extends Readonly<Record<string, string>>> {
  *   const apiPods = Selector.make({ app: "api", tier: "web" });
  */
 export const Selector = {
-	make: <const L extends Readonly<Record<string, string>>>(labels: L): Selector<L> =>
-		unsafeCoerce<Selector<L>>(
-			{ labels },
-			"SelectorBrand is a unique-symbol phantom — no runtime value; runtime shape is { labels }",
-		),
-};
+  make: <const L extends Readonly<Record<string, string>>>(labels: L): Selector<L> =>
+    unsafeCoerce<Selector<L>>(
+      { labels },
+      "SelectorBrand is a unique-symbol phantom — no runtime value; runtime shape is { labels }"
+    )
+}
 
-export type SelectorLabels<S> = S extends Selector<infer L> ? L : never;
+export type SelectorLabels<S> = S extends Selector<infer L> ? L : never

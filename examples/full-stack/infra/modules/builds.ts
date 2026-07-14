@@ -1,9 +1,9 @@
-import { Application } from "@konfig.ts/argocd";
-import { Dep } from "@konfig.ts/core";
+import { Application } from "@konfig.ts/argocd"
+import { Dep } from "@konfig.ts/core"
 
 export interface BuildOpts {
-	readonly registry: string;
-	readonly tag: string;
+  readonly registry: string
+  readonly tag: string
 }
 
 /**
@@ -27,26 +27,30 @@ export interface BuildOpts {
  * fix the registry/tag at wrapper-construction time, which is the wrong
  * tradeoff for build modules that may be re-tagged per env.
  */
-export const defineApiBuild = <const Name extends string>(opts: {
-	readonly name: Application.LiteralName<Name>;
-	readonly source: Application.ArgoSource;
-} & BuildOpts) =>
-	Application.define({
-		name: opts.name,
-		namespace: "app",
-		source: opts.source,
-		provides: Dep.provideImage({ app: "api", registry: opts.registry, tag: opts.tag }),
-		build: () => [],
-	});
+export const defineApiBuild = <const Name extends string>(
+  opts: {
+    readonly name: Application.LiteralName<Name>
+    readonly source: Application.ArgoSource
+  } & BuildOpts
+) =>
+  Application.define({
+    name: opts.name,
+    namespace: "app",
+    source: opts.source,
+    provides: Dep.provideImage({ app: "api", registry: opts.registry, tag: opts.tag }),
+    build: () => []
+  })
 
-export const defineWorkerBuild = <const Name extends string>(opts: {
-	readonly name: Application.LiteralName<Name>;
-	readonly source: Application.ArgoSource;
-} & BuildOpts) =>
-	Application.define({
-		name: opts.name,
-		namespace: "app",
-		source: opts.source,
-		provides: Dep.provideImage({ app: "worker", registry: opts.registry, tag: opts.tag }),
-		build: () => [],
-	});
+export const defineWorkerBuild = <const Name extends string>(
+  opts: {
+    readonly name: Application.LiteralName<Name>
+    readonly source: Application.ArgoSource
+  } & BuildOpts
+) =>
+  Application.define({
+    name: opts.name,
+    namespace: "app",
+    source: opts.source,
+    provides: Dep.provideImage({ app: "worker", registry: opts.registry, tag: opts.tag }),
+    build: () => []
+  })

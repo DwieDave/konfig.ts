@@ -1,7 +1,7 @@
 # T5.0 Spike — Typesafe asset/config management for `@konfig.ts/k8s`
 
 **Verdict: pattern works.** No adjustments to T5.1–T5.9 required. Branded
-refs are parameterized on the resource *name*, env/volume helpers carry
+refs are parameterized on the resource _name_, env/volume helpers carry
 that name through to the Container/Pod/Deployment via parameterized
 generics, and the final Deployment Manifest accumulates the names in
 its `R` parameter automatically.
@@ -56,9 +56,8 @@ Schemas at the boundary don't try to express derived defaults. Inside
 the module function (`oauthProxy(input)`):
 
 ```ts
-const cfg = yield* boundary(OauthProxyOptions, "oauth-proxy")(input);
-const issuerUrl =
-  cfg.oidcIssuerUrl ?? `https://${cfg.host}/realms/${cfg.realm}`;
+const cfg = yield * boundary(OauthProxyOptions, "oauth-proxy")(input)
+const issuerUrl = cfg.oidcIssuerUrl ?? `https://${cfg.host}/realms/${cfg.realm}`
 // build manifests with cfg + derived values …
 ```
 

@@ -278,16 +278,16 @@ const _resolveDefaults = (
     const pmVersion = _readEngineVersion(ctx.target, _pmEngineKey(pmKind))
     if (!pmVersion) {
       return yield* new EngineVersionMissing({
-          target: ctx.target.name,
-          engineField: `engines.${_pmEngineKey(pmKind)}`
-        })
+        target: ctx.target.name,
+        engineField: `engines.${_pmEngineKey(pmKind)}`
+      })
     }
     const runtimeVersion = _readEngineVersion(ctx.target, _runtimeEngineKey(runtimeKind))
     if (!runtimeVersion) {
       return yield* new EngineVersionMissing({
-          target: ctx.target.name,
-          engineField: `engines.${_runtimeEngineKey(runtimeKind)}`
-        })
+        target: ctx.target.name,
+        engineField: `engines.${_runtimeEngineKey(runtimeKind)}`
+      })
     }
     const pm = _pmImpl(pmKind, {
       layout: ctx.detectedPm.pnpmLayout ?? "isolated",

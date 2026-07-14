@@ -1,9 +1,9 @@
-import { Application, Sync } from "@konfig.ts/argocd";
-import { Helm, Module } from "@konfig.ts/core";
-import { Namespace } from "@konfig.ts/k8s";
+import { Application, Sync } from "@konfig.ts/argocd"
+import { Helm, Module } from "@konfig.ts/core"
+import { Namespace } from "@konfig.ts/k8s"
 
 export interface PostgresOpts {
-	readonly storageGi: number;
+  readonly storageGi: number
 }
 
 /**
@@ -17,38 +17,38 @@ export interface PostgresOpts {
  * declaring `namespace: "app"` won't double-create the Namespace.
  */
 export const definePostgres = Module.fixedNs({
-	target: Application.target,
-	namespace: "app",
-	annotations: Sync.wave(-1),
-	build: ({ name, namespace }, opts: PostgresOpts) => {
-		const ns = Namespace.make({ name: namespace });
+  target: Application.target,
+  namespace: "app",
+  annotations: Sync.wave(-1),
+  build: ({ name, namespace }, opts: PostgresOpts) => {
+    const ns = Namespace.make({ name: namespace })
 
-		const release = Helm.release({
-			repo: "https://charts.bitnami.com/bitnami",
-			chart: "postgresql",
-			releaseName: name,
-			version: "16.0.0",
-			digest: "sha256:483dc159c5fb377c29026d363153cc904a7f77109d524881eed64098637b9bd4",
-			namespace,
-			values: {
-				auth: {
-					database: "app",
-					username: "app",
-					existingSecret: "db-creds",
-					secretKeys: {
-						adminPasswordKey: "password",
-						userPasswordKey: "password",
-					},
-				},
-				primary: {
-					persistence: {
-						enabled: true,
-						size: `${opts.storageGi}Gi`,
-					},
-				},
-			},
-		});
+    const release = Helm.release({
+      repo: "https://charts.bitnami.com/bitnami",
+      chart: "postgresql",
+      releaseName: name,
+      version: "16.0.0",
+      digest: "sha256:483dc159c5fb377c29026d363153cc904a7f77109d524881eed64098637b9bd4",
+      namespace,
+      values: {
+        auth: {
+          database: "app",
+          username: "app",
+          existingSecret: "db-creds",
+          secretKeys: {
+            adminPasswordKey: "password",
+            userPasswordKey: "password"
+          }
+        },
+        primary: {
+          persistence: {
+            enabled: true,
+            size: `${opts.storageGi}Gi`
+          }
+        }
+      }
+    })
 
-		return [ns, release];
-	},
-});
+    return [ns, release]
+  }
+})

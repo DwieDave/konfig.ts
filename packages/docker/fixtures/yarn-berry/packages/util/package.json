@@ -1,7 +1,7 @@
 {
-	"name": "@fix/util",
-	"version": "1.0.0",
-	"dependencies": {
-		"@fix/shared": "workspace:*"
-	}
+  "name": "@fix/util",
+  "version": "1.0.0",
+  "dependencies": {
+    "@fix/shared": "workspace:*"
+  }
 }

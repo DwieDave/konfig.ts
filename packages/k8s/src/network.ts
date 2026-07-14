@@ -1,16 +1,16 @@
-import { Manifest, type SecretRef, unsafeCoerce } from "@konfig.ts/core";
-import { Effect } from "effect";
-import type { ContainerSpec } from "./container";
+import { Manifest, type SecretRef, unsafeCoerce } from "@konfig.ts/core"
+import { Effect } from "effect"
+import type { IngressBackend as K8sIngressBackend } from "kubernetes-types/networking/v1"
 import type {
-	Ingress as K8sIngress,
-	IngressRule as K8sIngressRule,
-	IngressTLS as K8sIngressTLS,
-	Service as K8sService,
-	ServicePort as K8sServicePort,
-} from "./.generated/k8s-types";
-import type { IngressBackend as K8sIngressBackend } from "kubernetes-types/networking/v1";
-import type { ServicePortSpec } from "./ports";
-import type { Selector } from "./selector";
+  Ingress as K8sIngress,
+  IngressRule as K8sIngressRule,
+  IngressTLS as K8sIngressTLS,
+  Service as K8sService,
+  ServicePort as K8sServicePort
+} from "./.generated/k8s-types"
+import type { ContainerSpec } from "./container"
+import type { ServicePortSpec } from "./ports"
+import type { Selector } from "./selector"
 
 /**
  * Strict input for a `Service`. `selector` and `ports` are required:
@@ -20,18 +20,18 @@ import type { Selector } from "./selector";
  * defaults match kube-apiserver behaviour.
  */
 export interface ServiceInput {
-	readonly name: string;
-	readonly namespace: string;
-	readonly labels?: Readonly<Record<string, string>>;
-	readonly annotations?: Readonly<Record<string, string>>;
-	readonly selector: Readonly<Record<string, string>>;
-	readonly ports: ReadonlyArray<K8sServicePort>;
-	readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer";
-	readonly clusterIP?: string;
-	readonly sessionAffinity?: string;
-	readonly publishNotReadyAddresses?: boolean;
-	readonly externalTrafficPolicy?: string;
-	readonly internalTrafficPolicy?: string;
+  readonly name: string
+  readonly namespace: string
+  readonly labels?: Readonly<Record<string, string>>
+  readonly annotations?: Readonly<Record<string, string>>
+  readonly selector: Readonly<Record<string, string>>
+  readonly ports: ReadonlyArray<K8sServicePort>
+  readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer"
+  readonly clusterIP?: string
+  readonly sessionAffinity?: string
+  readonly publishNotReadyAddresses?: boolean
+  readonly externalTrafficPolicy?: string
+  readonly internalTrafficPolicy?: string
 }
 
 /**
@@ -42,19 +42,19 @@ export interface ServiceInput {
  * port list is validated against that union rather than inferred from.
  */
 export interface ServiceFromContainerInput<Ports extends string> {
-	readonly name: string;
-	readonly namespace: string;
-	readonly labels?: Readonly<Record<string, string>>;
-	readonly annotations?: Readonly<Record<string, string>>;
-	readonly selector: Readonly<Record<string, string>>;
-	readonly forContainer: ContainerSpec<Ports>;
-	readonly ports: ReadonlyArray<ServicePortSpec<NoInfer<Ports>>>;
-	readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer";
-	readonly clusterIP?: string;
-	readonly sessionAffinity?: string;
-	readonly publishNotReadyAddresses?: boolean;
-	readonly externalTrafficPolicy?: string;
-	readonly internalTrafficPolicy?: string;
+  readonly name: string
+  readonly namespace: string
+  readonly labels?: Readonly<Record<string, string>>
+  readonly annotations?: Readonly<Record<string, string>>
+  readonly selector: Readonly<Record<string, string>>
+  readonly forContainer: ContainerSpec<Ports>
+  readonly ports: ReadonlyArray<ServicePortSpec<NoInfer<Ports>>>
+  readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer"
+  readonly clusterIP?: string
+  readonly sessionAffinity?: string
+  readonly publishNotReadyAddresses?: boolean
+  readonly externalTrafficPolicy?: string
+  readonly internalTrafficPolicy?: string
 }
 
 /**
@@ -63,126 +63,132 @@ export interface ServiceFromContainerInput<Ports extends string> {
  * once both consume the same `podSet`.
  */
 export interface ServiceFromPodSetInput<L extends Readonly<Record<string, string>>> {
-	readonly name: string;
-	readonly namespace: string;
-	readonly labels?: Readonly<Record<string, string>>;
-	readonly annotations?: Readonly<Record<string, string>>;
-	readonly podSet: Selector<L>;
-	readonly ports: ReadonlyArray<K8sServicePort>;
-	readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer";
-	readonly clusterIP?: string;
-	readonly sessionAffinity?: string;
-	readonly publishNotReadyAddresses?: boolean;
-	readonly externalTrafficPolicy?: string;
-	readonly internalTrafficPolicy?: string;
+  readonly name: string
+  readonly namespace: string
+  readonly labels?: Readonly<Record<string, string>>
+  readonly annotations?: Readonly<Record<string, string>>
+  readonly podSet: Selector<L>
+  readonly ports: ReadonlyArray<K8sServicePort>
+  readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer"
+  readonly clusterIP?: string
+  readonly sessionAffinity?: string
+  readonly publishNotReadyAddresses?: boolean
+  readonly externalTrafficPolicy?: string
+  readonly internalTrafficPolicy?: string
 }
 
 export const Service = {
-	make: (input: ServiceInput): Manifest.Manifest<K8sService> => {
-		const resource: K8sService = {
-			apiVersion: "v1",
-			kind: "Service",
-			metadata: {
-				name: input.name,
-				namespace: input.namespace,
-				labels: input.labels,
-				annotations: input.annotations,
-			},
-			spec: {
-				selector: input.selector,
-				type: input.type,
-				ports: unsafeCoerce(input.ports, "input.ports is the user-typed Service spec; K8s ServicePort allows the same fields"),
-				clusterIP: input.clusterIP,
-				sessionAffinity: input.sessionAffinity,
-				publishNotReadyAddresses: input.publishNotReadyAddresses,
-				externalTrafficPolicy: input.externalTrafficPolicy,
-				internalTrafficPolicy: input.internalTrafficPolicy,
-			},
-		};
-		return Manifest.make<K8sService>(() => Effect.succeed(resource));
-	},
-	fromContainer: <Ports extends string>(
-		input: ServiceFromContainerInput<Ports>,
-	): Manifest.Manifest<K8sService> =>
-		Service.make({
-			name: input.name,
-			namespace: input.namespace,
-			labels: input.labels,
-			annotations: input.annotations,
-			selector: input.selector,
-			ports: unsafeCoerce<ReadonlyArray<K8sServicePort>>(
-				input.ports,
-				"ServicePortSpec<Ports> structurally matches K8sServicePort; targetPort's PortName<Ports> brand is a phantom — runtime value is the underlying string",
-			),
-			type: input.type,
-			clusterIP: input.clusterIP,
-			sessionAffinity: input.sessionAffinity,
-			publishNotReadyAddresses: input.publishNotReadyAddresses,
-			externalTrafficPolicy: input.externalTrafficPolicy,
-			internalTrafficPolicy: input.internalTrafficPolicy,
-		}),
-	fromPodSet: <L extends Readonly<Record<string, string>>>(
-		input: ServiceFromPodSetInput<L>,
-	): Manifest.Manifest<K8sService> =>
-		Service.make({
-			name: input.name,
-			namespace: input.namespace,
-			labels: input.labels,
-			annotations: input.annotations,
-			selector: input.podSet.labels,
-			ports: input.ports,
-			type: input.type,
-			clusterIP: input.clusterIP,
-			sessionAffinity: input.sessionAffinity,
-			publishNotReadyAddresses: input.publishNotReadyAddresses,
-			externalTrafficPolicy: input.externalTrafficPolicy,
-			internalTrafficPolicy: input.internalTrafficPolicy,
-		}),
-};
+  make: (input: ServiceInput): Manifest.Manifest<K8sService> => {
+    const resource: K8sService = {
+      apiVersion: "v1",
+      kind: "Service",
+      metadata: {
+        name: input.name,
+        namespace: input.namespace,
+        labels: input.labels,
+        annotations: input.annotations
+      },
+      spec: {
+        selector: input.selector,
+        type: input.type,
+        ports: unsafeCoerce(
+          input.ports,
+          "input.ports is the user-typed Service spec; K8s ServicePort allows the same fields"
+        ),
+        clusterIP: input.clusterIP,
+        sessionAffinity: input.sessionAffinity,
+        publishNotReadyAddresses: input.publishNotReadyAddresses,
+        externalTrafficPolicy: input.externalTrafficPolicy,
+        internalTrafficPolicy: input.internalTrafficPolicy
+      }
+    }
+    return Manifest.make<K8sService>(() => Effect.succeed(resource))
+  },
+  fromContainer: <Ports extends string>(
+    input: ServiceFromContainerInput<Ports>
+  ): Manifest.Manifest<K8sService> =>
+    Service.make({
+      name: input.name,
+      namespace: input.namespace,
+      labels: input.labels,
+      annotations: input.annotations,
+      selector: input.selector,
+      ports: unsafeCoerce<ReadonlyArray<K8sServicePort>>(
+        input.ports,
+        "ServicePortSpec<Ports> structurally matches K8sServicePort; targetPort's PortName<Ports> brand is a phantom — runtime value is the underlying string"
+      ),
+      type: input.type,
+      clusterIP: input.clusterIP,
+      sessionAffinity: input.sessionAffinity,
+      publishNotReadyAddresses: input.publishNotReadyAddresses,
+      externalTrafficPolicy: input.externalTrafficPolicy,
+      internalTrafficPolicy: input.internalTrafficPolicy
+    }),
+  fromPodSet: <L extends Readonly<Record<string, string>>>(
+    input: ServiceFromPodSetInput<L>
+  ): Manifest.Manifest<K8sService> =>
+    Service.make({
+      name: input.name,
+      namespace: input.namespace,
+      labels: input.labels,
+      annotations: input.annotations,
+      selector: input.podSet.labels,
+      ports: input.ports,
+      type: input.type,
+      clusterIP: input.clusterIP,
+      sessionAffinity: input.sessionAffinity,
+      publishNotReadyAddresses: input.publishNotReadyAddresses,
+      externalTrafficPolicy: input.externalTrafficPolicy,
+      internalTrafficPolicy: input.internalTrafficPolicy
+    })
+}
 
 export interface IngressTLSInput {
-	readonly hosts?: ReadonlyArray<string>;
-	readonly secretName: SecretRef<string>;
+  readonly hosts?: ReadonlyArray<string>
+  readonly secretName: SecretRef<string>
 }
 
 export interface IngressInput {
-	readonly name: string;
-	readonly namespace: string;
-	readonly labels?: Readonly<Record<string, string>>;
-	readonly annotations?: Readonly<Record<string, string>>;
-	readonly ingressClassName?: string;
-	readonly rules?: ReadonlyArray<K8sIngressRule>;
-	readonly tls?: ReadonlyArray<IngressTLSInput>;
-	readonly defaultBackend?: K8sIngressBackend;
+  readonly name: string
+  readonly namespace: string
+  readonly labels?: Readonly<Record<string, string>>
+  readonly annotations?: Readonly<Record<string, string>>
+  readonly ingressClassName?: string
+  readonly rules?: ReadonlyArray<K8sIngressRule>
+  readonly tls?: ReadonlyArray<IngressTLSInput>
+  readonly defaultBackend?: K8sIngressBackend
 }
 
 export const Ingress = {
-	make: (input: IngressInput): Manifest.Manifest<K8sIngress> => {
-		const resource: K8sIngress = {
-			apiVersion: "networking.k8s.io/v1",
-			kind: "Ingress",
-			metadata: {
-				name: input.name,
-				namespace: input.namespace,
-				labels: input.labels,
-				annotations: input.annotations,
-			},
-			spec: {
-				ingressClassName: input.ingressClassName,
-				rules: unsafeCoerce(input.rules, "user-supplied Ingress rules; widening from our convenience type to the K8s type"),
-				tls: unsafeCoerce<K8sIngressTLS[]>(input.tls, "Ingress.tls produces K8sIngressTLS with branded secretName"),
-				defaultBackend: unsafeCoerce(input.defaultBackend, "user-supplied IngressBackend; structural match to K8s type"),
-			},
-		};
-		return Manifest.make<K8sIngress>(() => Effect.succeed(resource));
-	},
-	/**
-	 * TLS entry constructor for `Ingress.make({ tls: [...] })`. Takes a
-	 * branded `SecretRef` so the secret's name can't widen to a raw
-	 * string at the call site.
-	 */
-	tls: (input: {
-		readonly secretName: SecretRef<string>;
-		readonly hosts?: ReadonlyArray<string>;
-	}): IngressTLSInput => ({ secretName: input.secretName, hosts: input.hosts }),
-};
+  make: (input: IngressInput): Manifest.Manifest<K8sIngress> => {
+    const resource: K8sIngress = {
+      apiVersion: "networking.k8s.io/v1",
+      kind: "Ingress",
+      metadata: {
+        name: input.name,
+        namespace: input.namespace,
+        labels: input.labels,
+        annotations: input.annotations
+      },
+      spec: {
+        ingressClassName: input.ingressClassName,
+        rules: unsafeCoerce(
+          input.rules,
+          "user-supplied Ingress rules; widening from our convenience type to the K8s type"
+        ),
+        tls: unsafeCoerce<K8sIngressTLS[]>(input.tls, "Ingress.tls produces K8sIngressTLS with branded secretName"),
+        defaultBackend: unsafeCoerce(input.defaultBackend, "user-supplied IngressBackend; structural match to K8s type")
+      }
+    }
+    return Manifest.make<K8sIngress>(() => Effect.succeed(resource))
+  },
+  /**
+   * TLS entry constructor for `Ingress.make({ tls: [...] })`. Takes a
+   * branded `SecretRef` so the secret's name can't widen to a raw
+   * string at the call site.
+   */
+  tls: (input: {
+    readonly secretName: SecretRef<string>
+    readonly hosts?: ReadonlyArray<string>
+  }): IngressTLSInput => ({ secretName: input.secretName, hosts: input.hosts })
+}

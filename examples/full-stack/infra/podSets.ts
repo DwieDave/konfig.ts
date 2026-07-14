@@ -1,4 +1,4 @@
-import { Selector } from "@konfig.ts/k8s";
+import { Selector } from "@konfig.ts/k8s"
 
 /**
  * Shared `Selector`s for the pod sets in this composition.
@@ -17,6 +17,6 @@ import { Selector } from "@konfig.ts/k8s";
  * `redisCachePods` already uses the lower-level primitives in
  * `modules/redis-cache.ts`.
  */
-export const apiPods = Selector.make({ app: "api" });
-export const workerPods = Selector.make({ app: "worker" });
-export const redisCachePods = Selector.make({ app: "redis", role: "cache" });
+export const apiPods = Selector.make({ app: "api" })
+export const workerPods = Selector.make({ app: "worker" })
+export const redisCachePods = Selector.make({ app: "redis", role: "cache" })

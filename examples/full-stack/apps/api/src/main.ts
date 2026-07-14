@@ -16,41 +16,43 @@
  * message instead of the raw stack trace and exit 78 (config error),
  * matching the round-2 `_konfig_unsatisfied` DX at the type level.
  */
-import { apiEnv } from "@example/env-contracts";
-import { Environment } from "@konfig.ts/k8s";
-import { Cause, Effect, Redacted } from "effect";
+import { apiEnv } from "@example/env-contracts"
+import { Environment } from "@konfig.ts/k8s"
+import { Cause, Effect, Redacted } from "effect"
 
 const config = await Effect.runPromise(
-	Environment.runtime(apiEnv).pipe(
-		Effect.catchCause((cause): Effect.Effect<never> =>
-			Effect.sync((): never => {
-				console.error(`api: failed to decode env contract — ${Cause.pretty(cause)}`);
-				console.error(`api: check that every env var declared in apiEnv is set (HTTP_PORT, LOG_LEVEL, NODE_ENV, POD_NAME, DATABASE_*, S3_*, JWT_SIGNING_KEY)`);
-				return process.exit(78);
-			}),
-		),
-	),
-);
+  Environment.runtime(apiEnv).pipe(
+    Effect.catchCause((cause): Effect.Effect<never> =>
+      Effect.sync((): never => {
+        console.error(`api: failed to decode env contract — ${Cause.pretty(cause)}`)
+        console.error(
+          `api: check that every env var declared in apiEnv is set (HTTP_PORT, LOG_LEVEL, NODE_ENV, POD_NAME, DATABASE_*, S3_*, JWT_SIGNING_KEY)`
+        )
+        return process.exit(78)
+      })
+    )
+  )
+)
 
-const port = config.http.port;
-const podName = config.runtime.podName;
-const logLevel = config.http.logLevel;
+const port = config.http.port
+const podName = config.runtime.podName
+const logLevel = config.http.logLevel
 
 Bun.serve({
-	port,
-	fetch(req) {
-		const url = new URL(req.url);
-		if (url.pathname === "/healthz") {
-			return new Response("ok", { status: 200 });
-		}
-		return Response.json({
-			service: "api",
-			pod: podName,
-			logLevel,
-			db: Redacted.value(config.db.url) ? "configured" : "missing",
-			s3: Redacted.value(config.s3.accessKey) ? "configured" : "missing",
-		});
-	},
-});
+  port,
+  fetch(req) {
+    const url = new URL(req.url)
+    if (url.pathname === "/healthz") {
+      return new Response("ok", { status: 200 })
+    }
+    return Response.json({
+      service: "api",
+      pod: podName,
+      logLevel,
+      db: Redacted.value(config.db.url) ? "configured" : "missing",
+      s3: Redacted.value(config.s3.accessKey) ? "configured" : "missing"
+    })
+  }
+})
 
-console.log(`api listening on :${port} (pod=${podName}, logLevel=${logLevel})`);
+console.log(`api listening on :${port} (pod=${podName}, logLevel=${logLevel})`)

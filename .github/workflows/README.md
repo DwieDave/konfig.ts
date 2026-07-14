@@ -36,8 +36,8 @@ Triggered by a `vX.Y.Z` tag. Runs:
 
 ## Secrets required
 
-| Secret | Used by | Purpose |
-|---|---|---|
+| Secret      | Used by       | Purpose                                             |
+| ----------- | ------------- | --------------------------------------------------- |
 | `NPM_TOKEN` | `release.yml` | npm "Publish" scope token for the `@konfig.ts` org. |
 
 ## Permissions

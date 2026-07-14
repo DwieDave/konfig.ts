@@ -207,11 +207,11 @@ const _verifyDigest = (input: _VerifyDigestInput) =>
     if (expected !== actual) {
       yield* fs.remove(input.cachedTgz).pipe(Effect.ignore)
       return yield* new HelmDigestMismatch({
-          chart: input.opts.chart,
-          version: input.opts.version,
-          expected,
-          actual
-        })
+        chart: input.opts.chart,
+        version: input.opts.version,
+        expected,
+        actual
+      })
     }
   })
 
