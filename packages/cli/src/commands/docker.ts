@@ -1,13 +1,4 @@
-import {
-  deepEqual,
-  diffFiles,
-  type DiffFormat,
-  formatDiff,
-  hasDifferences,
-  parseYaml,
-  redact,
-  unsafeCoerce
-} from "@konfig.ts/core"
+import { diffFiles, type DiffFormat, formatDiff, hasDifferences, unsafeCoerce } from "@konfig.ts/core"
 import {
   DockerWriteError,
   DockerWriteRefused,
@@ -21,10 +12,6 @@ import { Console, Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Argument, Command, Flag } from "../_unstable"
-
-void deepEqual
-void parseYaml
-void redact
 
 class SpecImportError extends Data.TaggedError("SpecImportError")<{
   readonly specPath: string
@@ -181,18 +168,18 @@ const _diffOne = (
   kind: "prod" | "dev",
   target: string,
   format: DiffFormat
-): Effect.Effect<boolean, DiffDrift, FileSystem | Path> =>
+): Effect.Effect<void, DiffDrift, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const onDisk = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
     const head = extractHeader(onDisk)
     const emittedHead = extractHeader(emitted)
-    if (head.managed && emittedHead.managed && head.hash === emittedHead.hash) return true
+    if (head.managed && emittedHead.managed && head.hash === emittedHead.hash) return
     const result = diffFiles({
       left: { [dest]: onDisk },
       right: { [dest]: emitted }
     })
-    if (!hasDifferences(result)) return true
+    if (!hasDifferences(result)) return
     yield* Console.log(formatDiff({ result, format }))
     return yield* new DiffDrift({ target, kind })
   })

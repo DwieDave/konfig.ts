@@ -1,5 +1,6 @@
 import { parseYamlAll } from "@konfig.ts/core"
 import { Data, Effect, Result, Schema, Stream } from "effect"
+import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess, ChildProcessSpawner } from "./_unstable"
 
 /**
@@ -117,7 +118,7 @@ export interface KubeconformInput {
   readonly extraArgs?: ReadonlyArray<string>
 }
 
-const _collectText = (stream: Stream.Stream<Uint8Array, unknown>): Effect.Effect<string, unknown> =>
+const _collectText = (stream: Stream.Stream<Uint8Array, PlatformError>): Effect.Effect<string, PlatformError> =>
   Stream.mkString(Stream.decodeText(stream))
 
 /**
