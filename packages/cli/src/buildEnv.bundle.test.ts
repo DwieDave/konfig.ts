@@ -1,29 +1,29 @@
-import { NodeServices } from "@effect/platform-node";
-import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core";
-import { Effect } from "effect";
-import { FileSystem } from "effect/FileSystem";
-import { Path } from "effect/Path";
-import { describe, expect, it } from "vitest";
-import { renderEnv } from "./buildEnv";
+import { NodeServices } from "@effect/platform-node"
+import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
+import { Effect } from "effect"
+import { FileSystem } from "effect/FileSystem"
+import { Path } from "effect/Path"
+import { describe, expect, it } from "vitest"
+import { renderEnv } from "./buildEnv"
 
 const _writeEnvFile = (root: string, entry: string, body: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem;
-		const path = yield* Path;
-		const full = path.join(root, entry);
-		yield* fs.makeDirectory(path.dirname(full), { recursive: true });
-		yield* fs.writeFileString(full, body);
-		return full;
-	});
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const full = path.join(root, entry)
+    yield* fs.makeDirectory(path.dirname(full), { recursive: true })
+    yield* fs.writeFileString(full, body)
+    return full
+  })
 
 describe("renderEnv: BundleSetResult env", () => {
-	it("writes per-bundle directories with no Application CR sentinel", async () => {
-		const program = Effect.gen(function* () {
-			const fs = yield* FileSystem;
-			const path = yield* Path;
-			const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-bundle-" });
+  it("writes per-bundle directories with no Application CR sentinel", async () => {
+    const program = Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-bundle-" })
 
-			const envBody = `
+      const envBody = `
 import { Bundle } from "@konfig.ts/core";
 import { ConfigMap } from "@konfig.ts/k8s";
 const api = Bundle.define({
@@ -32,34 +32,34 @@ const api = Bundle.define({
 	build: () => [ConfigMap.make({ name: "api-conf", namespace: "app", data: { K: "v" } })],
 });
 export default Bundle.entrypoint(Bundle.fromModules({ modules: [api] as const }));
-`;
-			yield* _writeEnvFile(root, "infra/env/test.ts", envBody);
+`
+      yield* _writeEnvFile(root, "infra/env/test.ts", envBody)
 
-			const cfg: ResolvedKonfigConfig = {
-				configDir: root,
-				config: {
-					root: "infra",
-					cluster: "cluster.ts",
-					modules: "modules",
-					charts: "charts",
-					outDir: { manifests: "rendered" },
-					envs: {},
-					crd: { outDir: ".generated/crd" },
-					helm: { cacheDir: ".konfig/helm-cache", minVersion: "3.16.0" },
-					cacheInclude: [],
-				},
-			};
-			const ctx = RenderContext.make("test");
+      const cfg: ResolvedKonfigConfig = {
+        configDir: root,
+        config: {
+          root: "infra",
+          cluster: "cluster.ts",
+          modules: "modules",
+          charts: "charts",
+          outDir: { manifests: "rendered" },
+          envs: {},
+          crd: { outDir: ".generated/crd" },
+          helm: { cacheDir: ".konfig/helm-cache", minVersion: "3.16.0" },
+          cacheInclude: []
+        }
+      }
+      const ctx = RenderContext.make("test")
 
-			const rendered = yield* renderEnv({ cfg, envName: "test", ctx });
-			const filePaths = rendered.files.map((f) => path.relative(rendered.outDirAbs, f.path));
-			const apiFiles = filePaths.filter((p) => p.startsWith("api/"));
-			const applicationFiles = filePaths.filter((p) => p.includes("Application-"));
-			expect(apiFiles.length).toBeGreaterThan(0);
-			expect(applicationFiles).toEqual([]);
-			return rendered;
-		}).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+      const rendered = yield* renderEnv({ cfg, envName: "test", ctx })
+      const filePaths = rendered.files.map((f) => path.relative(rendered.outDirAbs, f.path))
+      const apiFiles = filePaths.filter((p) => p.startsWith("api/"))
+      const applicationFiles = filePaths.filter((p) => p.includes("Application-"))
+      expect(apiFiles.length).toBeGreaterThan(0)
+      expect(applicationFiles).toEqual([])
+      return rendered
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
 
-		await Effect.runPromise(program);
-	});
-});
+    await Effect.runPromise(program)
+  })
+})

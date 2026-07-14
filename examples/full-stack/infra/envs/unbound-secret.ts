@@ -9,20 +9,20 @@
  * Not registered in konfig.json — this file exists purely as a typing
  * regression check (run `bun check`).
  */
-import { Environment } from "@konfig.ts/k8s";
-import { Sops } from "@konfig.ts/sops";
-import { apiEnv } from "@example/env-contracts";
+import { apiEnv } from "@example/env-contracts"
+import { Environment } from "@konfig.ts/k8s"
+import { Sops } from "@konfig.ts/sops"
 
-const sopsBase = "infra/secrets";
+const sopsBase = "infra/secrets"
 const dbBackend = Sops.passthrough({
-  file: `${sopsBase}/SopsSecret-db-creds.yaml`,
-});
+  file: `${sopsBase}/SopsSecret-db-creds.yaml`
+})
 const s3Backend = Sops.passthrough({
-  file: `${sopsBase}/SopsSecret-s3-creds.yaml`,
-});
+  file: `${sopsBase}/SopsSecret-s3-creds.yaml`
+})
 const jwtBackend = Sops.passthrough({
-  file: `${sopsBase}/SopsSecret-jwt-signing-key.yaml`,
-});
+  file: `${sopsBase}/SopsSecret-jwt-signing-key.yaml`
+})
 
 // Baseline: every secret bound — no error.
 const _ok = Environment.bind({
@@ -31,18 +31,18 @@ const _ok = Environment.bind({
   secrets: {
     db: { backend: dbBackend },
     s3: { backend: s3Backend },
-    jwt: { backend: jwtBackend },
-  },
-});
-void _ok;
+    jwt: { backend: jwtBackend }
+  }
+})
+void _ok
 
 // (1) Whole `secrets` field omitted — required when M has secrets.
 // @ts-expect-error Property 'secrets' is missing
 const _missingSecretsField = Environment.bind({
   env: apiEnv,
-  namespace: "app",
-});
-void _missingSecretsField;
+  namespace: "app"
+})
+void _missingSecretsField
 
 // (2) `jwt` member omitted — every secret must be present.
 const _missingJwt = Environment.bind({
@@ -51,10 +51,10 @@ const _missingJwt = Environment.bind({
   // @ts-expect-error Property 'jwt' is missing
   secrets: {
     db: { backend: dbBackend },
-    s3: { backend: s3Backend },
-  },
-});
-void _missingJwt;
+    s3: { backend: s3Backend }
+  }
+})
+void _missingJwt
 
 // (3) `db` member present but neither backend nor source — at least
 // one must be supplied so a Secret manifest or in-process values layer
@@ -66,19 +66,19 @@ const _emptyDb = Environment.bind({
     // @ts-expect-error Property 'backend' or 'source' is missing
     db: {},
     s3: { backend: s3Backend },
-    jwt: { backend: jwtBackend },
-  },
-});
-void _emptyDb;
+    jwt: { backend: jwtBackend }
+  }
+})
+void _emptyDb
 
 // (4) `db` uses a backend with `RequiresSource: true` (Sops.backend) but
 // no `source` — the discriminated SecretMemberOptions makes `source`
 // mandatory at the type level when the backend declares it.
 const sopsBackend = Sops.backend({
   recipients: {
-    age: ["age1demo000000000000000000000000000000000000000000000000000example"],
-  },
-});
+    age: ["age1demo000000000000000000000000000000000000000000000000000example"]
+  }
+})
 const _missingSource = Environment.bind({
   env: apiEnv,
   namespace: "app",
@@ -86,7 +86,7 @@ const _missingSource = Environment.bind({
     // @ts-expect-error Property 'source' is missing for a requiresSource backend
     db: { backend: sopsBackend },
     s3: { backend: s3Backend },
-    jwt: { backend: jwtBackend },
-  },
-});
-void _missingSource;
+    jwt: { backend: jwtBackend }
+  }
+})
+void _missingSource

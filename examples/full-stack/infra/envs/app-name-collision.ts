@@ -18,28 +18,28 @@
  *
  * Not registered in konfig.json — pure typing regression.
  */
-import { AppOfApps, Application } from "@konfig.ts/argocd";
-import { cluster } from "../cluster";
+import { Application, AppOfApps } from "@konfig.ts/argocd"
+import { cluster } from "../cluster"
 
 const src = (name: string) => ({
   repoURL: cluster.repositoryUrl,
   targetRevision: "main",
-  path: `./infra/k8s/manifests/collision/${name}`,
-});
+  path: `./infra/k8s/manifests/collision/${name}`
+})
 
 const apiV1 = Application.define({
   name: "api",
   namespace: "app",
   source: src("api"),
-  build: () => [],
-});
+  build: () => []
+})
 
 const apiV2 = Application.define({
   name: "api",
   namespace: "app",
   source: src("api"),
-  build: () => [],
-});
+  build: () => []
+})
 
 // Both handles claim `App<"api">`; `fromModules` happily folds them
 // and the second silently shadows the first. The example gallery
@@ -49,6 +49,6 @@ export default AppOfApps.entrypoint(
   AppOfApps.fromModules({
     target: { repoURL: cluster.repositoryUrl, branch: "main", rootPath: "./out" },
     defaults: {},
-    modules: [apiV1, apiV2] as const,
-  }),
-);
+    modules: [apiV1, apiV2] as const
+  })
+)

@@ -342,14 +342,14 @@ export const detectPm = (
     const kinds = new Set(presentLockfiles.map((l) => l.kind))
     if (kinds.size === 0) {
       return yield* new UnsupportedPm({
-          reason: "no packageManager field and no recognized lockfile"
-        })
+        reason: "no packageManager field and no recognized lockfile"
+      })
     }
     if (kinds.size > 1) {
       return yield* new UnsupportedPm({
-          reason: "multiple lockfiles present and no packageManager field to disambiguate",
-          candidates: [...kinds]
-        })
+        reason: "multiple lockfiles present and no packageManager field to disambiguate",
+        candidates: [...kinds]
+      })
     }
     const kind = [...kinds][0]!
     const layout = kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined

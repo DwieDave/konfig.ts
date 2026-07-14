@@ -1,10 +1,10 @@
 {
-	"root": ".",
-	"cluster": "infra/cluster.ts",
-	"modules": "infra/modules",
-	"envs": {
-		"prod":    { "entry": "infra/envs/prod.ts" },
-		"staging": { "entry": "infra/envs/staging.ts" }
-	},
-	"outDir": { "manifests": ".generated/manifests" }
+  "root": ".",
+  "cluster": "infra/cluster.ts",
+  "modules": "infra/modules",
+  "envs": {
+    "prod": { "entry": "infra/envs/prod.ts" },
+    "staging": { "entry": "infra/envs/staging.ts" }
+  },
+  "outDir": { "manifests": ".generated/manifests" }
 }

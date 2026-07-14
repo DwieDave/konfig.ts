@@ -1,11 +1,11 @@
 {
-	"extends": "./tsconfig.json",
-	"compilerOptions": {
-		"plugins": [],
-		"incremental": false,
-		"composite": false,
-		"declaration": false,
-		"declarationMap": false,
-		"sourceMap": false
-	}
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "plugins": [],
+    "incremental": false,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  }
 }

@@ -1,11 +1,11 @@
-import { Application, Sync } from "@konfig.ts/argocd";
-import { Dep, Module } from "@konfig.ts/core";
-import { Secret } from "@konfig.ts/k8s";
-import { Sops } from "@konfig.ts/sops";
-import { ghcrPull } from "@example/env-contracts";
+import { ghcrPull } from "@example/env-contracts"
+import { Application, Sync } from "@konfig.ts/argocd"
+import { Dep, Module } from "@konfig.ts/core"
+import { Secret } from "@konfig.ts/k8s"
+import { Sops } from "@konfig.ts/sops"
 
 export interface ImagePullsOpts {
-	readonly sopsBase: string;
+  readonly sopsBase: string
 }
 
 /**
@@ -23,17 +23,17 @@ export interface ImagePullsOpts {
  *     render, swap for `Sops.backend({ recipients })` + `Sops.source`.
  */
 export const defineImagePulls = Module.fixedNs({
-	target: Application.target,
-	namespace: "app",
-	annotations: Sync.wave(-1),
-	provides: Dep.provideSecret("ghcr-pull"),
-	build: (_ctx, opts: ImagePullsOpts) => {
-		const bound = Secret.bind({
-			secret: ghcrPull,
-			backend: Sops.passthrough({
-				file: `${opts.sopsBase}/SopsSecret-ghcr-pull.yaml`,
-			}),
-		});
-		return bound.manifest === undefined ? [] : [bound.manifest];
-	},
-});
+  target: Application.target,
+  namespace: "app",
+  annotations: Sync.wave(-1),
+  provides: Dep.provideSecret("ghcr-pull"),
+  build: (_ctx, opts: ImagePullsOpts) => {
+    const bound = Secret.bind({
+      secret: ghcrPull,
+      backend: Sops.passthrough({
+        file: `${opts.sopsBase}/SopsSecret-ghcr-pull.yaml`
+      })
+    })
+    return bound.manifest === undefined ? [] : [bound.manifest]
+  }
+})

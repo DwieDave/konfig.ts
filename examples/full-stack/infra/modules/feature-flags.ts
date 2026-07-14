@@ -1,6 +1,6 @@
-import { Application, Sync } from "@konfig.ts/argocd";
-import { Module } from "@konfig.ts/core";
-import { ConfigMap } from "@konfig.ts/k8s";
+import { Application, Sync } from "@konfig.ts/argocd"
+import { Module } from "@konfig.ts/core"
+import { ConfigMap } from "@konfig.ts/k8s"
 
 /**
  * `app/feature-flags` ConfigMap.
@@ -16,18 +16,18 @@ import { ConfigMap } from "@konfig.ts/k8s";
  * `featureFlags.ref` and consume specific keys via `EnvVar.fromConfigMap`.
  */
 export const featureFlags = ConfigMap.make({
-	name: "feature-flags",
-	namespace: "app",
-	data: {
-		NEW_UI: "true",
-		BETA_DASHBOARD: "false",
-		DARK_MODE: "true",
-	},
-});
+  name: "feature-flags",
+  namespace: "app",
+  data: {
+    NEW_UI: "true",
+    BETA_DASHBOARD: "false",
+    DARK_MODE: "true"
+  }
+})
 
 export const defineFeatureFlags = Module.fixedNs({
-	target: Application.target,
-	namespace: "app",
-	annotations: Sync.wave(-1),
-	build: (_ctx, _opts: Record<never, never>) => [featureFlags],
-});
+  target: Application.target,
+  namespace: "app",
+  annotations: Sync.wave(-1),
+  build: (_ctx, _opts: Record<never, never>) => [featureFlags]
+})

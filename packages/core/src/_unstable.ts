@@ -3,8 +3,8 @@
 // from here — when the upstream layout changes, we update one file.
 //
 // See compat.md at repo root for the unstable surface we depend on.
-export { ChildProcess } from "effect/unstable/process";
+export { ChildProcess } from "effect/unstable/process"
 export {
-	ChildProcessSpawner,
-	type ChildProcessSpawner as ChildProcessSpawnerType,
-} from "effect/unstable/process/ChildProcessSpawner";
+  ChildProcessSpawner,
+  type ChildProcessSpawner as ChildProcessSpawnerType
+} from "effect/unstable/process/ChildProcessSpawner"

@@ -1,6 +1,6 @@
 {
-	"name": "fix-yarn-berry-root",
-	"private": true,
-	"packageManager": "yarn@4.5.0",
-	"workspaces": ["packages/*"]
+  "name": "fix-yarn-berry-root",
+  "private": true,
+  "packageManager": "yarn@4.5.0",
+  "workspaces": ["packages/*"]
 }

@@ -1,23 +1,23 @@
 {
-	"compilerOptions": {
-		"target": "ESNext",
-		"module": "ESNext",
-		"moduleResolution": "bundler",
-		"types": ["bun"],
-		"strict": true,
-		"resolveJsonModule": true,
-		"skipLibCheck": true,
-		"noEmit": true,
-		"isolatedModules": true,
-		"lib": ["ESNext"],
-		"allowImportingTsExtensions": true,
-		"customConditions": ["source"],
-		"plugins": [{ "name": "@effect/language-service" }]
-	},
-	"include": [
-		"infra/**/*.ts",
-		"apps/**/docker.ts",
-		"apps/**/src/**/*.ts",
-		"shared/**/*.ts"
-	]
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["bun"],
+    "strict": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "lib": ["ESNext"],
+    "allowImportingTsExtensions": true,
+    "customConditions": ["source"],
+    "plugins": [{ "name": "@effect/language-service" }]
+  },
+  "include": [
+    "infra/**/*.ts",
+    "apps/**/docker.ts",
+    "apps/**/src/**/*.ts",
+    "shared/**/*.ts"
+  ]
 }

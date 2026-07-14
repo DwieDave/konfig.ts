@@ -62,13 +62,13 @@ const _assertEncrypted = (
             || ["spec", "secretTemplates", container, key].some((segment) => regex.test(segment))
           if (mustEncrypt && !value.startsWith(_ENC_MARKER)) {
             return yield* new RenderError({
-                message:
-                  `${label}: refusing to emit — value for "${key}" is not sops-encrypted (missing ${_ENC_MARKER} marker)`,
-                cause: new SopsInvocationError({
-                  op: "encrypt",
-                  cause: "sops output value was not encrypted"
-                })
+              message:
+                `${label}: refusing to emit — value for "${key}" is not sops-encrypted (missing ${_ENC_MARKER} marker)`,
+              cause: new SopsInvocationError({
+                op: "encrypt",
+                cause: "sops output value was not encrypted"
               })
+            })
           }
         }
       }

@@ -1,4 +1,4 @@
-import { Secret } from "@konfig.ts/env";
+import { Secret } from "@konfig.ts/env"
 
 /**
  * Postgres connection credentials.
@@ -13,37 +13,37 @@ import { Secret } from "@konfig.ts/env";
  * stays storage-agnostic.
  */
 export const dbCreds = Secret.define({
-	name: "db-creds",
-	namespace: "app",
-	env: {
-		url: "DATABASE_URL",
-		username: "DATABASE_USER",
-		password: "DATABASE_PASSWORD",
-	},
-});
+  name: "db-creds",
+  namespace: "app",
+  env: {
+    url: "DATABASE_URL",
+    username: "DATABASE_USER",
+    password: "DATABASE_PASSWORD"
+  }
+})
 
 /**
  * S3 access for the api's media uploads. Only the api consumes this.
  */
 export const s3Creds = Secret.define({
-	name: "s3-creds",
-	namespace: "app",
-	env: {
-		accessKey: "S3_ACCESS_KEY_ID",
-		secretKey: "S3_SECRET_ACCESS_KEY",
-	},
-});
+  name: "s3-creds",
+  namespace: "app",
+  env: {
+    accessKey: "S3_ACCESS_KEY_ID",
+    secretKey: "S3_SECRET_ACCESS_KEY"
+  }
+})
 
 /**
  * JWT signing key. Only the api needs it (worker doesn't issue tokens).
  */
 export const jwtKey = Secret.define({
-	name: "jwt-signing-key",
-	namespace: "app",
-	env: {
-		key: "JWT_SIGNING_KEY",
-	},
-});
+  name: "jwt-signing-key",
+  namespace: "app",
+  env: {
+    key: "JWT_SIGNING_KEY"
+  }
+})
 
 /**
  * GHCR docker pull credential. Mounted as a Kubernetes
@@ -54,9 +54,9 @@ export const jwtKey = Secret.define({
  * mappings beyond the dockerconfigjson blob itself).
  */
 export const ghcrPull = Secret.define({
-	name: "ghcr-pull",
-	namespace: "app",
-	env: {
-		dockerconfigjson: ".dockerconfigjson",
-	},
-});
+  name: "ghcr-pull",
+  namespace: "app",
+  env: {
+    dockerconfigjson: ".dockerconfigjson"
+  }
+})

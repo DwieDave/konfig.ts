@@ -1,14 +1,14 @@
 {
-	"name": "@fix/app",
-	"version": "0.0.0",
-	"dependencies": {
-		"@fix/util": "workspace:*"
-	},
-	"scripts": {
-		"build": "echo build"
-	},
-	"engines": {
-		"pnpm": "9.7.0",
-		"node": "22"
-	}
+  "name": "@fix/app",
+  "version": "0.0.0",
+  "dependencies": {
+    "@fix/util": "workspace:*"
+  },
+  "scripts": {
+    "build": "echo build"
+  },
+  "engines": {
+    "pnpm": "9.7.0",
+    "node": "22"
+  }
 }

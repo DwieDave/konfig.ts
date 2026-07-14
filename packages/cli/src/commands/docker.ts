@@ -104,9 +104,9 @@ const _writeOne = (
       const head = extractHeader(existing)
       if (!head.managed && !force) {
         return yield* new DockerWriteRefused({
-            path: dest,
-            reason: `destination is not konfig-managed (missing marker "${HEADER_MARKER}"). Use --force to overwrite.`
-          })
+          path: dest,
+          reason: `destination is not konfig-managed (missing marker "${HEADER_MARKER}"). Use --force to overwrite.`
+        })
       }
       if (head.managed && existing === content) return { written: false }
     }
