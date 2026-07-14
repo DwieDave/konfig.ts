@@ -1,6 +1,6 @@
 {
   "name": "konfig.ts",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "description": "Typesafe Kubernetes + ArgoCD configuration in TypeScript, powered by Effect.",
   "packageManager": "bun@1.3.5",
