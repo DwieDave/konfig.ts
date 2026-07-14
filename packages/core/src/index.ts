@@ -1,5 +1,6 @@
 export { brand, unsafeCoerce } from "./_cast"
 export { boundary } from "./boundary"
+export { makeStrictDecoder } from "./decode"
 export type { BundleHandle, BundleSetResult } from "./Bundle"
 export * as Bundle from "./Bundle"
 export * as Compose from "./Compose"
@@ -45,7 +46,8 @@ export {
   imagesFor,
   lookupEnv,
   lookupEnvEffect,
-  requireImage
+  requireImage,
+  requireImageEffect
 } from "./images"
 export {
   ClusterSpec,
@@ -76,5 +78,5 @@ export {
   RenderError
 } from "./RenderError"
 export { renderManifest } from "./renderManifest"
-export { ProcessError, runProcessExit, runProcessString } from "./subprocess"
+export { ProcessError, processDetail, runProcessExit, runProcessString } from "./subprocess"
 export * as Yaml from "./yaml"

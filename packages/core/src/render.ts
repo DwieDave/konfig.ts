@@ -2,11 +2,13 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
 import { RenderContext } from "./RenderContext"
 
-export interface RenderOptions<RIn = never> {
+export interface RenderOptions<RIn = never, E = never> {
   /** Render-context env (default `"prod"`). Keys output dirs and bundle entries. */
   readonly env?: string
   /** Extra layer merged with `NodeServices.layer` before running the program. Use for `ConfigProvider` mocks, custom service tags, etc. */
   readonly layers?: Layer.Layer<RIn, never, never>
+  /** Runner for the fully-provided program. Defaults to `NodeRuntime.runMain`; override in tests to avoid exiting the process. */
+  readonly runMain?: (effect: Effect.Effect<void, E>) => void
 }
 
 /** @internal */
@@ -53,7 +55,8 @@ export const _compose = <E, RIn>(
 // oxlint-disable-next-line app/no-multiple-function-params
 export const render = <E, RIn>(
   program: (ctx: RenderContext) => Effect.Effect<void, E, NodeServices.NodeServices | RIn>,
-  options: RenderOptions<RIn> = {}
+  options: RenderOptions<RIn, E> = {}
 ): void => {
-  NodeRuntime.runMain(_compose(program, options))
+  const runMain = options.runMain ?? NodeRuntime.runMain
+  runMain(_compose(program, options))
 }

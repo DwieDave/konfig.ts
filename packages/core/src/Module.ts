@@ -38,13 +38,13 @@ export interface BuildContext<Ns extends string = string> {
  * `Module.fixedNs` / `Module.dynamicNs` lift the array form into an
  * `Effect` internally — wrapper authors don't need to wrap themselves.
  */
-export type BuildResult<R = never> =
-  | Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
-  | ReadonlyArray<unknown>
+export type BuildResult<A = unknown, R = never> =
+  | Effect.Effect<ReadonlyArray<A>, AnyRenderError, R>
+  | ReadonlyArray<A>
 
-const _liftBuild = <R>(
-  result: BuildResult<R>
-): Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> => Effect.isEffect(result) ? result : Effect.succeed(result)
+const _liftBuild = <A, R>(
+  result: BuildResult<A, R>
+): Effect.Effect<ReadonlyArray<A>, AnyRenderError, R> => Effect.isEffect(result) ? result : Effect.succeed(result)
 
 /**
  * Higher-kinded handle constructor: each backend declares a sub-interface
@@ -130,12 +130,13 @@ export interface FixedNsConfig<
   Ns extends string,
   Opts extends object,
   R,
-  Extra
+  Extra,
+  A = unknown
 > {
   readonly target: Target<Kind, ExtraConfig, ExtraCallArgs>
   readonly namespace: Ns
   readonly provides?: Layer.Layer<Extra>
-  readonly build: (ctx: BuildContext<Ns>, opts: Opts) => BuildResult<R>
+  readonly build: (ctx: BuildContext<Ns>, opts: Opts) => BuildResult<A, R>
 }
 
 /**
@@ -223,11 +224,12 @@ export interface DynamicNsConfig<
   ExtraCallArgs extends object,
   Opts extends object,
   R,
-  Extra
+  Extra,
+  A = unknown
 > {
   readonly target: Target<Kind, ExtraConfig, ExtraCallArgs>
   readonly provides?: Layer.Layer<Extra>
-  readonly build: (ctx: BuildContext, opts: Opts) => BuildResult<R>
+  readonly build: (ctx: BuildContext, opts: Opts) => BuildResult<A, R>
 }
 
 /**

@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect"
+import { makeStrictDecoder } from "./decode"
 
 const _stringWithKeyDefault = (def: string) =>
   Schema.String.pipe(Schema.optionalKey, Schema.withDecodingDefaultKey(Effect.succeed(def)))
@@ -80,8 +81,7 @@ export interface ResolvedKonfigConfig {
   readonly config: KonfigConfig
 }
 
-const strict = { onExcessProperty: "error" } as const
-const decodeEff = Schema.decodeUnknownEffect(KonfigConfig)
+const _konfigConfigDecoder = makeStrictDecoder(KonfigConfig)
 
-export const decodeKonfigConfigSync = (input: unknown): KonfigConfig => Effect.runSync(decodeEff(input, strict))
-export const decodeKonfigConfigEffect = (input: unknown) => decodeEff(input, strict)
+export const decodeKonfigConfigSync = _konfigConfigDecoder.sync
+export const decodeKonfigConfigEffect = _konfigConfigDecoder.effect
