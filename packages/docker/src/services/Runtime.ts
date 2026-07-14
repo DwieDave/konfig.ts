@@ -8,5 +8,4 @@ export interface RuntimeImageInput {
 export interface Runtime {
   readonly _tag: "Bun" | "Node"
   readonly imageRef: (input: RuntimeImageInput) => ImageRef
-  readonly defaultDevWatch: (entry: string) => ReadonlyArray<string>
 }
