@@ -2,10 +2,11 @@ import { runProcessExit } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { ChildProcess, Command, Flag } from "../_unstable"
+import { Command, Flag } from "../_unstable"
 import { loadChartRegistryEffect } from "../chartRegistry"
 import { resolveCliPaths } from "../cliConfig"
 import { assertHelmVersion } from "../helmVersion"
+import { helmPullCommand } from "../helmPull"
 
 export class MissingAllFlag extends Data.TaggedError("MissingAllFlag") {}
 
@@ -26,16 +27,7 @@ const _fetchOne = (input: FetchOneInput) =>
     const exists = yield* fs.exists(cachedTgz)
     if (exists) return
 
-    const cmd = ChildProcess.make("helm", [
-      "pull",
-      "--repo",
-      input.repo,
-      input.chart,
-      "--version",
-      input.version,
-      "--destination",
-      input.cacheDir
-    ])
+    const cmd = helmPullCommand({ chart: input, options: { destination: input.cacheDir } })
     yield* runProcessExit(cmd)
   })
 

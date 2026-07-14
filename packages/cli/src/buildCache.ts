@@ -3,6 +3,7 @@ import { unsafeCoerce } from "@konfig.ts/core"
 import { Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import type { PlatformError } from "effect/PlatformError"
 import * as crypto from "node:crypto"
 import * as nodePath from "node:path"
 
@@ -10,6 +11,23 @@ export class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
   readonly path: string
   readonly cause: unknown
 }> {}
+
+/**
+ * Treats a missing file/directory as an absent input (falls back to the
+ * given default) but lets every other I/O failure (permission denied, I/O
+ * error, ...) propagate — an unreadable file must not silently hash as if
+ * it didn't exist, or a real read failure could produce a false cache hit.
+ */
+const _orAbsentIfNotFound = <A, R>(
+  effect: Effect.Effect<A, PlatformError, R>,
+  onAbsent: () => A
+): Effect.Effect<A, PlatformError, R> =>
+  effect.pipe(
+    Effect.catchIf(
+      (e) => e.reason._tag === "NotFound",
+      () => Effect.succeed(onAbsent())
+    )
+  )
 
 export interface BuildCacheEntry {
   readonly inputHash: string
@@ -44,6 +62,80 @@ const _ctxSignature = (ctx: RenderContext): string => {
   ].join("\n")
 }
 
+/** Resolved path of an env's entry file, per `cfg.config.envs[env]` or the `<root>/env/<env>.ts` default. */
+const _entryPath = (
+  cfg: ResolvedKonfigConfig,
+  envName: string,
+  path: Path
+): string => {
+  const envSpec = cfg.config.envs[envName]
+  return envSpec === undefined
+    ? path.join(cfg.configDir, cfg.config.root, "env", `${envName}.ts`)
+    : path.join(cfg.configDir, cfg.config.root, envSpec.entry)
+}
+
+/** Folds the entry file's content into `hash`, if the entry exists. */
+const _hashEntry = (
+  hash: crypto.Hash,
+  fs: FileSystem,
+  entry: string
+): Effect.Effect<void, PlatformError> =>
+  Effect.gen(function*() {
+    const entryExists = yield* _orAbsentIfNotFound(fs.exists(entry), () => false)
+    if (!entryExists) return
+    const content = yield* _orAbsentIfNotFound(fs.readFileString(entry), () => "")
+    hash.update(`entry:${entry}\n`)
+    hash.update(content)
+    hash.update("\n")
+  })
+
+/** Resolves `cfg.config.cacheInclude` (plain paths and glob patterns) to a flat file list. */
+const _resolveCacheIncludeFiles = (
+  cfg: ResolvedKonfigConfig,
+  fs: FileSystem,
+  path: Path
+): Effect.Effect<string[], PlatformError, FileSystem | Path> =>
+  Effect.gen(function*() {
+    const files: string[] = []
+    for (const extra of cfg.config.cacheInclude ?? []) {
+      const abs = path.isAbsolute(extra) ? extra : path.join(cfg.configDir, extra)
+      if (_GLOB_CHARS.test(extra)) {
+        // Glob entry: walk the longest static prefix via FileSystem, then
+        // filter with Node's native glob matcher (node >= 22).
+        const candidates: string[] = []
+        yield* _collectFiles(_globBase(abs, path.sep), candidates)
+        for (const c of candidates) {
+          if (nodePath.matchesGlob(c, abs)) files.push(c)
+        }
+      } else {
+        const stat = yield* _orAbsentIfNotFound(fs.stat(abs), () => null)
+        if (stat?.type === "Directory") {
+          yield* _collectFiles(abs, files)
+        } else if (stat?.type === "File") {
+          files.push(abs)
+        }
+      }
+    }
+    return files
+  })
+
+/** Folds the sorted content of every file in `files` into `hash`. */
+const _hashFiles = (
+  hash: crypto.Hash,
+  fs: FileSystem,
+  files: ReadonlyArray<string>
+): Effect.Effect<void, PlatformError> =>
+  Effect.gen(function*() {
+    for (const f of [...files].sort()) {
+      // Raw bytes, not readFileString: lossy UTF-8 decode would map distinct
+      // binary contents to the same string and yield a false cache hit.
+      const content = yield* _orAbsentIfNotFound(fs.readFile(f), () => new Uint8Array())
+      hash.update(`file:${f}\n`)
+      hash.update(content)
+      hash.update("\n")
+    }
+  })
+
 /**
  * Compute a SHA-256 over the inputs that could feed an env's render:
  *  - The env's entry file content (resolved per `cfg.config.envs[env]`
@@ -76,49 +168,14 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
     hash.update("\n")
     hash.update(`ctx:${_ctxSignature(ctx)}\n`)
 
-    const envSpec = cfg.config.envs[envName]
-    const entry = envSpec === undefined
-      ? path.join(cfg.configDir, cfg.config.root, "env", `${envName}.ts`)
-      : path.join(cfg.configDir, cfg.config.root, envSpec.entry)
-    const entryExists = yield* fs.exists(entry).pipe(Effect.orElseSucceed(() => false))
-    if (entryExists) {
-      const content = yield* fs.readFileString(entry).pipe(Effect.orElseSucceed(() => ""))
-      hash.update(`entry:${entry}\n`)
-      hash.update(content)
-      hash.update("\n")
-    }
+    yield* _hashEntry(hash, fs, _entryPath(cfg, envName, path))
 
     const rootAbs = path.join(cfg.configDir, cfg.config.root)
     const files: string[] = []
     yield* _collectFiles(rootAbs, files)
-    for (const extra of cfg.config.cacheInclude ?? []) {
-      const abs = path.isAbsolute(extra) ? extra : path.join(cfg.configDir, extra)
-      if (_GLOB_CHARS.test(extra)) {
-        // Glob entry: walk the longest static prefix via FileSystem, then
-        // filter with Node's native glob matcher (node >= 22).
-        const candidates: string[] = []
-        yield* _collectFiles(_globBase(abs, path.sep), candidates)
-        for (const c of candidates) {
-          if (nodePath.matchesGlob(c, abs)) files.push(c)
-        }
-      } else {
-        const stat = yield* fs.stat(abs).pipe(Effect.orElseSucceed(() => null))
-        if (stat?.type === "Directory") {
-          yield* _collectFiles(abs, files)
-        } else if (stat?.type === "File") {
-          files.push(abs)
-        }
-      }
-    }
-    files.sort()
-    for (const f of files) {
-      // Raw bytes, not readFileString: lossy UTF-8 decode would map distinct
-      // binary contents to the same string and yield a false cache hit.
-      const content = yield* fs.readFile(f).pipe(Effect.orElseSucceed(() => new Uint8Array()))
-      hash.update(`file:${f}\n`)
-      hash.update(content)
-      hash.update("\n")
-    }
+    files.push(...(yield* _resolveCacheIncludeFiles(cfg, fs, path)))
+
+    yield* _hashFiles(hash, fs, files)
 
     return hash.digest("hex")
   })

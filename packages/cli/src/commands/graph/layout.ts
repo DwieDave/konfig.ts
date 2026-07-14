@@ -117,7 +117,6 @@ const _reachableFromTarget = (
 }
 
 const _transitiveReduce = (
-  nodes: ReadonlyArray<GraphNode>,
   edges: ReadonlyArray<GraphEdge>
 ): GraphEdge[] => {
   const adj = _adjacency(edges)
@@ -143,7 +142,6 @@ const _transitiveReduce = (
     }
     return seen
   }
-  void nodes
   return edges.filter((e) => {
     const otherReachable = reachableExcl(e.from, e.to)
     return !otherReachable.has(e.to)
@@ -506,7 +504,6 @@ const _computeNodeSlots = (
     for (const e of inEdges) inc.set(e.from, x)
     return { outgoingSlotX: out, incomingSlotX: inc }
   }
-  const real = laid.data.real
   const outOrdered = outEdges.slice().sort((a, b) => {
     const ac = positions.get(a.to)
     const bc = positions.get(b.to)
@@ -555,7 +552,6 @@ const _computeNodeSlots = (
       if (x !== undefined) incoming.set(e.from, x)
     })
   }
-  void real
   return { outgoingSlotX: outgoing, incomingSlotX: incoming }
 }
 
@@ -755,23 +751,30 @@ const _renderTree = (
   return lines.join("\n")
 }
 
-const _renderDag = (
-  canvas: LaidNode[][],
-  canvasWidth: number,
-  layoutEdges: ReadonlyArray<LayoutEdgeData>
-): string => {
+const _computeNodePositions = (canvas: ReadonlyArray<ReadonlyArray<LaidNode>>): Map<string, LaidNode> => {
   const positions = new Map<string, LaidNode>()
   for (const layer of canvas) for (const ln of layer) positions.set(ln.data.name, ln)
+  return positions
+}
+
+const _computeSlotsByNode = (
+  canvas: ReadonlyArray<ReadonlyArray<LaidNode>>,
+  layoutEdges: ReadonlyArray<LayoutEdgeData>,
+  positions: Map<string, LaidNode>
+): Map<string, SlotMap> => {
   const slotsByNode = new Map<string, SlotMap>()
   for (const layer of canvas) {
     for (const ln of layer) {
-      slotsByNode.set(
-        ln.data.name,
-        _computeNodeSlots(ln, layoutEdges, positions, slotsByNode)
-      )
+      slotsByNode.set(ln.data.name, _computeNodeSlots(ln, layoutEdges, positions, slotsByNode))
     }
   }
-  const numLayers = canvas.length
+  return slotsByNode
+}
+
+const _groupEdgesByBoundary = (
+  layoutEdges: ReadonlyArray<LayoutEdgeData>,
+  positions: Map<string, LaidNode>
+): Map<number, LayoutEdgeData[]> => {
   const edgesByBoundary = new Map<number, LayoutEdgeData[]>()
   for (const e of layoutEdges) {
     const fromNode = positions.get(e.from)
@@ -780,19 +783,34 @@ const _renderDag = (
     list.push(e)
     edgesByBoundary.set(fromNode.layerIndex, list)
   }
+  return edgesByBoundary
+}
+
+const _computeRouteRowsAt = (numLayers: number, edgesByBoundary: Map<number, LayoutEdgeData[]>): number[] => {
   const routeRowsAt: number[] = []
   for (let i = 0; i < Math.max(0, numLayers - 1); i++) {
     const count = edgesByBoundary.get(i)?.length ?? 0
     routeRowsAt.push(Math.max(MIN_ROUTE_ROWS, count + 1))
   }
+  return routeRowsAt
+}
+
+const _computeLayerTopRow = (numLayers: number, routeRowsAt: ReadonlyArray<number>): number[] => {
   const layerTopRow: number[] = [0]
   for (let i = 1; i < numLayers; i++) {
     const prevTop = layerTopRow[i - 1] ?? 0
     const routeRows = routeRowsAt[i - 1] ?? MIN_ROUTE_ROWS
     layerTopRow.push(prevTop + BOX_ROWS + routeRows)
   }
-  const gridHeight = (layerTopRow[numLayers - 1] ?? 0) + BOX_ROWS
-  const grid = new CharGrid(canvasWidth, gridHeight)
+  return layerTopRow
+}
+
+const _paintBoxes = (
+  grid: CharGrid,
+  canvas: ReadonlyArray<ReadonlyArray<LaidNode>>,
+  layerTopRow: ReadonlyArray<number>,
+  slotsByNode: Map<string, SlotMap>
+): void => {
   for (let li = 0; li < canvas.length; li++) {
     const layer = canvas[li] ?? []
     const topRow = layerTopRow[li] ?? 0
@@ -807,109 +825,134 @@ const _renderDag = (
       }
     }
   }
+}
+
+interface PlacedRoute {
+  readonly startX: number
+  readonly endX: number
+  readonly turnY: number
+}
+
+const _rangesOverlap = (loA: number, hiA: number, loB: number, hiB: number): boolean => loA <= hiB && loB <= hiA
+
+const _routeCrossingCost = (
+  placed: ReadonlyArray<PlacedRoute>,
+  startX: number,
+  endX: number,
+  turnY: number,
+  parentBotRow: number,
+  childTopRow: number
+): number => {
+  const horizLo = Math.min(startX, endX)
+  const horizHi = Math.max(startX, endX)
+  let cost = 0
+  for (const p of placed) {
+    const pHorizLo = Math.min(p.startX, p.endX)
+    const pHorizHi = Math.max(p.startX, p.endX)
+    const pVertAboveActive = p.turnY > parentBotRow + 1
+    const pVertBelowActive = p.turnY < childTopRow - 1
+    if (pVertAboveActive && p.startX >= horizLo && p.startX <= horizHi && p.turnY > turnY) {
+      cost += 4
+    }
+    if (pVertBelowActive && p.endX >= horizLo && p.endX <= horizHi && p.turnY < turnY) {
+      cost += 4
+    }
+    if (turnY > parentBotRow + 1 && startX >= pHorizLo && startX <= pHorizHi && p.turnY < turnY) {
+      cost += 4
+    }
+    if (turnY < childTopRow - 1 && endX >= pHorizLo && endX <= pHorizHi && p.turnY > turnY) {
+      cost += 4
+    }
+    if (p.turnY === turnY && _rangesOverlap(horizLo, horizHi, pHorizLo, pHorizHi)) {
+      cost += 1
+    }
+  }
+  return cost
+}
+
+const _bestTurnRow = (
+  placed: ReadonlyArray<PlacedRoute>,
+  startX: number,
+  endX: number,
+  parentBotRow: number,
+  childTopRow: number,
+  turnSlotsCount: number
+): number => {
+  let bestTurnY = parentBotRow + 1
+  let bestCrossings = Number.POSITIVE_INFINITY
+  for (let t = 0; t < turnSlotsCount; t++) {
+    const tryY = parentBotRow + 1 + t
+    const c = _routeCrossingCost(placed, startX, endX, tryY, parentBotRow, childTopRow)
+    if (c < bestCrossings) {
+      bestCrossings = c
+      bestTurnY = tryY
+    }
+  }
+  return bestTurnY
+}
+
+const _orderBoundaryEdges = (
+  boundaryEdges: ReadonlyArray<LayoutEdgeData>,
+  slotsByNode: Map<string, SlotMap>
+): LayoutEdgeData[] =>
+  boundaryEdges.slice().sort((a, b) => {
+    const aStart = slotsByNode.get(a.from)?.outgoingSlotX.get(a.to) ?? 0
+    const aEnd = slotsByNode.get(a.to)?.incomingSlotX.get(a.from) ?? 0
+    const bStart = slotsByNode.get(b.from)?.outgoingSlotX.get(b.to) ?? 0
+    const bEnd = slotsByNode.get(b.to)?.incomingSlotX.get(b.from) ?? 0
+    const aDist = Math.abs(aStart - aEnd)
+    const bDist = Math.abs(bStart - bEnd)
+    if (aDist === bDist) return bStart - aStart
+    return bDist - aDist
+  })
+
+const _routeBoundary = (
+  grid: CharGrid,
+  boundary: number,
+  boundaryEdges: ReadonlyArray<LayoutEdgeData>,
+  positions: Map<string, LaidNode>,
+  slotsByNode: Map<string, SlotMap>,
+  layerTopRow: ReadonlyArray<number>,
+  routeRowsAt: ReadonlyArray<number>
+): void => {
+  const ordered = _orderBoundaryEdges(boundaryEdges, slotsByNode)
+  const routeRows = routeRowsAt[boundary] ?? MIN_ROUTE_ROWS
+  const turnSlotsCount = Math.max(1, routeRows - 1)
+  const placed: PlacedRoute[] = []
+  for (const e of ordered) {
+    const fromNode = positions.get(e.from)
+    const toNode = positions.get(e.to)
+    if (!fromNode || !toNode) continue
+    const fromSlots = slotsByNode.get(e.from)
+    const toSlots = slotsByNode.get(e.to)
+    if (!fromSlots || !toSlots) continue
+    const startX = fromSlots.outgoingSlotX.get(e.to)
+    const endX = toSlots.incomingSlotX.get(e.from)
+    if (startX === undefined || endX === undefined) continue
+    const parentBotRow = (layerTopRow[fromNode.layerIndex] ?? 0) + BOX_ROWS - 1
+    const childTopRow = layerTopRow[toNode.layerIndex] ?? 0
+    const bestTurnY = _bestTurnRow(placed, startX, endX, parentBotRow, childTopRow, turnSlotsCount)
+    placed.push({ startX, endX, turnY: bestTurnY })
+    _routeEdge(grid, startX, endX, parentBotRow + 1, childTopRow, e.kind, e.isFinal, bestTurnY)
+  }
+}
+
+const _renderDag = (
+  canvas: LaidNode[][],
+  canvasWidth: number,
+  layoutEdges: ReadonlyArray<LayoutEdgeData>
+): string => {
+  const positions = _computeNodePositions(canvas)
+  const slotsByNode = _computeSlotsByNode(canvas, layoutEdges, positions)
+  const numLayers = canvas.length
+  const edgesByBoundary = _groupEdgesByBoundary(layoutEdges, positions)
+  const routeRowsAt = _computeRouteRowsAt(numLayers, edgesByBoundary)
+  const layerTopRow = _computeLayerTopRow(numLayers, routeRowsAt)
+  const gridHeight = (layerTopRow[numLayers - 1] ?? 0) + BOX_ROWS
+  const grid = new CharGrid(canvasWidth, gridHeight)
+  _paintBoxes(grid, canvas, layerTopRow, slotsByNode)
   for (const [boundary, boundaryEdges] of edgesByBoundary) {
-    const ordered = boundaryEdges.slice().sort((a, b) => {
-      const aStart = slotsByNode.get(a.from)?.outgoingSlotX.get(a.to) ?? 0
-      const aEnd = slotsByNode.get(a.to)?.incomingSlotX.get(a.from) ?? 0
-      const bStart = slotsByNode.get(b.from)?.outgoingSlotX.get(b.to) ?? 0
-      const bEnd = slotsByNode.get(b.to)?.incomingSlotX.get(b.from) ?? 0
-      const aDist = Math.abs(aStart - aEnd)
-      const bDist = Math.abs(bStart - bEnd)
-      if (aDist === bDist) return bStart - aStart
-      return bDist - aDist
-    })
-    const routeRows = routeRowsAt[boundary] ?? MIN_ROUTE_ROWS
-    const turnSlotsCount = Math.max(1, routeRows - 1)
-    interface PlacedRoute {
-      readonly startX: number
-      readonly endX: number
-      readonly turnY: number
-    }
-    const placed: PlacedRoute[] = []
-    const overlap = (
-      loA: number,
-      hiA: number,
-      loB: number,
-      hiB: number
-    ): boolean => loA <= hiB && loB <= hiA
-    const wouldCross = (
-      startX: number,
-      endX: number,
-      turnY: number,
-      parentBotRow: number,
-      childTopRow: number
-    ): number => {
-      const horizLo = Math.min(startX, endX)
-      const horizHi = Math.max(startX, endX)
-      let cost = 0
-      for (const p of placed) {
-        const pHorizLo = Math.min(p.startX, p.endX)
-        const pHorizHi = Math.max(p.startX, p.endX)
-        const pVertAboveActive = p.turnY > parentBotRow + 1
-        const pVertBelowActive = p.turnY < childTopRow - 1
-        if (
-          pVertAboveActive &&
-          p.startX >= horizLo &&
-          p.startX <= horizHi &&
-          p.turnY > turnY
-        ) {
-          cost += 4
-        }
-        if (
-          pVertBelowActive &&
-          p.endX >= horizLo &&
-          p.endX <= horizHi &&
-          p.turnY < turnY
-        ) {
-          cost += 4
-        }
-        if (
-          turnY > parentBotRow + 1 &&
-          startX >= pHorizLo &&
-          startX <= pHorizHi &&
-          p.turnY < turnY
-        ) {
-          cost += 4
-        }
-        if (
-          turnY < childTopRow - 1 &&
-          endX >= pHorizLo &&
-          endX <= pHorizHi &&
-          p.turnY > turnY
-        ) {
-          cost += 4
-        }
-        if (p.turnY === turnY && overlap(horizLo, horizHi, pHorizLo, pHorizHi)) {
-          cost += 1
-        }
-      }
-      return cost
-    }
-    for (const e of ordered) {
-      const fromNode = positions.get(e.from)
-      const toNode = positions.get(e.to)
-      if (!fromNode || !toNode) continue
-      const fromSlots = slotsByNode.get(e.from)
-      const toSlots = slotsByNode.get(e.to)
-      if (!fromSlots || !toSlots) continue
-      const startX = fromSlots.outgoingSlotX.get(e.to)
-      const endX = toSlots.incomingSlotX.get(e.from)
-      if (startX === undefined || endX === undefined) continue
-      const parentBotRow = (layerTopRow[fromNode.layerIndex] ?? 0) + BOX_ROWS - 1
-      const childTopRow = layerTopRow[toNode.layerIndex] ?? 0
-      let bestTurnY = parentBotRow + 1
-      let bestCrossings = Number.POSITIVE_INFINITY
-      for (let t = 0; t < turnSlotsCount; t++) {
-        const tryY = parentBotRow + 1 + t
-        const c = wouldCross(startX, endX, tryY, parentBotRow, childTopRow)
-        if (c < bestCrossings) {
-          bestCrossings = c
-          bestTurnY = tryY
-        }
-      }
-      placed.push({ startX, endX, turnY: bestTurnY })
-      _routeEdge(grid, startX, endX, parentBotRow + 1, childTopRow, e.kind, e.isFinal, bestTurnY)
-    }
+    _routeBoundary(grid, boundary, boundaryEdges, positions, slotsByNode, layerTopRow, routeRowsAt)
   }
   return grid.toString()
 }
@@ -922,7 +965,7 @@ export const renderGraph = (input: RenderInput): string => {
     : { nodes: input.nodes.slice(), edges: filtered.slice() }
   const nodes = scope.nodes
   const edgesAfterScope = scope.edges
-  const edges = reduce ? _transitiveReduce(nodes, edgesAfterScope) : edgesAfterScope
+  const edges = reduce ? _transitiveReduce(edgesAfterScope) : edgesAfterScope
   if (nodes.length === 0) {
     return input.target !== undefined
       ? `(target '${input.target}' not found in workspace set)`
