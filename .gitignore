@@ -11,3 +11,5 @@ dist
 scratchpad/
 .claude/
 .docs/workflows/
+/CLAUDE.md
+/AGENTS.md
