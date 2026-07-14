@@ -48,7 +48,8 @@ export const entrypoint = Compose.makeResidualEntrypoint("AppOfApps.fromModules"
 // `any` in the AnyHandle upper bound: Effect's Layer is contravariant in
 // its first parameter and `ApplicationHandle` is invariant at the inference
 // site. `unknown` rejects concrete subtypes; `any` is bivariant — the
-// canonical "any handle" upper bound.
+// canonical "any handle" upper bound. Same pattern as core's
+// Compose.AnyHandle / Bundle.AnyHandle for the identical reason.
 // oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = ApplicationHandle<any, any, any>
 
@@ -89,11 +90,7 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>>(
   ResidualIn<Ms> | CoreManifest.RenderServices
 > => {
   const program = Effect.gen(function*() {
-    const apps: Application[] = []
-    for (const mod of opts.modules) {
-      const app = yield* mod
-      apps.push(app)
-    }
+    const apps = yield* Effect.forEach(opts.modules, (mod) => mod)
     return make({
       name: opts.name,
       target: opts.target,

@@ -46,19 +46,6 @@ export interface SyncPolicy {
   }
 }
 
-export interface BuildMetadata {
-  readonly source?: string
-  readonly dockerfile?: string
-  readonly imageName?: string
-  readonly image?: string
-  readonly cacheScope?: string
-  readonly extraTriggerPaths?: ReadonlyArray<string>
-  readonly preview?: {
-    readonly deployment?: string
-    readonly url?: { readonly label?: string; readonly host?: string }
-  }
-}
-
 export interface Application {
   readonly name: string
   readonly namespace: string
@@ -66,7 +53,6 @@ export interface Application {
   readonly source: ArgoSource
   readonly project?: string
   readonly syncPolicy?: SyncPolicy
-  readonly build?: BuildMetadata
   readonly annotations?: Readonly<Record<string, string>>
 }
 
@@ -96,7 +82,6 @@ export interface ApplicationMakeOptions {
   readonly source: ArgoSource
   readonly project?: string
   readonly syncPolicy?: SyncPolicy
-  readonly build?: BuildMetadata
   readonly annotations?: Readonly<Record<string, string>>
 }
 
@@ -107,7 +92,6 @@ export const make = (opts: ApplicationMakeOptions): Application => ({
   source: opts.source,
   ...(opts.project !== undefined ? { project: opts.project } : {}),
   ...(opts.syncPolicy !== undefined ? { syncPolicy: opts.syncPolicy } : {}),
-  ...(opts.build !== undefined ? { build: opts.build } : {}),
   ...(opts.annotations !== undefined ? { annotations: opts.annotations } : {})
 })
 
@@ -148,7 +132,6 @@ export interface HandleKind extends Module.HandleKind {
 export interface ExtraConfig {
   readonly project?: string
   readonly syncPolicy?: SyncPolicy
-  readonly buildMetadata?: BuildMetadata
   readonly annotations?: Readonly<Record<string, string>>
 }
 
@@ -166,13 +149,65 @@ export interface ApplicationDefineOptions<Name extends string, Ns extends string
   readonly source: ArgoSource
   readonly project?: string
   readonly syncPolicy?: SyncPolicy
-  readonly buildMetadata?: BuildMetadata
   readonly annotations?: Readonly<Record<string, string>>
   readonly build:
     | Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
     | (() => ReadonlyArray<unknown>)
   readonly provides?: Layer.Layer<Extra>
 }
+
+/**
+ * `LiteralName<Name>`/`LiteralName<Ns>` are branded strings that resolve
+ * back to `Name`/`Ns` once the call typechecks — coerce them to plain
+ * literals for use as dep-graph keys.
+ */
+const _coerceLiteralNames = <Name extends string, Ns extends string>(
+  name: LiteralName<Name>,
+  namespace: LiteralName<Ns>
+): { readonly name: Name; readonly namespace: Ns } => ({
+  name: unsafeCoerce<Name>(name, "LiteralName<Name> resolves to Name itself once the call typechecks"),
+  namespace: unsafeCoerce<Ns>(namespace, "LiteralName<Ns> resolves to Ns itself once the call typechecks")
+})
+
+/** The `App`/`Namespace` slots every `Application.define` instance owns. */
+const _ownsLayer = <Name extends string, Ns extends string>(
+  name: Name,
+  namespace: Ns
+): Layer.Layer<Dep.Provide<"Application", Name> | Dep.Provide<"Namespace", Ns>> =>
+  Layer.mergeAll(
+    Layer.succeed(Dep.Application(name))(name),
+    Layer.succeed(Dep.Namespace(namespace))(namespace)
+  )
+
+/** Normalize the `build` option (Effect or thunk) into a single Effect. */
+const _buildEffect = <R>(
+  build: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> | (() => ReadonlyArray<unknown>)
+): Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> =>
+  Effect.isEffect(build) ? build : Effect.sync(build)
+
+/** Build the Layer that produces this instance's `Application` tag value. */
+const _appLayer = <Name extends string, Ns extends string, R, Extra, InternalOut>(
+  tag: Context.Service<Dep.Need<"App", Name>, Application>,
+  names: { readonly name: Name; readonly namespace: Ns },
+  opts: ApplicationDefineOptions<Name, Ns, R, Extra>,
+  internalLayer: Layer.Layer<InternalOut>
+): Layer.Layer<Dep.Need<"App", Name>, AnyRenderError, R | Extra> =>
+  Layer.effect(
+    tag,
+    _buildEffect(opts.build).pipe(
+      Effect.map((manifests) =>
+        make({
+          name: names.name,
+          namespace: names.namespace,
+          manifests,
+          source: opts.source,
+          project: opts.project,
+          syncPolicy: opts.syncPolicy,
+          annotations: opts.annotations
+        })
+      )
+    )
+  ).pipe(Layer.provide(internalLayer))
 
 export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["define"] = <
   const Name extends string,
@@ -189,46 +224,13 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
   | Extra,
   Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
 > => {
-  const name = unsafeCoerce<Name>(
-    opts.name,
-    "LiteralName<Name> resolves to Name itself once the call typechecks"
-  )
-  const namespace = unsafeCoerce<Ns>(
-    opts.namespace,
-    "LiteralName<Ns> resolves to Ns itself once the call typechecks"
-  )
-  const tag = Dep.App<Name, Application>(name)
+  const names = _coerceLiteralNames(opts.name, opts.namespace)
+  const tag = Dep.App<Name, Application>(names.name)
 
-  const ownsLayer = Layer.mergeAll(
-    Layer.succeed(Dep.Application(name))(name),
-    Layer.succeed(Dep.Namespace(namespace))(namespace)
-  )
-
+  const ownsLayer = _ownsLayer(names.name, names.namespace)
   const internalLayer = opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer
 
-  const buildEffect: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> = Effect.isEffect(
-      opts.build
-    )
-    ? opts.build
-    : Effect.sync(opts.build)
-
-  const appLayer = Layer.effect(
-    tag,
-    buildEffect.pipe(
-      Effect.map((manifests) =>
-        make({
-          name,
-          namespace,
-          manifests,
-          source: opts.source,
-          project: opts.project,
-          syncPolicy: opts.syncPolicy,
-          build: opts.buildMetadata,
-          annotations: opts.annotations
-        })
-      )
-    )
-  ).pipe(Layer.provide(internalLayer))
+  const appLayer = _appLayer(tag, names, opts, internalLayer)
 
   const layer = opts.provides !== undefined
     ? Layer.mergeAll(appLayer, ownsLayer, opts.provides)
