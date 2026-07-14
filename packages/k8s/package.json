@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/k8s",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Kubernetes resource builders (workloads, network, identity, policy, volume, env) for konfig.ts.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

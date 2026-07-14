@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/core",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Core abstractions (Manifest, RenderContext, Helm, deps) for konfig.ts — typesafe Kubernetes + ArgoCD config in TypeScript.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
