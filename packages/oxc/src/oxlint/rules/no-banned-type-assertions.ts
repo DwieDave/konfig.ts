@@ -1,17 +1,18 @@
+import { isTSTypeCast } from "../types.ts"
 import type { AstNode, Rule } from "../types.ts"
 
 const BANNED_KEYWORDS = new Set(["TSAnyKeyword", "TSUnknownKeyword", "TSNeverKeyword"])
 
 function _bannedTargetKind(node: AstNode): string | null {
-  const ann = node.typeAnnotation as AstNode | undefined
-  if (!ann) return null
+  if (!isTSTypeCast(node)) return null
+  const ann = node.typeAnnotation
   if (BANNED_KEYWORDS.has(ann.type)) return ann.type.replace(/^TS|Keyword$/g, "").toLowerCase()
   return null
 }
 
 function _isDoubleAssertion(node: AstNode): boolean {
-  const inner = node.expression as AstNode | undefined
-  return !!inner && (inner.type === "TSAsExpression" || inner.type === "TSTypeAssertion")
+  if (!isTSTypeCast(node)) return false
+  return isTSTypeCast(node.expression)
 }
 
 export const noBannedTypeAssertions: Rule = {

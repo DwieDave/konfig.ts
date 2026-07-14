@@ -1,3 +1,4 @@
+import { isCallExpression, isIdentifier, isMemberExpression } from "../types.ts"
 import type { AstNode, Rule } from "../types.ts"
 
 const SYNC_APIS = new Set([
@@ -20,14 +21,12 @@ const SYNC_APIS = new Set([
 const SCHEMA_NAMESPACES = new Set(["Schema", "S"])
 
 function _isSchemaSyncCallee(callee: AstNode): { ns: string; api: string } | null {
-  if (callee.type !== "MemberExpression") return null
-  const object = callee.object as AstNode | undefined
-  const property = callee.property as AstNode | undefined
-  if (!object || !property) return null
-  if (object.type !== "Identifier") return null
-  if (property.type !== "Identifier") return null
-  const ns = String(object.name)
-  const api = String(property.name)
+  if (!isMemberExpression(callee)) return null
+  const object = callee.object
+  const property = callee.property
+  if (!isIdentifier(object) || !isIdentifier(property)) return null
+  const ns = object.name
+  const api = property.name
   if (!SCHEMA_NAMESPACES.has(ns)) return null
   if (!SYNC_APIS.has(api)) return null
   return { ns, api }
@@ -43,8 +42,8 @@ export const noSyncSchemaApis: Rule = {
   create(context) {
     return {
       CallExpression(node) {
-        const callee = node.callee as AstNode | undefined
-        if (!callee) return
+        if (!isCallExpression(node)) return
+        const callee = node.callee
         const hit = _isSchemaSyncCallee(callee)
         if (!hit) return
         context.report({
