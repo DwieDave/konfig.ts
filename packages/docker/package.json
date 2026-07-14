@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/docker",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Workspace-graph-aware Dockerfile generator for konfig.ts monorepos.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

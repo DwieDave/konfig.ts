@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/cli",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "konfig CLI — build, validate, diff, and set commands for konfig.ts configurations.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
