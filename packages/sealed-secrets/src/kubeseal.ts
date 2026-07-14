@@ -1,4 +1,4 @@
-import { boundary, ProcessError, runProcessString } from "@konfig.ts/core"
+import { boundary, ProcessError, processDetail, runProcessString } from "@konfig.ts/core"
 import { Data, Effect, Stream } from "effect"
 import * as YAML from "yaml"
 import { ChildProcess } from "./_unstable"
@@ -18,24 +18,11 @@ export class KubesealCertMissing extends Data.TaggedError("KubesealCertMissing")
   }
 }
 
-/**
- * Render the non-sensitive part of a subprocess failure — exit code and a
- * bounded stderr tail — never an arbitrary cause (which could carry piped
- * secret material).
- */
-const _processDetail = (cause: unknown): string => {
-  if (cause instanceof ProcessError) {
-    const tail = cause.stderrTail.trim()
-    return tail.length > 0 ? ` (exit ${cause.exitCode}): ${tail}` : ` (exit ${cause.exitCode})`
-  }
-  return ""
-}
-
 export class KubesealInvocationError extends Data.TaggedError("KubesealInvocationError")<{
-  readonly cause: unknown
+  readonly cause: ProcessError
 }> {
   get message(): string {
-    return `kubeseal invocation failed${_processDetail(this.cause)}`
+    return `kubeseal invocation failed${processDetail(this.cause)}`
   }
 }
 
@@ -55,12 +42,14 @@ const _readEnv = (name: string): string | undefined => {
   return typeof v === "string" && v.length > 0 ? v : undefined
 }
 
-export const resolveCertPath = (input: { readonly certPath?: string }): string => {
+export const resolveCertPath = (
+  input: { readonly certPath?: string }
+): Effect.Effect<string, KubesealCertMissing> => {
   const fromOpt = input.certPath
-  if (fromOpt !== undefined && fromOpt.length > 0) return fromOpt
+  if (fromOpt !== undefined && fromOpt.length > 0) return Effect.succeed(fromOpt)
   const fromEnv = _readEnv("KUBESEAL_CERT")
-  if (fromEnv !== undefined) return fromEnv
-  throw new KubesealCertMissing({ hint: "checked opts.certPath, then $KUBESEAL_CERT" })
+  if (fromEnv !== undefined) return Effect.succeed(fromEnv)
+  return Effect.fail(new KubesealCertMissing({ hint: "checked opts.certPath, then $KUBESEAL_CERT" }))
 }
 
 export const runKubeseal = (input: RunKubesealInput) =>

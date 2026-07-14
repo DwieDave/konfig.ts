@@ -2,18 +2,18 @@ import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Yaml } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
-import { BackendSourceMissing, Secret } from "@konfig.ts/k8s"
-import { Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Secret } from "@konfig.ts/k8s"
+import { Cause, Effect, Exit, Layer, Sink, Stream } from "effect"
 import { type Command, isStandardCommand } from "effect/unstable/process/ChildProcess"
 import {
   type ChildProcessHandle,
-  ChildProcessSpawner,
   ExitCode,
   make as makeSpawner,
   makeHandle,
   ProcessId
 } from "effect/unstable/process/ChildProcessSpawner"
-import { describe, expect, it as vitestIt } from "vitest"
+import { describe, expect } from "vitest"
+import { ChildProcessSpawner } from "./_unstable"
 import { SealedSecrets } from "./backend"
 import type { SealedSecret } from "./crd"
 
@@ -170,14 +170,18 @@ describe("SealedSecrets.backend", () => {
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
-  vitestIt("throws BackendSourceMissing at bind time when source omitted", () => {
-    expect(() =>
-      Secret.bind({
+  it.effect("fails at render time (not bind time) when source is omitted", () =>
+    Effect.gen(function*() {
+      const bound = Secret.bind({
         secret: dbCreds,
         backend: SealedSecrets.backend({ certPath: "/x" })
       })
-    ).toThrow(BackendSourceMissing)
-  })
+      const exit = yield* Effect.exit(bound.manifest!.render(ctx))
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.pretty(exit.cause)).toContain("requires a source")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("YAML output of rendered manifest reads like the spec", () =>
     Effect.gen(function*() {
