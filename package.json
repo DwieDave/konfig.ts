@@ -27,10 +27,12 @@
 		"check": "bun run --cwd packages/core check && bun run --cwd packages/env check && bun run --cwd packages/k8s check && bun run --cwd packages/external-secrets check && bun run --cwd packages/sealed-secrets check && bun run --cwd packages/sops check && bun run --cwd packages/argocd check && bun run --cwd packages/docker check && bun run --cwd packages/cli check && bun run --cwd examples check && bun run --cwd examples/full-stack check",
 		"test": "bun run --cwd packages/core test && bun run --cwd packages/env test && bun run --cwd packages/k8s test && bun run --cwd packages/external-secrets test && bun run --cwd packages/sealed-secrets test && bun run --cwd packages/sops test && bun run --cwd packages/argocd test && bun run --cwd packages/docker test && bun run --cwd packages/cli test",
 		"lint": "oxlint",
-		"lint:apply": "oxlint --fix"
+		"lint:apply": "oxlint --fix",
+		"prepare": "effect-tsgo patch"
 	},
 	"devDependencies": {
-		"@effect/language-service": "^0.86.2",
+		"@effect/tsgo": "^0.19.0",
+		"@typescript/native": "npm:typescript@7.0.2",
 		"oxlint": "^1.40.0",
 		"tsdown": "^0.22.0",
 		"typescript": "catalog:"
