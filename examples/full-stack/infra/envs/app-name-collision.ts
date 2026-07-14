@@ -1,22 +1,19 @@
 /**
- * Worked example of the dep-graph NOT catching two Applications that
- * share a name.
+ * Regression test: two Applications sharing a name are rejected at
+ * compile time.
  *
  * `Application.define({ name: "api", ... })` produces
- * `Dep.Provide<"App", "api">` and `Dep.Provide<"Application", "api">`.
- * Folding two such layers via `Compose.composeLayers` (what
- * `AppOfApps.fromModules` does internally) is structurally allowed —
- * Effect's Layer system accepts redundant providers, and the second
- * definition's `Out` channel re-occupies the same slot, so the
- * dep-graph sees a SINGLE provider for "api" with the second Effect
- * silently winning.
+ * `Dep.Provide<"App", "api">`. At runtime, folding two such layers via
+ * `Compose.composeLayers` is structurally allowed — Effect's Layer
+ * system accepts redundant providers and the second definition would
+ * silently shadow the first. `Compose.DuplicateProvides` closes that
+ * hole: `AppOfApps.fromModules` folds over the modules *tuple* (where
+ * each element's Out channel is still individually addressable, unlike
+ * the erased union) and rejects any overlap in unique Provide kinds
+ * with a `_konfig_duplicate` hint. The `@ts-expect-error` below fails
+ * the build if the check ever regresses.
  *
- * konfig can't catch this purely from a TS-type union of two
- * `App<"api">` tags. A 1.0-grade fix is on the M4 roadmap (a
- * per-bundle duplicate-app-name lint that walks the resolved
- * AppOfApps shape).
- *
- * Not registered in konfig.json — pure typing regression.
+ * Not registered in konfig.json — compile-time regression test only.
  */
 import { Application, AppOfApps } from "@konfig.ts/argocd"
 import { cluster } from "../cluster"
@@ -41,14 +38,14 @@ const apiV2 = Application.define({
   build: () => []
 })
 
-// Both handles claim `App<"api">`; `fromModules` happily folds them
-// and the second silently shadows the first. The example gallery
-// flags this as a "name collision" smell — wrap one of them with a
-// distinct `name` literal at the call site.
-export default AppOfApps.entrypoint(
-  AppOfApps.fromModules({
-    target: { repoURL: cluster.repositoryUrl, branch: "main", rootPath: "./out" },
-    defaults: {},
-    modules: [apiV1, apiV2] as const
-  })
-)
+// Both handles claim `App<"api">` — the duplicate-provide check makes
+// this call fail to typecheck with a `_konfig_duplicate` hint naming
+// the colliding app.
+// @ts-expect-error — duplicate App "api": the later module would silently shadow the earlier.
+const collision = AppOfApps.fromModules({
+  target: { repoURL: cluster.repositoryUrl, branch: "main", rootPath: "./out" },
+  defaults: {},
+  modules: [apiV1, apiV2] as const
+})
+
+export default AppOfApps.entrypoint(collision)

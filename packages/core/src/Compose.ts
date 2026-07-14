@@ -58,6 +58,56 @@ type FoldResidualIn<
 export type ResidualIn<T extends ReadonlyArray<AnyHandle>> = FoldResidualIn<T, never, never>
 
 /**
+ * Provide kinds that must be unique within one composition. Excluded:
+ * `"Namespace"` (two apps sharing a namespace is normal) and
+ * `"Application"` (argocd emits it pairwise with `"App"` — including
+ * it would double-report every app collision).
+ */
+type UniqueKinds = "App" | "Secret" | "SecretValues" | "ConfigMap" | "ServiceAccount" | "Pvc" | "Image"
+
+type UniqueOut<H> = Extract<OutOfHandle<H>, Need<UniqueKinds, string>>
+
+/**
+ * Left-fold over the modules tuple accumulating each module's unique
+ * Provides; any overlap with the accumulator is a duplicate — at
+ * runtime `Layer.provideMerge` would let the later module silently
+ * shadow the earlier one. Detection must happen on the tuple: once the
+ * per-module Out channels union away (e.g. in the folded R channel at
+ * the entrypoint), the duplication information is gone.
+ */
+type FoldDuplicates<
+  T extends ReadonlyArray<AnyHandle>,
+  AccOut,
+  Dups
+> = T extends readonly [infer H, ...infer Rest extends ReadonlyArray<AnyHandle>]
+  ? FoldDuplicates<Rest, AccOut | UniqueOut<H>, Dups | Extract<UniqueOut<H>, AccOut>>
+  : Dups
+
+/**
+ * The unique Provides claimed by more than one module in `T`, in tuple
+ * order. `never` when every provider name is distinct.
+ */
+export type DuplicateProvides<T extends ReadonlyArray<AnyHandle>> = FoldDuplicates<T, never, never>
+
+type DuplicateHint<D, Api extends string> = D extends Need<infer K, infer N>
+  ? `Duplicate ${K} "${N}": two modules in ${Api}({ modules }) provide the same name; the later one silently shadows the earlier. Rename one of them.`
+  : never
+
+/**
+ * Intersects the options argument with a phantom `_konfig_duplicate`
+ * object when two modules in `Ms` provide the same unique name. The
+ * options literal has no such property, so the call fails to typecheck
+ * and the user sees the hint — same pattern as `ResidualHintCheck`.
+ */
+export type NoDuplicateProvides<
+  Ms extends ReadonlyArray<AnyHandle>,
+  Api extends string
+> = [DuplicateProvides<Ms>] extends [never] ? unknown
+  : {
+    readonly _konfig_duplicate: DuplicateHint<DuplicateProvides<Ms>, Api>
+  }
+
+/**
  * Runtime layer composition — `reduce(Layer.provideMerge)`. Each
  * successive module receives every prior module's Out as available
  * services. The runtime type collapses to a bottom Layer; the per-module
