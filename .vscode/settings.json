@@ -1,5 +1,0 @@
-{
-  "typescript.native-preview.tsdk": "node_modules/@typescript/native",
-  "typescript.experimental.useTsgo": true,
-  "js/ts.experimental.useTsgo": true
-}
