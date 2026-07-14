@@ -46,6 +46,18 @@ export class ProcessError extends Data.TaggedError("ProcessError")<{
   }
 }
 
+/**
+ * Render a `ProcessError` cause as the ` (exit N): stderrTail` suffix
+ * callers append to their own error messages. Returns `""` for any
+ * other cause, so callers can call it unconditionally on an unknown
+ * `cause` without a type guard.
+ */
+export const processDetail = (cause: unknown): string => {
+  if (!(cause instanceof ProcessError)) return ""
+  const tail = cause.stderrTail.trim()
+  return tail.length > 0 ? ` (exit ${cause.exitCode}): ${tail}` : ` (exit ${cause.exitCode})`
+}
+
 interface _CollectedProcess {
   readonly exitCode: number
   readonly stdout: string
