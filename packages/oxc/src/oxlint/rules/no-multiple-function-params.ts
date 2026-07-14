@@ -1,10 +1,13 @@
-import type { AstNode, Rule } from "../types.ts"
+import { isFunctionLike } from "../types.ts"
+import type { AstNode, Rule, RuleContext } from "../types.ts"
 
 const MESSAGE = "Functions with more than one parameter must take a single object parameter (named-args)."
 
 type Scope = "all" | "exports"
 
-const _isInsideExport = (context: Parameters<Rule["create"]>[0], node: AstNode): boolean => {
+const _isScope = (value: unknown): value is Scope => value === "all" || value === "exports"
+
+const _isInsideExport = (context: RuleContext, node: AstNode): boolean => {
   for (const ancestor of context.sourceCode.getAncestors(node)) {
     const t = ancestor.type
     if (
@@ -18,11 +21,10 @@ const _isInsideExport = (context: Parameters<Rule["create"]>[0], node: AstNode):
   return false
 }
 
-const _scopeFrom = (context: Parameters<Rule["create"]>[0]): Scope => {
+const _scopeFrom = (context: RuleContext): Scope => {
   const opt = context.options[0]
-  if (opt && typeof opt === "object" && "scope" in opt) {
-    const scope = (opt as { scope?: unknown }).scope
-    if (scope === "all" || scope === "exports") return scope
+  if (opt && typeof opt === "object" && "scope" in opt && _isScope(opt.scope)) {
+    return opt.scope
   }
   return "exports"
 }
@@ -34,7 +36,7 @@ const FUNCTION_LIKE = new Set<string>([
 ])
 
 const _isInlineCallback = (
-  context: Parameters<Rule["create"]>[0],
+  context: RuleContext,
   node: AstNode
 ): boolean => {
   // A function is an "inline callback" if it lives in an expression position
@@ -56,7 +58,7 @@ const _isInlineCallback = (
 }
 
 const _isNestedInsideFunction = (
-  context: Parameters<Rule["create"]>[0],
+  context: RuleContext,
   node: AstNode
 ): boolean => {
   for (const ancestor of context.sourceCode.getAncestors(node)) {
@@ -66,9 +68,9 @@ const _isNestedInsideFunction = (
   return false
 }
 
-function _check(context: Parameters<Rule["create"]>[0], node: AstNode, scope: Scope) {
-  const params = node.params as readonly AstNode[] | undefined
-  if (!params || params.length <= 1) return
+function _check(context: RuleContext, node: AstNode, scope: Scope) {
+  if (!isFunctionLike(node)) return
+  if (node.params.length <= 1) return
   if (_isInlineCallback(context, node)) return
   if (_isNestedInsideFunction(context, node)) return
   if (scope === "exports" && !_isInsideExport(context, node)) return

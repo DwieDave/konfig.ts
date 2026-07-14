@@ -1,10 +1,12 @@
+import { isIdentifier, isTSTypeCast, isTSTypeReference } from "../types.ts"
 import type { AstNode, Rule } from "../types.ts"
 
 function _isAsConst(node: AstNode): boolean {
-  const ann = node.typeAnnotation as AstNode | undefined
-  if (!ann || ann.type !== "TSTypeReference") return false
-  const typeName = ann.typeName as AstNode | undefined
-  return !!typeName && typeName.type === "Identifier" && typeName.name === "const"
+  if (!isTSTypeCast(node)) return false
+  const ann = node.typeAnnotation
+  if (!isTSTypeReference(ann)) return false
+  const typeName = ann.typeName
+  return isIdentifier(typeName) && typeName.name === "const"
 }
 
 export const noTypeAssertion: Rule = {

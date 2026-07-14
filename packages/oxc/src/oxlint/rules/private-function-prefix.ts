@@ -1,3 +1,4 @@
+import { isFunctionLike, isIdentifier, isVariableDeclaration } from "../types.ts"
 import type { AstNode, Rule } from "../types.ts"
 
 function _isExportedDeclaration(node: AstNode): boolean {
@@ -39,23 +40,23 @@ export const privateFunctionPrefix: Rule = {
       FunctionDeclaration(node) {
         if (!_isTopLevelDeclaration(node)) return
         if (_isExportedDeclaration(node)) return
-        const id = node.id as AstNode | undefined
-        _reportIfBare(context, node, id?.name as string | undefined)
+        if (!isFunctionLike(node)) return
+        const id = node.id
+        _reportIfBare(context, node, id && isIdentifier(id) ? id.name : undefined)
       },
       VariableDeclaration(node) {
         if (!_isTopLevelDeclaration(node)) return
         if (_isExportedDeclaration(node)) return
-        const decls = node.declarations as readonly AstNode[] | undefined
-        if (!decls) return
-        for (const decl of decls) {
-          const init = decl.init as AstNode | undefined
+        if (!isVariableDeclaration(node)) return
+        for (const decl of node.declarations) {
+          const init = decl.init
           if (!init) continue
           if (init.type !== "ArrowFunctionExpression" && init.type !== "FunctionExpression") {
             continue
           }
-          const id = decl.id as AstNode | undefined
-          if (!id || id.type !== "Identifier") continue
-          _reportIfBare(context, decl, id.name as string | undefined)
+          const id = decl.id
+          if (!isIdentifier(id)) continue
+          _reportIfBare(context, decl, id.name)
         }
       }
     }

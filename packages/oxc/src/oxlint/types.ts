@@ -10,6 +10,78 @@ export interface AstNode {
   readonly [key: string]: unknown
 }
 
+export interface Identifier extends AstNode {
+  readonly type: "Identifier"
+  readonly name: string
+}
+
+export interface MemberExpression extends AstNode {
+  readonly type: "MemberExpression"
+  readonly object: AstNode
+  readonly property: AstNode
+}
+
+export interface CallExpression extends AstNode {
+  readonly type: "CallExpression"
+  readonly callee: AstNode
+  readonly arguments: readonly AstNode[]
+}
+
+export interface FunctionLike extends AstNode {
+  readonly type: "FunctionDeclaration" | "FunctionExpression" | "ArrowFunctionExpression"
+  readonly id?: AstNode
+  readonly params: readonly AstNode[]
+  readonly body?: AstNode
+  readonly generator?: boolean
+}
+
+export interface VariableDeclarator extends AstNode {
+  readonly type: "VariableDeclarator"
+  readonly id: AstNode
+  readonly init?: AstNode
+}
+
+export interface VariableDeclaration extends AstNode {
+  readonly type: "VariableDeclaration"
+  readonly declarations: readonly VariableDeclarator[]
+}
+
+export interface TSTypeReference extends AstNode {
+  readonly type: "TSTypeReference"
+  readonly typeName: AstNode
+}
+
+export interface TSTypeCast extends AstNode {
+  readonly type: "TSAsExpression" | "TSTypeAssertion"
+  readonly expression: AstNode
+  readonly typeAnnotation: AstNode
+}
+
+export const isIdentifier = (node: AstNode): node is Identifier => node.type === "Identifier"
+
+export const isMemberExpression = (node: AstNode): node is MemberExpression =>
+  node.type === "MemberExpression"
+
+export const isCallExpression = (node: AstNode): node is CallExpression =>
+  node.type === "CallExpression"
+
+export const isFunctionLike = (node: AstNode): node is FunctionLike =>
+  node.type === "FunctionDeclaration" ||
+  node.type === "FunctionExpression" ||
+  node.type === "ArrowFunctionExpression"
+
+export const isVariableDeclaration = (node: AstNode): node is VariableDeclaration =>
+  node.type === "VariableDeclaration"
+
+export const isVariableDeclarator = (node: AstNode): node is VariableDeclarator =>
+  node.type === "VariableDeclarator"
+
+export const isTSTypeReference = (node: AstNode): node is TSTypeReference =>
+  node.type === "TSTypeReference"
+
+export const isTSTypeCast = (node: AstNode): node is TSTypeCast =>
+  node.type === "TSAsExpression" || node.type === "TSTypeAssertion"
+
 export interface Comment {
   readonly type: "Line" | "Block"
   readonly value: string
