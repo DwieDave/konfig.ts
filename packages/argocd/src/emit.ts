@@ -49,7 +49,6 @@ export interface BuildCRInput {
 export const buildCR = (input: BuildCRInput): ApplicationCR => {
   const { app, target, defaults } = input
   const server = defaults.destination?.server ?? "https://kubernetes.default.svc"
-  const path = `${target.rootPath}/${app.name}`
   const project = app.project ?? defaults.project ?? "default"
   const controllerNamespace = target.controllerNamespace ?? "argocd"
   const syncPolicy = _mergeSyncPolicy({ def: defaults.syncPolicy, app: app.syncPolicy })
@@ -73,9 +72,9 @@ export const buildCR = (input: BuildCRInput): ApplicationCR => {
       },
       project,
       source: {
-        path: app.source.path ?? path,
-        repoURL: app.source.repoURL ?? target.repoURL,
-        targetRevision: app.source.targetRevision ?? target.branch
+        path: app.source.path,
+        repoURL: app.source.repoURL,
+        targetRevision: app.source.targetRevision
       },
       ...(syncPolicy !== undefined ? { syncPolicy } : {})
     }

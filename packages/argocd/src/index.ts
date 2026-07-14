@@ -1,4 +1,4 @@
-export type { ArgoSource, BuildMetadata, SyncPolicy } from "./Application"
+export type { ArgoSource, SyncPolicy } from "./Application"
 export * as Application from "./Application"
 export type { AppOfAppsDefaults, AppOfAppsResult, AppOfAppsTarget } from "./AppOfApps"
 export * as AppOfApps from "./AppOfApps"
