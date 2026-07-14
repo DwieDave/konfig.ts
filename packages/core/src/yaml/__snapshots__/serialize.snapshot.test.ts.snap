@@ -243,3 +243,247 @@ data:
   ZERO_STR: "0"
 "
 `;
+
+exports[`serialize — k8s kind snapshots ConfigMap 1`] = `
+"apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfg
+  namespace: prod
+data:
+  HTTP_PORT: "8080"
+  LOG_LEVEL: info
+"
+`;
+
+exports[`serialize — k8s kind snapshots CronJob 1`] = `
+"apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly
+  namespace: prod
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - image: ghcr.io/example/worker:1.0.0
+              name: tick
+          restartPolicy: OnFailure
+  schedule: 0 2 * * *
+"
+`;
+
+exports[`serialize — k8s kind snapshots Deployment 1`] = `
+"apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - image: ghcr.io/example/api:1.0.0
+          name: api
+"
+`;
+
+exports[`serialize — k8s kind snapshots Ingress 1`] = `
+"apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  namespace: prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: api
+                port:
+                  number: 80
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: api-tls
+"
+`;
+
+exports[`serialize — k8s kind snapshots Job 1`] = `
+"apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: prod
+spec:
+  template:
+    spec:
+      containers:
+        - image: migrate:1
+          name: migrate
+      restartPolicy: Never
+"
+`;
+
+exports[`serialize — k8s kind snapshots NetworkPolicy 1`] = `
+"apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api
+  namespace: prod
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+    - Ingress
+"
+`;
+
+exports[`serialize — k8s kind snapshots PersistentVolumeClaim 1`] = `
+"apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: prod
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+"
+`;
+
+exports[`serialize — k8s kind snapshots Role 1`] = `
+"apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reader
+  namespace: prod
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+"
+`;
+
+exports[`serialize — k8s kind snapshots RoleBinding 1`] = `
+"apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reader
+  namespace: prod
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reader
+subjects:
+  - kind: ServiceAccount
+    name: api
+"
+`;
+
+exports[`serialize — k8s kind snapshots Secret 1`] = `
+"apiVersion: v1
+kind: Secret
+metadata:
+  name: api-creds
+  namespace: prod
+stringData:
+  url: postgres://...
+type: Opaque
+"
+`;
+
+exports[`serialize — k8s kind snapshots Service 1`] = `
+"apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: prod
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: api
+"
+`;
+
+exports[`serialize — k8s kind snapshots ServiceAccount 1`] = `
+"apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api
+  namespace: prod
+"
+`;
+
+exports[`serialize — k8s kind snapshots StatefulSet 1`] = `
+"apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: db
+  serviceName: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+        - image: postgres:16
+          name: db
+"
+`;
+
+exports[`serialize — k8s kind snapshots escapes special characters 1`] = `
+"apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfg
+data:
+  COLON: "value: with colon"
+  MULTILINE: |-
+    line one
+    line two
+  QUOTE: contains a "double quote"
+"
+`;
+
+exports[`serialize — k8s kind snapshots special numeric values stay as strings when supplied as strings 1`] = `
+"apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cfg
+data:
+  BOOL_STR: "false"
+  FLOAT_STR: "1.0"
+  YES_STR: "yes"
+  ZERO_STR: "0"
+"
+`;

@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/env",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Yieldable environment atoms (defineSecret, defineLiteral, defineDownward, defineEnvironment) shared between konfig manifest emission and the runtime pod application.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
