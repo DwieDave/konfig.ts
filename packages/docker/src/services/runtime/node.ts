@@ -5,6 +5,5 @@ export const node: Runtime = {
   imageRef: ({ version, alpine }) => ({
     image: "node",
     tag: `${version}${alpine ? "-alpine" : ""}`
-  }),
-  defaultDevWatch: (entry) => ["node", "--watch", entry]
+  })
 }

@@ -126,10 +126,6 @@ describe("Runtime bun", () => {
       tag: "1.3.5"
     })
   })
-
-  it("defaultDevWatch", () => {
-    expect(bunRuntime.defaultDevWatch("main.ts")).toEqual(["bun", "--watch", "main.ts"])
-  })
 })
 
 describe("Runtime node", () => {
@@ -145,13 +141,5 @@ describe("Runtime node", () => {
       image: "node",
       tag: "22"
     })
-  })
-
-  it("defaultDevWatch", () => {
-    expect(nodeRuntime.defaultDevWatch("dist/main.js")).toEqual([
-      "node",
-      "--watch",
-      "dist/main.js"
-    ])
   })
 })

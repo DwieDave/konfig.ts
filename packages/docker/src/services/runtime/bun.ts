@@ -5,6 +5,5 @@ export const bun: Runtime = {
   imageRef: ({ version, alpine }) => ({
     image: "oven/bun",
     tag: `${version}${alpine ? "-alpine" : ""}`
-  }),
-  defaultDevWatch: (entry) => ["bun", "--watch", entry]
+  })
 }
