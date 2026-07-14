@@ -122,4 +122,30 @@ describe("AppOfApps.fromModules", () => {
     const result = await Effect.runPromise(program)
     expect(result.name).toBe("root-apps")
   })
+
+  it("rejects two modules sharing an app name at compile time", () => {
+    const apiV1 = define({
+      name: "api",
+      namespace: "app",
+      source: src("api"),
+      build: () => []
+    })
+    const apiV2 = define({
+      name: "api",
+      namespace: "app",
+      source: src("api"),
+      build: () => []
+    })
+    // @ts-expect-error — duplicate App "api": the later module would silently shadow the earlier.
+    fromModules({ target, defaults, modules: [apiV1, apiV2] as const })
+    // distinct names sharing a namespace stay accepted
+    const web = define({
+      name: "web",
+      namespace: "app",
+      source: src("web"),
+      build: () => []
+    })
+    const ok = fromModules({ target, defaults, modules: [apiV1, web] as const })
+    expect(Effect.isEffect(ok)).toBe(true)
+  })
 })

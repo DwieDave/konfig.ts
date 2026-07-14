@@ -254,9 +254,13 @@ export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>> {
  * **Order matters.** List providers before their consumers. A consumer
  * placed before its provider leaves an unmet `Need` in the residual,
  * which surfaces at `entrypoint` as a `_konfig_unsatisfied` hint.
+ *
+ * **Names must be unique.** Two modules providing the same unique name
+ * (app, secret, config map, …) fail here with a `_konfig_duplicate`
+ * hint — at runtime the later module would silently shadow the earlier.
  */
 export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>>(
-  opts: FromModulesOptions<Ms>
+  opts: FromModulesOptions<Ms> & Compose.NoDuplicateProvides<Ms, "Bundle.fromModules">
 ): Effect.Effect<
   BundleSetResult,
   AnyRenderError,
