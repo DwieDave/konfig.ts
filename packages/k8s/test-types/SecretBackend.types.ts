@@ -24,17 +24,33 @@ type _BackendTag = Expect<
   Equal<BackendTag, "Sops" | "Sops.passthrough" | "SealedSecrets" | "ExternalSecrets" | "NativeSecret">
 >
 
-// 3 · BackendEmitInput is shaped as documented.
-type _BackendEmitInput = Expect<
+// 3 · BackendEmitInput is shaped as documented — `source` is required
+//     when RequiresSource is `true`, and `SecretSource | undefined` when
+//     `false`.
+type _BackendEmitInputRequired = Expect<
   Equal<
-    BackendEmitInput<"n", "k">,
+    BackendEmitInput<"n", "k", true>,
     {
       readonly name: "n"
       readonly namespace: string
       readonly keys: ReadonlyArray<"k">
       readonly labels?: Readonly<Record<string, string>>
       readonly annotations?: Readonly<Record<string, string>>
-      readonly source?: SecretSource<"k", Manifest.RenderServices>
+      readonly source: SecretSource<"k", Manifest.RenderServices>
+    }
+  >
+>
+
+type _BackendEmitInputOptional = Expect<
+  Equal<
+    BackendEmitInput<"n", "k", false>,
+    {
+      readonly name: "n"
+      readonly namespace: string
+      readonly keys: ReadonlyArray<"k">
+      readonly labels?: Readonly<Record<string, string>>
+      readonly annotations?: Readonly<Record<string, string>>
+      readonly source: SecretSource<"k", Manifest.RenderServices> | undefined
     }
   >
 >
@@ -69,7 +85,8 @@ type _Defaulted = Expect<
 export type _Tests = readonly [
   _Backend_NotAssignable,
   _BackendTag,
-  _BackendEmitInput,
+  _BackendEmitInputRequired,
+  _BackendEmitInputOptional,
   _Defaulted
 ]
 

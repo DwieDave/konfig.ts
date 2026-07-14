@@ -114,19 +114,20 @@ interface WebInput<Cs extends ReadonlyArray<ContainerInput>> {
   }
 }
 
-export const web = <const Cs extends ReadonlyArray<ContainerInput>>(
-  input: WebInput<Cs>
-): Manifest.Manifest<
-  readonly [K8sDeployment, K8sService] | readonly [K8sDeployment, K8sService, K8sIngress]
-> => {
-  const selectorLabels = { app: input.name }
+interface _WebPartInput<Cs extends ReadonlyArray<ContainerInput>> {
+  readonly input: WebInput<Cs>
+  readonly selectorLabels: Readonly<Record<string, string>>
+}
+
+const _webDeployment = <Cs extends ReadonlyArray<ContainerInput>>(
+  { input, selectorLabels }: _WebPartInput<Cs>
+): Manifest.Manifest<K8sDeployment> => {
   // selectorLabels are spread LAST so a colliding user pod label can never
   // override the `app` selector — that would desync the pod template from
   // `spec.selector` and leave the Service with zero endpoints.
   const podLabels = { ...input.deployment.podLabels, ...selectorLabels }
-
   const reloaderAnns = _reloaderAnnotations(input.reloader)
-  const deployment = Deployment.make({
+  return Deployment.make({
     name: input.name,
     namespace: input.namespace,
     labels: { ...selectorLabels, ...input.labels },
@@ -143,8 +144,12 @@ export const web = <const Cs extends ReadonlyArray<ContainerInput>>(
       }
     }
   })
+}
 
-  const service = Service.make({
+const _webService = <Cs extends ReadonlyArray<ContainerInput>>(
+  { input, selectorLabels }: _WebPartInput<Cs>
+): Manifest.Manifest<K8sService> =>
+  Service.make({
     name: input.name,
     namespace: input.namespace,
     labels: { ...selectorLabels, ...input.labels },
@@ -157,20 +162,33 @@ export const web = <const Cs extends ReadonlyArray<ContainerInput>>(
     )
   })
 
+const _webIngress = <Cs extends ReadonlyArray<ContainerInput>>(
+  { ingress, input, selectorLabels }: _WebPartInput<Cs> & { readonly ingress: NonNullable<WebInput<Cs>["ingress"]> }
+): Manifest.Manifest<K8sIngress> =>
+  Ingress.make({
+    name: input.name,
+    namespace: input.namespace,
+    labels: { ...selectorLabels, ...input.labels },
+    annotations: { ...input.annotations, ...ingress.annotations },
+    ingressClassName: ingress.ingressClassName,
+    rules: ingress.rules,
+    tls: ingress.tls
+  })
+
+export const web = <const Cs extends ReadonlyArray<ContainerInput>>(
+  input: WebInput<Cs>
+): Manifest.Manifest<
+  readonly [K8sDeployment, K8sService] | readonly [K8sDeployment, K8sService, K8sIngress]
+> => {
+  const selectorLabels = { app: input.name }
+  const deployment = _webDeployment({ input, selectorLabels })
+  const service = _webService({ input, selectorLabels })
+
   if (input.ingress === undefined) {
     return M.make((ctx) => Effect.all([deployment.render(ctx), service.render(ctx)], { concurrency: "unbounded" }))
   }
 
-  const ingress = Ingress.make({
-    name: input.name,
-    namespace: input.namespace,
-    labels: { ...selectorLabels, ...input.labels },
-    annotations: { ...input.annotations, ...input.ingress.annotations },
-    ingressClassName: input.ingress.ingressClassName,
-    rules: input.ingress.rules,
-    tls: input.ingress.tls
-  })
-
+  const ingress = _webIngress({ input, selectorLabels, ingress: input.ingress })
   return M.make((ctx) =>
     Effect.all([deployment.render(ctx), service.render(ctx), ingress.render(ctx)], {
       concurrency: "unbounded"

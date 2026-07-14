@@ -1,8 +1,7 @@
 import { Manifest, RenderError } from "@konfig.ts/core"
-import type { SecretSource } from "@konfig.ts/env"
 import { Effect, Redacted } from "effect"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
-import { type BackendEmitInput, BackendSourceMissing, type SecretBackend } from "./backend"
+import { type BackendEmitInput, type SecretBackend } from "./backend"
 
 export interface NativeSecretOptions {
   readonly type?: string
@@ -11,9 +10,8 @@ export interface NativeSecretOptions {
 }
 
 interface _EmitInput<N extends string, K extends string> {
-  readonly base: BackendEmitInput<N, K>
+  readonly base: BackendEmitInput<N, K, true>
   readonly opts: NativeSecretOptions
-  readonly source: SecretSource<K, Manifest.RenderServices>
 }
 
 const _emit = <N extends string, K extends string>(
@@ -26,7 +24,7 @@ const _emit = <N extends string, K extends string>(
           `NativeSecret backend emits a plaintext Secret with stringData on disk for "${input.base.namespace}/${input.base.name}". Pass { silenceWarning: true } to suppress, or switch to ExternalSecrets / SealedSecrets / Sops for production.`
         )
       }
-      const resolved = yield* input.source.resolve.pipe(
+      const resolved = yield* input.base.source.resolve.pipe(
         Effect.mapError(
           (cause) =>
             new RenderError({
@@ -59,17 +57,12 @@ const _emit = <N extends string, K extends string>(
 export const NativeSecret = {
   backend: <N extends string, K extends string>(
     opts?: NativeSecretOptions
-  ): SecretBackend<N, K, true> => {
+  ): SecretBackend<N, K, true, K8sSecret> => {
     const resolvedOpts = opts ?? {}
     return {
       _tag: "NativeSecret",
       requiresSource: true,
-      emit: (input: BackendEmitInput<N, K>) => {
-        if (input.source === undefined) {
-          throw new BackendSourceMissing({ backend: "NativeSecret", secret: input.name })
-        }
-        return _emit({ base: input, opts: resolvedOpts, source: input.source })
-      }
+      emit: (input: BackendEmitInput<N, K, true>) => _emit({ base: input, opts: resolvedOpts })
     }
   }
 }

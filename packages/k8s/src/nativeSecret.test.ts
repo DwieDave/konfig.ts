@@ -5,7 +5,6 @@ import { SecretSource } from "@konfig.ts/env"
 import { Cause, Effect, Exit, Logger } from "effect"
 import { describe, expect, it as vitestIt } from "vitest"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
-import { BackendSourceMissing } from "./backend"
 import { Secret } from "./index"
 import { NativeSecret } from "./nativeSecret"
 import { bindSecret } from "./secretBind"
@@ -65,14 +64,18 @@ describe("NativeSecret.backend", () => {
       expect(yaml).toContain("password: p")
     }).pipe(Effect.provide(NodeServices.layer)))
 
-  vitestIt("throws BackendSourceMissing when source is omitted", () => {
-    expect(() =>
-      bindSecret({
+  it.effect("fails at render time (not bind time) when source is omitted", () =>
+    Effect.gen(function*() {
+      const bound = bindSecret({
         secret: dbCreds,
         backend: NativeSecret.backend({ silenceWarning: true })
       })
-    ).toThrow(BackendSourceMissing)
-  })
+      const exit = yield* Effect.exit(bound.manifest!.render(ctx))
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.pretty(exit.cause)).toContain("requires a source")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("emits a render-time warning by default", () =>
     Effect.gen(function*() {

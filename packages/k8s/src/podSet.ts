@@ -59,15 +59,24 @@ export const PodSet = {
         const d = yield* deployment.render(ctx)
         const s = service !== undefined ? yield* service.render(ctx) : undefined
         const n = netPol !== undefined ? yield* netPol.render(ctx) : undefined
-        const reason =
-          "tuple element types are statically known per branch; the array literal is widened by TS, the brand-free runtime shape matches the typed tuple"
-        if (s !== undefined && n !== undefined) {
-          return unsafeCoerce<readonly [K8sDeployment, K8sService, K8sNetworkPolicy]>([d, s, n], reason)
-        }
-        if (s !== undefined) return unsafeCoerce<readonly [K8sDeployment, K8sService]>([d, s], reason)
-        if (n !== undefined) return unsafeCoerce<readonly [K8sDeployment, K8sNetworkPolicy]>([d, n], reason)
-        return unsafeCoerce<readonly [K8sDeployment]>([d], reason)
+        return _asPodSetOutput(d, s, n)
       })
     )
   }
+}
+
+// tuple element types are statically known per branch; the array literal is
+// widened by TS, the brand-free runtime shape matches the typed tuple.
+const _asPodSetOutput = (
+  d: K8sDeployment,
+  s: K8sService | undefined,
+  n: K8sNetworkPolicy | undefined
+): PodSetOutput => {
+  const reason = "PodSet.define: tuple shape is determined by which of service/netPol are present"
+  if (s !== undefined && n !== undefined) {
+    return unsafeCoerce<readonly [K8sDeployment, K8sService, K8sNetworkPolicy]>([d, s, n], reason)
+  }
+  if (s !== undefined) return unsafeCoerce<readonly [K8sDeployment, K8sService]>([d, s], reason)
+  if (n !== undefined) return unsafeCoerce<readonly [K8sDeployment, K8sNetworkPolicy]>([d, n], reason)
+  return unsafeCoerce<readonly [K8sDeployment]>([d], reason)
 }

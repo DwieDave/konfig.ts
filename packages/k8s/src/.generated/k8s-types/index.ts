@@ -13,7 +13,14 @@
 // `ContainerInput` in container.ts) accept a wider, branded shape
 // and lower into these types when emitting manifests.
 
-export type { Deployment, DeploymentSpec, StatefulSet, StatefulSetSpec } from "kubernetes-types/apps/v1"
+export type {
+  Deployment,
+  DeploymentSpec,
+  DeploymentStrategy,
+  StatefulSet,
+  StatefulSetSpec,
+  StatefulSetUpdateStrategy
+} from "kubernetes-types/apps/v1"
 
 export type { CronJob, Job, JobSpec } from "kubernetes-types/batch/v1"
 export type {

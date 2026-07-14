@@ -52,6 +52,12 @@ import { bindEnvironment } from "./environmentBind"
 import { Secret as _SecretIdentity } from "./identity"
 import { bindSecret } from "./secretBind"
 
+// Compile-time guard for the namespace merges below: resolves to `false`
+// (a type error at the `= true` assignment) if `A` and `B` share a key,
+// so a same-named member added upstream can't silently shadow one of
+// ours via spread order instead of failing the build.
+type IsDisjoint<A, B> = keyof A & keyof B extends never ? true : false
+
 /**
  * `Secret` value namespace — merges the env-contracts side (`define`)
  * with the K8s side (`make`, `bind`, identity helpers). Importing
@@ -61,6 +67,11 @@ import { bindSecret } from "./secretBind"
  *   Secret.make({ name, namespace, stringData })  — K8s Secret manifest
  *   Secret.bind({ secret, backend, source })  — env-to-manifest binder
  */
+const _secretContractIdentityDisjoint: IsDisjoint<typeof _SecretContract, typeof _SecretIdentity> = true
+const _secretBindDisjoint: IsDisjoint<
+  typeof _SecretContract & typeof _SecretIdentity,
+  { readonly bind: typeof bindSecret }
+> = true
 export const Secret = { ..._SecretContract, ..._SecretIdentity, bind: bindSecret }
 
 /**
@@ -68,12 +79,16 @@ export const Secret = { ..._SecretContract, ..._SecretIdentity, bind: bindSecret
  * `bind` + `runtime` (K8s). The same `Environment` symbol carries the
  * declaration, the manifest binder, and the runtime decoder.
  */
+const _environmentBindRuntimeDisjoint: IsDisjoint<
+  typeof _EnvironmentContract,
+  { readonly bind: typeof bindEnvironment; readonly runtime: typeof envRuntime }
+> = true
 export const Environment = {
   ..._EnvironmentContract,
   bind: bindEnvironment,
   runtime: envRuntime
 }
-export { type BackendEmitInput, BackendSourceMissing, type BackendTag, type SecretBackend } from "./backend"
+export { type BackendEmitInput, type BackendTag, type SecretBackend } from "./backend"
 export type {
   BindEnvironmentInput,
   DeclaredDownward,
