@@ -1,5 +1,5 @@
 import { Config } from "effect"
-import { _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
+import { _envClaim, _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
 
 export interface DownwardEntry<EnvName extends string>
   extends Config.Config<string>, EntryMarker<"Downward">, HasEnvClaims
@@ -19,7 +19,7 @@ const _define = <const EnvName extends string>(
   const parser = Config.string(input.envName)
 
   const envClaims: ReadonlyArray<EnvClaim> = [
-    { envName: input.envName, label: `Downward(${input.envName})` }
+    _envClaim({ envName: input.envName, label: `Downward(${input.envName})` })
   ]
 
   return _makeEntry({

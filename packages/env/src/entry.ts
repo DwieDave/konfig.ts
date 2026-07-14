@@ -30,6 +30,9 @@ export interface HasEnvClaims {
   readonly envClaims: ReadonlyArray<EnvClaim>
 }
 
+/** Builds a single `EnvClaim` — shared by Secret/Literal/Downward entries. */
+export const _envClaim = ({ envName, label }: EnvClaim): EnvClaim => ({ envName, label })
+
 export interface MakeEntryInput<C extends Config.Config<unknown>, M extends object> {
   readonly config: C
   readonly metadata: M
