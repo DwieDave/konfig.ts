@@ -86,14 +86,18 @@ describe("Service.fromContainer", () => {
       }))
   })
 
-  it("numeric targetPort still works", () => {
-    const svc = Service.fromContainer({
-      name: "api",
-      namespace: "default",
-      selector: { app: "api" },
-      forContainer: api,
-      ports: [{ port: 80, targetPort: 8080 }]
-    })
-    expect(svc).toBeDefined()
+  layer(NodeServices.layer)("numeric targetPort rendering", (it) => {
+    it.effect("numeric targetPort still works", () =>
+      Effect.gen(function*() {
+        const svc = Service.fromContainer({
+          name: "api",
+          namespace: "default",
+          selector: { app: "api" },
+          forContainer: api,
+          ports: [{ port: 80, targetPort: 8080 }]
+        })
+        const out = yield* renderManifest({ manifest: svc, ctx })
+        expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: 8080 })
+      }))
   })
 })

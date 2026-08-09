@@ -52,7 +52,16 @@ export interface CombineInput<A1, A2> {
 export const combine = <A1, A2>(input: CombineInput<A1, A2>): Manifest<readonly [A1, A2]> =>
   make((ctx) => Effect.all([input.a.render(ctx), input.b.render(ctx)], { concurrency: "unbounded" }))
 
-export const concat = <A>(...manifests: Manifest<A | A[]>[]): Manifest<A[]> =>
+// `concat` tells apart a Manifest<A> from a Manifest<A[]> at render time with
+// `Array.isArray`, so A must not itself be an array type — Manifest<string[]>
+// would be indistinguishable from Manifest<string[][]>'s per-element A. The
+// `IsArray<A>` branch below rejects an array-typed A at the call site
+// (`never` accepts no manifest) instead of silently over-flattening it.
+type IsArray<A> = A extends readonly unknown[] ? true : false
+
+export const concat = <A>(
+  ...manifests: (IsArray<A> extends true ? never : Manifest<A | A[]>)[]
+): Manifest<A[]> =>
   make((ctx) =>
     Effect.all(
       manifests.map((m) => m.render(ctx)),

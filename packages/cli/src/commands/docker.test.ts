@@ -149,7 +149,7 @@ describe("writeAtomic", () => {
       const p = yield* Path
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-atomic-" })
       const dest = p.join(dir, "Dockerfile")
-      yield* writeAtomic({ fs, p, path: dest, content: "FROM scratch\n" })
+      yield* writeAtomic({ fs, path: dest, content: "FROM scratch\n" })
       const content = yield* fs.readFileString(dest)
       expect(content).toBe("FROM scratch\n")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
@@ -160,7 +160,7 @@ describe("writeAtomic", () => {
       const p = yield* Path
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-atomic-" })
       const dest = p.join(dir, "missing-subdir", "Dockerfile")
-      const failure = yield* Effect.flip(writeAtomic({ fs, p, path: dest, content: "FROM scratch\n" }))
+      const failure = yield* Effect.flip(writeAtomic({ fs, path: dest, content: "FROM scratch\n" }))
       expect(failure._tag).toBe("DockerWriteError")
       expect(failure.path).toBe(dest)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))

@@ -22,7 +22,7 @@ const _setVersion = (file: string, version: string) =>
     return true
   })
 
-const _resolveTarget = (arg: string, current: string) =>
+export const _resolveTarget = (arg: string, current: string) =>
   Effect.gen(function*() {
     if (SEMVER_RE.test(arg)) return arg
     if (arg !== "major" && arg !== "minor" && arg !== "patch") {
@@ -72,6 +72,7 @@ export const bumpVersionCommand = Command.make(
       if (rootBumped) yield* Console.log("  bumped package.json (root)")
 
       let published = 0
+      let alreadyAtTarget = 0
       for (const dir of yield* packageDirs) {
         const pkgJson = path.join(dir, "package.json")
         const pkg = yield* readJson(pkgJson)
@@ -83,14 +84,18 @@ export const bumpVersionCommand = Command.make(
         if (bumped) {
           yield* Console.log(`  bumped ${path.relative(REPO_ROOT, dir)} → ${resolved}`)
           published += 1
+        } else {
+          yield* Console.log(`  already at target: ${path.relative(REPO_ROOT, dir)}`)
+          alreadyAtTarget += 1
         }
       }
-      yield* Console.log(`bumped ${published} published packages + root`)
+      yield* Console.log(`bumped ${published} published packages + root (${alreadyAtTarget} already at target)`)
 
       // bun.lock must stay in sync or CI's --frozen-lockfile fails.
       yield* Effect.tryPromise({
         try: () => _execFile("bun", ["install"], { cwd: REPO_ROOT }),
-        catch: (cause) => new RepoScriptError({ message: "'bun install' failed; run it manually to sync bun.lock", cause })
+        catch: (cause) =>
+          new RepoScriptError({ message: "'bun install' failed; run it manually to sync bun.lock", cause })
       }).pipe(
         Effect.catchTag("RepoScriptError", (e) => Console.warn(`warning: ${e.message}`))
       )

@@ -12,10 +12,20 @@ interface _RunResult {
   readonly code: number
 }
 
+// "scripts" isn't a workspace package (no package.json/test script of its own), so its
+// pure helpers are covered by a standalone vitest config run directly via bunx instead.
+const _SCRIPTS_PSEUDO_PACKAGE = "scripts"
+
+const _spawnArgsFor = (pkg: string) =>
+  pkg === _SCRIPTS_PSEUDO_PACKAGE
+    ? { cmd: "bunx", args: ["vitest", "run"], cwd: `${REPO_ROOT}/scripts` }
+    : { cmd: "bun", args: ["run", "--cwd", `packages/${pkg}`, "test"], cwd: REPO_ROOT }
+
 const _run = (input: { readonly pkg: string; readonly summaryFile: string | undefined }) =>
   Effect.callback<_RunResult, RepoScriptError>((resume) => {
-    const child = spawn("bun", ["run", "--cwd", `packages/${input.pkg}`, "test"], {
-      cwd: REPO_ROOT,
+    const { args, cmd, cwd } = _spawnArgsFor(input.pkg)
+    const child = spawn(cmd, args, {
+      cwd,
       stdio: ["ignore", "pipe", "pipe"],
       env: input.summaryFile === undefined
         ? process.env
@@ -25,7 +35,7 @@ const _run = (input: { readonly pkg: string; readonly summaryFile: string | unde
     child.stdout.on("data", (chunk) => chunks.push(chunk))
     child.stderr.on("data", (chunk) => chunks.push(chunk))
     child.on("error", (cause) => {
-      resume(Effect.fail(new RepoScriptError({ message: `cannot spawn tests for packages/${input.pkg}`, cause })))
+      resume(Effect.fail(new RepoScriptError({ message: `cannot spawn tests for ${input.pkg}`, cause })))
     })
     child.on("close", (code) => {
       resume(Effect.succeed({ pkg: input.pkg, output: Buffer.concat(chunks).toString("utf8"), code: code ?? 1 }))
@@ -44,7 +54,7 @@ const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFi
       const block = r.summaryFile === undefined
         ? ""
         : yield* fs.readFileString(r.summaryFile).pipe(Effect.orElseSucceed(() => ""))
-      out += `\n## 📦 @konfig.ts/${r.pkg}\n${block}`
+      out += `\n## 📦 ${r.pkg === _SCRIPTS_PSEUDO_PACKAGE ? r.pkg : `@konfig.ts/${r.pkg}`}\n${block}`
     }
     const existing = yield* fs.readFileString(summaryFile).pipe(Effect.orElseSucceed(() => ""))
     yield* fs
@@ -64,7 +74,7 @@ export const testCommand = Command.make(
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
-      const packages = yield* testPackageNames
+      const packages = [...(yield* testPackageNames), _SCRIPTS_PSEUDO_PACKAGE]
       const inCi = process.env.GITHUB_STEP_SUMMARY !== undefined
 
       const tmpDir = inCi
@@ -78,7 +88,8 @@ export const testCommand = Command.make(
           Effect.gen(function*() {
             const summaryFile = tmpDir === undefined ? undefined : path.join(tmpDir, `${pkg}.md`)
             const result = yield* _run({ pkg, summaryFile })
-            yield* Console.log(`\n📦 @konfig.ts/${pkg}\n${result.output}`)
+            const label = pkg === _SCRIPTS_PSEUDO_PACKAGE ? pkg : `@konfig.ts/${pkg}`
+            yield* Console.log(`\n📦 ${label}\n${result.output}`)
             return { ...result, summaryFile }
           })
         ),

@@ -2,14 +2,9 @@ import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
 import { describe, expect } from "vitest"
-import { CircularWorkspaceDep, WorkspaceNotFound } from "../DockerError"
 import { allWorkspaces, closureOf, detectPm, findRoot, type Workspace } from "./WorkspaceGraph"
 
 const FIXTURES = new URL("../../fixtures/", import.meta.url).pathname
-
-const provided = <A, E>(eff: Effect.Effect<A, E, never>) => eff
-const withFs = <A, E>(eff: Effect.Effect<A, E, ReturnType<typeof Effect.gen>>) =>
-  Effect.provide(eff, NodeServices.layer)
 
 const _causeContains = (cause: unknown, needle: string): boolean => {
   const encoded = Schema.encodeExit(Schema.fromJsonString(Schema.Unknown))(cause)
@@ -186,8 +181,3 @@ describe("closureOf", () => {
       expect(closure.map((w) => w.name)).toEqual(["@fix/shared", "@fix/util", "@fix/app"])
     }).pipe(Effect.provide(NodeServices.layer)))
 })
-
-void provided
-void withFs
-void WorkspaceNotFound
-void CircularWorkspaceDep

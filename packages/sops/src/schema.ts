@@ -42,7 +42,7 @@ export const SopsSecretSpecSchema = Schema.Struct({
 })
 
 // Only fields backend.ts reads are typed; trailing Record absorbs the rest of sops's output shape.
-export const SopsMetadataSchema = Schema.StructWithRest(
+const SopsMetadataSchema = Schema.StructWithRest(
   Schema.Struct({
     mac_only_encrypted: Schema.optionalKey(Schema.Boolean),
     encrypted_regex: Schema.optionalKey(Schema.String)

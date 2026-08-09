@@ -1,4 +1,5 @@
 import { Manifest, RenderError, Yaml } from "@konfig.ts/core"
+import type { SecretSourceError } from "@konfig.ts/env"
 import { type BackendEmitInput, type SecretBackend } from "@konfig.ts/k8s"
 import { Effect, Redacted } from "effect"
 import type { SealedSecret, SealedSecretScope } from "./crd"
@@ -17,13 +18,15 @@ interface _EmitInput<N extends string, K extends string> {
 const _toStringData = (
   keys: ReadonlyArray<string>,
   resolved: Record<string, Redacted.Redacted<string>>
-): Record<string, string> =>
-  Object.fromEntries(keys.map((key) => [key, Redacted.value(resolved[key])]))
+): Record<string, string> => Object.fromEntries(keys.map((key) => [key, Redacted.value(resolved[key])]))
 
-const _toRenderError = (base: { readonly namespace: string; readonly name: string }, detail: string) =>
-(cause: unknown) =>
+const _toRenderError = <C = unknown>(
+  base: { readonly namespace: string; readonly name: string },
+  detail: string | ((cause: C) => string)
+) =>
+(cause: C) =>
   new RenderError({
-    message: `SealedSecrets(${base.namespace}/${base.name}): ${detail}`,
+    message: `SealedSecrets(${base.namespace}/${base.name}): ${typeof detail === "function" ? detail(cause) : detail}`,
     cause
   })
 
@@ -37,12 +40,7 @@ const _emit = <N extends string, K extends string>(
       )
       const resolved = yield* input.base.source.resolve.pipe(
         Effect.mapError(
-          (cause) =>
-            new RenderError({
-              message:
-                `SealedSecrets(${input.base.namespace}/${input.base.name}): source failed for key "${cause.key}"`,
-              cause
-            })
+          _toRenderError<SecretSourceError>(input.base, (cause) => `source failed for key "${cause.key}"`)
         )
       )
       const stringData = _toStringData(input.base.keys, resolved)

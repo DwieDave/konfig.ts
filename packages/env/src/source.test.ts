@@ -127,6 +127,18 @@ describe("SecretSource.fromCommand", () => {
       expect(Redacted.value(v.token)).toBe("s3cr3t")
     }))
 
+  it.effect("trims leading and trailing whitespace, not just trailing newlines", () =>
+    Effect.gen(function*() {
+      const src = SecretSource.fromCommand({
+        keys: ["token"] as const,
+        run: () => ({ cmd: "get-secret", args: [] })
+      })
+      const v = yield* src.resolve.pipe(
+        Effect.provide(_fakeSpawner({ stdout: "  s3cr3t  \n" }))
+      )
+      expect(Redacted.value(v.token)).toBe("s3cr3t")
+    }))
+
   it.effect("a non-zero exit surfaces as SecretSourceError (never a redacted empty)", () =>
     Effect.gen(function*() {
       const src = SecretSource.fromCommand({
@@ -156,6 +168,22 @@ describe("SecretSource.fromCommand", () => {
       if (Exit.isFailure(r)) {
         const json = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(r.cause)
         expect(json).toContain("SecretSourceError")
+      }
+    }))
+
+  it.effect("whitespace-only stdout fails via source.ts's own guard, not core's", () =>
+    Effect.gen(function*() {
+      const src = SecretSource.fromCommand({
+        keys: ["token"] as const,
+        run: () => ({ cmd: "get-secret", args: [] })
+      })
+      const r = yield* Effect.exit(
+        src.resolve.pipe(Effect.provide(_fakeSpawner({ stdout: "   ", exitCode: 0 })))
+      )
+      expect(Exit.isFailure(r)).toBe(true)
+      if (Exit.isFailure(r)) {
+        const json = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(r.cause)
+        expect(json).toContain("secret command produced empty output")
       }
     }))
 })

@@ -10,14 +10,23 @@ export class RepoScriptError extends Data.TaggedError("RepoScriptError")<{
   readonly cause?: unknown
 }> {}
 
-export interface PackageJson {
-  readonly name?: string
-  readonly version?: string
-  readonly private?: boolean
-  readonly [key: string]: unknown
-}
+export const PackageJson = Schema.StructWithRest(
+  Schema.Struct({
+    name: Schema.optional(Schema.String),
+    version: Schema.optional(Schema.String),
+    private: Schema.optional(Schema.Boolean)
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)]
+)
 
-const _JsonRecord = Schema.fromJsonString(Schema.Unknown)
+export type PackageJson = typeof PackageJson.Type
+
+const _JsonPackage = Schema.fromJsonString(PackageJson)
+
+export const parseJson = (file: string, text: string) =>
+  Schema.decodeEffect(_JsonPackage)(text).pipe(
+    Effect.mapError((cause) => new RepoScriptError({ message: `cannot parse ${file}`, cause }))
+  )
 
 export const readJson = (file: string) =>
   Effect.gen(function*() {
@@ -25,14 +34,11 @@ export const readJson = (file: string) =>
     const text = yield* fs
       .readFileString(file)
       .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot read ${file}`, cause })))
-    const parsed = yield* Schema.decodeEffect(_JsonRecord)(text).pipe(
-      Effect.mapError((cause) => new RepoScriptError({ message: `cannot parse ${file}`, cause }))
-    )
-    return parsed as PackageJson
+    return yield* parseJson(file, text)
   })
 
-/** Packages without tests/coverage, skipped wherever the CLI iterates test-carrying packages. */
-export const EXCLUDED_PACKAGES: ReadonlySet<string> = new Set(["oxc"])
+/** Packages without a test:coverage script, skipped only where coverage output is read. */
+const COVERAGE_EXCLUDED_PACKAGES: ReadonlySet<string> = new Set(["oxc"])
 
 export const packageDirs = Effect.gen(function*() {
   const fs = yield* FileSystem
@@ -54,7 +60,10 @@ export const packageDirs = Effect.gen(function*() {
 export const testPackageNames = Effect.gen(function*() {
   const path = yield* Path
   const dirs = yield* packageDirs
-  return dirs
-    .map((dir) => path.basename(dir))
-    .filter((name) => !EXCLUDED_PACKAGES.has(name))
+  return dirs.map((dir) => path.basename(dir))
+})
+
+export const coveragePackageNames = Effect.gen(function*() {
+  const names = yield* testPackageNames
+  return names.filter((name) => !COVERAGE_EXCLUDED_PACKAGES.has(name))
 })

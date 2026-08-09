@@ -29,7 +29,11 @@ export class KubesealInvocationError extends Data.TaggedError("KubesealInvocatio
 export class KubesealParseError extends Data.TaggedError("KubesealParseError")<{
   readonly output: string
   readonly cause: unknown
-}> {}
+}> {
+  get message(): string {
+    return `kubeseal output failed to parse as YAML: ${String(this.cause)}`
+  }
+}
 
 export interface RunKubesealInput {
   readonly plainSecretYaml: string

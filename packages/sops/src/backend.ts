@@ -1,12 +1,12 @@
-import { type BoundaryDecodeError, boundary, Manifest, RenderError, Yaml } from "@konfig.ts/core"
+import { boundary, type BoundaryDecodeError, Manifest, RenderError, Yaml } from "@konfig.ts/core"
 import { type BackendEmitInput, type SecretBackend } from "@konfig.ts/k8s"
-import { Effect, Redacted } from "effect"
+import { Data, Effect, Redacted } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import * as YAML from "yaml"
 import type { SopsRecipients, SopsSecret } from "./crd"
 import { SopsEncryptedSecretSchema, SopsRecipientsSchema } from "./schema"
+import { sopsEncryptStdin } from "./sops"
 import { SopsSource } from "./source"
-import { sopsEncryptStdin, SopsInvocationError } from "./sops"
 
 const _decodeSopsSecret = boundary({
   schema: SopsEncryptedSecretSchema,
@@ -17,6 +17,17 @@ const _decodeSopsSecret = boundary({
 // encrypted_regex partially-encrypts (a key needs ENC[ if the regex matches
 // it or any ancestor key on its path).
 const _ENC_MARKER = "ENC["
+
+// Post-hoc validation failure (sops exited 0 but the value isn't ciphertext) — distinct from
+// SopsInvocationError, which is reserved for the sops process itself failing to run.
+class SopsUnencryptedValueError extends Data.TaggedError("SopsUnencryptedValueError")<{
+  readonly label: string
+  readonly key: string
+}> {
+  get message(): string {
+    return `${this.label}: value for "${this.key}" is not sops-encrypted (missing ${_ENC_MARKER} marker)`
+  }
+}
 
 const _encryptedRegex = (
   secret: SopsSecret,
@@ -47,13 +58,11 @@ const _assertEncrypted = (
           const mustEncrypt = regex === undefined
             || ["spec", "secretTemplates", container, key].some((segment) => regex.test(segment))
           if (mustEncrypt && !value.startsWith(_ENC_MARKER)) {
+            const unencrypted = new SopsUnencryptedValueError({ label, key })
             return yield* new RenderError({
               message:
                 `${label}: refusing to emit — value for "${key}" is not sops-encrypted (missing ${_ENC_MARKER} marker)`,
-              cause: new SopsInvocationError({
-                op: "encrypt",
-                cause: "sops output value was not encrypted"
-              })
+              cause: unencrypted
             })
           }
         }
@@ -74,32 +83,44 @@ const _parseVerified = (
   Effect.gen(function*() {
     const parsed = yield* Effect.try({
       try: (): unknown => YAML.parse(yamlText),
-      catch: (cause) =>
-        new RenderError({ message: `${label}: output was not valid YAML`, cause })
+      catch: (cause) => new RenderError({ message: `${label}: output was not valid YAML`, cause })
     })
     const decoded = yield* _decodeSopsSecret(parsed)
     yield* _assertEncrypted(decoded, label)
     return decoded
   })
 
-// Restamping the namespace is only safe when mac_only_encrypted; otherwise the MAC covers it.
-const _restampNamespace = (
+// Restamping namespace/name is only safe when mac_only_encrypted; otherwise the MAC covers them.
+const _restampIdentity = (
   decoded: SopsSecret,
   namespace: string,
+  name: string,
   label: string
 ): Effect.Effect<SopsSecret, RenderError> => {
-  if (decoded.metadata.namespace === namespace) return Effect.succeed(decoded)
+  const namespaceMismatch = decoded.metadata.namespace !== namespace
+  const nameMismatch = decoded.metadata.name !== name
+    || decoded.spec.secretTemplates.some((template) => template.name !== name)
+  if (!namespaceMismatch && !nameMismatch) return Effect.succeed(decoded)
+
   if (decoded.sops.mac_only_encrypted !== true) {
+    const targets = [
+      namespaceMismatch ? `metadata.namespace to "${namespace}"` : undefined,
+      nameMismatch ? `metadata.name/spec.secretTemplates[].name to "${name}"` : undefined
+    ].filter((target): target is string => target !== undefined).join(" and ")
     return Effect.fail(
       new RenderError({
         message:
-          `${label}: refusing to restamp metadata.namespace to "${namespace}" — file is fully MAC'd (mac_only_encrypted is not true), so the namespace is protected by the MAC`
+          `${label}: refusing to restamp ${targets} — file is fully MAC'd (mac_only_encrypted is not true), so it is protected by the MAC`
       })
     )
   }
   return Effect.succeed({
     ...decoded,
-    metadata: { ...decoded.metadata, namespace }
+    metadata: { ...decoded.metadata, namespace, name },
+    spec: {
+      ...decoded.spec,
+      secretTemplates: decoded.spec.secretTemplates.map((template) => ({ ...template, name }))
+    }
   })
 }
 
@@ -197,7 +218,7 @@ const _passthrough = <N extends string, K extends string>(
           )
         )
       const decoded = yield* _parseVerified(contents, label)
-      return yield* _restampNamespace(decoded, input.base.namespace, label)
+      return yield* _restampIdentity(decoded, input.base.namespace, input.base.name, label)
     })
   )
 

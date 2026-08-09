@@ -30,14 +30,38 @@ interface _MergeSyncPolicyInput {
   readonly def: AppOfAppsDefaults["syncPolicy"]
   readonly app: AnyApp["syncPolicy"]
 }
+const _mergeAutomated = (
+  def: NonNullable<AppOfAppsDefaults["syncPolicy"]>["automated"],
+  app: NonNullable<AnyApp["syncPolicy"]>["automated"]
+): NonNullable<AnyApp["syncPolicy"]>["automated"] => {
+  if (def === undefined) return app
+  if (app === undefined) return def
+  return { ...def, ...app }
+}
+
+const _mergeRetry = (
+  def: NonNullable<AppOfAppsDefaults["syncPolicy"]>["retry"],
+  app: NonNullable<AnyApp["syncPolicy"]>["retry"]
+): NonNullable<AnyApp["syncPolicy"]>["retry"] => {
+  if (def === undefined) return app
+  if (app === undefined) return def
+  return {
+    ...def,
+    ...app,
+    backoff: def.backoff === undefined && app.backoff === undefined
+      ? undefined
+      : { ...def.backoff, ...app.backoff }
+  }
+}
+
 const _mergeSyncPolicy = (input: _MergeSyncPolicyInput): AnyApp["syncPolicy"] => {
   const { def, app } = input
   if (def === undefined) return app
   if (app === undefined) return def
   return {
-    automated: app.automated ?? def.automated,
+    automated: _mergeAutomated(def.automated, app.automated),
     syncOptions: app.syncOptions ?? def.syncOptions,
-    retry: app.retry ?? def.retry
+    retry: _mergeRetry(def.retry, app.retry)
   }
 }
 
@@ -89,4 +113,5 @@ export const emitApplicationCR = (input: BuildCRInput): Manifest.Manifest<string
 
 export const serializeApplicationCR = (input: BuildCRInput): string => Yaml.serialize({ value: buildCR(input) })
 
-export const applicationCRFilename = (app: AnyApp): string => `Application-${app.name}.yaml`
+export const applicationCRFilename = (app: AnyApp): string =>
+  Yaml.filenameFor({ kind: "Application", metadata: { name: app.name } })

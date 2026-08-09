@@ -58,7 +58,6 @@ const _isNestedInsideFunction = (
   node: AstNode
 ): boolean => {
   for (const ancestor of context.sourceCode.getAncestors(node)) {
-    if (ancestor === node) continue
     if (FUNCTION_LIKE.has(ancestor.type)) return true
   }
   return false

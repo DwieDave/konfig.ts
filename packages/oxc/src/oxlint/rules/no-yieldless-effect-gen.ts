@@ -17,6 +17,7 @@ function _hasYieldExpression(node: AstNode): boolean {
     const cur = stack.pop()
     if (!cur) continue
     if (cur.type === "YieldExpression") return true
+    if (cur !== node && isFunctionLike(cur)) continue
     for (const key of Object.keys(cur)) {
       if (key === "type" || key === "parent" || key === "loc" || key === "range") continue
       const v = cur[key]

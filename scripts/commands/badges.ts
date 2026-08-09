@@ -3,7 +3,7 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Command } from "effect/unstable/cli"
 import { renderBadge } from "../lib/badge"
-import { readJson, REPO_ROOT, RepoScriptError, testPackageNames } from "../lib/repo"
+import { coveragePackageNames, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
 
 const CoverageSummary = Schema.Struct({
   total: Schema.Struct({
@@ -19,8 +19,7 @@ const TestResults = Schema.Struct({
   numPassedTests: Schema.Number
 })
 
-const _coverageColor = (pct: number) =>
-  pct >= 90 ? "#4c1" : pct >= 75 ? "#a3c51c" : pct >= 60 ? "#dfb317" : "#e05d44"
+const _coverageColor = (pct: number) => pct >= 90 ? "#4c1" : pct >= 75 ? "#a3c51c" : pct >= 60 ? "#dfb317" : "#e05d44"
 
 const _writeBadge = (input: { readonly file: string; readonly svg: string }) =>
   Effect.gen(function*() {
@@ -41,17 +40,21 @@ export const badgesCommand = Command.make(
       let linesTotal = 0
       let linesCovered = 0
       let tests = 0
-      for (const p of yield* testPackageNames) {
+      for (const p of yield* coveragePackageNames) {
         const covFile = path.join(REPO_ROOT, "packages", p, "coverage", "coverage-summary.json")
         const cov = yield* Schema.decodeUnknownEffect(CoverageSummary)(yield* readJson(covFile)).pipe(
-          Effect.mapError((cause) => new RepoScriptError({ message: `unexpected coverage summary shape in ${covFile}`, cause }))
+          Effect.mapError((cause) =>
+            new RepoScriptError({ message: `unexpected coverage summary shape in ${covFile}`, cause })
+          )
         )
         linesTotal += cov.total.lines.total
         linesCovered += cov.total.lines.covered
 
         const resultsFile = path.join(REPO_ROOT, "packages", p, "coverage", "test-results.json")
         const results = yield* Schema.decodeUnknownEffect(TestResults)(yield* readJson(resultsFile)).pipe(
-          Effect.mapError((cause) => new RepoScriptError({ message: `unexpected test results shape in ${resultsFile}`, cause }))
+          Effect.mapError((cause) =>
+            new RepoScriptError({ message: `unexpected test results shape in ${resultsFile}`, cause })
+          )
         )
         tests += results.numTotalTests
       }

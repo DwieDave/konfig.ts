@@ -42,6 +42,11 @@ export class SharedRootFileMissing extends Data.TaggedError("SharedRootFileMissi
   readonly path: string
 }> {}
 
+export class PlatformMultiUnsupported extends Data.TaggedError("PlatformMultiUnsupported")<{
+  readonly target: string
+  readonly values: ReadonlyArray<string>
+}> {}
+
 export class DockerWriteRefused extends Data.TaggedError("DockerWriteRefused")<{
   readonly path: string
   readonly reason: string
@@ -62,5 +67,6 @@ export type AnyDockerError =
   | BuildScriptMissing
   | WorkspaceSourceUnknown
   | SharedRootFileMissing
+  | PlatformMultiUnsupported
   | DockerWriteRefused
   | DockerWriteError

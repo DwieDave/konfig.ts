@@ -5,6 +5,7 @@ import {
   type AnyDockerError,
   BuildScriptMissing,
   EngineVersionMissing,
+  PlatformMultiUnsupported,
   SharedRootFileMissing,
   WorkspaceNotFound,
   WorkspaceSourceUnknown
@@ -110,7 +111,7 @@ const _runtimeEngineKey = (kind: RuntimeKind): string => kind.toLowerCase()
 
 const _readEngineVersion = (ws: Workspace, key: string): string | undefined => ws.pkg.engines?.[key]
 
-export interface ValidateSpecInput {
+interface ValidateSpecInput {
   readonly spec: DockerSpec
   readonly ctx: LowerContext
 }
@@ -128,6 +129,16 @@ export const validateSpec = (
       if (c._tag === "WorkspaceSource" && !closureNames.has(c.name)) {
         return yield* new WorkspaceSourceUnknown({ target: ctx.target.name, missingWorkspace: c.name })
       }
+    }
+
+    // FROM --platform takes exactly one value; multi-arch is a buildx/manifest
+    // concern (`docker buildx build --platform`), not something a single FROM
+    // line can express. Reject Multi here rather than silently dropping it.
+    if (spec.runner.platform?._tag === "PlatformMulti") {
+      return yield* new PlatformMultiUnsupported({
+        target: ctx.target.name,
+        values: spec.runner.platform.values
+      })
     }
 
     if (spec.build?._tag === "BuildScript") {
@@ -408,20 +419,13 @@ const _builderStage = (
   for (const path of spec.sharedRootFiles ?? []) {
     instructions.push({ _tag: "Copy", src: [path], dst: `./${path}` })
   }
-  if (pm.pmImpl.nodeModulesLayout === "hoisted") {
-    instructions.push({
-      _tag: "Copy",
-      from: "deps",
-      src: ["/app/node_modules"],
-      dst: "/app/node_modules"
-    })
-  } else {
-    instructions.push({
-      _tag: "Copy",
-      from: "deps",
-      src: ["/app/node_modules"],
-      dst: "/app/node_modules"
-    })
+  instructions.push({
+    _tag: "Copy",
+    from: "deps",
+    src: ["/app/node_modules"],
+    dst: "/app/node_modules"
+  })
+  if (pm.pmImpl.nodeModulesLayout !== "hoisted") {
     for (const ws of ctx.closure) {
       instructions.push({
         _tag: "Copy",

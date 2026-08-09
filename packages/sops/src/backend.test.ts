@@ -64,7 +64,7 @@ interface RecordedCall {
   readonly stdin?: string
 }
 
-interface Sink {
+interface CallSink {
   calls: RecordedCall[]
 }
 
@@ -94,7 +94,7 @@ const _handleForOutput = (output: string): ChildProcessHandle =>
   })
 
 const _makeStubSpawner = (
-  sink: Sink,
+  sink: CallSink,
   respond: (cmd: Command) => string
 ): Layer.Layer<ChildProcessSpawner> =>
   Layer.succeed(
@@ -121,7 +121,7 @@ const ctx = { env: "prod" } as const
 describe("Sops.backend (case B: konfig source → SopsSecret CR)", () => {
   it.effect("encrypts to a SopsSecret with age recipients", () =>
     Effect.gen(function*() {
-      const sink: Sink = { calls: [] }
+      const sink: CallSink = { calls: [] }
       const bound = Secret.bind({
         secret: dbCreds,
         backend: Sops.backend({
@@ -289,7 +289,9 @@ ${macOnlyEncrypted === undefined ? "" : `  mac_only_encrypted: ${macOnlyEncrypte
       const exit = yield* renderStagingPassthrough(namespaceMismatchFile(undefined))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)).toContain("mac_only_encrypted")
+        expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)).toContain(
+          "mac_only_encrypted"
+        )
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -301,12 +303,73 @@ ${macOnlyEncrypted === undefined ? "" : `  mac_only_encrypted: ${macOnlyEncrypte
         expect(coerce<SopsSecret>(exit.value).metadata.namespace).toBe("staging")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
+
+  const nameMismatchFile = (macOnlyEncrypted: boolean | undefined) =>
+    `
+apiVersion: isindir.github.com/v1alpha3
+kind: SopsSecret
+metadata:
+  name: other-secret
+  namespace: prod
+spec:
+  secretTemplates:
+    - name: other-secret
+      type: Opaque
+      stringData:
+        url: ENC[AES256_GCM,data:STUBurl==,type:str]
+        password: ENC[AES256_GCM,data:STUBpassword==,type:str]
+sops:
+${macOnlyEncrypted === undefined ? "" : `  mac_only_encrypted: ${macOnlyEncrypted}\n`}  age:
+    - recipient: age1mockstub
+      enc: STUB
+`.trim()
+
+  const renderPassthroughForDbCreds = (contents: string) =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const tmpFile = `${process.cwd()}/.tmp-sops-passthrough-name-restamp.yaml`
+      yield* fs.writeFileString(tmpFile, contents)
+      try {
+        const bound = Secret.bind({
+          secret: dbCreds,
+          backend: Sops.passthrough({ file: tmpFile })
+        })
+        return yield* Effect.exit(bound.manifest!.render(ctx))
+      } finally {
+        yield* fs.remove(tmpFile)
+      }
+    })
+
+  it.effect(
+    "refuses to pass through a file whose secret name doesn't match the bound secret, when not mac_only_encrypted",
+    () =>
+      Effect.gen(function*() {
+        const exit = yield* renderPassthroughForDbCreds(nameMismatchFile(undefined))
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
+          expect(text).toContain("mac_only_encrypted")
+          expect(text).toContain("name")
+        }
+      }).pipe(Effect.provide(NodeServices.layer))
+  )
+
+  it.effect("restamps metadata.name and spec.secretTemplates[].name when the file is mac_only_encrypted", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderPassthroughForDbCreds(nameMismatchFile(true))
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        const rendered = coerce<SopsSecret>(exit.value)
+        expect(rendered.metadata.name).toBe("db-creds")
+        expect(rendered.spec.secretTemplates[0]?.name).toBe("db-creds")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
 })
 
 describe("Sops.source (case A: sops source → SealedSecrets backend)", () => {
   it.effect("decrypts the file once and plucks every requested key from the parsed plaintext", () =>
     Effect.gen(function*() {
-      const sink: Sink = { calls: [] }
+      const sink: CallSink = { calls: [] }
       const respond = (cmd: Command): string => {
         if (!isStandardCommand(cmd)) return ""
         if (cmd.command === "sops") {
@@ -345,7 +408,7 @@ describe("Sops.source (case A: sops source → SealedSecrets backend)", () => {
 describe("Sops.source error handling", () => {
   it.effect("sops failure surfaces as SecretSourceError → RenderError", () =>
     Effect.gen(function*() {
-      const sink: Sink = { calls: [] }
+      const sink: CallSink = { calls: [] }
       const respond = (): never => {
         throw new Error("sops not installed")
       }
@@ -372,7 +435,7 @@ describe("Sops.backend recipient input boundary", () => {
 
   it.effect("rejects age recipient containing a comma (smuggled second key)", () =>
     Effect.gen(function*() {
-      const sink: Sink = { calls: [] }
+      const sink: CallSink = { calls: [] }
       const bound = Secret.bind({
         secret: dbCreds,
         backend: Sops.backend({
@@ -397,7 +460,7 @@ describe("Sops.backend recipient input boundary", () => {
 
   it.effect("rejects age recipient with shell metachars (semicolon)", () =>
     Effect.gen(function*() {
-      const sink: Sink = { calls: [] }
+      const sink: CallSink = { calls: [] }
       const bound = Secret.bind({
         secret: dbCreds,
         backend: Sops.backend({
@@ -451,7 +514,7 @@ sops:
 
   const runWith = (output: string) =>
     Effect.gen(function*() {
-      const sink: Sink = { calls: [] }
+      const sink: CallSink = { calls: [] }
       const bound = Secret.bind({
         secret: dbCreds,
         backend: Sops.backend({
@@ -483,8 +546,9 @@ sops:
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
-        expect(text).toContain("SopsInvocationError")
+        expect(text).toContain("SopsUnencryptedValueError")
         expect(text).toContain("ENC[")
+        expect(text).toContain("db-creds")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -505,7 +569,7 @@ metadata:
 
   it.effect("BoundaryDecodeError if sops stdout doesn't match SopsSecret schema", () =>
     Effect.gen(function*() {
-      const sink: Sink = { calls: [] }
+      const sink: CallSink = { calls: [] }
       const bound = Secret.bind({
         secret: dbCreds,
         backend: Sops.backend({

@@ -135,7 +135,7 @@ describe("DockerSpec Schema", () => {
         ...minimalValid,
         runner: {
           ...minimalValid.runner,
-          env: { TOKEN: "AAAAB3NzaC1yc2EAAAADAQABAAABAQDFooBar1234567890" }
+          env: { API_KEY: "QWxwaGFCZXRhR2FtbWE5ODc2NTQzMjEwWFlaTG9yZW1JcHN1bQ" }
         }
       })
     )

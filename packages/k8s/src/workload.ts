@@ -136,10 +136,9 @@ export const StatefulSet = {
           "konfig PodSpecInput is structurally a K8s PodTemplateSpec body; brand-checked fields lower at construction"
         ),
         serviceName: input.serviceName,
-        volumeClaimTemplates: unsafeCoerce(
-          input.volumeClaimTemplates,
-          "ReadonlyArray<K8sPersistentVolumeClaim> is structurally Array<PersistentVolumeClaim>; readonly-to-mutable variance is safe here"
-        ),
+        volumeClaimTemplates: input.volumeClaimTemplates
+          ? [...input.volumeClaimTemplates]
+          : undefined,
         podManagementPolicy: input.podManagementPolicy,
         updateStrategy: input.updateStrategy
       }

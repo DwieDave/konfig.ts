@@ -199,33 +199,46 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
       return
     }
 
-    const beforeFiles = new Set(
-      yield* fs.readDirectory(cacheDir).pipe(Effect.orElseSucceed((): string[] => []))
+    // Pull into a per-invocation temp directory nested inside cacheDir (same
+    // filesystem, so the rename below is atomic), then rename the known
+    // output into place. This replaces diffing directory listings
+    // before/after `helm pull`, which misattributed tarballs when concurrent
+    // releases shared KONFIG_HELM_CACHE.
+    const pullDir = yield* fs.makeTempDirectory({ directory: cacheDir, prefix: ".konfig-helm-pull-" })
+
+    yield* Effect.gen(function*() {
+      const pull = ChildProcess.make("helm", [
+        "pull",
+        "--repo",
+        opts.repo,
+        opts.chart,
+        "--version",
+        opts.version,
+        "--destination",
+        pullDir
+      ])
+      yield* runProcessExit(pull)
+
+      const pulledFiles = yield* fs.readDirectory(pullDir)
+      const candidates = pulledFiles.filter((f) => f.endsWith(".tgz") && f.startsWith(opts.chart))
+      const pulled = candidates[0]
+      if (candidates.length !== 1 || pulled === undefined) {
+        return yield* new HelmRenderError({
+          chart: opts.chart,
+          version: opts.version,
+          cause: `helm pull produced ${candidates.length} matching tarball(s) in ${pullDir}, expected exactly 1`
+        })
+      }
+
+      // `fs.rename` performs an atomic replace on POSIX, so a second
+      // concurrent release racing to populate the same cache entry
+      // overwrites harmlessly with byte-identical content (helm pull for a
+      // pinned version is deterministic) rather than corrupting the cache.
+      yield* fs.rename(path.join(pullDir, pulled), cachedTgz)
+    }).pipe(
+      Effect.ensuring(fs.remove(pullDir, { recursive: true, force: true }).pipe(Effect.ignore))
     )
 
-    const pull = ChildProcess.make("helm", [
-      "pull",
-      "--repo",
-      opts.repo,
-      opts.chart,
-      "--version",
-      opts.version,
-      "--destination",
-      cacheDir
-    ])
-    yield* runProcessExit(pull)
-
-    const afterFiles = yield* fs.readDirectory(cacheDir)
-    const candidates = afterFiles.filter(
-      (f) =>
-        f.endsWith(".tgz") &&
-        f.startsWith(opts.chart) &&
-        !beforeFiles.has(f) &&
-        path.join(cacheDir, f) !== cachedTgz
-    )
-    if (candidates.length > 0) {
-      yield* fs.rename(path.join(cacheDir, candidates[0] ?? ""), cachedTgz)
-    }
     yield* _verifyDigest({ opts, cachedTgz })
   })
 

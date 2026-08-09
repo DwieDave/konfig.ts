@@ -2,7 +2,7 @@ import { Console, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Argument, Command } from "effect/unstable/cli"
-import { readJson, RepoScriptError } from "../lib/repo"
+import { parseJson, RepoScriptError } from "../lib/repo"
 
 // npm publish ignores publishConfig.exports and src/ is excluded from files[], so the
 // bun/source conditions (pointing at ./src/index.ts for dev) must be stripped pre-publish.
@@ -16,7 +16,7 @@ const _strip = Effect.gen(function*() {
   const raw = yield* fs
     .readFileString(pkgJsonPath)
     .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot read ${pkgJsonPath}`, cause })))
-  const pkg = yield* readJson(pkgJsonPath)
+  const pkg = yield* parseJson(pkgJsonPath, raw)
   const exportsMap = pkg.exports as Record<string, Record<string, string>> | undefined
   const dot = exportsMap?.["."]
   if (dot === undefined) {

@@ -1,6 +1,6 @@
 import type { PackageManager } from "../PackageManager"
 
-export type YarnVariant = "classic" | "berry"
+type YarnVariant = "classic" | "berry"
 
 export interface YarnOptions {
   readonly variant: YarnVariant
@@ -12,11 +12,13 @@ export const yarn = (opts: YarnOptions): PackageManager => {
     _tag: "Yarn",
     lockfileNames: ["yarn.lock"],
     auxFiles: isBerry ? [".yarnrc.yml", ".yarnrc"] : [".yarnrc"],
+    // Berry has no --ignore-scripts flag; YARN_ENABLE_SCRIPTS=false is its
+    // equivalent lifecycle-script suppression (every other PM disables scripts too).
     installCommand: isBerry
-      ? ["yarn", "install", "--immutable"]
+      ? ["YARN_ENABLE_SCRIPTS=false", "yarn", "install", "--immutable"]
       : ["yarn", "install", "--frozen-lockfile", "--ignore-scripts"],
     prodInstallCommand: isBerry
-      ? ["yarn", "install"]
+      ? ["YARN_ENABLE_SCRIPTS=false", "yarn", "install"]
       : ["yarn", "install", "--ignore-scripts"],
     productionFlag: isBerry ? [] : ["--production"],
     nodeModulesLayout: "hoisted",

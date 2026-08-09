@@ -189,4 +189,105 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
       expect(pullInvoked).toBe(false)
       expect(docs).toHaveLength(3)
     }).pipe(Effect.provide(NodeServices.layer)))
+
+  // it.live: this test relies on a real elapsed-time delay to force the two
+  // pulls to interleave, so it must not run against the virtual TestClock
+  // that it.effect installs (Effect.sleep would just hang without it being
+  // manually advanced).
+  it.live(
+    "two concurrent releases of the same chart at different versions, sharing a cache, don't misattribute tarballs",
+    () =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem
+        const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-race-test-" })
+
+        const tarballA = Buffer.from("tarball-for-version-a")
+        const tarballB = Buffer.from("tarball-for-version-b")
+        const digestA = `sha256:${_sha256Hex(tarballA)}`
+        const digestB = `sha256:${_sha256Hex(tarballB)}`
+
+        // Record every `--destination` the two concurrent pulls are given.
+        // A pre-fix implementation passes the *shared* cacheDir straight
+        // through as `--destination` and instead diffs its directory
+        // listing before/after the pull to guess which new file is "mine" —
+        // a guess that misattributes tarballs once a second release's pull
+        // lands in the same window. The fix pulls into a private
+        // per-invocation temp directory and renames the known output, so
+        // each recorded destination must be distinct from both the other
+        // release's and from cacheDir itself.
+        const pullDestinations: string[] = []
+
+        const spawnerLayer = Layer.succeed(
+          ChildProcessSpawner,
+          makeSpawner(
+            ((command: Command) =>
+              Effect.gen(function*() {
+                if (!isStandardCommand(command)) return _handle("")
+                const args = command.args
+                if (args[0] === "pull") {
+                  const fsInner = yield* FileSystem
+                  const pathInner = yield* Path
+                  const destIdx = args.indexOf("--destination")
+                  const dest = args[destIdx + 1] ?? ""
+                  const chart = args[3] ?? "chart"
+                  const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
+                  const tarball = version === "1.0.0" ? tarballA : tarballB
+                  pullDestinations.push(dest)
+                  if (version === "1.0.0") yield* Effect.sleep("30 millis")
+                  yield* fsInner.writeFile(pathInner.join(dest, `${chart}-${version}.tgz`), tarball)
+                  return _handle("")
+                }
+                if (args[0] === "template") {
+                  return _handle(TEMPLATE_STDOUT)
+                }
+                return _handle("")
+              })) as unknown as Parameters<typeof makeSpawner>[0]
+          )
+        )
+
+        const configProvider = ConfigProvider.fromUnknown({ KONFIG_HELM_CACHE: cacheDir })
+
+        const releaseA = Helm.release({
+          repo: "https://example.com/charts",
+          chart: "mychart",
+          version: "1.0.0",
+          digest: digestA,
+          values: {}
+        })
+        const releaseB = Helm.release({
+          repo: "https://example.com/charts",
+          chart: "mychart",
+          version: "1.0.1",
+          digest: digestB,
+          values: {}
+        })
+
+        const [docsA, docsB] = yield* Effect.all(
+          [
+            releaseA.render(RenderContext.make("test")),
+            releaseB.render(RenderContext.make("test"))
+          ],
+          { concurrency: "unbounded" }
+        ).pipe(
+          Effect.provide(Layer.mergeAll(NodeServices.layer, spawnerLayer)),
+          Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+          Effect.scoped
+        )
+
+        expect(docsA).toHaveLength(3)
+        expect(docsB).toHaveLength(3)
+
+        // Each concurrent release cached its own tarball under its own
+        // digest-suffixed name — no misattribution — and both pulls landed
+        // in distinct private directories, never the shared cacheDir.
+        const cachedFiles = yield* fs.readDirectory(cacheDir)
+        expect(cachedFiles).toHaveLength(2)
+        expect(cachedFiles.some((f) => f.startsWith("mychart-1.0.0-"))).toBe(true)
+        expect(cachedFiles.some((f) => f.startsWith("mychart-1.0.1-"))).toBe(true)
+
+        expect(pullDestinations).toHaveLength(2)
+        expect(new Set(pullDestinations).size).toBe(2)
+        expect(pullDestinations).not.toContain(cacheDir)
+      }).pipe(Effect.provide(NodeServices.layer))
+  )
 })

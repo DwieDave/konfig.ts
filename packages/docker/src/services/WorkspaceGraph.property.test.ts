@@ -1,7 +1,6 @@
 import { Effect, Exit, Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { CircularWorkspaceDep, WorkspaceNotFound } from "../DockerError"
 import { closureOf, type Workspace } from "./WorkspaceGraph"
 
 const _ws = (name: string, deps: ReadonlyArray<string>): Workspace => ({
@@ -113,7 +112,4 @@ describe("closureOf — property tests", () => {
       expect(_causeContains(result.cause, "CircularWorkspaceDep")).toBe(true)
     }
   })
-
-  void WorkspaceNotFound
-  void CircularWorkspaceDep
 })

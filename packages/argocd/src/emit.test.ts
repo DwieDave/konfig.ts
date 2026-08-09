@@ -1,5 +1,18 @@
+import { NodeServices } from "@effect/platform-node"
+import { layer } from "@effect/vitest"
+import { RenderContext, renderManifest } from "@konfig.ts/core"
+import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import { Application, applicationCRFilename, type AppOfApps, serializeApplicationCR, Sync } from "./index"
+import {
+  Application,
+  applicationCRFilename,
+  type AppOfApps,
+  emitApplicationCR,
+  serializeApplicationCR,
+  Sync
+} from "./index"
+
+const ctx = RenderContext.make("test")
 
 const target: AppOfApps.AppOfAppsTarget = {
   repoURL: "ssh://git@github.com/example/infra.git",
@@ -150,6 +163,98 @@ describe("serializeApplicationCR", () => {
   })
 })
 
+describe("syncPolicy merge (defaults + app both defined)", () => {
+  const appBase = {
+    name: "merge-target",
+    namespace: "argocd",
+    manifests: [],
+    source: {
+      repoURL: "ssh://git@github.com/example/infra.git",
+      targetRevision: "main",
+      path: "./infra/k8s/manifests/prod/merge-target"
+    }
+  } as const
+
+  it("deep-merges automated field-by-field instead of clobbering the default", () => {
+    const app = Application.make({
+      ...appBase,
+      syncPolicy: { automated: { prune: false } }
+    })
+    const withDefaults: AppOfApps.AppOfAppsDefaults = {
+      ...defaults,
+      syncPolicy: { automated: { selfHeal: true, allowEmpty: true } }
+    }
+
+    const yaml = serializeApplicationCR({ app, target, defaults: withDefaults })
+
+    // app-level prune:false must win, but default selfHeal:true / allowEmpty:true
+    // must survive instead of being wholesale replaced.
+    expect(yaml).toContain("prune: false")
+    expect(yaml).toContain("selfHeal: true")
+    expect(yaml).toContain("allowEmpty: true")
+  })
+
+  it("deep-merges retry (including nested backoff) field-by-field", () => {
+    const app = Application.make({
+      ...appBase,
+      syncPolicy: { retry: { limit: 3, backoff: { duration: "5s" } } }
+    })
+    const withDefaults: AppOfApps.AppOfAppsDefaults = {
+      ...defaults,
+      syncPolicy: { retry: { backoff: { factor: 2, maxDuration: "3m" } } }
+    }
+
+    const yaml = serializeApplicationCR({ app, target, defaults: withDefaults })
+
+    expect(yaml).toContain("limit: 3")
+    expect(yaml).toContain("duration: 5s")
+    expect(yaml).toContain("factor: 2")
+    expect(yaml).toContain("maxDuration: 3m")
+  })
+
+  it("app-level syncOptions replaces (not merges with) the default array", () => {
+    const app = Application.make({
+      ...appBase,
+      syncPolicy: { syncOptions: ["CreateNamespace=true"] }
+    })
+    const withDefaults: AppOfApps.AppOfAppsDefaults = {
+      ...defaults,
+      syncPolicy: { syncOptions: ["Validate=false"] }
+    }
+
+    const yaml = serializeApplicationCR({ app, target, defaults: withDefaults })
+
+    expect(yaml).toContain("CreateNamespace=true")
+    expect(yaml).not.toContain("Validate=false")
+  })
+})
+
+describe("emitApplicationCR", () => {
+  layer(NodeServices.layer)("rendering", (it) => {
+    it.effect("renders the same YAML as serializeApplicationCR", () =>
+      Effect.gen(function*() {
+        const app = Application.make({
+          name: "sops-secrets-operator",
+          namespace: "argocd",
+          manifests: [],
+          source: {
+            repoURL: "ssh://git@github.com/example/infra.git",
+            targetRevision: "main",
+            path: "./infra/k8s/manifests/prod/sops-secrets-operator"
+          },
+          syncPolicy: { automated: { prune: false, selfHeal: false } }
+        })
+
+        const manifest = emitApplicationCR({ app, target, defaults })
+        const out = yield* renderManifest({ manifest, ctx })
+
+        expect(out).toBe(serializeApplicationCR({ app, target, defaults }))
+        expect(out).toContain("kind: Application")
+        expect(out).toContain("name: sops-secrets-operator")
+      }))
+  })
+})
+
 describe("applicationCRFilename", () => {
   it("returns Application-<name>.yaml", () => {
     const app = Application.make({
@@ -159,5 +264,15 @@ describe("applicationCRFilename", () => {
       source: { repoURL: "", targetRevision: "", path: "" }
     })
     expect(applicationCRFilename(app)).toBe("Application-cert-manager.yaml")
+  })
+
+  it("sanitizes '.' and '/' out of the name, like core's filenameFor", () => {
+    const app = Application.make({
+      name: "sub/app.v2",
+      namespace: "argocd",
+      manifests: [],
+      source: { repoURL: "", targetRevision: "", path: "" }
+    })
+    expect(applicationCRFilename(app)).toBe("Application-sub-app-v2.yaml")
   })
 })

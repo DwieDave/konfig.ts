@@ -1,4 +1,4 @@
-export interface SourceLocation {
+interface SourceLocation {
   readonly line: number
   readonly column: number
 }
@@ -35,7 +35,7 @@ export interface FunctionLike extends AstNode {
   readonly generator?: boolean
 }
 
-export interface VariableDeclarator extends AstNode {
+interface VariableDeclarator extends AstNode {
   readonly type: "VariableDeclarator"
   readonly id: AstNode
   readonly init?: AstNode
@@ -59,25 +59,18 @@ export interface TSTypeCast extends AstNode {
 
 export const isIdentifier = (node: AstNode): node is Identifier => node.type === "Identifier"
 
-export const isMemberExpression = (node: AstNode): node is MemberExpression =>
-  node.type === "MemberExpression"
+export const isMemberExpression = (node: AstNode): node is MemberExpression => node.type === "MemberExpression"
 
-export const isCallExpression = (node: AstNode): node is CallExpression =>
-  node.type === "CallExpression"
+export const isCallExpression = (node: AstNode): node is CallExpression => node.type === "CallExpression"
 
 export const isFunctionLike = (node: AstNode): node is FunctionLike =>
   node.type === "FunctionDeclaration" ||
   node.type === "FunctionExpression" ||
   node.type === "ArrowFunctionExpression"
 
-export const isVariableDeclaration = (node: AstNode): node is VariableDeclaration =>
-  node.type === "VariableDeclaration"
+export const isVariableDeclaration = (node: AstNode): node is VariableDeclaration => node.type === "VariableDeclaration"
 
-export const isVariableDeclarator = (node: AstNode): node is VariableDeclarator =>
-  node.type === "VariableDeclarator"
-
-export const isTSTypeReference = (node: AstNode): node is TSTypeReference =>
-  node.type === "TSTypeReference"
+export const isTSTypeReference = (node: AstNode): node is TSTypeReference => node.type === "TSTypeReference"
 
 export const isTSTypeCast = (node: AstNode): node is TSTypeCast =>
   node.type === "TSAsExpression" || node.type === "TSTypeAssertion"
@@ -111,11 +104,11 @@ export interface RuleContext {
   report(descriptor: ReportDescriptor): void
 }
 
-export type Visitor = (node: AstNode) => void
+type Visitor = (node: AstNode) => void
 
-export type RuleListener = Readonly<Record<string, Visitor>>
+type RuleListener = Readonly<Record<string, Visitor>>
 
-export interface RuleMeta {
+interface RuleMeta {
   readonly type?: "problem" | "suggestion" | "layout"
   readonly docs?: { readonly description?: string }
   readonly schema?: ReadonlyArray<unknown>

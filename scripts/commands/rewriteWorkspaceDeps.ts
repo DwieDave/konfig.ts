@@ -7,10 +7,10 @@ import { packageDirs, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
 // npm understands neither workspace:* nor catalog: protocols, so both must be
 // resolved to concrete semver before npm publish.
 
-type DepRecord = Record<string, string>
+export type DepRecord = Record<string, string>
 type Catalogs = Record<string, DepRecord>
 
-interface _RewriteInput {
+export interface _RewriteInput {
   readonly rec: DepRecord | undefined
   readonly version: string
   readonly catalog: DepRecord
@@ -18,7 +18,7 @@ interface _RewriteInput {
   readonly pkgJsonPath: string
 }
 
-const _rewriteRecord = (input: _RewriteInput) =>
+export const _rewriteRecord = (input: _RewriteInput) =>
   Effect.gen(function*() {
     const { catalog, namedCatalogs, pkgJsonPath, rec, version } = input
     if (rec === undefined) return false
@@ -31,7 +31,7 @@ const _rewriteRecord = (input: _RewriteInput) =>
       ) {
         rec[name] = version
         changed = true
-      } else if (spec === "catalog:" || spec.startsWith("catalog:")) {
+      } else if (spec.startsWith("catalog:")) {
         const group = spec.slice("catalog:".length)
         const table = group === "" ? catalog : namedCatalogs[group] ?? {}
         const resolved = table[name]

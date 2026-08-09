@@ -17,6 +17,22 @@ const minimalSpec = (target: string): DockerSpec => ({
 })
 
 describe("lower (bun fixture)", () => {
+  it.effect("rejects a multi-arch platform with PlatformMultiUnsupported (FROM takes one value)", () =>
+    Effect.gen(function*() {
+      const spec: DockerSpec = {
+        ...minimalSpec(`${FIXTURES}bun/packages/app`),
+        runner: {
+          ...minimalSpec(`${FIXTURES}bun/packages/app`).runner,
+          platform: { _tag: "PlatformMulti", values: ["linux/amd64", "linux/arm64"] }
+        }
+      }
+      const exit = yield* Effect.exit(lower(spec))
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(exit.cause.toString()).toContain("PlatformMultiUnsupported")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
+
   it.effect("emits prod bundle with deps/builder/runner from base", () =>
     Effect.gen(function*() {
       const bundle = yield* lower(minimalSpec(`${FIXTURES}bun/packages/app`))

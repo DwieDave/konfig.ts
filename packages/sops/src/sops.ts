@@ -1,7 +1,8 @@
-import { processDetail, runProcessString } from "@konfig.ts/core"
+import { boundary, processDetail, runProcessString } from "@konfig.ts/core"
 import { Data, Effect, Stream } from "effect"
 import { ChildProcess } from "./_unstable"
 import type { SopsRecipients } from "./crd"
+import { SopsRecipientsSchema } from "./schema"
 
 export class SopsInvocationError extends Data.TaggedError("SopsInvocationError")<{
   readonly op: "decrypt" | "encrypt"
@@ -11,6 +12,11 @@ export class SopsInvocationError extends Data.TaggedError("SopsInvocationError")
     return `sops ${this.op} failed${processDetail(this.cause)}`
   }
 }
+
+const _decodeRecipients = boundary({
+  schema: SopsRecipientsSchema,
+  label: "SopsRecipients"
+})
 
 const _recipientArgs = (recipients: SopsRecipients): string[] => {
   const out: string[] = []
@@ -51,6 +57,9 @@ export interface SopsEncryptStdinInput {
 
 export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
   Effect.gen(function*() {
+    // Validate here too: this is public API and callers may pass unvalidated string[]
+    // regardless of the SopsRecipients type, bypassing any decode a caller performed upstream.
+    const recipients = yield* _decodeRecipients(input.recipients)
     const encoded = new TextEncoder().encode(input.plaintextYaml)
     const args = [
       "--encrypt",
@@ -58,7 +67,7 @@ export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
       "yaml",
       "--output-type",
       "yaml",
-      ..._recipientArgs(input.recipients),
+      ..._recipientArgs(recipients),
       "/dev/stdin"
     ]
     const cmd = ChildProcess.make("sops", args, {

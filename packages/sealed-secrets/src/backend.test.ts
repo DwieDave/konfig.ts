@@ -201,6 +201,26 @@ describe("SealedSecrets.backend", () => {
       expect(yaml).toContain("encryptedData:")
     }).pipe(Effect.provide(NodeServices.layer)))
 
+  it.effect("KubesealParseError if kubeseal stdout isn't valid YAML", () =>
+    Effect.gen(function*() {
+      const sink: SpawnerSink = {}
+      const garbage = "key: [1,2"
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: SealedSecrets.backend({ scope: "strict", certPath: "/tmp/c.pem" }),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+      const exit = yield* Effect.exit(
+        bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink, garbage)))
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const text = Cause.pretty(exit.cause)
+        expect(text).toContain("KubesealParseError")
+        expect(text).toContain("kubeseal failed")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
+
   it.effect("BoundaryDecodeError if kubeseal stdout doesn't match SealedSecret schema", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}

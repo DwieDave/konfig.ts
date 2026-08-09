@@ -33,6 +33,14 @@ layer(NodeServices.layer)("Manifest combinators", (it) => {
       expect(result).toEqual([])
     }))
 
+  it("concat rejects an array-typed A at compile time (element type would be ambiguous)", () => {
+    const nested = Manifest.make<number[][]>(() => [[1, 2], [3]])
+    // @ts-expect-error — A = number[] is itself an array type, so
+    // Manifest<number[]> and Manifest<number[][]>'s per-element A are
+    // indistinguishable via Array.isArray; concat's type rejects this call.
+    Manifest.concat(nested)
+  })
+
   it.effect("whenever runs the thunk and its manifest when cond is true", () =>
     Effect.gen(function*() {
       let called = false

@@ -66,18 +66,16 @@ export const emitFor = (load: SpecLoad) =>
 
 export interface WriteAtomicInput {
   readonly fs: FileSystem
-  readonly p: Path
   readonly path: string
   readonly content: string
 }
 
 export const writeAtomic = (input: WriteAtomicInput): Effect.Effect<void, DockerWriteError> =>
   Effect.gen(function*() {
-    const { content, fs, p, path } = input
+    const { content, fs, path } = input
     const tmp = `${path}.tmp.${process.pid}`
     yield* fs.writeFileString(tmp, content)
     yield* fs.rename(tmp, path)
-    void p
   }).pipe(Effect.mapError((cause) => new DockerWriteError({ path: input.path, cause })))
 
 export interface WriteOneInput {
@@ -92,7 +90,6 @@ export const writeOne = (
   Effect.gen(function*() {
     const { content, dest, force } = input
     const fs = yield* FileSystem
-    const p = yield* Path
     const existed = yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false))
     if (existed) {
       const existing = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
@@ -105,7 +102,7 @@ export const writeOne = (
       }
       if (head.managed && existing === content) return { written: false }
     }
-    yield* writeAtomic({ fs, p, path: dest, content })
+    yield* writeAtomic({ fs, path: dest, content })
     return { written: true }
   })
 
@@ -132,7 +129,7 @@ export const previewEffect = (
     }
   })
 
-export const previewCommand = Command.make(
+const previewCommand = Command.make(
   "preview",
   {
     target: Argument.string("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
@@ -186,7 +183,7 @@ export const writeEffect = (
     }
   })
 
-export const writeCommand = Command.make(
+const writeCommand = Command.make(
   "write",
   {
     target: Argument.string("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
@@ -265,7 +262,7 @@ export const diffEffect = (
     yield* Console.log(`OK — ${args.target} matches`)
   })
 
-export const diffCommand = Command.make(
+const diffCommand = Command.make(
   "diff",
   {
     target: Argument.string("target").pipe(Argument.withDescription("workspace dir relative to cwd")),

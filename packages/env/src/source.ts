@@ -85,12 +85,12 @@ const _fromCommand = <const K extends string>(
     for (const key of input.keys) {
       const spec = input.run(key)
       const proc = ChildProcess.make(spec.cmd, [...spec.args])
-      const stdout = yield* runProcessString(proc, { allowEmptyStdout: false }).pipe(
+      const stdout = yield* runProcessString(proc, { allowEmptyStdout: true }).pipe(
         Effect.mapError(
           (cause) => new SecretSourceError({ source: "fromCommand", key, cause })
         )
       )
-      const value = stdout.replace(/\n+$/u, "")
+      const value = stdout.trim()
       if (value.length === 0) {
         return yield* new SecretSourceError({
           source: "fromCommand",
