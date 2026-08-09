@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { describe, expect } from "vitest"
 import { CircularWorkspaceDep, WorkspaceNotFound } from "../DockerError"
 import { allWorkspaces, closureOf, detectPm, findRoot, type Workspace } from "./WorkspaceGraph"
@@ -10,6 +10,11 @@ const FIXTURES = new URL("../../fixtures/", import.meta.url).pathname
 const provided = <A, E>(eff: Effect.Effect<A, E, never>) => eff
 const withFs = <A, E>(eff: Effect.Effect<A, E, ReturnType<typeof Effect.gen>>) =>
   Effect.provide(eff, NodeServices.layer)
+
+const _causeContains = (cause: unknown, needle: string): boolean => {
+  const encoded = Schema.encodeExit(Schema.UnknownFromJsonString)(cause)
+  return Exit.isSuccess(encoded) && encoded.value.includes(needle)
+}
 
 describe("findRoot", () => {
   it.effect("returns the bun fixture root when started from a nested workspace", () =>
@@ -157,25 +162,22 @@ describe("closureOf", () => {
       expect(closure.map((w) => w.name)).toEqual(["@fix/shared"])
     }).pipe(Effect.provide(NodeServices.layer)))
 
-  it("WorkspaceNotFound when target is unknown", async () => {
+  it("WorkspaceNotFound when target is unknown", () => {
     const all: ReadonlyArray<Workspace> = [_ws("@a", {})]
-    const exit = await Effect.runPromiseExit(closureOf({ all, target: "@missing" }))
+    const exit = Effect.runSyncExit(closureOf({ all, target: "@missing" }))
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {
-      const cause = exit.cause
-      const isWNF = JSON.stringify(cause).includes("WorkspaceNotFound")
-      expect(isWNF).toBe(true)
+      expect(_causeContains(exit.cause, "WorkspaceNotFound")).toBe(true)
     }
   })
 
-  it("detects a cycle", async () => {
+  it("detects a cycle", () => {
     const a = _ws("@a", { "@b": "workspace:*" })
     const b = _ws("@b", { "@a": "workspace:*" })
-    const exit = await Effect.runPromiseExit(closureOf({ all: [a, b], target: "@a" }))
+    const exit = Effect.runSyncExit(closureOf({ all: [a, b], target: "@a" }))
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {
-      const isCycle = JSON.stringify(exit.cause).includes("CircularWorkspaceDep")
-      expect(isCycle).toBe(true)
+      expect(_causeContains(exit.cause, "CircularWorkspaceDep")).toBe(true)
     }
   })
 

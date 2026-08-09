@@ -1,4 +1,4 @@
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { CircularWorkspaceDep, WorkspaceNotFound } from "../DockerError"
@@ -45,15 +45,18 @@ const arbDag = fc
     return { names, deps }
   })
 
+const _causeContains = (cause: unknown, needle: string): boolean => {
+  const encoded = Schema.encodeExit(Schema.UnknownFromJsonString)(cause)
+  return Exit.isSuccess(encoded) && encoded.value.includes(needle)
+}
+
 describe("closureOf — property tests", () => {
-  it("the closure of a target contains exactly the transitive reachable set", async () => {
-    await fc.assert(
-      fc.asyncProperty(arbDag, async ({ names, deps }) => {
+  it("the closure of a target contains exactly the transitive reachable set", () => {
+    fc.assert(
+      fc.property(arbDag, ({ names, deps }) => {
         const all = names.map((n) => _ws(n, deps[n] ?? []))
         const target = names[0]!
-        const result = await Effect.runPromise(
-          Effect.exit(closureOf({ all, target }))
-        )
+        const result = Effect.runSyncExit(closureOf({ all, target }))
         if (!Exit.isSuccess(result)) return
 
         // Compute the expected closure by BFS over deps.
@@ -72,12 +75,12 @@ describe("closureOf — property tests", () => {
     )
   })
 
-  it("the closure ends with the target — dep-first topological order", async () => {
-    await fc.assert(
-      fc.asyncProperty(arbDag, async ({ names, deps }) => {
+  it("the closure ends with the target — dep-first topological order", () => {
+    fc.assert(
+      fc.property(arbDag, ({ names, deps }) => {
         const all = names.map((n) => _ws(n, deps[n] ?? []))
         const target = names[0]!
-        const result = await Effect.runPromise(Effect.exit(closureOf({ all, target })))
+        const result = Effect.runSyncExit(closureOf({ all, target }))
         if (!Exit.isSuccess(result)) return
         const last = result.value[result.value.length - 1]
         expect(last?.name).toBe(target)
@@ -86,43 +89,34 @@ describe("closureOf — property tests", () => {
     )
   })
 
-  it("returns WorkspaceNotFound for a target that doesn't exist", async () => {
+  it("returns WorkspaceNotFound for a target that doesn't exist", () => {
     const all = [_ws("@fix/a", [])]
-    const result = await Effect.runPromise(
-      Effect.exit(closureOf({ all, target: "@fix/missing" }))
-    )
+    const result = Effect.runSyncExit(closureOf({ all, target: "@fix/missing" }))
     expect(Exit.isFailure(result)).toBe(true)
     if (Exit.isFailure(result)) {
-      const json = JSON.stringify(result.cause)
-      expect(json).toContain("WorkspaceNotFound")
+      expect(_causeContains(result.cause, "WorkspaceNotFound")).toBe(true)
     }
   })
 
-  it("detects a self-cycle", async () => {
+  it("detects a self-cycle", () => {
     const all = [_ws("@fix/a", ["@fix/a"])]
-    const result = await Effect.runPromise(
-      Effect.exit(closureOf({ all, target: "@fix/a" }))
-    )
+    const result = Effect.runSyncExit(closureOf({ all, target: "@fix/a" }))
     expect(Exit.isFailure(result)).toBe(true)
     if (Exit.isFailure(result)) {
-      const json = JSON.stringify(result.cause)
-      expect(json).toContain("CircularWorkspaceDep")
+      expect(_causeContains(result.cause, "CircularWorkspaceDep")).toBe(true)
     }
   })
 
-  it("detects a 3-cycle", async () => {
+  it("detects a 3-cycle", () => {
     const all = [
       _ws("@fix/a", ["@fix/b"]),
       _ws("@fix/b", ["@fix/c"]),
       _ws("@fix/c", ["@fix/a"])
     ]
-    const result = await Effect.runPromise(
-      Effect.exit(closureOf({ all, target: "@fix/a" }))
-    )
+    const result = Effect.runSyncExit(closureOf({ all, target: "@fix/a" }))
     expect(Exit.isFailure(result)).toBe(true)
     if (Exit.isFailure(result)) {
-      const json = JSON.stringify(result.cause)
-      expect(json).toContain("CircularWorkspaceDep")
+      expect(_causeContains(result.cause, "CircularWorkspaceDep")).toBe(true)
     }
   })
 

@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { describe, expect } from "vitest"
 import type { DockerSpec } from "../spec"
 import { lower } from "./lower"
@@ -219,7 +219,8 @@ describe("lower error paths", () => {
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(JSON.stringify(exit.cause)).toContain("BuildScriptMissing")
+        const causeJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        expect(causeJson).toContain("BuildScriptMissing")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -236,7 +237,8 @@ describe("lower error paths", () => {
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(JSON.stringify(exit.cause)).toContain("WorkspaceSourceUnknown")
+        const causeJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        expect(causeJson).toContain("WorkspaceSourceUnknown")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -249,7 +251,8 @@ describe("lower error paths", () => {
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(JSON.stringify(exit.cause)).toContain("SharedRootFileMissing")
+        const causeJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        expect(causeJson).toContain("SharedRootFileMissing")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -267,7 +270,8 @@ describe("lower error paths", () => {
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(JSON.stringify(exit.cause)).toContain("EngineVersionMissing")
+        const causeJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        expect(causeJson).toContain("EngineVersionMissing")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 })

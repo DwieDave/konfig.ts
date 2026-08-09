@@ -1,5 +1,5 @@
 import { brand, unsafeCoerce } from "@konfig.ts/core"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { parse as parseYaml } from "yaml"
@@ -61,12 +61,15 @@ const _readPkgJsonIfExists = (
     if (!exists) return undefined
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    return yield* Effect.try(() =>
-      unsafeCoerce<PackageJson>(
-        JSON.parse(text),
-        "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses"
-      )
-    ).pipe(Effect.orElseSucceed(() => undefined))
+    return yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(text).pipe(
+      Effect.map((decoded) =>
+        unsafeCoerce<PackageJson>(
+          decoded,
+          "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses"
+        )
+      ),
+      Effect.orElseSucceed(() => undefined)
+    )
   })
 
 const _isMonorepoRoot = (pkg: PackageJson | undefined, hasPnpmYaml: boolean): boolean => {
@@ -215,19 +218,22 @@ const _parseWorkspacePackage = (
     const pkgPath = p.join(root, relDir, "package.json")
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    return yield* Effect.try((): Workspace | undefined => {
-      const pkg = unsafeCoerce<PackageJson>(
-        JSON.parse(text),
-        "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses"
-      )
-      if (!pkg.name) return undefined
-      return {
-        name: pkg.name,
-        relDir,
-        pkg,
-        hasBuildScript: Boolean(pkg.scripts?.build)
-      }
-    }).pipe(Effect.orElseSucceed(() => undefined))
+    return yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(text).pipe(
+      Effect.map((decoded): Workspace | undefined => {
+        const pkg = unsafeCoerce<PackageJson>(
+          decoded,
+          "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses"
+        )
+        if (!pkg.name) return undefined
+        return {
+          name: pkg.name,
+          relDir,
+          pkg,
+          hasBuildScript: Boolean(pkg.scripts?.build)
+        }
+      }),
+      Effect.orElseSucceed(() => undefined)
+    )
   })
 
 export const allWorkspaces = (
