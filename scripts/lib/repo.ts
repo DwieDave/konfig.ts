@@ -31,6 +31,9 @@ export const readJson = (file: string) =>
     return parsed as PackageJson
   })
 
+/** Packages without tests/coverage, skipped wherever the CLI iterates test-carrying packages. */
+export const EXCLUDED_PACKAGES: ReadonlySet<string> = new Set(["oxc"])
+
 export const packageDirs = Effect.gen(function*() {
   const fs = yield* FileSystem
   const path = yield* Path
@@ -46,4 +49,12 @@ export const packageDirs = Effect.gen(function*() {
     if (exists) dirs.push(dir)
   }
   return dirs
+})
+
+export const testPackageNames = Effect.gen(function*() {
+  const path = yield* Path
+  const dirs = yield* packageDirs
+  return dirs
+    .map((dir) => path.basename(dir))
+    .filter((name) => !EXCLUDED_PACKAGES.has(name))
 })

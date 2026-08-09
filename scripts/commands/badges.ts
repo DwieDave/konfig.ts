@@ -3,19 +3,7 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Command } from "effect/unstable/cli"
 import { renderBadge } from "../lib/badge"
-import { readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
-
-const PACKAGES = [
-  "core",
-  "env",
-  "k8s",
-  "external-secrets",
-  "sealed-secrets",
-  "sops",
-  "argocd",
-  "docker",
-  "cli"
-]
+import { readJson, REPO_ROOT, RepoScriptError, testPackageNames } from "../lib/repo"
 
 const CoverageSummary = Schema.Struct({
   total: Schema.Struct({
@@ -53,7 +41,7 @@ export const badgesCommand = Command.make(
       let linesTotal = 0
       let linesCovered = 0
       let tests = 0
-      for (const p of PACKAGES) {
+      for (const p of yield* testPackageNames) {
         const covFile = path.join(REPO_ROOT, "packages", p, "coverage", "coverage-summary.json")
         const cov = yield* Schema.decodeUnknownEffect(CoverageSummary)(yield* readJson(covFile)).pipe(
           Effect.mapError((cause) => new RepoScriptError({ message: `unexpected coverage summary shape in ${covFile}`, cause }))
