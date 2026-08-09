@@ -1,6 +1,11 @@
 # konfig.ts
 
+[![npm](https://img.shields.io/npm/v/%40konfig.ts%2Fcore?label=npm)](https://www.npmjs.com/package/@konfig.ts/core)
 ![line coverage](.github/badges/coverage.svg)
+![tests](.github/badges/tests.svg)
+![effect](.github/badges/effect.svg)
+[![license](https://img.shields.io/npm/l/%40konfig.ts%2Fcore?label=license)](LICENSE)
+[![provenance](https://img.shields.io/badge/provenance-attested-1f6feb)](https://github.com/DwieDave/konfig.ts/attestations)
 
 Typesafe Kubernetes + ArgoCD configuration in TypeScript, powered by
 [Effect](https://effect.website/).

@@ -40,7 +40,7 @@
     "lint": "oxlint",
     "lint:apply": "oxlint --fix",
     "prepublishOnly": "bun run build",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

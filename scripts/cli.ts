@@ -3,7 +3,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
 import { bumpVersionCommand } from "./commands/bumpVersion"
-import { coverageBadgeCommand } from "./commands/coverageBadge"
+import { badgesCommand } from "./commands/badges"
 import { prepackExportsCommand } from "./commands/prepackExports"
 import { rewriteWorkspaceDepsCommand } from "./commands/rewriteWorkspaceDeps"
 
@@ -16,7 +16,7 @@ const root = Command.make(
     bumpVersionCommand,
     prepackExportsCommand,
     rewriteWorkspaceDepsCommand,
-    coverageBadgeCommand
+    badgesCommand
   ])
 )
 
