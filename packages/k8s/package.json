@@ -54,8 +54,8 @@
     "lint": "oxlint",
     "lint:apply": "oxlint --fix",
     "prepublishOnly": "bun run build",
-    "prepack": "node ../../scripts/prepack-exports.mjs strip",
-    "postpack": "node ../../scripts/prepack-exports.mjs restore",
+    "prepack": "bun ../../scripts/cli.ts prepack-exports strip",
+    "postpack": "bun ../../scripts/cli.ts prepack-exports restore",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {

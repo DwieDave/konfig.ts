@@ -90,7 +90,7 @@ jobs:
           retention-days: 7
 
       - name: "Rewrite workspace:* and catalog: protocol deps to concrete versions"
-        run: node scripts/rewrite-workspace-deps.cjs
+        run: bun scripts/cli.ts rewrite-workspace-deps
 
       - name: Verify published-artifact contents (dry-run pack)
         run: |

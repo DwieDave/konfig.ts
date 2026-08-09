@@ -18,7 +18,7 @@ Triggered by a `vX.Y.Z` tag. Runs:
 2. **`bun run check` + `bun run test` + `bun run build`** — the same
    gates as CI, run on the tagged commit's tree.
 3. **Rewrite `workspace:*` → exact version** via
-   `scripts/rewrite-workspace-deps.cjs`. The npm registry doesn't
+   `scripts/cli.ts rewrite-workspace-deps`. The npm registry doesn't
    understand `workspace:*`; the script pins every internal dep to the
    lockstep version.
 4. **`npm pack --dry-run`** for each package — surfaces the
@@ -69,7 +69,7 @@ Before tagging, do a local pack pass:
 ```bash
 bun install --frozen-lockfile
 bun run check && bun run test && bun run build
-node scripts/rewrite-workspace-deps.cjs
+bun scripts/cli.ts rewrite-workspace-deps
 for pkg in packages/*/; do
   (cd "$pkg" && npm pack --dry-run --json) | jq '.[0].files | length'
 done
