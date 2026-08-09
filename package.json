@@ -27,7 +27,7 @@
     "test": "bun run --cwd packages/core test && bun run --cwd packages/env test && bun run --cwd packages/k8s test && bun run --cwd packages/external-secrets test && bun run --cwd packages/sealed-secrets test && bun run --cwd packages/sops test && bun run --cwd packages/argocd test && bun run --cwd packages/docker test && bun run --cwd packages/cli test",
     "lint": "oxlint",
     "lint:apply": "oxlint --fix",
-    "prepare": "effect-tsgo patch --oxlint"
+    "prepare": "effect-tsgo patch --no-typescript --oxlint"
   },
   "devDependencies": {
     "@effect/tsgo": "^0.36.0",
