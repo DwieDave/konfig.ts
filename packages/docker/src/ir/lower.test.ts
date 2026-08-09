@@ -56,7 +56,6 @@ describe("lower (bun fixture)", () => {
           i._tag === "Copy" &&
           (i as { src: ReadonlyArray<string> }).src.some((s) => s.endsWith("/node_modules"))
       )
-      // Root + 3 closure members (@fix/shared, @fix/util, @fix/app)
       expect(nodeModulesCopies.length).toBe(4)
       const allDsts = nodeModulesCopies.map((c) => (c as { dst: string }).dst)
       expect(allDsts).not.toContain("/app/packages/other/node_modules")
@@ -125,7 +124,6 @@ describe("lower (bun fixture)", () => {
             (s) => s.startsWith("/app/packages/") && !s.endsWith("/node_modules")
           )
       )
-      // Closure has shared, util, app — workspaceSourceAll excludes target (app), so 2 entries.
       expect(wsCopies.length).toBe(2)
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -147,11 +145,8 @@ describe("lower (bun fixture)", () => {
           i._tag === "Copy" &&
           (i as { src: ReadonlyArray<string> }).src.some((s) => s.endsWith("/node_modules"))
       ) as ReadonlyArray<{ from?: string; src: ReadonlyArray<string> }>
-      // root + every closure workspace (shared, util, app/target) = 4.
       expect(nmCopies.length).toBe(4)
-      // All sourced from the production deps stage, never the dev builder.
       expect(nmCopies.every((c) => c.from === "prod-deps")).toBe(true)
-      // The target app's own node_modules is included (the bug this guards).
       expect(
         nmCopies.some((c) => c.src.includes("/app/packages/app/node_modules"))
       ).toBe(true)
@@ -178,10 +173,7 @@ describe("lower (bun fixture)", () => {
       const rmRuns = stage.instructions.filter(
         (i) => i._tag === "Run" && (i as { cmd: string }).cmd.startsWith("rm -rf ")
       ) as ReadonlyArray<{ cmd: string }>
-      // One line per path (the old code joined every path into a single line).
       expect(rmRuns.length).toBe(4)
-      // Each token single-quoted; spaces, metacharacters and embedded
-      // single quotes are neutralised (the embedded quote uses '\'').
       expect(rmRuns.map((r) => r.cmd)).toEqual([
         `rm -rf 'node_modules/sharp'`,
         `rm -rf 'node_modules/@types/react dom'`,
@@ -258,7 +250,6 @@ describe("lower error paths", () => {
 
   it.effect("fails EngineVersionMissing when target has no engines.<runtime>", () =>
     Effect.gen(function*() {
-      // shared has no engines field
       const spec: DockerSpec = {
         target: `${FIXTURES}bun/packages/shared`,
         runner: {
@@ -283,8 +274,6 @@ describe("lower prod-deps stage (production install per package manager)", () =>
     { pm: "pnpm", target: `${FIXTURES}pnpm-isolated/packages/app`, lockfile: "pnpm-lock.yaml" },
     { pm: "yarn", target: `${FIXTURES}yarn-classic/packages/app`, lockfile: "yarn.lock" }
   ] as const
-  // `npm ci`, `pnpm --frozen-lockfile`, `yarn --immutable` — all REQUIRE
-  // the lockfile and validate it against the (trimmed) manifest.
   const FROZEN_RE = /(^| )(ci|--frozen-lockfile|--immutable)( |$)/
   for (const c of cases) {
     it.effect(`${c.pm}: never both deletes the lockfile and runs a frozen install`, () =>
@@ -304,10 +293,7 @@ describe("lower prod-deps stage (production install per package manager)", () =>
           (r) => r.cmd.startsWith("rm -f") && r.cmd.includes(c.lockfile)
         )
         const frozenInstall = runs.some((r) => FROZEN_RE.test(r.cmd))
-        // The exact failing combination the fix guards against.
         expect(deletesLockfile && frozenInstall).toBe(false)
-        // Non-bun keeps the lockfile and re-resolves — no frozen install,
-        // no lockfile deletion. Bun deletes+regenerates but is non-frozen.
         if (c.pm !== "bun") {
           expect(deletesLockfile).toBe(false)
           expect(frozenInstall).toBe(false)
@@ -329,7 +315,6 @@ describe("lower (pnpm fixtures: layout branching)", () => {
           i._tag === "Copy" &&
           (i as { src: ReadonlyArray<string> }).src.some((s) => s.includes("node_modules"))
       )
-      // Root + 3 closure entries
       expect(nmCopies.length).toBeGreaterThanOrEqual(2)
     }).pipe(Effect.provide(NodeServices.layer)))
 

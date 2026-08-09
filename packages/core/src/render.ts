@@ -3,18 +3,14 @@ import { Effect, Layer } from "effect"
 import { RenderContext } from "./RenderContext"
 
 export interface RenderOptions<RIn = never, E = never> {
-  /** Render-context env (default `"prod"`). Keys output dirs and bundle entries. */
   readonly env?: string
-  /** Extra layer merged with `NodeServices.layer` before running the program. Use for `ConfigProvider` mocks, custom service tags, etc. */
   readonly layers?: Layer.Layer<RIn, never, never>
-  /** Runner for the fully-provided program. Defaults to `NodeRuntime.runMain`; override in tests to avoid exiting the process. */
+  // Defaults to NodeRuntime.runMain; override in tests to avoid exiting the process.
   readonly runMain?: (effect: Effect.Effect<void, E>) => void
 }
 
-/** @internal */
 export const _resolveEnv = (env: string | undefined): string => env ?? "prod"
 
-/** @internal */
 export const _buildLayers = <RIn>(
   extra: Layer.Layer<RIn, never, never> | undefined
 ): Layer.Layer<NodeServices.NodeServices | RIn, never, never> =>
@@ -23,13 +19,7 @@ export const _buildLayers = <RIn>(
     ? (NodeServices.layer as Layer.Layer<NodeServices.NodeServices | RIn, never, never>)
     : Layer.mergeAll(NodeServices.layer, extra)
 
-/**
- * @internal
- * Compose the ctx + layers wiring `render` hands to `NodeRuntime.runMain`
- * into a single runnable Effect (context fully provided). Extracted so
- * tests can exercise the composition with `Effect.runPromise` instead of
- * `runMain`, which would exit the process.
- */
+// Extracted so tests can exercise this with Effect.runPromise instead of runMain (which exits).
 // oxlint-disable-next-line app/no-multiple-function-params
 export const _compose = <E, RIn>(
   program: (ctx: RenderContext) => Effect.Effect<void, E, NodeServices.NodeServices | RIn>,
@@ -40,18 +30,6 @@ export const _compose = <E, RIn>(
   return program(ctx).pipe(Effect.scoped, Effect.provide(layers))
 }
 
-/**
- * Run a render program against `NodeRuntime`.
- *
- * The callback receives a `RenderContext` keyed on `options.env`
- * (default `"prod"`) and returns an Effect whose only required
- * services are `NodeServices` and whatever the caller supplies via
- * `options.layers`. `render` provides both, wraps in `Effect.scoped`,
- * and hands off to `NodeRuntime.runMain`.
- *
- * Replaces the per-file `NodeRuntime.runMain(program.pipe(...))`
- * boilerplate every example used to repeat.
- */
 // oxlint-disable-next-line app/no-multiple-function-params
 export const render = <E, RIn>(
   program: (ctx: RenderContext) => Effect.Effect<void, E, NodeServices.NodeServices | RIn>,

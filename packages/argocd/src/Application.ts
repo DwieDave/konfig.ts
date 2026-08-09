@@ -1,14 +1,9 @@
 import { type AnyRenderError, Dep, type Module, unsafeCoerce } from "@konfig.ts/core"
 import { type Context, Effect, Layer } from "effect"
 
-/**
- * Mutate-attach a `layer` field to an Effect Context.Tag so that both
- * `yield* handle` (consume the service) and `handle.layer` (provide it
- * into a parent Layer) work off the same object reference. The single
- * unsafe cast in the dep-graph machinery lives here — keep it tested
- * (`Application.test.ts`) so Effect Context internals can move without
- * breaking every define* factory.
- */
+// Mutate-attach `layer` to the Context.Tag so yield* and .layer share one
+// reference; the sole unsafe cast in the dep-graph machinery — kept covered
+// by Application.test.ts.
 const _attachLayerToTag = <
   Tag extends object,
   Out,
@@ -58,21 +53,9 @@ export interface Application {
 
 export type Any = Application
 
-/**
- * Re-export of {@link Module.LiteralName} — preserved as
- * `Application.LiteralName` so existing wrapper code keeps working.
- * konfig's dependency graph keys every `Provide<"App", Name>` /
- * `Provide<"Application", Name>` slot by literal `Name`; a wrapper that
- * lets `Name` widen to `string` collapses every app into the same slot
- * and silently masks unmet deps. This brand turns that regression into
- * a compile error at the call site — always fix the wrapper, never
- * relax the constraint.
- *
- * Forwarding pattern (no casts needed):
- *   export const defineX = <const Name extends string>(
- *     opts: { appName: Application.LiteralName<Name>; ... },
- *   ) => Application.define({ name: opts.appName, ... });
- */
+// Widening Name to string here would collapse every app into the same
+// Provide<"App", Name> slot and silently mask unmet deps — this brand turns
+// that into a compile error instead.
 export type LiteralName<T extends string> = Module.LiteralName<T>
 
 export interface ApplicationMakeOptions {
@@ -101,13 +84,6 @@ export interface ApplicationHandle<Name extends string, Out, In>
   readonly layer: Layer.Layer<Out, AnyRenderError, In>
 }
 
-/**
- * Higher-kinded handle constructor that maps `Module`'s
- * `(Name, Ns, R, Extra)` slots onto an `ApplicationHandle`. Lets
- * `Module.fixedNs(Application, …)` / `Module.dynamicNs(Application, …)`
- * return strongly-typed `ApplicationHandle`s without `core` knowing
- * about argocd's types.
- */
 export interface HandleKind extends Module.HandleKind {
   readonly Handle: ApplicationHandle<
     this["_Name"] & string,
@@ -124,21 +100,12 @@ export interface HandleKind extends Module.HandleKind {
   >
 }
 
-/**
- * Extra config-time fields argocd's `define` accepts beyond the
- * universal `name`/`namespace`/`build`/`provides`. Passed to
- * `Module.fixedNs(Application, { ... })` alongside the build callback.
- */
 export interface ExtraConfig {
   readonly project?: string
   readonly syncPolicy?: SyncPolicy
   readonly annotations?: Readonly<Record<string, string>>
 }
 
-/**
- * Extra per-instance fields the wrapper requires at the call site —
- * argocd needs the Application's git source for every instance.
- */
 export interface ExtraCallArgs {
   readonly source: ArgoSource
 }
@@ -156,11 +123,6 @@ export interface ApplicationDefineOptions<Name extends string, Ns extends string
   readonly provides?: Layer.Layer<Extra>
 }
 
-/**
- * `LiteralName<Name>`/`LiteralName<Ns>` are branded strings that resolve
- * back to `Name`/`Ns` once the call typechecks — coerce them to plain
- * literals for use as dep-graph keys.
- */
 const _coerceLiteralNames = <Name extends string, Ns extends string>(
   name: LiteralName<Name>,
   namespace: LiteralName<Ns>
@@ -169,7 +131,6 @@ const _coerceLiteralNames = <Name extends string, Ns extends string>(
   namespace: unsafeCoerce<Ns>(namespace, "LiteralName<Ns> resolves to Ns itself once the call typechecks")
 })
 
-/** The `App`/`Namespace` slots every `Application.define` instance owns. */
 const _ownsLayer = <Name extends string, Ns extends string>(
   name: Name,
   namespace: Ns
@@ -179,12 +140,10 @@ const _ownsLayer = <Name extends string, Ns extends string>(
     Layer.succeed(Dep.Namespace(namespace))(namespace)
   )
 
-/** Normalize the `build` option (Effect or thunk) into a single Effect. */
 const _buildEffect = <R>(
   build: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> | (() => ReadonlyArray<unknown>)
 ): Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> => Effect.isEffect(build) ? build : Effect.sync(build)
 
-/** Build the Layer that produces this instance's `Application` tag value. */
 const _appLayer = <Name extends string, Ns extends string, R, Extra>(
   tag: Context.Service<Dep.Need<"App", Name>, Application>,
   names: { readonly name: Name; readonly namespace: Ns },
@@ -244,18 +203,4 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
   >(_attachLayerToTag(tag, layer), "narrow generic ApplicationHandle from the attachLayerToTag helper's loose Tag arg")
 }
 
-/**
- * `Module.Target` adapter for `Application.define`. Lets
- * `Module.fixedNs(Application.target, …)` / `Module.dynamicNs(Application.target, …)`
- * compose argocd modules with TypeScript inferring `HandleKind` /
- * `ExtraConfig` / `ExtraCallArgs` directly from this value's type
- * (the namespace alone can't drive that inference because the lookup
- * types behind `Module.Target['define']` aren't invertible).
- *
- * ```ts
- * const defineApi = Module.dynamicNs(Application.target, {
- *   build: ({ name, namespace }, opts: ApiOpts) => [ ... ],
- * });
- * ```
- */
 export const target: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs> = { define }

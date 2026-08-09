@@ -38,13 +38,6 @@ export interface DeploymentInput extends WorkloadMeta, SelectorAndTemplate {
   readonly minReadySeconds?: number
 }
 
-/**
- * Deployment built from a `Selector`. The selector's labels become both
- * the Deployment's `spec.selector.matchLabels` and the pod template's
- * `metadata.labels` — coherent by construction. Drift between selector
- * and template (the classic "service has no endpoints" footgun) is
- * structurally impossible once both consume the same `podSet`.
- */
 export interface DeploymentFromPodSetInput<L extends Readonly<Record<string, string>>> {
   readonly name: string
   readonly namespace: string
@@ -103,10 +96,7 @@ export const Deployment = {
       selector: { matchLabels: input.podSet.labels },
       template: {
         metadata: {
-          // podSet labels are spread LAST so a colliding caller-supplied
-          // template label can never shadow a selector label — that would
-          // desync the pod template from `spec.selector` and strand the
-          // Deployment with zero matching endpoints.
+          // podSet labels spread LAST so a colliding template label can't desync spec.selector (zero endpoints).
           labels: { ...input.template.metadata?.labels, ...input.podSet.labels },
           annotations: input.template.metadata?.annotations
         },

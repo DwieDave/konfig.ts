@@ -13,14 +13,9 @@ const _decodeSopsSecret = boundary({
   label: "SopsSecret"
 })
 
-// Fail-closed: every value we hand to the operator MUST be a sops ciphertext,
-// which is always wrapped as `ENC[AES256_GCM,data:...]` — UNLESS the document
-// was partially encrypted via `encrypted_regex`, in which case only keys the
-// regex selects carry ciphertext and the rest are intentionally plaintext.
-// sops semantics: a matching key encrypts its whole subtree, so a value needs
-// ENC[ if the regex matches its own key OR any ancestor key on the path
-// (spec / secretTemplates / stringData / data). No `encrypted_regex` in the
-// sops block → everything must be encrypted, as before.
+// Fail-closed: every value must carry the sops ENC[ ciphertext marker, unless
+// encrypted_regex partially-encrypts (a key needs ENC[ if the regex matches
+// it or any ancestor key on its path).
 const _ENC_MARKER = "ENC["
 
 const _encryptedRegex = (
@@ -39,7 +34,6 @@ const _encryptedRegex = (
   })
 }
 
-// ponytail: encrypted_regex only; add encrypted_suffix/unencrypted_* if a repo ever uses them
 const _assertEncrypted = (
   secret: SopsSecret,
   label: string
@@ -72,9 +66,7 @@ const _decodeRecipients = boundary({
   label: "SopsRecipients"
 })
 
-// Parse → schema-decode → MAC/ciphertext-assert. Shared by _emit (sops's own
-// stdout) and _passthrough (a file already on disk) — both need the same
-// fail-closed pipeline before the result can be treated as a SopsSecret.
+// Shared fail-closed pipeline for _emit and _passthrough: parse → schema-decode → MAC/ciphertext-assert.
 const _parseVerified = (
   yamlText: string,
   label: string
@@ -90,10 +82,7 @@ const _parseVerified = (
     return decoded
   })
 
-// A restamp is only safe when the namespace isn't covered by the sops MAC
-// (mac_only_encrypted) — otherwise metadata.namespace is exactly what
-// verification is meant to protect. Rewriting to the same namespace the file
-// already carries is always a no-op and needs no such guarantee.
+// Restamping the namespace is only safe when mac_only_encrypted; otherwise the MAC covers it.
 const _restampNamespace = (
   decoded: SopsSecret,
   namespace: string,

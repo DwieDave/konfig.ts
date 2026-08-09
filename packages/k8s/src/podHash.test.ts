@@ -54,8 +54,7 @@ describe("hashSecretValues", () => {
   })
 
   vitestIt("delimiter framing — a key/value boundary cannot be forged", () => {
-    // With naive `key + "=" + value + "\n"` concatenation these two records
-    // would hash identically; netstring framing keeps them distinct.
+    // naive "key=value\n" concatenation would hash these identically; netstring framing keeps them distinct.
     const a = hashSecretValues({ salt: "s", values: { "a=b": Redacted.make("c") } })
     const b = hashSecretValues({ salt: "s", values: { a: Redacted.make("b=c") } })
     expect(a).not.toBe(b)

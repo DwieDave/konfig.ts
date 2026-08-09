@@ -5,17 +5,8 @@ import { _makeEntry, type EntryMarker, type EnvClaim, EnvNameCollision, type Has
 import type { AnyLiteralEntry, LiteralEntry } from "./literal"
 import type { AnySecretEntry, SecretEntry } from "./secret"
 
-/**
- * Union of every kind that can be a member of a `Environment`.
- *
- * Nesting: `Environment` itself is a valid `EnvMember`, so bundles can
- * group related secrets / literals / downward fields into sub-records.
- * The yielded record matches the nesting structure — e.g. `env.db.host`,
- * `env.db.password` for a bundle `{db: Environment.define({host, password})}`.
- * `Environment.bind` walks nested groups recursively when emitting
- * envVars + secret manifests, and `SecretMembersOpts` / `LiteralMembersOpts`
- * accept matching nested override shapes.
- */
+// Environment is itself a valid EnvMember: nested bundles yield nested
+// records (env.db.host), and Environment.bind walks them recursively.
 export type EnvMember =
   | AnySecretEntry
   | AnyLiteralEntry
@@ -33,21 +24,9 @@ export interface Environment<M extends Readonly<Record<string, EnvMember>>>
 // oxlint-disable-next-line app/no-explicit-any
 export type AnyEnvironment = Environment<Readonly<Record<string, any>>>
 
-/**
- * Flattens every member's `envClaims` and cross-checks for envName
- * collisions.
- *
- * Throws `EnvNameCollision` (a `Data.TaggedError`) synchronously on
- * collision. `Environment.define` is a synchronous, user-facing config
- * builder — collisions are an authoring mistake caught at definition
- * time (typically module load), the same moment `_CheckCollisions`
- * already flags most of them at compile time. There is no Effect
- * context to run this in, so surfacing it as `Effect<A, EnvNameCollision>`
- * would just push callers to unwrap it immediately; a plain throw
- * (mirroring the type-level check it complements) keeps the API a
- * direct `M -> Environment<M>` function. Add an Either/Effect variant
- * only if a caller actually needs to recover from this at runtime.
- */
+// Throws EnvNameCollision synchronously (not Effect): Environment.define
+// is a synchronous builder and collisions are an authoring mistake caught
+// at module-load time, same moment _CheckCollisions flags most at compile time.
 const _collectClaims = (
   members: Readonly<Record<string, EnvMember>>
 ): ReadonlyArray<EnvClaim> => {
@@ -72,18 +51,8 @@ const _collectClaims = (
   return out
 }
 
-/**
- * Compile-time envName collision check (best-effort, complements the
- * runtime throw).
- *
- * Each member exposes a union of the envNames it claims. For every
- * key K in M, we compare K's envName union against the union claimed
- * by all *other* members; a non-empty intersection means a collision.
- * The check stops at the top-level members of M — nested `Environment`
- * members are not walked into here. The runtime `_collectClaims`
- * catches every collision, including cross-nesting ones; the type
- * check is just the early-warning layer.
- */
+// Compile-time envName collision check; best-effort only (top-level members,
+// not nested Environments) — _collectClaims is the authoritative runtime check.
 type _EnvNamesOfMember<E> = E extends SecretEntry<
   infer _N,
   infer _K,
@@ -145,19 +114,7 @@ const _define = <const M extends Readonly<Record<string, EnvMember>>>(
   })
 }
 
-/**
- * `Environment` value namespace (env-contracts package).
- *
- *   const apiEnv = Environment.define({
- *     db: Secret.define({ ... }),
- *     port: Literal.define({ ... }),
- *     pod: Downward.define({ ... }),
- *   });
- *
- * The k8s package re-exports this merged with its own `Environment.bind`
- * / `Environment.runtime`, so importing `Environment` from `@konfig.ts/k8s`
- * exposes `define` alongside the binder + runtime decoder.
- */
+// @konfig.ts/k8s re-exports this merged with its own bind/runtime.
 export const Environment = {
   define: _define
 }

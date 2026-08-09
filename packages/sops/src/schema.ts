@@ -2,9 +2,7 @@ import { Schema } from "effect"
 
 const _stringRecord = Schema.Record(Schema.String, Schema.String)
 
-// All recipients flow into `sops --<kind> a,b,c` argv items. They must contain
-// no comma (would silently split) and no shell metacharacter (defense in depth
-// even though we use argv, not /bin/sh -c).
+// Recipients flow into `sops --<kind> a,b,c` argv; must contain no comma or shell metachar.
 const _AGE_RECIPIENT = /^age1[0-9a-z]{58}$/
 const _AWS_KMS_ARN = /^arn:aws:kms:[a-z0-9-]+:[0-9]+:(?:key\/[0-9a-fA-F-]+|alias\/[A-Za-z0-9/_-]+)$/
 const _GCP_KMS_PATH =
@@ -43,9 +41,7 @@ export const SopsSecretSpecSchema = Schema.Struct({
   suspend: Schema.optionalKey(Schema.Boolean)
 })
 
-// Only the fields backend.ts reads are enumerated. A real sops block also
-// carries version/lastmodified/mac/pgp/kms/age/etc — the trailing Record
-// keeps those untyped instead of forcing us to model sops's full output shape.
+// Only fields backend.ts reads are typed; trailing Record absorbs the rest of sops's output shape.
 export const SopsMetadataSchema = Schema.StructWithRest(
   Schema.Struct({
     mac_only_encrypted: Schema.optionalKey(Schema.Boolean),
@@ -54,12 +50,7 @@ export const SopsMetadataSchema = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)]
 )
 
-// Fail-closed decoder for anything we emit as an ENCRYPTED SopsSecret. Unlike a
-// plaintext-shaped document, a genuinely sops-encrypted file ALWAYS carries the
-// top-level `sops` metadata block (recipients, MAC, lastmodified, version). We
-// model it as a REQUIRED, object-typed key: a plaintext SopsSecret has no such
-// block, so decoding it here fails instead of being emitted as if encrypted.
-// (Value-level "does it start with ENC[" is asserted separately in backend.ts.)
+// Requires the top-level `sops` metadata block, so a plaintext-shaped document fails to decode.
 export const SopsEncryptedSecretSchema = Schema.Struct({
   apiVersion: Schema.Literal("isindir.github.com/v1alpha3"),
   kind: Schema.Literal("SopsSecret"),

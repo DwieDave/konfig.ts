@@ -40,13 +40,11 @@ describe("environmentLayer", () => {
   it.effect("yields are typed end-to-end", () =>
     Effect.gen(function*() {
       const env = yield* ApiEnv
-      // `port` is number (Literal<"PORT", number>) — not string.
       const portPlus: number = env.port + 1
       expect(portPlus).toBe(8081)
     }).pipe(Effect.provide(Layer.provide(environmentLayer({ tag: ApiEnv, env: apiEnv }), fakeEnv))))
 })
 
-// Compile-time: EnvironmentShape is the structural type of `yield* env`.
 type _Shape = {
   db: { url: Redacted.Redacted<string>; password: Redacted.Redacted<string> }
   port: number

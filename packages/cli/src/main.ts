@@ -30,9 +30,8 @@ const root = Command.make(
   ])
 )
 
-// Single source of truth for the version: the shipped package.json. At
-// runtime this module is `dist/main.mjs`, so `../package.json` resolves to
-// the package root package.json in both source and bundled layouts.
+// At runtime this module is `dist/main.mjs`, so `../package.json` resolves to
+// the package root in both source and bundled layouts.
 const { version } = unsafeCoerce<{ version: string }>(
   createRequire(import.meta.url)("../package.json"),
   "package.json parsed as JSON — reading its string `version` field"

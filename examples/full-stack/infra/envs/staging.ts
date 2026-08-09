@@ -1,7 +1,4 @@
-/**
- * Staging composition. Same shape as prod, smaller replica counts and
- * a `staging` image tag.
- */
+// Same shape as prod, smaller replica counts and a `staging` image tag.
 import { AppOfApps } from "@konfig.ts/argocd"
 import { cluster } from "../cluster"
 import { defineApi } from "../modules/api"

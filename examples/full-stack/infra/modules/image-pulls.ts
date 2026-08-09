@@ -8,20 +8,8 @@ export interface ImagePullsOpts {
   readonly sopsBase: string
 }
 
-/**
- * Emits a SopsSecret for the GHCR pull credential and declares the
- * resulting Secret as a provider of `Dep.Secret("ghcr-pull")`.
- *
- * Demonstrates two konfig.ts patterns:
- *  1. `Secret.bind` for a standalone Secret that's NOT exposed as
- *     container env vars (it's only used via `imagePullSecrets`). The
- *     bind handle still emits the manifest and exposes the SecretRef
- *     for downstream Application modules to mount.
- *  2. `Sops.passthrough` — reads the encrypted yaml on disk and emits
- *     it as the SopsSecret manifest verbatim. No `sops --encrypt` shell-
- *     out at render time, so this works offline. To re-encrypt on every
- *     render, swap for `Sops.backend({ recipients })` + `Sops.source`.
- */
+// Emits a SopsSecret for the GHCR pull credential, provided as `Dep.Secret("ghcr-pull")`.
+// `Sops.passthrough` reads the encrypted yaml as-is (no `sops --encrypt` shell-out, works offline).
 export const defineImagePulls = Module.fixedNs({
   target: Application.target,
   namespace: "app",

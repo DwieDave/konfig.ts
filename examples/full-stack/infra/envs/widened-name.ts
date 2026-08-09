@@ -1,28 +1,14 @@
-/**
- * Worked example of the `LiteralName<T>` brand catching a `string`
- * widening at the call site of a module factory.
- *
- * If `Application.define`'s `name` parameter widens to `string`, the
- * dep-graph slot `Dep.Provide<"App", string>` collapses every
- * Application into the same key — and so a missing dep silently
- * resolves to a different app's provider. `LiteralName<Name>` rewrites
- * to a structured `_konfig_error` type when `Name` is the bare
- * `string`, so the call site fails to compile.
- *
- * Not registered in konfig.json — pure typing regression.
- */
+// Demonstrates: `LiteralName<T>` catching a `string`-widened name at a module factory call site.
 import { Application } from "@konfig.ts/argocd"
 import { Config, Effect } from "effect"
 import { cluster } from "../cluster"
 
-// Source helper.
 const src = (name: string) => ({
   repoURL: cluster.repositoryUrl,
   targetRevision: "main",
   path: `./infra/k8s/manifests/widened/${name}`
 })
 
-// Baseline: name is a string literal "api" — no error.
 const _ok = Application.define({
   name: "api",
   namespace: "app",
@@ -31,9 +17,6 @@ const _ok = Application.define({
 })
 void _ok
 
-// (1) `name` flows in from a string variable; `Name` widens to
-//     `string` and `LiteralName<string>` resolves to the branded
-//     error type, so the call below fails to typecheck.
 const dynamicName: string = Effect.runSync(Config.string("MY_APP_NAME").pipe(Config.withDefault("api")))
 const _widened = Application.define({
   // @ts-expect-error Application name must be a string literal — wrapper widened `Name` to `string`.
@@ -44,7 +27,6 @@ const _widened = Application.define({
 })
 void _widened
 
-// (2) Same gotcha at the namespace slot.
 const dynamicNs: string = Effect.runSync(Config.string("MY_NS").pipe(Config.withDefault("app")))
 const _widenedNs = Application.define({
   name: "api",
@@ -55,7 +37,4 @@ const _widenedNs = Application.define({
 })
 void _widenedNs
 
-// (3) `Module.fixedNs` / `Module.dynamicNs` are the recommended
-//     factory shapes — they re-apply `LiteralName` at every layer so
-//     a misuse from inside a module wrapper also fails here.
 void Effect.succeed

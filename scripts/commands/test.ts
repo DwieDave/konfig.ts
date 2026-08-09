@@ -33,11 +33,7 @@ const _run = (input: { readonly pkg: string; readonly summaryFile: string | unde
     return Effect.sync(() => child.kill())
   })
 
-// Vitest's github-actions reporter writes an unnamed "## Vitest Test Report"
-// block per package run. With packages running concurrently, each child gets
-// its own summary file (via a GITHUB_STEP_SUMMARY override) and the blocks are
-// stitched into the real summary afterwards, each under its package heading —
-// parallel execution with deterministic, correctly-labelled output.
+// Each child gets its own GITHUB_STEP_SUMMARY file; stitched under its package heading afterwards.
 const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFile: string | undefined }>) =>
   Effect.gen(function*() {
     const summaryFile = process.env.GITHUB_STEP_SUMMARY

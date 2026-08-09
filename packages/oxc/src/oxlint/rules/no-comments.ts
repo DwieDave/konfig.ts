@@ -1,24 +1,7 @@
 import type { AstNode, Rule } from "../types.ts"
 
-/**
- * Why a comment policy? Most comments rot — the code moves and the
- * comment stays. `app/no-comments` enforces two cheap guardrails: no
- * non-JSDoc block comments (`/* ... *\/`), and a per-comment length
- * cap. The combination encourages either a clearer name, a tighter
- * function, a JSDoc block on the exported symbol, or — for intentional
- * rationale — a `// konfig: WHY ...` tag that future readers must NOT
- * remove without understanding the "why".
- *
- * Exemptions:
- *  - Directives (`eslint`, `oxlint`, `biome`, `prettier`, `@ts-...`)
- *    are always passed through.
- *  - JSDoc block comments (`/** ... *\/`) on declarations are
- *    documentation, not commentary — they pass through. A JSDoc block
- *    parses with its raw value starting with `*` (from the second `*`
- *    in `/**`), which is how we recognise them without a parent-node
- *    lookup.
- *  - WHY comments tagged `// konfig: WHY <reason>` are unrestricted.
- */
+// Bans non-JSDoc block comments and caps line-comment length; JSDoc, directives
+// (eslint/oxlint/biome/prettier/@ts-), and `// konfig: WHY ...` are exempt.
 const DIRECTIVE_PREFIX = /^\s*(eslint|oxlint|biome|prettier|@ts-)/
 const WHY_PREFIX = /^\s*konfig:\s*WHY\b/
 const MAX_COMMENT_LENGTH = 150

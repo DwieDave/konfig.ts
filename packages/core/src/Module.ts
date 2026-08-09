@@ -2,42 +2,19 @@ import { Effect, type Layer } from "effect"
 import { unsafeCoerce } from "./_cast"
 import type { AnyRenderError } from "./RenderError"
 
-/**
- * Resolves to `T` if it is a string literal (or template-literal
- * pattern), and to a structured error type when `T` widens to the bare
- * `string`. Use as the field type on every name/namespace slot any
- * module wrapper forwards.
- *
- * konfig's dep graph keys each provider by literal name; a wrapper that
- * lets `Name` widen to `string` collapses every module into the same
- * slot and silently masks unmet deps. This brand turns that into a
- * compile error at the call site.
- */
+// Forces name/namespace fields to stay literal: the dep graph keys providers by literal
+// name, so a widened `string` would silently collapse distinct modules into one slot.
 export type LiteralName<T extends string> = string extends T ? {
     readonly _konfig_error:
       "Module name/namespace must be a string literal. Make the wrapper generic (`<const Name extends string>`) and forward via `Module.LiteralName<Name>`."
   }
   : T
 
-/**
- * Context passed to a module's `build` callback. Carries the
- * per-instance identity (chosen `name` and the module's `namespace`)
- * so the build can stamp them onto manifests without re-receiving
- * them via `opts`.
- */
 export interface BuildContext<Ns extends string = string> {
   readonly name: string
   readonly namespace: Ns
 }
 
-/**
- * Allowed return shapes from a module `build` callback:
- *  - an `Effect` (when the build reads from Layers, files, etc.)
- *  - a plain `ReadonlyArray<unknown>` for pure synchronous builds.
- *
- * `Module.fixedNs` / `Module.dynamicNs` lift the array form into an
- * `Effect` internally — wrapper authors don't need to wrap themselves.
- */
 export type BuildResult<A = unknown, R = never> =
   | Effect.Effect<ReadonlyArray<A>, AnyRenderError, R>
   | ReadonlyArray<A>
@@ -46,14 +23,7 @@ const _liftBuild = <A, R>(
   result: BuildResult<A, R>
 ): Effect.Effect<ReadonlyArray<A>, AnyRenderError, R> => Effect.isEffect(result) ? result : Effect.succeed(result)
 
-/**
- * Higher-kinded handle constructor: each backend declares a sub-interface
- * that maps the four type parameters (`_Name`, `_Ns`, `_R`, `_Extra`)
- * onto its native handle (`ApplicationHandle` / `BundleHandle` / …).
- *
- * `ApplyHandle` substitutes concrete types into the kind's `this`
- * slots — the standard "type lambda" encoding Effect uses for HKTs.
- */
+// HKT encoding: each backend maps (_Name, _Ns, _R, _Extra) to its native handle type.
 export interface HandleKind {
   readonly _Name: string
   readonly _Ns: string
@@ -75,11 +45,6 @@ export type ApplyHandle<
   readonly _Extra: Extra
 })["Handle"]
 
-/**
- * Universal define-args every backend accepts. Each backend layers
- * additional fields on via the `ExtraConfig` (config-time-only) and
- * `ExtraCallArgs` (per-instance) generics on `Target`.
- */
 export interface DefineBaseArgs<
   Name extends string,
   Ns extends string,
@@ -94,19 +59,7 @@ export interface DefineBaseArgs<
   readonly provides?: Layer.Layer<Extra>
 }
 
-/**
- * Adapter contract a backend implements to plug into `Module.fixedNs` /
- * `Module.dynamicNs`. Both `Application` (argocd) and `Bundle` (k8s)
- * satisfy it via their existing `define` exports — pass the namespace
- * itself as the first argument.
- *
- *  - `Kind`            — HKT mapping `(Name, Ns, R, Extra)` to the
- *                          backend's native handle type.
- *  - `ExtraConfig`     — config-time-only fields the backend accepts
- *                          (e.g. argocd's `syncPolicy`, `annotations`).
- *  - `ExtraCallArgs`   — per-instance fields the wrapper requires
- *                          at the call site (e.g. argocd's `source`).
- */
+// Adapter contract a backend implements to plug into `Module.fixedNs` / `Module.dynamicNs`.
 export interface Target<
   Kind extends HandleKind = HandleKind,
   ExtraConfig extends object = Record<string, never>,
@@ -122,7 +75,6 @@ export interface Target<
   ) => ApplyHandle<Kind, Name, Ns, R, Extra>
 }
 
-/** Config accepted by `Module.fixedNs` (namespace baked into the wrapper). */
 export interface FixedNsConfig<
   Kind extends HandleKind,
   ExtraConfig extends object,
@@ -139,29 +91,7 @@ export interface FixedNsConfig<
   readonly build: (ctx: BuildContext<Ns>, opts: Opts) => BuildResult<A, R>
 }
 
-/**
- * Build a typed wrapper for a module whose namespace is part of its
- * identity (e.g. `cert-manager` always installs into `cert-manager`).
- *
- * `target` is the backend adapter — typically `Application.target`
- * (argocd) or `Bundle.target` (k8s). The wrapper's call signature
- * merges the backend's per-instance fields (`source` for argocd,
- * none for bundle) with the user-defined `Opts`.
- *
- * ```ts
- * const defineSops = Module.fixedNs({
- *   target: Application.target,
- *   namespace: "sops",
- *   annotations: Sync.wave(-1),
- *   build: ({ namespace }, _opts: Record<never, never>) => [
- *     Namespace.make({ name: namespace }),
- *     Helm.release({ ... }),
- *   ],
- * });
- *
- * const sops = defineSops({ name: "sops-operator", source: src("sops") });
- * ```
- */
+// Wrapper for a module whose namespace is fixed (baked into the wrapper, not per-instance).
 export const fixedNs = <
   Kind extends HandleKind,
   ExtraConfig extends object,
@@ -217,7 +147,6 @@ export const fixedNs = <
   }
 }
 
-/** Config accepted by `Module.dynamicNs` (namespace chosen per instance). */
 export interface DynamicNsConfig<
   Kind extends HandleKind,
   ExtraConfig extends object,
@@ -232,26 +161,7 @@ export interface DynamicNsConfig<
   readonly build: (ctx: BuildContext, opts: Opts) => BuildResult<A, R>
 }
 
-/**
- * Build a typed wrapper for a module whose namespace is chosen per
- * instance (e.g. an `api` module deployed into different namespaces
- * per env).
- *
- * ```ts
- * const defineApi = Module.dynamicNs({
- *   target: Application.target,
- *   annotations: Sync.wave(1),
- *   build: ({ name, namespace }, opts: ApiOpts) => [ ... ],
- * });
- *
- * const api = defineApi({
- *   name: "api",
- *   namespace: "prod",
- *   source: src("api"),
- *   replicas: 2,
- * });
- * ```
- */
+// Wrapper for a module whose namespace is chosen per instance.
 export const dynamicNs = <
   Kind extends HandleKind,
   ExtraConfig extends object,

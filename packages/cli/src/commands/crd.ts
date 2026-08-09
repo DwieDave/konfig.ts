@@ -28,11 +28,6 @@ export interface CrdExtractFlags {
   readonly all: boolean
 }
 
-/**
- * Underlying effect behind `crd extract`, exported separately from
- * `Command.make` so it can be driven directly in tests over a temp
- * config tree without spawning the real CLI binary.
- */
 export const crdExtractEffect = (flags: CrdExtractFlags) =>
   Effect.gen(function*() {
     const path = yield* Path.Path
@@ -89,10 +84,6 @@ export const crdExtractCommand = Command.make("extract", _crdExtractFlags, crdEx
   Command.withDescription("Extract CRD TypeScript types from Helm charts")
 )
 
-/**
- * Underlying effect behind `crd verify`, exported separately from
- * `Command.make` for the same reason as `crdExtractEffect`.
- */
 export const crdVerifyEffect = Effect.gen(function*() {
   const { cacheDir, outDir, chartsDir, minVersion } = yield* resolveCliPaths
 

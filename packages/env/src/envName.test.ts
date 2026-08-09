@@ -5,8 +5,6 @@ import { Environment } from "./environment"
 import { Literal } from "./literal"
 
 describe("env-name collision (property)", () => {
-  // Generate N distinct env-var names; assemble an env from one literal
-  // per name. Should never collide.
   const envName = fc
     .string({ minLength: 1, maxLength: 16 })
     .map((s) => s.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase())

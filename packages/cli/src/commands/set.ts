@@ -15,21 +15,16 @@ export class ImagesFileError extends Data.TaggedError("ImagesFileError")<{
   readonly cause: unknown
 }> {}
 
-/** Tab-indented JSON serialization, matching the repo's `images.json` formatting. */
+// Tab-indented to match the repo's `images.json` formatting.
 const _formatImagesConfig = (decoded: ImagesConfig): string => `${JSON.stringify(decoded, null, "\t")}\n`
 
 export interface SetImageArgs {
   readonly env: string
   readonly app: string
   readonly image: string
-  /** Directory `resolveConfig` searches upward from for `konfig.json` (defaults to `process.cwd()`). */
   readonly from?: string
 }
 
-/**
- * Update `<root>/images.json` for `args.env`.`args.app`, Schema-validating
- * both the read and the write.
- */
 export const setImageEffect = (args: SetImageArgs) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem

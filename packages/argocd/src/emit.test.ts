@@ -112,7 +112,6 @@ describe("serializeApplicationCR", () => {
     expect(yaml).toContain("repoURL: ssh://git@github.com/other/charts.git")
     expect(yaml).toContain("targetRevision: v1.2.3")
     expect(yaml).toContain("path: ./charts/external")
-    // must NOT fall back to the parent target-derived values
     expect(yaml).not.toContain("targetRevision: main")
     expect(yaml).not.toContain("path: ./infra/k8s/manifests/prod/external")
   })
@@ -129,7 +128,6 @@ describe("serializeApplicationCR", () => {
       }
     } as const
 
-    // per-app override wins
     expect(
       serializeApplicationCR({
         app: Application.make({ ...base, project: "team-a" }),
@@ -138,7 +136,6 @@ describe("serializeApplicationCR", () => {
       })
     ).toContain("project: team-a")
 
-    // defaults.project used when app has none
     expect(
       serializeApplicationCR({
         app: Application.make(base),
@@ -147,7 +144,6 @@ describe("serializeApplicationCR", () => {
       })
     ).toContain("project: team-b")
 
-    // falls back to "default"
     expect(serializeApplicationCR({ app: Application.make(base), target, defaults })).toContain(
       "project: default"
     )

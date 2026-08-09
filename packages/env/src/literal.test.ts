@@ -27,7 +27,6 @@ describe("Literal", () => {
       const v = yield* port
       expect(v).toBe(8080)
     }).pipe(
-      // Provider is empty — literal does not read it.
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))
     ))
 

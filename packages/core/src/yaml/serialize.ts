@@ -76,25 +76,8 @@ export const serialize = (input: SerializeInput): string => {
   return (input.trailingNewline ?? true) ? `${lf}\n` : lf
 }
 
-/**
- * Derive the on-disk filename (`<Kind>-<name>.yaml`) for a rendered
- * resource.
- *
- * **Precondition (caller invariant):** `resource.kind` and
- * `resource.metadata.name` MUST both be non-empty strings. A rendered
- * Kubernetes object always satisfies this, so callers are expected to
- * validate/decode the object *before* reaching this point (the CLI keys
- * files by kind+name only for objects it has already confirmed carry
- * both fields).
- *
- * Because the precondition is a caller invariant rather than runtime
- * input, a violation is a programming error: this throws synchronously
- * (a defect) instead of returning a typed error. It is deliberately kept
- * out of the `AnyRenderError` channel — do not route untrusted resources
- * through it; narrow them first.
- *
- * @throws {Error} if `kind` or `metadata.name` is missing or empty.
- */
+// Caller invariant: kind and metadata.name must be non-empty strings (validate/decode first).
+// Throws synchronously as a defect — deliberately not routed through AnyRenderError.
 export const filenameFor = (resource: {
   readonly kind?: unknown
   readonly metadata?: { readonly name?: unknown }

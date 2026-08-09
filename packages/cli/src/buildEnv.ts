@@ -14,12 +14,6 @@ import { Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 
-/**
- * The absolute output directory an env renders into. Keyed on `env`
- * alone, or `<env>/<cluster>` when `ctx.cluster` is set. Shared by
- * `renderEnv` (to place files) and the build cache (to verify a cached
- * entry's `outDirAbs` matches the ctx being built before honoring a hit).
- */
 export interface EnvOutDirInput {
   readonly cfg: ResolvedKonfigConfig
   readonly envName: string
@@ -88,10 +82,6 @@ const _loadEnv = (entry: string) =>
         cause: "default export is not an Effect — env entries must default-export an AppOfApps or Bundle program Effect"
       })
     }
-    // `isEffectProgram` proves `program` is an Effect; the A/E channels are
-    // narrowed here per the env-entry contract (core/README.md). R is asserted
-    // `never` because env entries are user programs whose requirements are
-    // provided downstream by the runtime that runs them.
     const result = yield* unsafeCoerce<Effect.Effect<EnvResult, AnyRenderError>>(
       program,
       "isEffectProgram confirmed above; narrowing the proven Effect's A/E per the env entry contract"
@@ -112,9 +102,8 @@ interface _SplitRawYamlInput {
 const _splitRawYaml = (input: _SplitRawYamlInput): OutputFile[] => {
   const { content, dir, pathSep } = input
   const files: OutputFile[] = []
-  // parseYamlAll splits on YAML document boundaries proper — a literal
-  // `---` inside a block scalar stays part of its document rather than
-  // mis-splitting the stream as a naive /^---$/m regex would.
+  // parseYamlAll splits on real YAML doc boundaries, not a naive /^---$/m
+  // regex, so a literal `---` inside a block scalar isn't mis-split.
   for (const doc of parseYamlAll(content)) {
     if (doc === null || typeof doc !== "object") continue
     const parsed = unsafeCoerce<{ kind?: string; metadata?: { name?: string } }>(
@@ -183,7 +172,6 @@ export interface RenderedEnv {
 
 type AnyManifest = M.Manifest<unknown>
 
-/** The argo `Application` + its render target/defaults, carried per-child only in the argo branch. */
 interface EnvChildArgo {
   readonly app: AppOfAppsResult["apps"][number]
   readonly target: AppOfAppsResult["target"]
@@ -196,12 +184,6 @@ interface EnvChild {
   readonly argo: EnvChildArgo | undefined
 }
 
-/**
- * Normalise both AppOfAppsResult (argo) and BundleSetResult (k8s) into a
- * single `children` list. The `argo` field carries the `Application`
- * reference (plus its target/defaults) only when we're in the argo branch —
- * it gates the per-child `Application-<name>.yaml` sentinel emission.
- */
 const _childrenOf = (result: EnvResult): EnvChild[] =>
   _isAppOfApps(result)
     ? result.apps.map((app) => ({
@@ -223,12 +205,6 @@ interface RenderChildInput {
   readonly path: Path
 }
 
-/**
- * Renders one child's manifests (unbounded concurrency — for argo children
- * that's Application's helm/sops fan-out; for bundles it's just the
- * manifest renderers) and appends the argo `Application` sentinel file
- * when applicable.
- */
 const _renderChild = (input: RenderChildInput) =>
   Effect.gen(function*() {
     const { appsDirAbs, child, ctx, outDirAbs, path } = input
@@ -279,7 +255,7 @@ export const renderEnv = (input: RenderEnvInput) =>
 
     const children = _childrenOf(result)
 
-    // Bounded at 4 to keep the helm/sops subprocess count manageable.
+    // Bounded at 4: keeps the helm/sops subprocess count manageable.
     const perAppFiles = yield* Effect.all(
       children.map((child) => _renderChild({ appsDirAbs, child, ctx, outDirAbs, path })),
       { concurrency: 4 }
@@ -297,20 +273,9 @@ export class WriteEnvError extends Data.TaggedError("WriteEnvError")<{
   readonly cause: unknown
 }> {}
 
-/**
- * Atomic write strategy:
- *   1. Wipe any leftover `<outDir>.tmp` from a prior interrupted run.
- *   2. Stage every file under `<outDir>.tmp` (rewriting each file's
- *      destination path to point inside the staging directory).
- *   3. Remove the live `<outDir>` if it exists, then rename
- *      `<outDir>.tmp` → `<outDir>`.
- *
- * Killing the process during step 2 leaves the live `<outDir>` unchanged.
- * Killing during step 3 leaves either the new tree at `<outDir>` (if the
- * rename completed) or the old tree at `<outDir>` plus the new one at
- * `<outDir>.tmp` (recovery: delete one, rename the other) — never a
- * half-rewritten live tree.
- */
+// Atomic write: stage all files under `<outDir>.tmp`, then remove the live
+// `<outDir>` and rename `.tmp` into place — a kill mid-write never leaves a
+// half-rewritten live tree.
 export const writeFiles = (
   rendered: RenderedEnv
 ): Effect.Effect<ReadonlyArray<string>, WriteEnvError, FileSystem | Path> =>

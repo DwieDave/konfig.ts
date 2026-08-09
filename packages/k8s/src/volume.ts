@@ -1,13 +1,6 @@
 import { brand } from "@konfig.ts/core"
 import type { ConfigMapRef, PvcRef, SecretRef } from "@konfig.ts/core"
 
-/**
- * Branded volume name — a string carrying the literal `N` in its
- * phantom. Constructed by the volume factories
- * (`Volume.empty`, `Volume.fromSecret`, …) and `Volume.mountRef`. Lets
- * `VolumeMount<Mounts>` and `Pod` constrain a container's
- * `volumeMounts[i].name` to volumes that the pod actually declares.
- */
 declare const VolumeNameBrand: unique symbol
 export type VolumeName<N extends string> = string & {
   readonly [VolumeNameBrand]: N
@@ -63,23 +56,6 @@ export interface VolumeFromPvcInput<N extends string, PvcN extends string> {
   readonly readOnly?: boolean
 }
 
-/**
- * `Volume` value namespace.
- *
- *   volumes: [
- *     Volume.empty({ name: "config" }),
- *     Volume.fromSecret({ name: "tls", ref: tlsSecret.ref }),
- *     Volume.fromConfigMap({ name: "settings", ref: cfg.ref }),
- *     Volume.fromPvc({ name: "data", claim: pvc.ref }),
- *   ],
- *   volumeMounts: [
- *     { name: Volume.mountRef("config"), mountPath: "/etc/conf" },
- *   ],
- *
- * All four constructors capture the literal `name` in the returned
- * `Volume<N>` brand; `Pod` infers the union and constrains each
- * container's `volumeMounts[i].name` to it.
- */
 export const Volume = {
   empty: <const N extends string>(input: EmptyVolumeInput<N>): Volume<N> => ({
     name: _volumeName(input.name),
@@ -111,11 +87,6 @@ export const Volume = {
   mountRef: <const N extends string>(name: N): VolumeName<N> => _volumeName(name)
 }
 
-/**
- * Typed container volumeMount. `Mounts` is the union of volume names
- * declared on the surrounding pod; `name` must reference one of them.
- * Bare-number variants don't apply (mounts are always by name).
- */
 export interface VolumeMount<Mounts extends string = string> {
   readonly name: VolumeName<Mounts>
   readonly mountPath: string

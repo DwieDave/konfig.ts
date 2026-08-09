@@ -29,8 +29,6 @@ import {
 import type { CopyAtom, DevSpec, DockerSpec, HealthcheckAtom, RunnerSpec, UserAtom } from "../spec"
 import type { Dockerfile, DockerfileBundle, Instruction, Stage } from "./DockerfileIR"
 
-// ──────────────────────────── context ────────────────────────────
-
 export interface LowerContext {
   readonly root: RootDir
   readonly allWorkspaces: ReadonlyArray<Workspace>
@@ -72,8 +70,6 @@ export const prepareContext = (
     return { root, allWorkspaces: all, closure, target, detectedPm, hasPatchesDir }
   })
 
-// ──────────────────────────── resolution ────────────────────────────
-
 type PmKind = "Bun" | "Npm" | "Pnpm" | "Yarn"
 type RuntimeKind = "Bun" | "Node"
 
@@ -114,8 +110,6 @@ const _runtimeEngineKey = (kind: RuntimeKind): string => kind.toLowerCase()
 
 const _readEngineVersion = (ws: Workspace, key: string): string | undefined => ws.pkg.engines?.[key]
 
-// ──────────────────────────── validation ────────────────────────────
-
 export interface ValidateSpecInput {
   readonly spec: DockerSpec
   readonly ctx: LowerContext
@@ -153,16 +147,10 @@ export const validateSpec = (
     }
   })
 
-// ──────────────────────────── stage building ────────────────────────────
-
 const HARDENED_DEFAULT_USER = { uid: 1001, gid: 1001, name: "app" } as const
 
-/**
- * POSIX-shell single-quote a token: wrap in single quotes and replace each
- * embedded single quote with the `'\''` escape sequence (close quote,
- * backslash-escaped literal quote, reopen quote). Safe for arbitrary path
- * strings inside a Dockerfile `RUN` line.
- */
+// POSIX-shell single-quote a token: closes quote, emits an escaped literal
+// quote, reopens quote — safe for arbitrary paths in a Dockerfile RUN line.
 const _shSingleQuote = (s: string): string => `'${s.replaceAll("'", "'\\''")}'`
 
 const _envToInstruction = (env: Record<string, string> | undefined): Instruction | undefined => {
@@ -204,7 +192,7 @@ const _copyAtomToInstruction = (
   ctx: LowerContext
 ): Instruction | undefined => {
   const tgt = ctx.target
-  if (c._tag === "WorkspaceSourceAll") return undefined // expanded earlier
+  if (c._tag === "WorkspaceSourceAll") return undefined
   if (c._tag === "BuilderArtifact") {
     return {
       _tag: "Copy",
@@ -309,30 +297,17 @@ const _resolveDefaults = (
     }
   })
 
-// ──────────────────────────── prod stages ────────────────────────────
-
 const _baseStage = (img: ImageRef): Stage => ({
   name: "base",
   from: { _tag: "FromImage", image: img.image, tag: img.tag },
   instructions: []
 })
 
-/**
- * `prod-deps` stage — only emitted when `spec.runner.production === true`.
- * Identical shape to {@link _depsStage} but appends the package manager's
- * `productionFlag` to the install command so `devDependencies` are
- * skipped. The runner then copies its `node_modules/` from this stage
- * instead of `builder`, dropping typescript / @types / lint / test
- * tooling from the runtime image.
- */
 const _lockfilesToCopy = (ctx: LowerContext, pm: PmContext): ReadonlyArray<string> =>
   ctx.detectedPm.presentLockfiles.length > 0
     ? ctx.detectedPm.presentLockfiles
     : pm.pmImpl.lockfileNames
 
-// Root `package.json` + lockfile(s) + package-manager aux files (and the
-// `patches/` dir, if present) — the minimal context every stage needs
-// before it can run an install. Shared by deps / prod-deps / dev stages.
 const _rootCopyInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] => {
   const rootFiles: ReadonlyArray<string> = [
     "package.json",
@@ -346,8 +321,6 @@ const _rootCopyInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] 
   return instructions
 }
 
-// Per-workspace `package.json` copies, so the package manager can resolve
-// the workspace graph before workspace source is copied in.
 const _packageJsonCopyInstructions = (workspaces: ReadonlyArray<Workspace>): Instruction[] =>
   workspaces.map((ws): Instruction => ({
     _tag: "Copy",
@@ -355,22 +328,11 @@ const _packageJsonCopyInstructions = (workspaces: ReadonlyArray<Workspace>): Ins
     dst: `./${ws.relDir}/`
   }))
 
-// Restrict the root `package.json`'s `workspaces` array to ONLY the
-// closure (target + transitive workspace deps) before running install.
-// Without this, `bun install` (and equivalents) resolve every workspace
-// listed in the original `workspaces` field — which in a monorepo means
-// pulling react / tanstack / typesafe-i18n into a CronJob image, ts-node
-// into a static SPA, and so on.
-//
-// Mutating the root package.json is done with the package manager's own
-// runtime (bun / node) so we don't need jq/sed in the base image. Script
-// uses DOUBLE quotes throughout so it can be wrapped in a shell
-// single-quoted string in the Dockerfile without conflicts. Also wipes
-// root `devDependencies` — `--production` only SKIPS installing them but
-// still needs to RESOLVE them (find workspace package or version). When
-// non-closure workspaces have been removed, root devDependencies like
-// `@konfig.ts/argocd: workspace:*` would error out as "Workspace
-// dependency not found".
+// Restricts root package.json's `workspaces` array to the closure so
+// install doesn't pull in unrelated workspaces' deps; also wipes
+// devDependencies since --production still needs to RESOLVE them, and
+// non-closure workspace:* deps would otherwise fail resolution. Script
+// uses double quotes so it can be wrapped in a single-quoted shell string.
 const _prodDepsWorkspaceRewriteInstruction = (ctx: LowerContext, pm: PmContext): Instruction => {
   const closureRelDirs = ctx.closure.map((ws) => ws.relDir).sort()
   const rewriteScript = `const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json","utf-8"));` +
@@ -381,19 +343,10 @@ const _prodDepsWorkspaceRewriteInstruction = (ctx: LowerContext, pm: PmContext):
   return { _tag: "Run", cmd: `${runtimeBin} -e '${rewriteScript}'` }
 }
 
-// Bun re-resolves the whole graph from scratch on `bun install`, so the
-// FULL-graph lockfile (which would fail validation against the trimmed
-// `workspaces` set) is dropped and regenerated. For npm/pnpm/yarn we KEEP
-// the lockfile and run a NON-frozen prod install (`pm.prodInstallCommand`,
-// i.e. `npm install` not `npm ci`, no `--frozen-lockfile` / `--immutable`)
-// so it re-resolves against the trimmed package.json using the lockfile as
-// a hint. Deleting the lockfile AND running a frozen/`ci` install would
-// fail for every non-bun manager. Re-resolving in a build stage is safe;
-// versions float only within each workspace's existing semver ranges.
-//
-// Only the closure's package.json files are copied — non-closure
-// workspaces were stripped from `workspaces` above so omitting their
-// package.json is safe, install resolves nothing for them.
+// Bun re-resolves from scratch so its full-graph lockfile is dropped and
+// regenerated; other managers keep the lockfile and run a non-frozen
+// install (no --frozen-lockfile/--immutable) since it must re-resolve
+// against the trimmed package.json using the lockfile only as a hint.
 const _prodDepsInstallInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] => {
   const instructions: Instruction[] = []
   if (pm.pmKind === "Bun") {
@@ -409,12 +362,8 @@ const _prodDepsInstallInstructions = (ctx: LowerContext, pm: PmContext): Instruc
   return instructions
 }
 
-// Applied AFTER install so paths are gone before the runner COPY happens.
-// `rm` in the runner only emits deletion markers on top of the data layer
-// and doesn't reduce image size. Each path gets its OWN `RUN rm -rf`
-// line, robustly single-quote escaped, so spaces and shell metacharacters
-// (`;`, `&`, `$`, `*`, embedded quotes, …) can't break the build or run
-// unintended commands.
+// Applied after install (not in the runner) so the deletion actually
+// shrinks the layer rather than just adding a deletion marker.
 const _removePathInstructions = (paths: ReadonlyArray<string> | undefined): Instruction[] =>
   (paths ?? []).map((path): Instruction => ({ _tag: "Run", cmd: `rm -rf ${_shSingleQuote(path)}` }))
 
@@ -521,20 +470,12 @@ const _runnerEnvAndExposeInstructions = (runner: RunnerSpec): ReadonlyArray<Inst
   return [...(envInstr ? [envInstr] : []), ..._exposeToInstructions(runner.expose)]
 }
 
-// True once the runner uses a custom base image (e.g. nginx:alpine for a
-// static SPA) — the alternate base may not even have an `/app` dir and the
-// caller supplies everything explicitly via `runner.copy`, so node_modules
-// must NOT be auto-copied.
 const _usesCustomBase = (runner: RunnerSpec): boolean => runner.baseImage !== undefined
 
-// Source stage for node_modules copies: the slim `prod-deps` stage instead
-// of `builder` when `runner.production === true`, so dev deps are
-// excluded from the final image.
 const _nodeModulesFrom = (runner: RunnerSpec): "prod-deps" | "builder" => runner.production ? "prod-deps" : "builder"
 
-// When the runner pulls in any workspace source, also pull in the root
-// node_modules so workspace:* symlinks (and bun's "bun"/"source" export
-// condition) resolve at runtime.
+// Workspace source needs the root node_modules too, so workspace:*
+// symlinks resolve at runtime.
 const _runnerRootNodeModulesInstructions = (
   runner: RunnerSpec,
   usesWorkspaceSource: boolean,
@@ -550,15 +491,9 @@ const _runnerRootNodeModulesInstructions = (
   }]
 }
 
-// Under an isolated linker (e.g. bun), each workspace keeps its OWN
-// node_modules — a tree of symlinks into the shared /app/node_modules/.bun
-// store. The root copy above is not enough: the target app's node_modules
-// is never pulled in (only its build artifacts are), so its direct deps
-// would be unresolvable at runtime. Closure workspaces' node_modules must
-// also come from the same source stage (not the dev `builder`) so their
-// store symlinks stay consistent with the root store. `ctx.closure`
-// includes the target. WorkspaceSource source copies bring the dir minus
-// node_modules (dockerignored from context / overwritten here).
+// Under an isolated linker (e.g. bun), each workspace keeps its own
+// node_modules of symlinks into the shared store; these must come from
+// the same source stage as the root copy to stay consistent with it.
 const _runnerWorkspaceNodeModulesInstructions = (
   runner: RunnerSpec,
   ctx: LowerContext,
@@ -625,9 +560,6 @@ const _runnerStage = (
   const usesWorkspaceSource = expandedCopy.some((c) => c._tag === "WorkspaceSource")
   const chown = user.chown ? { chown: user.chown } : {}
   const healthcheck = _runnerHealthcheckInstruction(runner.healthcheck)
-  // runner.removePaths is applied IN the source stage (prod-deps or
-  // builder) so the deletion shrinks layer size — NOT here. See
-  // _prodDepsStage / _builderStage.
   const instructions: Instruction[] = [
     ...(user.setupRun ? [user.setupRun] : []),
     ..._runnerEnvAndExposeInstructions(runner),
@@ -648,8 +580,6 @@ const _runnerStage = (
     instructions
   }
 }
-
-// ──────────────────────────── dev stage ────────────────────────────
 
 const _devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext, dev: DevSpec): Stage => {
   const instructions: Instruction[] = [
@@ -683,8 +613,6 @@ const _devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext, dev: DevS
   }
 }
 
-// ──────────────────────────── buildIR (pure) ────────────────────────────
-
 export interface BuildIRInput {
   readonly spec: DockerSpec
   readonly ctx: LowerContext
@@ -708,8 +636,6 @@ export const buildIR = (input: BuildIRInput): DockerfileBundle => {
   const dev: Dockerfile = { args: [], stages: [base, _devStage(spec, ctx, pm, spec.dev)] }
   return { prod, dev }
 }
-
-// ──────────────────────────── public lower ────────────────────────────
 
 export const lower = (
   spec: DockerSpec

@@ -17,12 +17,6 @@ interface FetchOneInput {
   readonly cacheDir: string
 }
 
-/**
- * Fetches a single chart tarball into `input.cacheDir`, skipping the helm
- * subprocess entirely when the tarball is already cached. Exported so the
- * cache-hit/cache-miss decision and the argv it plans can be tested
- * against a stubbed `ChildProcessSpawner` without invoking real helm.
- */
 export const _fetchOne = (input: FetchOneInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -41,11 +35,6 @@ interface HelmFetchFlags {
   readonly all: boolean
 }
 
-/**
- * The `konfig helm fetch` handler body, exported separately from
- * `Command.make` so it can be exercised directly against a temp charts
- * dir and a stubbed subprocess spawner in tests.
- */
 export const helmFetchEffect = (flags: HelmFetchFlags) =>
   Effect.gen(function*() {
     const { cacheDir, chartsDir, minVersion } = yield* resolveCliPaths

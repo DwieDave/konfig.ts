@@ -2,15 +2,6 @@ import { Downward, Environment, Literal } from "@konfig.ts/env"
 import { Config } from "effect"
 import { dbCreds, jwtKey, s3Creds } from "./secrets"
 
-/**
- * Full env bundle for `apps/api`.
- *
- * Mixes every contract atom konfig.ts/env provides:
- *   - perEnv*: values that change per environment (HTTP_PORT, LOG_LEVEL)
- *   - Literal: values baked into the manifest (NODE_ENV)
- *   - Downward: Kubernetes downward-API fields (POD_NAME)
- *   - Secret: external creds bound to a backend at composition time
- */
 export const apiEnv = Environment.define({
   db: dbCreds,
   s3: s3Creds,
@@ -33,12 +24,7 @@ export const apiEnv = Environment.define({
   })
 })
 
-/**
- * Worker bundle. Strict subset of apiEnv:
- *   - shares the same dbCreds (must connect to the same database)
- *   - no S3, no JWT (worker doesn't serve HTTP)
- *   - extra knob: BATCH_SIZE
- */
+// Strict subset of apiEnv: shares dbCreds, drops S3/JWT, adds BATCH_SIZE.
 export const workerEnv = Environment.define({
   db: dbCreds,
   worker: Environment.define({

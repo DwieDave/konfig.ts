@@ -4,14 +4,8 @@ import { Path } from "effect/Path"
 import { Argument, Command } from "effect/unstable/cli"
 import { readJson, RepoScriptError } from "../lib/repo"
 
-// Rewrite the current package's `exports` map for `npm publish`.
-//
-// Why: the dev checkout points the `bun` and `source` export conditions at
-// `./src/index.ts` so that `check`/`test` resolve TypeScript source without a
-// build. But `src/` is excluded from `files[]`, and the release publishes via
-// plain `npm publish`, which does NOT apply `publishConfig.exports`. Bun
-// prioritizes the `bun` condition, so a published tarball with a verbatim
-// `bun → ./src/index.ts` is unresolvable for the primary audience.
+// npm publish ignores publishConfig.exports and src/ is excluded from files[], so the
+// bun/source conditions (pointing at ./src/index.ts for dev) must be stripped pre-publish.
 
 const _strip = Effect.gen(function*() {
   const fs = yield* FileSystem
@@ -30,20 +24,15 @@ const _strip = Effect.gen(function*() {
     return
   }
 
-  // Back up the exact pre-strip bytes so `restore` is lossless and git-independent.
   yield* fs
     .writeFileString(backup, raw)
     .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot write ${backup}`, cause })))
 
-  // Keep only the conditions that make sense in a published tarball, in the
-  // canonical order: types first (so TS resolves declarations), then import.
   const stripped: Record<string, string> = {}
   if (dot.types !== undefined) stripped.types = dot.types
   if (dot.import !== undefined) stripped.import = dot.import
   const next: Record<string, unknown> = { ...pkg, exports: { ...exportsMap, ".": stripped } }
 
-  // publishConfig.exports was the (never-applied) npm override; it is now
-  // redundant because `exports` itself is already publish-safe.
   const publishConfig = { ...(pkg.publishConfig as Record<string, unknown> | undefined) }
   if ("exports" in publishConfig) {
     delete publishConfig.exports

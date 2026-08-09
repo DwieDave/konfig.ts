@@ -43,12 +43,7 @@ export interface HelmReleaseOptions {
   readonly namespace?: string
   readonly values: Record<string, unknown>
   readonly extraOpts?: readonly string[]
-  /**
-   * Minimum acceptable `helm` CLI version (semver, e.g. `"3.16.0"`).
-   * When set, `release` runs a `helm version --short` preflight before
-   * pulling/templating and fails with `HelmVersionTooLow` if the
-   * installed helm is older (or absent). Omit to skip the check.
-   */
+  // When set, runs a `helm version --short` preflight and fails HelmVersionTooLow if older.
   readonly minVersion?: string
 }
 
@@ -71,20 +66,8 @@ const _asDocShape = (value: unknown): _ParsedDocShape | null =>
     )
     : null
 
-/**
- * Turn `helm template` stdout into individual `RawYaml` docs.
- *
- * Document boundaries come from the shared `parseYamlAll`
- * (`YAML.parseAllDocuments`) helper rather than a naive `/^---$/m` split,
- * so a `---` appearing inside a block scalar can't spuriously split one
- * manifest into two. `parseYamlAll` also drops empty / comment-only
- * segments for us.
- *
- * When a `namespace` is supplied, each namespaced-kind document that
- * lacks an explicit namespace is patched to carry it (the re-parse
- * branch behavior). Cluster-scoped kinds and documents that already pin
- * a namespace are left untouched.
- */
+// Uses parseYamlAll (not a naive /^---$/m split) so a `---` inside a block scalar can't
+// spuriously split one manifest into two.
 const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<RawYaml[]> =>
   Effect.sync(() => {
     const { output, chart, version, namespace } = input
@@ -112,14 +95,12 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<RawYaml[]
 
 const _HELM_VERSION_RE = /v?(\d+)\.(\d+)\.(\d+)/
 
-/** Extract a `major.minor.patch` triple from a version string, or `null`. */
 const _parseVersionTriple = (text: string): readonly [number, number, number] | null => {
   const m = _HELM_VERSION_RE.exec(text.trim())
   if (m === null) return null
   return [Number(m[1]), Number(m[2]), Number(m[3])]
 }
 
-/** True when `found` is strictly older than `min` (release triple compare). */
 const _isBelow = (
   found: readonly [number, number, number],
   min: readonly [number, number, number]
@@ -133,12 +114,6 @@ const _isBelow = (
   return false
 }
 
-/**
- * One-shot `helm version --short` preflight. Fails `HelmVersionTooLow`
- * when helm is absent/unparseable or older than `minVersion`. Pre-release
- * / build metadata on the installed version is ignored — only the release
- * triple gates the check.
- */
 const _assertHelmMinVersion = (
   minVersion: string
 ): Effect.Effect<void, HelmVersionTooLow, ChildProcessSpawner> =>
@@ -165,10 +140,7 @@ const _toHex = (buf: ArrayBuffer): string => {
   return hex
 }
 
-// Minimal local typing for `crypto.subtle.digest`. The base tsconfig is
-// `lib: ["ES2022"]` (no DOM), so `BufferSource` / `Crypto` are not declared;
-// we define just enough to drive the runtime call without dragging the
-// whole DOM lib in.
+// tsconfig lib is ES2022 (no DOM), so Crypto isn't declared; minimal local typing instead.
 interface _SubtleCrypto {
   readonly digest: (algorithm: "SHA-256", data: ArrayBufferView) => Promise<ArrayBuffer>
 }
@@ -176,12 +148,7 @@ interface _CryptoGlobal {
   readonly subtle: _SubtleCrypto
 }
 
-/**
- * SHA-256 the file at `filePath` via Web Crypto API (`crypto.subtle.digest`).
- * `crypto.subtle` is a runtime global on Node ≥ 20 and on Bun; no
- * `node:crypto` import is needed, which keeps the file portable across
- * the runtimes Effect targets.
- */
+// crypto.subtle is a runtime global on Node >=20 and Bun; avoids a node:crypto import.
 const _hashFile = (filePath: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -307,8 +274,6 @@ export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {
     }).pipe(
       Effect.scoped,
       Effect.mapError((cause) =>
-        // The version preflight already produces a typed HelmVersionTooLow;
-        // surface it as-is rather than burying it inside HelmRenderError.
         cause instanceof HelmVersionTooLow
           ? cause
           : new HelmRenderError({ chart: opts.chart, version: opts.version, cause })

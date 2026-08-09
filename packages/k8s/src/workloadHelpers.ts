@@ -16,46 +16,11 @@ import type { ServicePortSpec } from "./ports"
 import type { Volume } from "./volume"
 import { CronJob, Deployment } from "./workload"
 
-/**
- * Union of port names declared by every `ContainerSpec` in `Cs`. Raw
- * `ContainerInput` entries (no `Container.define`) contribute `never`,
- * so untyped containers don't widen the result — they just don't add
- * any named-port options to the Service. With every container untyped,
- * the union collapses to `never` and `targetPort` is effectively
- * `number`-only, matching Kubernetes' behaviour when no port is named.
- */
 type _PortNamesOfContainers<Cs extends ReadonlyArray<ContainerInput>> = {
   readonly [K in keyof Cs]: Cs[K] extends ContainerSpec<infer P, string> ? P : never
 }[number]
 
-/**
- * Reloader integration shorthand. Two complementary rotation models:
- *
- *  - *Build-time* rotation (re-render → new hash → rolling update). konfig
- *    does NOT stamp this automatically; it ships `hashSecretValues` as a
- *    helper you attach yourself — feed it your resolved secret values and
- *    place the digest into `deployment.podAnnotations`, so a value change
- *    flips the pod template and triggers a rollout.
- *  - *Runtime* rotation via Stakater's Reloader (operator watches mounted
- *    Secrets/ConfigMaps and patches the workload to restart pods on change),
- *    selected by the option below.
- *
- * Pick:
- *
- *  - `"off"` (default) — no Reloader annotation. Pair with a build-time
- *    `hashSecretValues` annotation if you accept the redeploy-on-edit model.
- *  - `"stakater"` — emit `reloader.stakater.com/auto: "true"`. Reloader
- *    watches every Secret/ConfigMap referenced by the pod spec.
- *  - `"stakater-strict"` — emit `reloader.stakater.com/auto: "true"`
- *    plus `reloader.stakater.com/match: "true"`, restricting watch
- *    to objects with the matching annotation set on them.
- *  - `{ secrets, configMaps }` — explicit per-resource lists, emitted
- *    as `secret.reloader.stakater.com/reload` /
- *    `configmap.reloader.stakater.com/reload` (comma-joined).
- *
- * See packages/k8s/README.md for the trade-off between build-time
- * hashes and runtime reloader.
- */
+// See packages/k8s/README.md for the build-time-hash vs runtime-reloader trade-off.
 export type ReloaderOption =
   | "off"
   | "stakater"
@@ -91,7 +56,6 @@ interface WebInput<Cs extends ReadonlyArray<ContainerInput>> {
   readonly namespace: string
   readonly labels?: Readonly<Record<string, string>>
   readonly annotations?: Readonly<Record<string, string>>
-  /** Pod-restart-on-rotation integration. See `ReloaderOption`. */
   readonly reloader?: ReloaderOption
   readonly deployment: {
     readonly replicas?: number
@@ -122,9 +86,7 @@ interface _WebPartInput<Cs extends ReadonlyArray<ContainerInput>> {
 const _webDeployment = <Cs extends ReadonlyArray<ContainerInput>>(
   { input, selectorLabels }: _WebPartInput<Cs>
 ): Manifest.Manifest<K8sDeployment> => {
-  // selectorLabels are spread LAST so a colliding user pod label can never
-  // override the `app` selector — that would desync the pod template from
-  // `spec.selector` and leave the Service with zero endpoints.
+  // selectorLabels spread LAST so a colliding pod label can't desync spec.selector (zero endpoints).
   const podLabels = { ...input.deployment.podLabels, ...selectorLabels }
   const reloaderAnns = _reloaderAnnotations(input.reloader)
   return Deployment.make({

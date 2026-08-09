@@ -2,15 +2,7 @@ import { Application, Sync } from "@konfig.ts/argocd"
 import { Helm, Module } from "@konfig.ts/core"
 import { Namespace } from "@konfig.ts/k8s"
 
-/**
- * isindir/sops-secrets-operator — reconciles SopsSecret CRs into
- * native Secrets after decrypting with the operator's age key.
- *
- * Sync-wave -2 so it lands before the `secrets` app (-1) and the
- * postgres + app workloads (0). ArgoCD waves are a runtime ordering
- * mechanism — the static dep graph in envs/prod.ts is what catches
- * mis-composition at build time.
- */
+// isindir/sops-secrets-operator — reconciles SopsSecret CRs into native Secrets. Sync-wave -2 so it lands before secrets (-1) and workloads (0).
 export const defineSopsOperator = Module.fixedNs({
   target: Application.target,
   namespace: "sops",

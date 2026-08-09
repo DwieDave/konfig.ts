@@ -14,10 +14,6 @@ const _ws = (name: string, deps: ReadonlyArray<string>): Workspace => ({
   hasBuildScript: false
 })
 
-/**
- * Builds a DAG: nodes "A".."Z" with random forward-only edges
- * (i ↔ alpha[i] → alpha[j] only if j > i). Always acyclic by construction.
- */
 const arbDag = fc
   .array(fc.integer({ min: 2, max: 15 }), { minLength: 1, maxLength: 1 })
   .chain(([n]) => {
@@ -34,7 +30,6 @@ const arbDag = fc
     const names = Array.from({ length: size }, (_, i) => `@fix/p${i}`)
     const deps: Record<string, string[]> = Object.fromEntries(names.map((n) => [n, [] as string[]]))
     for (const [a, b] of edgePairs) {
-      // Forward edges only so the result is acyclic.
       const from = Math.min(a, b)
       const to = Math.max(a, b)
       if (from === to) continue
@@ -59,7 +54,6 @@ describe("closureOf — property tests", () => {
         const result = Effect.runSyncExit(closureOf({ all, target }))
         if (!Exit.isSuccess(result)) return
 
-        // Compute the expected closure by BFS over deps.
         const seen = new Set<string>()
         const stack = [target]
         while (stack.length > 0) {

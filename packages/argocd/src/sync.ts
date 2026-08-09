@@ -1,13 +1,7 @@
 export type HookPhase = "PreSync" | "Sync" | "PostSync" | "SyncFail" | "PostDelete"
 
-/**
- * `Sync` value namespace — ArgoCD `argocd.argoproj.io/*` annotation
- * helpers. Each call returns a single-property annotation record ready
- * to spread into `Application.define({ annotations })` or any
- * resource's `metadata.annotations`.
- *
- *   annotations: { ...Sync.wave(-1), ...Sync.options(["Replace=true"]) }
- */
+// ArgoCD argocd.argoproj.io/* annotation helpers; spread the result into
+// Application.define({ annotations }) or a resource's metadata.annotations.
 export const Sync = {
   wave: (n: number): { "argocd.argoproj.io/sync-wave": string } => ({
     "argocd.argoproj.io/sync-wave": String(n)

@@ -1,17 +1,6 @@
 import { Secret } from "@konfig.ts/env"
 
-/**
- * Postgres connection credentials.
- *
- * Used by both `apps/api` (read+write) and `apps/worker` (background
- * jobs). The two consumers share the same Secret — they need identical
- * connection strings, and rotating once should rotate everywhere.
- *
- * Backend is bound per-environment (prod = SOPS-encrypted yaml on disk,
- * staging could use a different recipient, local would skip the manifest
- * and let devspace populate plaintext out-of-band). The bundle itself
- * stays storage-agnostic.
- */
+// Shared by api and worker so rotating once rotates everywhere.
 export const dbCreds = Secret.define({
   name: "db-creds",
   namespace: "app",
@@ -22,9 +11,6 @@ export const dbCreds = Secret.define({
   }
 })
 
-/**
- * S3 access for the api's media uploads. Only the api consumes this.
- */
 export const s3Creds = Secret.define({
   name: "s3-creds",
   namespace: "app",
@@ -34,9 +20,6 @@ export const s3Creds = Secret.define({
   }
 })
 
-/**
- * JWT signing key. Only the api needs it (worker doesn't issue tokens).
- */
 export const jwtKey = Secret.define({
   name: "jwt-signing-key",
   namespace: "app",
@@ -45,14 +28,7 @@ export const jwtKey = Secret.define({
   }
 })
 
-/**
- * GHCR docker pull credential. Mounted as a Kubernetes
- * `imagePullSecrets` entry, NOT exposed to the container as env vars.
- *
- * This contract is provided by `infra/modules/image-pulls.ts` via
- * `Secret.bind` (no Environment binding — the secret has no env-var
- * mappings beyond the dockerconfigjson blob itself).
- */
+// Mounted as imagePullSecrets, not exposed to the container as env vars.
 export const ghcrPull = Secret.define({
   name: "ghcr-pull",
   namespace: "app",

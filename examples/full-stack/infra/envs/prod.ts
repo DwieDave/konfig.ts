@@ -9,21 +9,7 @@ import { defineRedisCache } from "../modules/redis-cache"
 import { defineSopsOperator } from "../modules/sops-operator"
 import { defineWorker } from "../modules/worker"
 
-/**
- * Production env composition.
- *
- * Lists every module once, in dependency order (providers first). The
- * type-level dep check fires at `AppOfApps.entrypoint` for both
- * `Dep.Need<"Secret", _>` and `Dep.Need<"Image", _>` (workloads
- * `yield* Dep.Image(app)`, the build modules' `provides:
- * Dep.provideImage(...)`).
- *
- * Forgetting `apiBuild` or `imagePulls` from the modules list surfaces
- * the friendlier hint:
- *   _konfig_unsatisfied: "Missing provider for Image \"api\"…"
- *
- * See `broken.ts` for a worked example.
- */
+// Modules are listed in dependency order (providers first); see broken.ts for the missing-provider error case.
 
 const branch = "main"
 const rootPath = "./infra/k8s/manifests/prod"

@@ -1,10 +1,4 @@
-/**
- * Multi-cluster demo — US region overlay.
- *
- * Same module set as `prod.ts`, parameterized by the `us-east-1`
- * cluster overlay. Renders to `./infra/k8s/manifests/prod-us/us-east-1/`
- * via `konfig build prod-us --cluster=us-east-1`.
- */
+// US region overlay of prod.ts; render with `konfig build prod-us --cluster=us-east-1`.
 import { AppOfApps } from "@konfig.ts/argocd"
 import { cluster, clusters } from "../cluster"
 import { defineApi } from "../modules/api"

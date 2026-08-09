@@ -1,17 +1,6 @@
 import { Docker } from "@konfig.ts/docker"
 
-/**
- * Production multi-stage + dev single-stage Dockerfile for `apps/api`.
- *
- * The runner stage is workspace-graph-aware: konfig.ts/docker resolves
- * the transitive closure of @example/api (which pulls in
- * @example/env-contracts) and copies only those workspaces into the
- * final image.
- *
- * The `runner.production` flag re-runs `bun install --production` after
- * trimming the root package.json's workspaces to the closure — drops
- * dev dependencies and unused workspace trees from node_modules.
- */
+// runner.production re-runs `bun install --production` after trimming workspaces to the closure.
 export default Docker.app({
   target: "apps/api",
   runner: {
@@ -21,9 +10,7 @@ export default Docker.app({
     expose: 8080,
     cmd: ["bun", "run", "src/main.ts"],
     env: {
-      // Only contract atoms with literal defaults belong here.
-      // per-env values and secrets come from the Deployment env
-      // block (via Environment.bind in the api infra module).
+      // per-env values and secrets come from Environment.bind, not here
       LOG_LEVEL: "info"
     },
     healthcheck: {

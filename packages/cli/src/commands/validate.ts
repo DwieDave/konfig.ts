@@ -19,12 +19,6 @@ export interface RunValidateInput {
   readonly ignoreMissingSchemas: boolean
 }
 
-/**
- * The validate command's render + structural (and optional kubeconform)
- * validation pipeline, factored out of `Command.make` so it can be
- * driven with a directly-constructed `ResolvedKonfigConfig` (bypassing
- * `resolveConfig()`'s cwd-search) in tests.
- */
 export const runValidate = (input: RunValidateInput) =>
   Effect.gen(function*() {
     const { cfg, ctx, envName, ignoreMissingSchemas, strict } = input

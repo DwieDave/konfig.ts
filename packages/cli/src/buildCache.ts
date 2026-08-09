@@ -11,12 +11,8 @@ export class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
   readonly cause: unknown
 }> {}
 
-/**
- * Treats a missing file/directory as an absent input (falls back to the
- * given default) but lets every other I/O failure (permission denied, I/O
- * error, ...) propagate — an unreadable file must not silently hash as if
- * it didn't exist, or a real read failure could produce a false cache hit.
- */
+// Only NotFound falls back to `onAbsent`; other I/O errors must propagate or an
+// unreadable file could silently hash as absent and produce a false cache hit.
 const _orAbsentIfNotFound = <A, R>(
   effect: Effect.Effect<A, PlatformError, R>,
   onAbsent: () => A
@@ -42,12 +38,6 @@ interface ComputeInputHashInput {
   readonly ctx: RenderContext
 }
 
-/**
- * Canonical, deterministic serialization of the render-context knobs
- * that change output: the target cluster, the target k8s version, and
- * the free-form flags (sorted by key so map insertion order is
- * irrelevant). Two contexts render-equivalent iff their signatures match.
- */
 const _ctxSignature = (ctx: RenderContext): string => {
   const flagPairs = ctx.flags === undefined
     ? []
@@ -61,7 +51,6 @@ const _ctxSignature = (ctx: RenderContext): string => {
   ].join("\n")
 }
 
-/** Resolved path of an env's entry file, per `cfg.config.envs[env]` or the `<root>/env/<env>.ts` default. */
 const _entryPath = (
   cfg: ResolvedKonfigConfig,
   envName: string,
@@ -73,7 +62,6 @@ const _entryPath = (
     : path.join(cfg.configDir, cfg.config.root, envSpec.entry)
 }
 
-/** Folds the entry file's content into `hash`, if the entry exists. */
 const _hashEntry = (
   hash: crypto.Hash,
   fs: FileSystem,
@@ -88,7 +76,6 @@ const _hashEntry = (
     hash.update("\n")
   })
 
-/** Resolves `cfg.config.cacheInclude` (plain paths and glob patterns) to a flat file list. */
 const _resolveCacheIncludeFiles = (
   cfg: ResolvedKonfigConfig,
   fs: FileSystem,
@@ -99,8 +86,6 @@ const _resolveCacheIncludeFiles = (
     for (const extra of cfg.config.cacheInclude ?? []) {
       const abs = path.isAbsolute(extra) ? extra : path.join(cfg.configDir, extra)
       if (_GLOB_CHARS.test(extra)) {
-        // Glob entry: walk the longest static prefix via FileSystem, then
-        // filter with Node's native glob matcher (node >= 22).
         const candidates: string[] = []
         yield* _collectFiles(_globBase(abs, path.sep), candidates)
         const pattern = _globToRegExp(abs, path.sep)
@@ -119,7 +104,6 @@ const _resolveCacheIncludeFiles = (
     return files
   })
 
-/** Folds the sorted content of every file in `files` into `hash`. */
 const _hashFiles = (
   hash: crypto.Hash,
   fs: FileSystem,
@@ -127,8 +111,8 @@ const _hashFiles = (
 ): Effect.Effect<void, PlatformError> =>
   Effect.gen(function*() {
     for (const f of [...files].sort()) {
-      // Raw bytes, not readFileString: lossy UTF-8 decode would map distinct
-      // binary contents to the same string and yield a false cache hit.
+      // Raw bytes, not readFileString: a lossy UTF-8 decode could map distinct
+      // binary contents to the same string, causing a false cache hit.
       const content = yield* _orAbsentIfNotFound(fs.readFile(f), () => new Uint8Array())
       hash.update(`file:${f}\n`)
       hash.update(content)
@@ -136,27 +120,8 @@ const _hashFiles = (
     }
   })
 
-/**
- * Compute a SHA-256 over the inputs that could feed an env's render:
- *  - The env's entry file content (resolved per `cfg.config.envs[env]`
- *    or `<root>/env/<env>.ts`).
- *  - Every file under `cfg.config.root` regardless of extension —
- *    scripts, templates, and data files can all feed a render — (sorted
- *    by path so the hash is deterministic across runs; node_modules,
- *    dist, and .konfig are skipped).
- *  - Every file/directory listed in `cfg.config.cacheInclude` (resolved
- *    relative to the konfig.json dir) — inputs outside the konfig root.
- *    Entries may be glob patterns (`../shared/**\/*.yaml`, Node glob
- *    syntax); non-glob entries are plain files or directories.
- *  - The konfig.json contents (via `cfg.config` serialized).
- *  - The render context (cluster, k8sVersion, sorted flags) — these
- *    thread into every `renderManifest` call and change the output, so
- *    a build with a different `--k8s-version` / `--cluster` / `--flag`
- *    must be a cache miss.
- *
- * The hash is conservative — touching any file under the env root
- * invalidates the cache. False negatives only; never a false positive.
- */
+// Hash is conservative: touching any file under the env root invalidates the
+// cache. False negatives only, never a false positive.
 export const computeInputHash = (input: ComputeInputHashInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -182,7 +147,6 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
 
 const _GLOB_CHARS = /[*?[{]/
 
-/** Longest leading path prefix of `pattern` with no glob metacharacters. */
 const _globBase = (pattern: string, sep: string): string => {
   const staticSegs: string[] = []
   for (const seg of pattern.split(sep)) {
@@ -194,11 +158,6 @@ const _globBase = (pattern: string, sep: string): string => {
 
 const _REGEXP_SPECIAL = /[\\^$.|+(){}]/
 
-/**
- * Converts a glob `pattern` (`*`, `**`, `?`, `[...]`) into a `RegExp` that
- * matches full paths separated by `sep`. `**` matches across separators;
- * `*` and `?` stop at a separator.
- */
 const _globToRegExp = (pattern: string, sep: string): RegExp => {
   const sepClass = sep === "\\" ? "\\\\" : sep
   let source = ""
@@ -252,11 +211,6 @@ const _collectFiles = (
     }
   })
 
-/**
- * Hash a list of (path, content) pairs deterministically. Used to
- * fingerprint the rendered output so the next build can detect
- * out-of-band tampering with the output tree.
- */
 export const computeOutputHash = (
   files: ReadonlyArray<{ readonly path: string; readonly content: string }>
 ): string => {
@@ -270,13 +224,6 @@ export const computeOutputHash = (
   return hash.digest("hex")
 }
 
-/**
- * Recompute {@link computeOutputHash} over the tree currently on disk at
- * `outDirAbs`, walking recursively and using each file's absolute path
- * (matching how the entry's `outputHash` was recorded from
- * `rendered.files`). Lets a cache hit detect out-of-band edits/deletes
- * to the rendered tree before honoring it.
- */
 export const computeOnDiskOutputHash = (
   outDirAbs: string
 ): Effect.Effect<string, never, FileSystem | Path> =>
@@ -307,11 +254,8 @@ const _collectOutputFiles = (
     }
   })
 
-/**
- * Cache file key. Folds a short digest of the render-context signature
- * into the filename so builds for the same env but different
- * cluster/k8sVersion/flags never share a cache slot.
- */
+// Folds a digest of the render-context signature into the filename so builds
+// for the same env but different cluster/k8sVersion/flags don't share a slot.
 const _cacheFilePath = (
   cfg: ResolvedKonfigConfig,
   envName: string,
@@ -328,7 +272,6 @@ interface ReadEntryInput {
   readonly ctx: RenderContext
 }
 
-/** Parses a cache file's raw text; the caller revalidates by recomputing `inputHash`. */
 const _parseCacheEntry = (text: string): BuildCacheEntry =>
   unsafeCoerce<BuildCacheEntry>(
     JSON.parse(text),
@@ -354,7 +297,6 @@ interface WriteEntryInput {
   readonly entry: BuildCacheEntry
 }
 
-/** Pretty-printed JSON serialization of a cache entry. */
 const _formatCacheEntry = (entry: BuildCacheEntry): string => `${JSON.stringify(entry, null, 2)}\n`
 
 export const writeCacheEntry = (input: WriteEntryInput) =>

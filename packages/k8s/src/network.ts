@@ -12,13 +12,6 @@ import type { ContainerSpec } from "./container"
 import type { ServicePortSpec } from "./ports"
 import type { Selector } from "./selector"
 
-/**
- * Strict input for a `Service`. `selector` and `ports` are required:
- * a Service with no selector has no endpoints, and one with no ports
- * is meaningless. ServicePort needs at minimum a `port`; the upstream
- * `K8sServicePort` only marks `port` as required — names/protocol
- * defaults match kube-apiserver behaviour.
- */
 export interface ServiceInput {
   readonly name: string
   readonly namespace: string
@@ -34,13 +27,6 @@ export interface ServiceInput {
   readonly internalTrafficPolicy?: string
 }
 
-/**
- * Strongly-typed Service input bound to a container's declared port-name
- * union. `selector` and `ports` are required; `ports[i].targetPort`
- * accepts a bare number or `Port.ref(name)` referencing a name declared
- * on `forContainer`. `NoInfer` locks `Ports` to `forContainer`, so the
- * port list is validated against that union rather than inferred from.
- */
 export interface ServiceFromContainerInput<Ports extends string> {
   readonly name: string
   readonly namespace: string
@@ -57,11 +43,6 @@ export interface ServiceFromContainerInput<Ports extends string> {
   readonly internalTrafficPolicy?: string
 }
 
-/**
- * Service built from a `Selector`. The selector's labels populate
- * `spec.selector` — drift versus the matching Deployment is impossible
- * once both consume the same `podSet`.
- */
 export interface ServiceFromPodSetInput<L extends Readonly<Record<string, string>>> {
   readonly name: string
   readonly namespace: string
@@ -182,11 +163,6 @@ export const Ingress = {
     }
     return Manifest.make<K8sIngress>(() => Effect.succeed(resource))
   },
-  /**
-   * TLS entry constructor for `Ingress.make({ tls: [...] })`. Takes a
-   * branded `SecretRef` so the secret's name can't widen to a raw
-   * string at the call site.
-   */
   tls: (input: {
     readonly secretName: SecretRef<string>
     readonly hosts?: ReadonlyArray<string>

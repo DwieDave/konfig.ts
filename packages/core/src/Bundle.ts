@@ -6,12 +6,6 @@ import type * as CoreManifest from "./Manifest"
 import type * as Module from "./Module"
 import type { AnyRenderError } from "./RenderError"
 
-/**
- * Mutate-attach a `.layer` field to an Effect Context.Tag — same pattern
- * `argocd/Application.ts:_attachLayerToTag` uses. A single unsafe cast
- * in the dep-graph machinery; lives here so the rest of Bundle stays
- * cast-free.
- */
 const _attachLayerToTag = <Tag extends object, Out, Err, In>(
   tag: Tag,
   layer: Layer.Layer<Out, Err, In>
@@ -39,24 +33,10 @@ export const make = (opts: BundleMakeOptions): Bundle => ({
   ...(opts.namespace !== undefined ? { namespace: opts.namespace } : {})
 })
 
-/**
- * Handle returned by `Bundle.define`. Same yieldable-Context-Tag +
- * `.layer` pattern as argocd's `ApplicationHandle`; only the carried
- * value type differs (a plain `Bundle` with no argo source/syncPolicy).
- * `Dep.Need<"App", Name>` keys the dep graph by literal name so
- * sibling modules can `yield* bundleHandle` to consume it.
- */
 export interface BundleHandle<Name extends string, Out, In> extends Context.Service<Dep.Need<"App", Name>, Bundle> {
   readonly layer: Layer.Layer<Out, AnyRenderError, In>
 }
 
-/**
- * Higher-kinded handle constructor that maps `Module`'s
- * `(Name, Ns, R, Extra)` slots onto a `BundleHandle`. Lets
- * `Module.fixedNs({ target: Bundle.target, … })` /
- * `Module.dynamicNs({ target: Bundle.target, … })` return
- * strongly-typed `BundleHandle`s.
- */
 export interface HandleKind extends Module.HandleKind {
   readonly Handle: BundleHandle<
     this["_Name"] & string,
@@ -71,13 +51,6 @@ export interface HandleKind extends Module.HandleKind {
   >
 }
 
-/**
- * Re-export of {@link Module.LiteralName} — preserved as
- * `Bundle.LiteralName` so existing wrapper code keeps working.
- * konfig's dep graph keys every `Provide<"App", Name>` slot by literal
- * `Name`; a wrapper that lets `Name` widen to `string` collapses every
- * bundle into the same slot.
- */
 export type LiteralName<T extends string> = Module.LiteralName<T>
 
 export interface BundleDefineOptions<
@@ -100,24 +73,6 @@ type _NsProvides<Ns extends string> = [Ns] extends [never] ? never
 type _NsExcludes<Ns extends string> = [Ns] extends [never] ? never
   : Dep.Need<"Namespace", Ns>
 
-/**
- * Build a typed handle for a manifest bundle — a name + optional
- * namespace + a set of manifests, plus dep-graph wiring. Same
- * compile-time guarantees as argocd's `Application.define` minus
- * `source: ArgoSource` / `syncPolicy` / sync-wave annotations:
- *  - the literal `Name` flows into `Dep.Provide<"App", Name>`,
- *  - the optional literal namespace flows into `Dep.Provide<"Namespace", Ns>`,
- *  - the build callback's `R` channel becomes the handle's `In` after
- *    subtracting what this bundle provides itself.
- *
- * Pair with `Bundle.fromModules` to compose multiple bundles
- * and have the dep-graph residual checked at `Bundle.entrypoint`.
- *
- * For `Module.fixedNs` / `Module.dynamicNs` use, see `Bundle.target`
- * — it adapts this `define` so namespace is required (Module wrappers
- * always thread a namespace through), which lets the dep-graph drop
- * the `Provide<"Namespace", never>` cell the optional shape needs.
- */
 export const define = <
   const Name extends string,
   const Ns extends string = never,
@@ -182,21 +137,7 @@ export const define = <
   )
 }
 
-/**
- * `Module.Target` adapter for `Bundle.define`. `Module.fixedNs` /
- * `Module.dynamicNs` always pass a namespace through, so this adapter
- * requires `namespace` (whereas `Bundle.define` itself accepts it as
- * optional) — pinning `Ns` to a real literal lets the dep-graph emit
- * a concrete `Provide<"Namespace", Ns>` cell on the resulting handle.
- *
- * ```ts
- * const defineCache = Module.fixedNs({
- *   target: Bundle.target,
- *   namespace: "cache",
- *   build: ({ name, namespace }) => [ ... ],
- * });
- * ```
- */
+// Module.Target adapter for Bundle.define; requires namespace (Bundle.define allows optional).
 export const target: Module.Target<HandleKind, Record<never, never>, Record<never, never>> = {
   define: <const Name extends string, const Ns extends string, R = never, Extra = never>(
     args: Module.DefineBaseArgs<Name, Ns, R, Extra>
@@ -222,18 +163,9 @@ export const makeSet = (opts: BundleSetMakeOptions): BundleSetResult => ({
   bundles: opts.bundles
 })
 
-/**
- * Phantom check that rejects a `Bundle.fromModules` program whose `R`
- * channel still carries unmet dep-graph Needs. Bound to the
- * "Bundle.fromModules" API label so the `_konfig_unsatisfied` hint
- * guides the user to the right call site.
- */
 export const entrypoint = Compose.makeResidualEntrypoint("Bundle.fromModules")
 
-// `any` in the AnyHandle upper bound: Effect's Layer is contravariant in
-// its first parameter and `BundleHandle` is invariant at the inference
-// site. `unknown` rejects concrete subtypes; `any` is bivariant — the
-// canonical "any handle" upper bound.
+// `any` (not `unknown`) needed: Layer is contravariant here, invariant at the inference site.
 // oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = BundleHandle<any, any, any>
 
@@ -244,21 +176,8 @@ export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>> {
   readonly modules: Ms
 }
 
-/**
- * One-list composition for a backend-agnostic bundle set. Yields each
- * module's `Bundle` in tuple order, then wires the merged provider layer
- * with `Compose.composeLayers`. The returned Effect's R channel is the
- * residual unmet Needs after the fold (`Compose.ResidualIn<Ms>`),
- * which `entrypoint` rejects unless empty.
- *
- * **Order matters.** List providers before their consumers. A consumer
- * placed before its provider leaves an unmet `Need` in the residual,
- * which surfaces at `entrypoint` as a `_konfig_unsatisfied` hint.
- *
- * **Names must be unique.** Two modules providing the same unique name
- * (app, secret, config map, …) fail here with a `_konfig_duplicate`
- * hint — at runtime the later module would silently shadow the earlier.
- */
+// Order matters: list providers before consumers, or the residual leaves an unmet Need.
+// Names must be unique or this fails with a `_konfig_duplicate` hint.
 export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>>(
   opts: FromModulesOptions<Ms> & Compose.NoDuplicateProvides<Ms, "Bundle.fromModules">
 ): Effect.Effect<

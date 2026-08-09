@@ -37,18 +37,11 @@ export interface DetectedPm {
   readonly kind: DetectedPmKind
   readonly version: string | undefined
   readonly pnpmLayout?: NodeModulesLayout
-  /** For yarn detection: "classic" if .yarnrc.yml is absent, "berry" otherwise. Undefined for non-yarn. */
   readonly yarnVariant?: YarnVariant
-  /**
-   * Lockfile filenames that actually exist in the workspace root.
-   * Bun has two formats (text `bun.lock`, binary `bun.lockb`) — the
-   * Dockerfile lowering needs the one that exists, not all possibilities.
-   * Empty if corepack named the PM but no lockfile was found on disk.
-   */
+  // Lockfiles that actually exist on disk — Bun has two formats (text
+  // bun.lock, binary bun.lockb), lowering needs the one present, not both.
   readonly presentLockfiles: ReadonlyArray<string>
 }
-
-// ──────────────────────────── findRoot ────────────────────────────
 
 const _readPkgJsonIfExists = (
   fs: FileSystem,
@@ -83,8 +76,6 @@ export const findRoot = (from: string): Effect.Effect<RootDir, MonorepoRootNotFo
     const fs = yield* FileSystem
     const p = yield* Path
     let cur = p.resolve(from)
-    // Walk up to filesystem root; bail when dirname is a fixed point.
-    // Bound by 64 iterations as a defense against pathological symlinks.
     for (let i = 0; i < 64; i++) {
       const pkg = yield* _readPkgJsonIfExists(fs, p, cur)
       const pnpmYamlExists = yield* fs
@@ -98,14 +89,6 @@ export const findRoot = (from: string): Effect.Effect<RootDir, MonorepoRootNotFo
     return yield* new MonorepoRootNotFound({ from })
   })
 
-// ──────────────────────────── glob ────────────────────────────
-
-/**
- * Collect `dir` itself plus every descendant directory at any depth,
- * relative to `root`. `node_modules` and dotfile directories are skipped
- * so a `**` workspace glob never treats installed deps or `.git` as
- * workspaces. Used to implement recursive `**` glob descent.
- */
 const _collectDescendantDirs = (
   fs: FileSystem,
   p: Path,
@@ -152,9 +135,6 @@ const _expandWorkspaceGlob = (
             next.push(p.join(cur, ch))
           }
         } else if (part === "**") {
-          // Recursive descent: `**` matches `cur` and every nested
-          // directory. The trailing package.json filter below keeps
-          // only real workspace roots.
           const descendants = yield* _collectDescendantDirs(fs, p, root, cur)
           for (const d of descendants) next.push(d)
         } else {
@@ -163,7 +143,6 @@ const _expandWorkspaceGlob = (
       }
       currents = next
     }
-    // Filter to ones with package.json
     const filtered: string[] = []
     for (const c of currents) {
       const pkgPath = p.join(root, c, "package.json")
@@ -172,8 +151,6 @@ const _expandWorkspaceGlob = (
     }
     return filtered
   }).pipe(Effect.orElseSucceed(() => []))
-
-// ──────────────────────────── allWorkspaces ────────────────────────────
 
 interface PnpmWorkspaceYaml {
   readonly packages?: ReadonlyArray<string>
@@ -257,8 +234,6 @@ export const allWorkspaces = (
     return out
   })
 
-// ──────────────────────────── detectPm ────────────────────────────
-
 const _parseCorepackField = (
   pm: string
 ): { kind: DetectedPmKind; version: string } | undefined => {
@@ -328,7 +303,6 @@ export const detectPm = (
         .pipe(Effect.orElseSucceed(() => false))
       if (ex) presentLockfiles.push(entry)
     }
-    // Corepack wins.
     if (corepack) {
       const layout = corepack.kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined
       const yarnVariant = corepack.kind === "Yarn"
@@ -370,8 +344,6 @@ export const detectPm = (
     }
   })
 
-// ──────────────────────────── closureOf ────────────────────────────
-
 const WORKSPACE_PROTOCOLS = ["workspace:", "link:"] as const
 
 const _workspaceDeps = (pkg: PackageJson): ReadonlyArray<string> => {
@@ -382,8 +354,7 @@ const _workspaceDeps = (pkg: PackageJson): ReadonlyArray<string> => {
       if (WORKSPACE_PROTOCOLS.some((p) => spec.startsWith(p))) out.push(name)
     }
   }
-  // Closure follows runtime edges only. devDependencies are by definition
-  // build-time only and must not leak into the runner stage's closure.
+  // devDependencies are build-time only and must not leak into the runner closure.
   merge(pkg.dependencies)
   merge(pkg.peerDependencies)
   return out

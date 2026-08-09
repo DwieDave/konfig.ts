@@ -11,12 +11,8 @@ export interface HelmPullOptions {
   readonly untar?: boolean
 }
 
-/**
- * Builds the `helm pull` argv shared by chart-tarball fetching
- * (helmFetch) and CRD extraction (crd/extract). Callers must pass
- * schema-validated chart fields (see chartSchemas.ts) — this helper
- * does no validation of its own.
- */
+// Callers must pass schema-validated chart fields (see chartSchemas.ts) — this
+// helper does no validation of its own.
 export interface HelmPullCommandInput {
   readonly chart: HelmPullChart
   readonly options: HelmPullOptions

@@ -23,7 +23,6 @@ describe("Workload.web pod labels", () => {
         namespace: "prod",
         deployment: {
           containers: [{ name: "app", image: "nginx" }],
-          // Attempt to override the `app` selector label — must NOT win.
           podLabels: { app: "not-api", tier: "web" }
         },
         service: { ports: [{ port: 80, targetPort: 80 }] }

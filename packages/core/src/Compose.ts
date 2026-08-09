@@ -4,22 +4,12 @@ import type { Need } from "./deps"
 import type { RenderServices } from "./Manifest"
 import type { AnyRenderError } from "./RenderError"
 
-/**
- * The minimal shape `composeLayers` and the residual fold need: anything
- * with a `.layer` field of the standard `(Out, AnyRenderError, In)`
- * triple. Each runtime (argocd `ApplicationHandle`, k8s `BundleHandle`,
- * …) supplies its own wider handle interface — the carried value type
- * is irrelevant to the fold itself.
- */
 // oxlint-disable-next-line app/no-type-assertion
 export interface ComposeHandle<Out = any, In = any> {
   readonly layer: Layer.Layer<Out, AnyRenderError, In>
 }
 
-// `any` in the AnyHandle upper bound: Effect's Layer is contravariant in
-// its first parameter and `ComposeHandle` is invariant at the inference
-// site. `unknown` rejects concrete subtypes; `any` is bivariant — the
-// canonical "any handle" upper bound.
+// `any` (not `unknown`) needed: Layer is contravariant here, invariant at the inference site.
 // oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = ComposeHandle<any, any>
 
@@ -28,13 +18,8 @@ type OutOfHandle<H> = H extends ComposeHandle<infer Out, any> ? Out : never
 // oxlint-disable-next-line app/no-type-assertion
 type InOfHandle<H> = H extends ComposeHandle<any, infer In> ? In : never
 
-/**
- * Left-fold over the modules tuple, mirroring the runtime
- * `reduce(Layer.provideMerge)` below. Each module's `In` is filtered
- * against the union of every *prior* module's `Out`; whatever survives
- * is residual. Tuple order matters: a consumer listed before its
- * provider leaves its Need in the residual.
- */
+// Left-fold mirroring the runtime `reduce(Layer.provideMerge)` below: each module's In is
+// filtered against every prior module's Out; a consumer listed before its provider leaks a Need.
 type FoldResidualIn<
   T extends ReadonlyArray<AnyHandle>,
   AccIn,
@@ -49,32 +34,16 @@ type FoldResidualIn<
   : never
   : AccIn
 
-/**
- * After folding `Layer.provideMerge` over `Ms` in tuple order, the
- * leftover `RIn` channel — the Needs that no preceding module's Out
- * satisfies. Pair with `makeResidualEntrypoint` to surface a non-empty
- * residual as a compile error at the entrypoint call site.
- */
 export type ResidualIn<T extends ReadonlyArray<AnyHandle>> = FoldResidualIn<T, never, never>
 
-/**
- * Provide kinds that must be unique within one composition. Excluded:
- * `"Namespace"` (two apps sharing a namespace is normal) and
- * `"Application"` (argocd emits it pairwise with `"App"` — including
- * it would double-report every app collision).
- */
+// Namespace and Application excluded: shared namespaces are normal, and Application is
+// emitted pairwise with App (would double-report every collision).
 type UniqueKinds = "App" | "Secret" | "SecretValues" | "ConfigMap" | "ServiceAccount" | "Pvc" | "Image"
 
 type UniqueOut<H> = Extract<OutOfHandle<H>, Need<UniqueKinds, string>>
 
-/**
- * Left-fold over the modules tuple accumulating each module's unique
- * Provides; any overlap with the accumulator is a duplicate — at
- * runtime `Layer.provideMerge` would let the later module silently
- * shadow the earlier one. Detection must happen on the tuple: once the
- * per-module Out channels union away (e.g. in the folded R channel at
- * the entrypoint), the duplication information is gone.
- */
+// Must fold over the tuple, not the unioned R channel: once Out channels union away, the
+// per-module duplication information is gone.
 type FoldDuplicates<
   T extends ReadonlyArray<AnyHandle>,
   AccOut,
@@ -83,22 +52,12 @@ type FoldDuplicates<
   ? FoldDuplicates<Rest, AccOut | UniqueOut<H>, Dups | Extract<UniqueOut<H>, AccOut>>
   : Dups
 
-/**
- * The unique Provides claimed by more than one module in `T`, in tuple
- * order. `never` when every provider name is distinct.
- */
 export type DuplicateProvides<T extends ReadonlyArray<AnyHandle>> = FoldDuplicates<T, never, never>
 
 type DuplicateHint<D, Api extends string> = D extends Need<infer K, infer N>
   ? `Duplicate ${K} "${N}": two modules in ${Api}({ modules }) provide the same name; the later one silently shadows the earlier. Rename one of them.`
   : never
 
-/**
- * Intersects the options argument with a phantom `_konfig_duplicate`
- * object when two modules in `Ms` provide the same unique name. The
- * options literal has no such property, so the call fails to typecheck
- * and the user sees the hint — same pattern as `ResidualHintCheck`.
- */
 export type NoDuplicateProvides<
   Ms extends ReadonlyArray<AnyHandle>,
   Api extends string
@@ -107,12 +66,6 @@ export type NoDuplicateProvides<
     readonly _konfig_duplicate: DuplicateHint<DuplicateProvides<Ms>, Api>
   }
 
-/**
- * Runtime layer composition — `reduce(Layer.provideMerge)`. Each
- * successive module receives every prior module's Out as available
- * services. The runtime type collapses to a bottom Layer; the per-module
- * Out/In is tracked statically by `ResidualIn`.
- */
 export const composeLayers = (
   modules: ReadonlyArray<{ readonly layer: unknown }>
 ): Layer.Layer<never, AnyRenderError, never> => {
@@ -136,22 +89,10 @@ export const composeLayers = (
   )
 }
 
-/**
- * Per-Need template-literal hint shown when a residual reaches the
- * entrypoint. `Api` is the calling API's name ("AppOfApps.fromModules",
- * "Bundle.fromModules", …) so the message points the user at the right
- * call site.
- */
 type UnsatisfiedHint<R, Api extends string> = R extends Need<infer K, infer V>
   ? `Missing provider for ${K} "${V}". Add a module that provides it to ${Api}({ modules }), or check that providers come before consumers in the list.`
   : "Unsatisfied dep — see the Effect Layer error above."
 
-/**
- * Intersects the program type with a phantom `_konfig_unsatisfied`
- * object when the residual `R` carries anything beyond
- * `Manifest.RenderServices`. The program has no such property at runtime,
- * so the call fails to typecheck and the user sees the hint.
- */
 type ResidualHintCheck<R, Api extends string> = [Exclude<R, RenderServices>] extends [never] ? unknown
   : {
     readonly _konfig_unsatisfied: UnsatisfiedHint<
@@ -160,13 +101,6 @@ type ResidualHintCheck<R, Api extends string> = [Exclude<R, RenderServices>] ext
     >
   }
 
-/**
- * Build an `entrypoint` function bound to a specific API name. The
- * returned function accepts only programs whose `R` channel reduces to
- * `Manifest.RenderServices`; otherwise the call fails at the program
- * argument with a `_konfig_unsatisfied` hint that names the missing
- * provider and the calling API.
- */
 export const makeResidualEntrypoint = <const Api extends string>(_api: Api) =>
 <A, E, R>(
   program: Effect.Effect<A, E, R> & ResidualHintCheck<R, Api>

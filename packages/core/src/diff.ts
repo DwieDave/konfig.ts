@@ -28,11 +28,7 @@ const _redactAnnotationMap = (annotations: Record<string, unknown>): Record<stri
 }
 
 export interface RedactOptions {
-  /**
-   * Normalize numeric strings: `"1.0"` compares equal to `1`,
-   * `"true"` stays a string (only numerics are normalized). Useful for
-   * Helm-templated manifests where some fields get stringified.
-   */
+  // Normalize numeric strings only ("1.0" == 1); "true" stays a string.
   readonly normalizeNumerics?: boolean
 }
 
@@ -44,24 +40,8 @@ export interface RedactInput {
   readonly options?: RedactOptions
 }
 
-/**
- * Canonicalize a parsed YAML/JSON value for structural comparison,
- * applying two normalizations:
- *
- *  1. **Null/undefined keys are dropped.** Any object key whose value is
- *     `null` or `undefined` is omitted from the redacted output. This is
- *     deliberate: it makes an *explicit* `field: null` compare equal to
- *     an *absent* `field`, which is what we want when diffing manifests
- *     where one side spells out a null default the other side simply
- *     omits. The trade-off is that a genuine "field was set to null vs.
- *     field removed" distinction is intentionally invisible to the diff.
- *  2. **Numeric normalization** (opt-in via
- *     {@link RedactOptions.normalizeNumerics}) — see that field.
- *
- * Helm metadata redaction (dropping chart-churn labels/annotations) is
- * layered on top when a `labels`/`annotations` map appears under
- * `metadata`.
- */
+// Drops null/undefined object keys deliberately: an explicit `field: null` then compares
+// equal to an absent field, so "set to null" vs "removed" is intentionally invisible here.
 export const redact = (input: RedactInput): unknown => {
   const value = input.value
   const parentKey = input.parentKey ?? null
@@ -94,7 +74,6 @@ export const redact = (input: RedactInput): unknown => {
       return Number(value)
     }
     if (typeof value === "number" && Number.isFinite(value)) {
-      // 1.0 and 1 unify when round-tripping through Number().
       return value
     }
   }
@@ -134,13 +113,7 @@ export const deepEqual = (input: DeepEqualInput): boolean => {
 
 export const parseYaml = (text: string): unknown => YAML.parse(text)
 
-/**
- * Parse a multi-doc YAML file into an ordered list of documents. Each
- * document's parsed structure is preserved as-is. Empty / whitespace-only
- * segments are dropped, but their position is *not* preserved — only
- * present documents are returned. Use the returned index to identify
- * documents inside one file (alongside the filename) when reporting.
- */
+// Drops empty/whitespace-only segments; positions of remaining docs are not preserved.
 export const parseYamlAll = (text: string): ReadonlyArray<unknown> => {
   const docs = YAML.parseAllDocuments(text)
   const out: unknown[] = []
@@ -152,13 +125,7 @@ export const parseYamlAll = (text: string): ReadonlyArray<unknown> => {
   return out
 }
 
-/**
- * Identifier for a document inside a multi-doc YAML file. We key by
- * (kind, name, namespace) when those fields are present so a
- * label-only edit on a Service inside a 12-doc file diffs against the
- * same-kind/name Service in the other side, regardless of position
- * shuffle.
- */
+// Keys by (kind, name, namespace) so docs diff by identity, not position.
 const _docKey = (value: unknown, fallbackIdx: number): string => {
   if (value === null || typeof value !== "object") return `:doc:${fallbackIdx}`
   const v = unsafeCoerce<
@@ -194,7 +161,6 @@ export type FileDiff =
     readonly file: string
     readonly left: unknown
     readonly right: unknown
-    /** Per-document breakdown if the file holds a multi-doc YAML stream. */
     readonly docs?: ReadonlyArray<DocDiff>
   }
 
@@ -217,7 +183,6 @@ const _diffOne = (
   const lDocs = parseYamlAll(leftText).map((v, i) => [_docKey(v, i), redact({ value: v, options })] as const)
   const rDocs = parseYamlAll(rightText).map((v, i) => [_docKey(v, i), redact({ value: v, options })] as const)
 
-  // Fast path: single doc on each side.
   if (lDocs.length <= 1 && rDocs.length <= 1) {
     const l = lDocs[0]?.[1]
     const r = rDocs[0]?.[1]

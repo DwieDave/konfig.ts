@@ -9,11 +9,7 @@ import { sopsDecrypt } from "./sops"
 export interface SopsSourceInput<K extends string> {
   readonly file: string
   readonly keys: ReadonlyArray<K>
-  /**
-   * Path resolver for the parsed plaintext object. Default is
-   * `(k) => k`, i.e. flat record `{key: value}`. Supply a custom
-   * resolver if the encrypted YAML nests keys.
-   */
+  /** Path resolver for the parsed plaintext object; default is flat `{key: value}`. */
   readonly extract?: (key: K, parsed: unknown) => unknown
 }
 
@@ -25,12 +21,7 @@ const _defaultExtract = (key: string, parsed: unknown): unknown => {
   )[key]
 }
 
-/**
- * Decrypt the file ONCE, parse the resulting YAML, and pluck every
- * requested key from the in-memory plaintext. Replaces the prior
- * per-key `sopsExtract` loop which invoked `sops --decrypt --extract`
- * N times for N keys.
- */
+// Decrypts the file once; plucks every requested key from the in-memory plaintext.
 const _source = <const K extends string>(
   input: SopsSourceInput<K>
 ): SecretSource<K, ChildProcessSpawner | Scope.Scope> => {

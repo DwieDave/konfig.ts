@@ -77,19 +77,7 @@ const _define = <
 
 export type AnySecretEntry = SecretEntry<string, string, Readonly<Record<string, string>>>
 
-/**
- * `Secret` value namespace (env-contracts package).
- *
- *   const dbCreds = Secret.define({
- *     name: "db-creds",
- *     namespace: "app",
- *     env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" },
- *   });
- *
- * The k8s package re-exports this merged with its own `Secret.make` /
- * `Secret.bind`, so importing `Secret` from `@konfig.ts/k8s` exposes
- * `define` alongside the manifest/binder constructors.
- */
+// @konfig.ts/k8s re-exports this merged with its own make/bind.
 export const Secret = {
   define: _define
 }

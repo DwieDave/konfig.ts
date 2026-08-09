@@ -8,26 +8,16 @@ export interface LiteralEntry<EnvName extends string, T>
   readonly envName: EnvName
   readonly value: T
   readonly serialized: string
-  /**
-   * Stored so bind-time value overrides can re-serialize with the same
-   * fn. Typed as `(unknown) => string` so that `LiteralEntry<…, T>`
-   * stays assignable to `LiteralEntry<string, unknown>` in the
-   * `EnvMember` union (function params are contravariant — a more
-   * specific T would block the narrowing). The override site supplies
-   * a value typed against `T` via `LiteralMembersOpts<M>`.
-   */
+  // Typed (unknown) => string, not (T) => string, so LiteralEntry<..., T>
+  // stays assignable to LiteralEntry<string, unknown> in the EnvMember union
+  // (contravariance would otherwise block the narrowing).
   readonly serialize: (value: unknown) => string
 }
 
-/** Types the default `String(v)` serializer can stringify meaningfully. */
 type _Primitive = string | number | boolean | bigint
 
-/**
- * `serialize` is optional only for primitive `T` (the default `String(v)`
- * serializer is meaningful there). For any other `T` — objects, arrays,
- * etc. — `serialize` is required, so a caller can't silently end up with
- * `"[object Object]"` as the env value.
- */
+// serialize is optional only for primitive T (default String(v) is meaningful);
+// for objects/arrays it's required so values don't silently become "[object Object]".
 export type DefineLiteralInput<EnvName extends string, T> =
   & {
     readonly envName: EnvName
@@ -41,9 +31,6 @@ const _define = <const EnvName extends string, T = string>(
   input: DefineLiteralInput<EnvName, T>
 ): LiteralEntry<EnvName, T> => {
   const userSerialize = input.serialize ?? ((v: T) => String(v))
-  // Erase the parameter type to `unknown` for the stored function — see
-  // the LiteralEntry doc for the variance rationale. Literal's
-  // own type signature still enforces `T` at the user-facing call site.
   const serialize = (value: unknown): string =>
     userSerialize(
       unsafeCoerce<T>(
@@ -79,14 +66,6 @@ const _define = <const EnvName extends string, T = string>(
 
 export type AnyLiteralEntry = LiteralEntry<string, unknown>
 
-/**
- * `Literal` value namespace.
- *
- *   const port = Literal.define({
- *     envName: "PORT", value: 8080,
- *     schema: Config.number("PORT").pipe(Config.withDefault(8080)),
- *   });
- */
 export const Literal = {
   define: _define
 }

@@ -25,13 +25,6 @@ export interface DeclaredDownward<EnvName extends string> {
   readonly envVar: EnvVar
 }
 
-/**
- * Per-member declared shape produced by `Environment.bind`. Mirrors the
- * structure of the bundle: secrets give `DeclaredSecret`, literals
- * `DeclaredLiteral`, downwards `DeclaredDownward`, and nested
- * `Environment` members give a `members` sub-record with the same
- * recursive shape.
- */
 export type DeclaredMember<
   A extends EnvMember,
   Ns extends string = string
@@ -51,7 +44,6 @@ export interface DeclaredEnvironment<
   readonly envVars: ReadonlyArray<EnvVar>
   readonly manifests: ReadonlyArray<Manifest.Manifest<unknown>>
   readonly members: { readonly [K in keyof M]: DeclaredMember<M[K], Ns> }
-  // merged values layer over every secret member with a source.
   readonly valuesLayer: Layer.Layer<unknown, RenderError, Manifest.RenderServices>
 }
 
@@ -75,14 +67,6 @@ interface _SecretMemberSourceOnly<_N extends string, K extends string> extends _
   readonly source: SecretSource<K, Manifest.RenderServices>
 }
 
-/**
- * Per-secret-member options at bind time. Backends with `RequiresSource: true`
- * (`Sops.backend`, `SealedSecrets.backend`, `NativeSecret.backend`) make
- * `source` mandatory at the type level. Backends with `false`
- * (`ExternalSecrets.backend`, `Sops.passthrough`) make it optional. With no
- * backend, `source` becomes mandatory — used to feed the in-process
- * `SecretValues` layer for tests / local renders.
- */
 export type SecretMemberOptions<N extends string, K extends string> =
   | _SecretMemberBackendRequiresSource<N, K>
   | _SecretMemberBackendOptionalSource<N, K>
@@ -93,12 +77,6 @@ export type SecretMemberOptionsFor<A> = A extends SecretEntry<infer N, infer K, 
   : never
   : never
 
-/**
- * True iff `M` (recursively, via nested `Environment` members)
- * contains at least one `SecretEntry`. Used to flip `secrets` between
- * required (any secrets present) and optional (literals/downwards
- * only) on `BindEnvironmentInput`.
- */
 export type HasSecrets<M extends Readonly<Record<string, EnvMember>>> = true extends {
   readonly [K in keyof M]: M[K] extends SecretEntry<infer _N, infer _K, infer _E> ? true
     : M[K] extends Environment<infer Sub> ? HasSecrets<Sub>
@@ -106,18 +84,6 @@ export type HasSecrets<M extends Readonly<Record<string, EnvMember>>> = true ext
 }[keyof M] ? true
   : false
 
-/**
- * Recursive per-member secret options. For a secret member, the option
- * matches its `SecretMemberOptionsFor` and is required. For a nested
- * `Environment` member that itself contains secrets, the option is
- * `SecretMembersOpts<SubM>` and is also required. Nested environments
- * with no secrets are omitted entirely (no key needed).
- *
- * Together with `HasSecrets`, this enforces at compile time that every
- * `Secret` reachable from the bundle is acknowledged at bind
- * time — adding a new secret to the env contract forces every call
- * site to update.
- */
 export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
   readonly [
     K in keyof M as M[K] extends SecretEntry<infer _N, infer _K, infer _E> ? K
@@ -129,16 +95,6 @@ export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
     : never
 }
 
-/**
- * Per-literal value override for bind time. Keyed by member name, typed
- * to each literal's declared `T`. Useful when a `Literal` is a
- * runtime contract (carries a `schema: Config.string(envName)` for app
- * code to yield) but the manifest's emitted value differs per env —
- * e.g. `CLIENT_URL`, `S3_ENDPOINT`, host/URL literals.
- *
- * Recurses on nested `Environment` members — pass `{group: {host: "x"}}`
- * to override a literal nested inside a sub-bundle.
- */
 export type LiteralMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
   readonly [
     K in keyof M as M[K] extends LiteralEntry<infer _EnvName, infer _T> ? K
@@ -154,34 +110,10 @@ interface _BindEnvironmentInputBase<
   Ns extends string = string
 > {
   readonly env: Environment<M>
-  /**
-   * Per-literal value override for the manifest's emitted env var. The
-   * runtime read (via `entry.schema`, if provided) is unchanged —
-   * overrides only affect what the konfig module writes into the
-   * Deployment's `env` array.
-   */
   readonly literals?: LiteralMembersOpts<M>
-  /**
-   * Override every secret member's namespace for this bind. Useful when
-   * the bundle is consumed across multiple k8s namespaces (e.g. prod /
-   * staging / local) without redeclaring each contract. Recurses into
-   * nested `Environment` members.
-   *
-   * When passed as a string literal, the literal flows into each
-   * `DeclaredSecret.ref`'s brand so `secretEnvForPod` can enforce
-   * cross-namespace coherence on hand-spliced env entries.
-   */
   readonly namespace?: Ns
 }
 
-/**
- * `secrets` flips between required and optional based on whether `M`
- * actually contains any secrets. A bundle of literals/downwards only
- * has nothing to bind, so `secrets` stays optional. A bundle with even
- * one `Secret` (directly or nested) forces the caller to supply
- * every secret member — and for each member, either a `backend` or a
- * `source` (see `SecretMemberOptions`).
- */
 export type BindEnvironmentInput<
   M extends Readonly<Record<string, EnvMember>>,
   Ns extends string = string

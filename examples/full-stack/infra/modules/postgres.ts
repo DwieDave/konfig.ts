@@ -6,16 +6,7 @@ export interface PostgresOpts {
   readonly storageGi: number
 }
 
-/**
- * Bitnami Postgres via Helm. Demonstrates `Helm.release` — pulls the
- * chart at render time (cached under .konfig/helm-cache) and emits the
- * templated manifests as RawYaml stubs that the AppOfApps lifts.
- *
- * The `app` namespace it creates is implicitly provided via
- * `Application.define` (the `namespace` argument flows into the
- * `Dep.Provide<"Namespace", "app">` output type), so consumer modules
- * declaring `namespace: "app"` won't double-create the Namespace.
- */
+// Bitnami Postgres via Helm. The `app` namespace it creates is implicitly provided, so consumers declaring `namespace: "app"` won't double-create it.
 export const definePostgres = Module.fixedNs({
   target: Application.target,
   namespace: "app",

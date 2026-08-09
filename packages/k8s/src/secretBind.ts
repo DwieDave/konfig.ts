@@ -15,9 +15,7 @@ interface _DeclaredSecretBase<N extends string, K extends string, Ns extends str
   readonly refLayer: Layer.Layer<Dep.Provide<"Secret", N>>
 }
 
-// `values` and `layer` are populated together, iff a source was supplied
-// at bind time — a discriminated union instead of two independent
-// optionals so that can't drift into a "values but no layer" state.
+// values/layer populated together iff a source was supplied; discriminated union prevents drift into "values but no layer".
 type _SecretValuesFields<N extends string, K extends string> =
   | {
     readonly values: Context.Service<Dep.Need<"SecretValues", N>, Dep.SecretValuesRecord<K>>
@@ -40,17 +38,6 @@ export interface BindSecretInput<
   readonly source?: SecretSource<K, Manifest.RenderServices>
   readonly labels?: Readonly<Record<string, string>>
   readonly annotations?: Readonly<Record<string, string>>
-  /**
-   * Override the contract's baked-in `namespace` for this bind. Useful
-   * when the same `Secret` declaration is consumed across multiple
-   * k8s namespaces (e.g. prod / staging / local of the same workload)
-   * — the runtime read is namespace-independent, but each binding emits
-   * its manifest into a different namespace.
-   *
-   * When passed as a string literal (via `Environment.bind`'s
-   * `const namespace`), the literal flows into the ref's brand so
-   * `secretEnvForPod` can enforce cross-namespace coherence.
-   */
   readonly namespace?: Ns
 }
 
@@ -87,11 +74,8 @@ const _buildEnvVars = <N extends string, K extends string, Ns extends string>(
   ref: SecretRef<N, K, Ns>
 ): EnvVar[] => secret.keys.map((key: K) => EnvVar.fromSecret({ name: secret.env[key], ref, key }))
 
-// `backend`'s RequiresSource is erased to `boolean` at this generic call
-// site, so the compiler can't prove `source` is present the way each
-// concrete backend's own `emit` does. Catch the hole at runtime and fail
-// through the Manifest's Effect channel instead of letting `emit` read
-// `undefined.resolve` and throw.
+// RequiresSource is erased to `boolean` here, so the compiler can't prove `source` is present; fail at runtime instead
+// of letting `emit` read `undefined.resolve` and throw.
 const _missingSourceManifest = (backend: { readonly _tag: string }, name: string, namespace: string) =>
   Manifest.make<unknown>(() =>
     Effect.fail(

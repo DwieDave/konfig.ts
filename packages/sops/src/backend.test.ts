@@ -236,7 +236,7 @@ sops:
     Effect.gen(function*() {
       const exit = yield* renderPassthrough(partialFile(
         `        url: plain\n        password: plain`,
-        "([" // invalid regex — must fail closed, not fall through to plaintext
+        "(["
       ))
       expect(Exit.isFailure(exit)).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -330,8 +330,6 @@ describe("Sops.source (case A: sops source → SealedSecrets backend)", () => {
       expect(yaml).toContain("kind: SealedSecret")
 
       const sopsCalls = sink.calls.filter((c) => c.cmd === "sops")
-      // ONE decrypt call per file regardless of how many keys — the
-      // plaintext is plucked from the in-memory parse.
       expect(sopsCalls).toHaveLength(1)
       expect(sopsCalls[0]?.args).toContain("--decrypt")
       expect(sopsCalls[0]?.args).not.toContain("--extract")
@@ -417,8 +415,6 @@ describe("Sops.backend recipient input boundary", () => {
 })
 
 describe("Sops.backend fail-closed encryption check", () => {
-  // Shape sops would emit if it did NOT encrypt: no top-level `sops` metadata
-  // block and plaintext values. Must be REJECTED, never emitted as a secret.
   const PLAINTEXT_OUTPUT = `
 apiVersion: isindir.github.com/v1alpha3
 kind: SopsSecret
@@ -434,8 +430,6 @@ spec:
         password: p
 `.trim()
 
-  // Has a `sops` block (passes the schema) but the values were left in the
-  // clear — the ENC[ marker assertion must still reject this.
   const ENCRYPTED_BLOCK_PLAINTEXT_VALUES = `
 apiVersion: isindir.github.com/v1alpha3
 kind: SopsSecret

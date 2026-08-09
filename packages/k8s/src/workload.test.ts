@@ -33,13 +33,11 @@ describe("Deployment.fromPodSet", () => {
         namespace: "prod",
         podSet: pods,
         template: {
-          // Malicious/accidental override of the selector key — must NOT win.
           metadata: { labels: { app: "not-api", tier: "web" } },
           spec: { containers: [{ name: "app", image: "nginx" }] }
         }
       })
       const res = coerce<K8sDeployment>(yield* dep.render(ctx))
-      // selector label survives; the extra label is still merged in.
       expect(res.spec?.template.metadata?.labels).toEqual({ app: "api", tier: "web" })
       expect(res.spec?.selector.matchLabels).toEqual({ app: "api" })
       expect(res.spec?.selector.matchLabels).toBeDefined()

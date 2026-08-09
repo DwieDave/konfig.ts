@@ -141,9 +141,8 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
       source: src("api"),
       build: () => []
     })
-    // @ts-expect-error — duplicate App "api": the later module would silently shadow the earlier.
+    // @ts-expect-error duplicate App "api"
     fromModules({ target, defaults, modules: [apiV1, apiV2] as const })
-    // distinct names sharing a namespace stay accepted
     const web = define({
       name: "web",
       namespace: "app",

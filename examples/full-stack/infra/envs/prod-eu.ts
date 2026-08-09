@@ -1,12 +1,4 @@
-/**
- * Multi-cluster demo — EU region overlay.
- *
- * Same module set as `prod.ts`, parameterized by the `eu-west-1`
- * cluster overlay (registry, ingress class, storage class, domain).
- * Render with `konfig build prod-eu --cluster=eu-west-1`. The CLI
- * threads `cluster` into `RenderContext.cluster`, and the build
- * directory becomes `./infra/k8s/manifests/prod-eu/eu-west-1/`.
- */
+// EU region overlay of prod.ts; render with `konfig build prod-eu --cluster=eu-west-1`.
 import { AppOfApps } from "@konfig.ts/argocd"
 import { cluster, clusters } from "../cluster"
 import { defineApi } from "../modules/api"

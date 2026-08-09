@@ -38,26 +38,13 @@ export const make = (opts: AppOfAppsMakeOptions): AppOfAppsResult => ({
   apps: opts.apps
 })
 
-/**
- * Phantom check that rejects programs whose `R` channel still carries
- * unmet dep-graph Needs. Bound to the "AppOfApps.fromModules" API label
- * so the `_konfig_unsatisfied` hint guides the user to the right call.
- */
 export const entrypoint = Compose.makeResidualEntrypoint("AppOfApps.fromModules")
 
-// `any` in the AnyHandle upper bound: Effect's Layer is contravariant in
-// its first parameter and `ApplicationHandle` is invariant at the inference
-// site. `unknown` rejects concrete subtypes; `any` is bivariant — the
-// canonical "any handle" upper bound. Same pattern as core's
-// Compose.AnyHandle / Bundle.AnyHandle for the identical reason.
+// any (not unknown) for bivariance at the inference site — same pattern as
+// core's Compose.AnyHandle / Bundle.AnyHandle.
 // oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = ApplicationHandle<any, any, any>
 
-/**
- * After folding `Layer.provideMerge` over `Ms` in tuple order, the
- * leftover `RIn` channel. Public type alias preserved so downstream code
- * importing `AppOfApps.ResidualIn` keeps working.
- */
 export type ResidualIn<T extends ReadonlyArray<AnyHandle>> = Compose.ResidualIn<T>
 
 export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>> {
@@ -67,21 +54,9 @@ export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>> {
   readonly modules: Ms
 }
 
-/**
- * One-list composition for an app-of-apps. Yields each module's
- * `Application` in tuple order, then wires the merged provider layer
- * with `Compose.composeLayers`. The returned Effect's R channel is the
- * residual unmet Needs after that fold (`Compose.ResidualIn<Ms>`),
- * which `entrypoint` rejects unless empty.
- *
- * **Order matters.** List providers before their consumers. A consumer
- * placed before its provider leaves a `Dep.Need<...>` in the residual,
- * which surfaces at `entrypoint` as a `_konfig_unsatisfied` hint.
- *
- * **Names must be unique.** Two modules providing the same unique name
- * (app, secret, config map, …) fail here with a `_konfig_duplicate`
- * hint — at runtime the later module would silently shadow the earlier.
- */
+// Order matters: list providers before consumers, or the consumer's Need
+// surfaces at entrypoint as _konfig_unsatisfied. Duplicate provided names
+// across modules fail here (_konfig_duplicate) rather than silently shadowing.
 export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>>(
   opts: FromModulesOptions<Ms> & Compose.NoDuplicateProvides<Ms, "AppOfApps.fromModules">
 ): Effect.Effect<

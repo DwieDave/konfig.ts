@@ -94,7 +94,6 @@ describe("Secret", () => {
     ))
 
   it("preserves literal types of env keys (compile-time)", () => {
-    // Type-only assertion: dbCreds.env.url should be the literal "DATABASE_URL".
     const url: "DATABASE_URL" = dbCreds.env.url
     const pw: "DATABASE_PASSWORD" = dbCreds.env.password
     expect(url).toBe("DATABASE_URL")

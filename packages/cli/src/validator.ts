@@ -3,12 +3,6 @@ import { Data, Effect, Result, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess, ChildProcessSpawner } from "./_unstable"
 
-/**
- * Per-file, per-document, per-field validation report. Each `Issue`
- * names the file (relative to outDir), the document index within that
- * file (multi-doc YAML support), and the path-to-field with a
- * human-readable message.
- */
 export interface ValidationIssue {
   readonly file: string
   readonly doc: number
@@ -35,13 +29,8 @@ const _MetadataSchema = Schema.Struct({
   annotations: Schema.optionalKey(Schema.Record(Schema.String, Schema.String))
 })
 
-/**
- * Minimum envelope every Kubernetes manifest must satisfy: an
- * apiVersion, a kind, and a metadata block with a valid name. Deeper
- * field-level validation against the kubernetes-types interfaces would
- * require Effect Schemas mirroring every K8s resource — that work
- * lives behind `--strict` (kubeconform).
- */
+// Only checks the envelope (apiVersion/kind/metadata.name); deeper field
+// validation is deferred to `--strict` (kubeconform).
 export const KubeManifestEnvelopeSchema = Schema.Struct({
   apiVersion: Schema.String,
   kind: Schema.String,
@@ -60,9 +49,6 @@ export const validateManifestFile = (
 ): Effect.Effect<ReadonlyArray<ValidationIssue>> =>
   Effect.gen(function*() {
     const issues: ValidationIssue[] = []
-    // parseYamlAll splits on real YAML document boundaries — a `---`
-    // inside a block scalar stays part of its document, unlike a naive
-    // /^---$/m regex split.
     const docsResult = yield* Effect.result(Effect.try({
       try: () => parseYamlAll(input.content),
       catch: (cause) => `YAML parse error: ${String(cause)}`
@@ -121,16 +107,7 @@ export interface KubeconformInput {
 const _collectText = (stream: Stream.Stream<Uint8Array, PlatformError>): Effect.Effect<string, PlatformError> =>
   Stream.mkString(Stream.decodeText(stream))
 
-/**
- * Shell out to `kubeconform -summary -strict` over the rendered
- * directory. Caller threads in extra flags (e.g.
- * `--ignore-missing-schemas` for CRDs the bundled schema set doesn't
- * know about). Pass/fail is decided by the process exit code, not by
- * scraping stdout: a non-zero exit fails with `KubeconformReportError`
- * carrying both the stdout summary and stderr so the full report reaches
- * the user. A spawn failure (kubeconform not installed) fails with
- * `KubeconformNotFound`.
- */
+// Pass/fail is decided by the process exit code, not by scraping stdout.
 export const runKubeconform = (input: KubeconformInput) =>
   Effect.scoped(
     Effect.gen(function*() {

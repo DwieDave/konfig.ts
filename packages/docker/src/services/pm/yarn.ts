@@ -6,20 +6,6 @@ export interface YarnOptions {
   readonly variant: YarnVariant
 }
 
-/**
- * Yarn — both Yarn classic (1.x) and Yarn berry (≥ 2.x). The two
- * variants share a lockfile name (`yarn.lock`) but differ in install
- * semantics:
- *
- *  - **classic** uses `yarn install --frozen-lockfile` with the
- *    flat-or-hoisted node_modules layout.
- *  - **berry** uses `yarn install --immutable` and is auto-set when
- *    `.yarnrc.yml` is present. Workspaces are resolved from
- *    `package.json#workspaces` (same as classic) but the lockfile
- *    format and registry behavior differ. We do not (yet) emit
- *    workspace-focused-install steps for berry (`yarn workspaces focus`)
- *    — this is the surface a 1.x release will need to harden.
- */
 export const yarn = (opts: YarnOptions): PackageManager => {
   const isBerry = opts.variant === "berry"
   return {

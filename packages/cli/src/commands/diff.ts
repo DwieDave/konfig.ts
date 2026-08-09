@@ -15,12 +15,6 @@ class DiffNonEmpty extends Data.TaggedError("DiffNonEmpty")<{
   readonly env: string
 }> {}
 
-/**
- * Recursively collect every `.yaml` file under `baselineDir` into a
- * flat `{ relativePath: content }` map, joining nested directory names
- * with `/` so keys line up with the render side's relative paths.
- * Missing/unreadable dirs and non-yaml files are skipped.
- */
 export const readBaselineDir = (baselineDir: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -72,8 +66,6 @@ export const diffCommand = Command.make(
 
       const rendered = yield* renderEnv({ cfg, envName: args.env, ctx })
 
-      // Left: nixidy baseline, right: konfig render. Keys are filenames
-      // relative to each env root.
       const baselineDirAbs = path.join(
         cfg.configDir,
         cfg.config.root,

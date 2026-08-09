@@ -4,15 +4,8 @@ import { Path } from "effect/Path"
 import { Command } from "effect/unstable/cli"
 import { packageDirs, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
 
-// Rewrite non-npm dependency protocols in every @konfig.ts/* package to
-// concrete versions, in preparation for `npm publish`.
-//
-//   - `workspace:*`  → the lockstep version of the published package set
-//   - `catalog:`     → the version from the root package.json `catalog`
-//                      (a named `catalog:<group>` resolves from `catalogs`)
-//
-// Run before publishing. Idempotent. npm understands NEITHER protocol, so a
-// published tarball must carry real semver.
+// npm understands neither workspace:* nor catalog: protocols, so both must be
+// resolved to concrete semver before npm publish.
 
 type DepRecord = Record<string, string>
 type Catalogs = Record<string, DepRecord>
@@ -66,7 +59,6 @@ export const rewriteWorkspaceDepsCommand = Command.make(
       const catalog = (rootPkg.catalog ?? {}) as DepRecord
       const namedCatalogs = (rootPkg.catalogs ?? {}) as Catalogs
 
-      // Use core's version as the lockstep pin; every published package shares it.
       const core = yield* readJson(path.join(REPO_ROOT, "packages", "core", "package.json"))
       const version = typeof core.version === "string" ? core.version : "0.0.0"
       if (version === "0.0.0") {

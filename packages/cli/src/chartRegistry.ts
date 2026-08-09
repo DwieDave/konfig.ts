@@ -57,9 +57,8 @@ const _loadOne = (
       catch: (cause) => ({ importFailed: true as const, cause })
     }).pipe(
       Effect.tapError((e) =>
-        // A chart module that throws on import (syntax/type error, bad side
-        // effect) must not silently vanish from the registry — surface it
-        // so the operator can see which file failed and why.
+        // Surface import failures instead of letting the module silently
+        // vanish from the registry.
         Effect.sync(() =>
           process.stderr.write(`konfig: failed to load chart module ${absPath}: ${String(e.cause)}\n`)
         )

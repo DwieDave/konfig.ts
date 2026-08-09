@@ -1,5 +1,3 @@
-// Compile-time-only assertions for the env-contract types.
-
 import type {
   Downward as _Downward,
   Environment as _Environment,
@@ -13,12 +11,9 @@ import type { Config, Redacted } from "effect"
 type Expect<T extends true> = T
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
-// 1 · `Literal.define` with a typed `value` carries the type into the
-//     bundle yield.
 declare const port: ReturnType<typeof _Literal.define<"PORT", number>>
 type _Port_Value = Expect<Equal<MemberValue<typeof port>, number>>
 
-// 2 · `Secret.define` yields `{[k in K]: Redacted<string>}`.
 declare const dbCreds: ReturnType<
   typeof _Secret.define<
     "db",
@@ -35,8 +30,6 @@ type _DbCreds_Value = Expect<
   >
 >
 
-// 3 · `Environment.define({...})` flattens the per-member shape into
-//     an `EnvironmentShape<M>`.
 declare const bundle: ReturnType<
   typeof _Environment.define<{
     readonly db: typeof dbCreds
@@ -60,7 +53,6 @@ type _Bundle_Shape = Expect<
   >
 >
 
-// 4 · An Environment is a Config of its shape.
 declare const cfg: Config.Config<
   EnvironmentShape<{
     readonly db: typeof dbCreds

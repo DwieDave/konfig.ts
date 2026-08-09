@@ -1,14 +1,4 @@
-/**
- * Dummy worker entrypoint — pulls a batch every 5s, no-op in this demo.
- *
- * `workerEnv` (from @example/env-contracts) is the same bundle that
- * drives `Environment.bind` in `infra/modules/worker.ts`; consuming it
- * via `Environment.runtime(workerEnv)` keeps the contract symmetric.
- *
- * Boot fails closed: a `ConfigError` from the runtime decoder prints
- * a structured hint and exits 78 (config error) instead of dumping a
- * raw stack trace.
- */
+// workerEnv drives both Environment.bind (infra/modules/worker.ts) and Environment.runtime here.
 import { workerEnv } from "@example/env-contracts"
 import { Environment } from "@konfig.ts/k8s"
 import { Cause, Effect, Schedule } from "effect"

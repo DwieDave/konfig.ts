@@ -10,19 +10,7 @@ export interface WorkerOpts {
   readonly sopsBase: string
 }
 
-/**
- * `apps/worker` workload module.
- *
- * Same round-2 typing flow as `api.ts`, minus the Service and ports
- * (the worker doesn't serve HTTP). Yields `Dep.Image("worker")` and
- * uses `Container` so duplicate env names in the worker's
- * spec would fail at compile time with the `_konfig_duplicate_env_names`
- * hint.
- *
- * Reuses the same `db-creds` SopsSecret as api — `Environment.bind`
- * would emit the SopsSecret manifest a second time, but the AppOfApps
- * deduplicates by (kind, namespace, name) at render time.
- */
+// konfig: WHY reuses db-creds SopsSecret; AppOfApps dedupes the duplicate manifest by (kind, namespace, name)
 export const defineWorker = Module.fixedNs({
   target: Application.target,
   namespace: "app",

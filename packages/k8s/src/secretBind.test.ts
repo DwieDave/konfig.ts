@@ -17,9 +17,6 @@ const sessionKey = Secret.define({
 const port = Literal.define({ envName: "PORT", value: 8080 })
 const podName = Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" })
 
-// Reusable source-only opts — every secret member must supply a backend
-// or a source, so tests that only care about envVars / namespace use a
-// throwaway literal source.
 const dbCredsOpts = {
   source: SecretSource.literal({ data: { url: "u", password: "p" } })
 } as const
@@ -98,7 +95,6 @@ describe("Environment.bind", () => {
     })
     expect(bound.members.db.namespace).toBe("staging")
     expect(bound.members.session.namespace).toBe("staging")
-    // envVars are namespace-independent — they only carry the Secret name + key.
     expect(bound.envVars.map((e) => e.name).sort()).toEqual([
       "DATABASE_PASSWORD",
       "DATABASE_URL",
@@ -113,7 +109,6 @@ describe("Secret.bind namespace override", () => {
   it("overrides the contract namespace for the manifest binding", () => {
     const bound = Secret.bind({ secret: dbCreds, namespace: "staging" })
     expect(bound.namespace).toBe("staging")
-    // envVars carry the secret name + key only — namespace is invisible.
     expect(bound.envVars).toHaveLength(2)
   })
 

@@ -47,15 +47,8 @@ export interface CrdDocument {
   readonly versions: readonly string[]
 }
 
-/**
- * Exported (module-private `_` naming kept) purely for direct unit
- * testing of the malformed/edge-case CRD YAML branches — see
- * extract.test.ts.
- */
 export const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
   const docs: unknown[] = []
-  // parseYamlAll splits on real YAML document boundaries, so a literal
-  // `---` inside a CRD's block scalar won't mis-split the stream.
   let parsedDocs: ReadonlyArray<unknown>
   try {
     parsedDocs = parseYamlAll(yamlText)

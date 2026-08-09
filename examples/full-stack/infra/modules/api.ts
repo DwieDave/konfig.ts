@@ -11,29 +11,7 @@ export interface ApiOpts {
   readonly sopsBase: string
 }
 
-/**
- * `apps/api` workload module.
- *
- * Showcases the round-2 type-safety features end-to-end:
- *
- *   - `yield* Dep.Image("api")` resolves at composition time to a
- *     `BuiltImageRef<"api">` provided by `defineApiBuild` (modules/builds.ts).
- *     Forgetting to list `apiBuild` in `fromModules({ modules })` surfaces
- *     as a `_konfig_unsatisfied` hint at `AppOfApps.entrypoint`.
- *   - `Container.define({ ports, env })` brands the port-name union
- *     ("http") and validates the env list for duplicate names. A typo'd
- *     `Port.ref(...)` on the readiness probe is a compile error; a
- *     duplicate env name surfaces a human-readable hint inline.
- *   - `EnvVar.fromSecretForPod({ podNamespace: "app", ref })` rejects refs
- *     whose namespace doesn't match — the db-creds Secret lives in "app",
- *     so a cross-namespace mistake fails at type-check time, not at pod
- *     startup with "secret not found".
- *   - `Environment.bind` still produces the same SopsSecret manifest +
- *     envVars; we splice in extras via `EnvVar.value` /
- *     `EnvVar.fromSecretForPod` / `EnvVar.fromConfigMap`, and the
- *     duplicate-detection guards us against shadowing one of bind's
- *     names by accident.
- */
+// `apps/api` workload. `Dep.Image("api")` resolves via `defineApiBuild`; `EnvVar.fromSecretForPod` enforces namespace match at type-check time.
 export const defineApi = Module.fixedNs({
   target: Application.target,
   namespace: "app",

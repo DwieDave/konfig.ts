@@ -29,10 +29,6 @@ interface ClusterMeta {
   readonly annotations?: Readonly<Record<string, string>>
 }
 
-/**
- * Standard k8s PV access modes. Constrained to the four documented
- * values so a typo (`"ReadWriteonce"`) is a compile-time error.
- */
 export type PersistentVolumeAccessMode =
   | "ReadWriteOnce"
   | "ReadOnlyMany"
@@ -43,19 +39,7 @@ export type PersistentVolumeReclaimPolicy = "Retain" | "Recycle" | "Delete"
 
 export type PersistentVolumeMode = "Filesystem" | "Block"
 
-/**
- * Strict input shape for a `PersistentVolume.spec`. Upstream
- * `kubernetes-types` types every field as optional (because the
- * OpenAPI generator emits the entire union), which makes invalid
- * specs (no capacity, no accessModes, no volume source) compile.
- * The fields the kube-apiserver actually requires are required here.
- *
- * Volume-source fields (`hostPath`, `csi`, `nfs`, `local`, etc.) are
- * inherited from the upstream `PersistentVolumeSpec` via `Omit` so
- * users can use whichever source they need. "At least one source"
- * isn't enforced statically (TS unions over 20+ variants would be
- * unwieldy) — the kube-apiserver rejects a spec with no source.
- */
+// "At least one volume source" isn't enforced statically (20+ variants); kube-apiserver rejects a spec with none.
 export interface PersistentVolumeSpecInput extends
   Omit<
     K8sPersistentVolumeSpec,
@@ -92,11 +76,6 @@ export const PersistentVolume = {
     )
 }
 
-/**
- * Strict input shape for a `PersistentVolumeClaim.spec`. Same
- * rationale as `PersistentVolumeSpecInput` — accessModes + a storage
- * request are the fields the apiserver requires.
- */
 export interface PersistentVolumeClaimSpecInput {
   readonly accessModes: ReadonlyArray<PersistentVolumeAccessMode>
   readonly resources: { readonly requests: { readonly storage: string } }
@@ -134,11 +113,6 @@ export interface NetworkPolicyInput extends NamespacedMeta {
   readonly spec: K8sNetworkPolicy["spec"]
 }
 
-/**
- * Peer rule for `NetworkPolicy.fromPodSet`. A peer is either a typed
- * `Selector` (matched as `podSelector.matchLabels`), a `namespaceSelector`,
- * or a CIDR block.
- */
 export interface NetworkPolicyPeer {
   readonly podSet?: Selector<Readonly<Record<string, string>>>
   readonly namespaceSelector?: { readonly matchLabels?: Readonly<Record<string, string>> }
@@ -155,13 +129,6 @@ export interface NetworkPolicyEgressRule {
   readonly ports?: K8sNetworkPolicyEgressRule["ports"]
 }
 
-/**
- * NetworkPolicy built from typed `Selector`s. `podSet` drives
- * `spec.podSelector`; ingress/egress peer rules accept further selectors
- * via `from[].podSet` / `to[].podSet`. Peer selectors need not match the
- * owning selector — the typing ties this NetworkPolicy's selection to a
- * single source of truth and lets peers be independently typed.
- */
 export interface NetworkPolicyFromPodSetInput<L extends Readonly<Record<string, string>>> extends NamespacedMeta {
   readonly podSet: Selector<L>
   readonly policyTypes?: ReadonlyArray<"Ingress" | "Egress">

@@ -1,21 +1,4 @@
-/**
- * Dummy API entrypoint.
- *
- * One declaration covers both manifest emission and runtime decode:
- * `apiEnv` (from @example/env-contracts) drives both `Environment.bind`
- * in `infra/modules/api.ts` (which generates the Deployment's env block
- * + Secret manifests) AND `Environment.runtime(apiEnv)` here (which
- * reads the same env vars at process start and decodes them into the
- * typed record below).
- *
- * Add a new `Literal` to the bundle and both sides surface it
- * automatically; rename one and the typechecker flags both call sites.
- *
- * Boot fails closed: if the runtime decoder hits a `ConfigError`
- * (missing env var, type mismatch, etc.), we print the structured
- * message instead of the raw stack trace and exit 78 (config error),
- * matching the round-2 `_konfig_unsatisfied` DX at the type level.
- */
+// apiEnv drives both Environment.bind (infra/modules/api.ts) and Environment.runtime here, kept symmetric.
 import { apiEnv } from "@example/env-contracts"
 import { Environment } from "@konfig.ts/k8s"
 import { Cause, Effect, Redacted } from "effect"

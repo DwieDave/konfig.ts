@@ -1,7 +1,3 @@
-// Compile-time assertions for the friendlier residual error on
-// `AppOfApps.entrypoint`. Confirms that the hint includes the kind
-// and name of the unmet Need, and that a fully-wired program passes.
-
 import { AppOfApps } from "@konfig.ts/argocd"
 import type { Dep, Manifest } from "@konfig.ts/core"
 import type { Effect } from "effect"
@@ -24,16 +20,12 @@ declare const missingMultiple: Effect.Effect<
   Dep.Need<"Secret", "ghcr-pull"> | Dep.Need<"Namespace", "infra"> | Manifest.RenderServices
 >
 
-// Happy path — entrypoint accepts the program.
 const _ok = AppOfApps.entrypoint(goodProgram)
 
-// One unmet Need — the call fails with the hint listing the specific Need.
-// @ts-expect-error - Missing _konfig_unsatisfied (Secret "ghcr-pull").
+// @ts-expect-error _konfig_unsatisfied (Secret "ghcr-pull")
 const _missingOne = AppOfApps.entrypoint(missingGhcrPull)
 
-// Two unmet Needs — the hint property's literal type is a union; the
-// error lists both per-Need sentences.
-// @ts-expect-error - Missing _konfig_unsatisfied (Secret "ghcr-pull" | Namespace "infra").
+// @ts-expect-error _konfig_unsatisfied (union of both Needs)
 const _missingTwo = AppOfApps.entrypoint(missingMultiple)
 
 void _ok

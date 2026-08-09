@@ -51,12 +51,6 @@ export interface RunBuildInput {
   readonly noCache: boolean
 }
 
-/**
- * The build command's render/cache/write pipeline, factored out of
- * `Command.make` so it can be driven with a directly-constructed
- * `ResolvedKonfigConfig` (bypassing `resolveConfig()`'s cwd-search) in
- * tests.
- */
 export const runBuild = (input: RunBuildInput) =>
   Effect.gen(function*() {
     const { cfg, ctx, envName, logFmt, noCache, verbose } = input

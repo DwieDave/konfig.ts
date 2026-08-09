@@ -3,20 +3,8 @@ import { type Config, Effect } from "effect"
 import type { Environment, EnvMember } from "./environment"
 import type { EnvironmentShape } from "./layer"
 
-/**
- * Read every member of an `Environment<M>` from the active
- * `ConfigProvider` and return the decoded record.
- *
- * This is the runtime half of an env contract — the same `apiEnv`
- * bundle that drives `Environment.bind` in the konfig modules drives
- * this decode in the running app. Add a new `Literal` /
- * `Secret` to the bundle and the runtime call surfaces it
- * automatically; remove one and the runtime call no longer reads it.
- *
- *   const config = yield* Environment.runtime(apiEnv);
- *   const port = config.http.port;
- *   const password = Redacted.value(config.db.password);
- */
+// Runtime half of an env contract: the same bundle that drives
+// Environment.bind in the konfig modules drives this decode in the running app.
 export const runtime = <M extends Readonly<Record<string, EnvMember>>>(
   env: Environment<M>
 ): Effect.Effect<EnvironmentShape<M>, Config.ConfigError> =>

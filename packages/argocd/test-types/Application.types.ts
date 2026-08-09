@@ -1,8 +1,3 @@
-// Compile-time-only assertions for `Application.define`. None of
-// these have runtime behavior — failures show up as `tsc --noEmit`
-// errors when the type contract drifts. Run via:
-//   bun run --cwd packages/argocd type-test
-
 import type { Application as ApplicationNS } from "@konfig.ts/argocd"
 import type { AnyRenderError, Dep } from "@konfig.ts/core"
 import type { Context, Effect, Layer } from "effect"
@@ -17,8 +12,6 @@ type ApplicationHandle<Name extends string, Out, In> = ApplicationNS.Application
   In
 >
 
-// 1 · `define` with no deps and no extras: Out includes the three
-//     auto-provides, In is exactly `never`.
 declare const trivial: ReturnType<
   typeof ApplicationNS.define<"trivial", "ns", never, never>
 >
@@ -40,9 +33,6 @@ type _Trivial_In = Expect<
   >
 >
 
-// 2 · `define` with an unmet `Dep.Need<"Secret", "ghcr-pull">` in
-//     the build's R channel: `In` carries that Need; Out is the same
-//     auto-provides.
 declare const needingSecret: ReturnType<
   typeof ApplicationNS.define<"needing", "ns", Dep.Need<"Secret", "ghcr-pull">, never>
 >
@@ -62,9 +52,6 @@ type _Needing_In = Expect<
   >
 >
 
-// 3 · `define` with an `Extra` provider: Out unions Extra; the build's
-//     R-channel that mentions any of (Application<Name>, Namespace<Ns>,
-//     Extra) is discharged from In.
 type ExtraProvide = Dep.Provide<"ConfigMap", "shared">
 type R3 =
   | Dep.Need<"Secret", "x">
@@ -92,8 +79,6 @@ type _Extra_In = Expect<
   >
 >
 
-// 4 · An `ApplicationHandle` is Effect-yieldable; the produced
-//     value is the `Application` record.
 declare const handle: ApplicationHandle<"api", Dep.Provide<"App", "api">, never>
 
 type HandleEffectChannel = typeof handle extends Effect.Effect<infer A, infer _E, infer _R> ? A
@@ -105,8 +90,6 @@ type _Handle_Layer = Expect<
   Equal<HandleLayer, Layer.Layer<Dep.Provide<"App", "api">, AnyRenderError, never>>
 >
 
-// 5 · `ApplicationHandle` is also assignable as a Context.Service tag
-//     for `Need<"App", Name>`.
 declare const _serviceUse: Context.Service<Dep.Need<"App", "api">, App>
 const _serviceCheck: typeof _serviceUse = handle
 

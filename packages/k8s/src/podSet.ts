@@ -10,11 +10,6 @@ import { NetworkPolicy, type NetworkPolicyFromPodSetInput } from "./policy"
 import type { Selector } from "./selector"
 import { Deployment, type DeploymentFromPodSetInput } from "./workload"
 
-/**
- * `PodSet.define` input. Drives a coherent Deployment + Service +
- * (optional) NetworkPolicy from a single `Selector` — every resource
- * derives its selector from `podSet`, so the trio cannot drift.
- */
 export interface DefinePodSetInput<L extends Readonly<Record<string, string>>> {
   readonly podSet: Selector<L>
   readonly deployment: Omit<DeploymentFromPodSetInput<L>, "podSet">
@@ -28,20 +23,6 @@ type PodSetOutput =
   | readonly [K8sDeployment, K8sNetworkPolicy]
   | readonly [K8sDeployment]
 
-/**
- * `PodSet` value namespace.
- *
- *   const trio = PodSet.define({
- *     podSet: redisCachePods,
- *     deployment: { ... },
- *     service: { ... },
- *     netPol: { ... },
- *   });
- *
- * Umbrella over `Deployment.fromPodSet`, `Service.fromPodSet`, and
- * `NetworkPolicy.fromPodSet` — emits whichever subset of the trio the
- * input specifies, all rooted at one `Selector`.
- */
 export const PodSet = {
   define: <L extends Readonly<Record<string, string>>>(
     input: DefinePodSetInput<L>
@@ -65,8 +46,6 @@ export const PodSet = {
   }
 }
 
-// tuple element types are statically known per branch; the array literal is
-// widened by TS, the brand-free runtime shape matches the typed tuple.
 const _asPodSetOutput = (
   d: K8sDeployment,
   s: K8sService | undefined,

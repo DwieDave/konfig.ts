@@ -54,10 +54,6 @@ layer(NodeServices.layer)("PersistentVolume strict spec", (it) => {
       expect(result.spec?.claimRef?.namespace).toBe("prod")
     }))
 
-  // Compile-time tests below assert the strict types reject invalid
-  // specs. The constructions are commented out so the file compiles;
-  // uncommenting any of them should produce a TS error.
-
   // @ts-expect-error — spec missing capacity
   void PersistentVolume.make({ name: "x", spec: { accessModes: ["ReadWriteOnce"] } })
 

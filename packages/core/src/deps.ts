@@ -13,16 +13,8 @@ declare const ServiceAccountRefBrand: unique symbol
 declare const PvcRefBrand: unique symbol
 declare const BuiltImageRefBrand: unique symbol
 
-/**
- * Nominal reference to a named Secret. `N` brands the secret's metadata
- * name; `K` (defaults to `string`) brands the union of declared data
- * keys, so consumers like `secretEnv({ ref, key })` can constrain `key`
- * to keys that actually exist; `Ns` (defaults to `string`) brands the
- * secret's owning namespace, so pod-context consumers (like
- * `secretEnvForPod`) can reject refs from a different namespace at
- * compile time — eliminating the runtime "secret not found across
- * namespaces" failure mode.
- */
+// Ns brands the owning namespace so pod-context consumers can reject cross-namespace refs
+// at compile time, eliminating a runtime "secret not found across namespaces" failure.
 export type SecretRef<
   N extends string,
   K extends string = string,
@@ -34,13 +26,6 @@ export type SecretRef<
     readonly namespace: Ns
   }
 }
-/**
- * Nominal reference to a named ConfigMap. `N` brands the metadata name;
- * `K` (defaults to `string`) brands the union of declared data keys, so
- * `configMapEnv({ ref, key })` can constrain `key` to keys that actually
- * exist on the map. Producers (e.g. `ConfigMap.make`) populate `K` from
- * the literal `data` (or `binaryData`) record keys.
- */
 export type ConfigMapRef<N extends string, K extends string = string> = string & {
   readonly [ConfigMapRefBrand]: { readonly name: N; readonly keys: K }
 }
@@ -51,17 +36,8 @@ export type PvcRef<N extends string> = string & {
   readonly [PvcRefBrand]: N
 }
 
-/**
- * Nominal reference to a container image built in-tree. Runtime value
- * is the full image ref (`registry/app:tag`) — a string, so K8s YAML
- * serializes it directly. The phantom `App` brand carries the literal
- * app name and ties the ref to the dep graph via `Dep.Image`.
- *
- * Container `image` fields accept either a raw string (escape hatch
- * for vendor images: `ghcr.io/bitnami/postgresql:16.0.0`) or
- * `BuiltImageRef<App>`. The branded path catches a workload whose
- * build module is missing from the composition at `AppOfApps.entrypoint`.
- */
+// Runtime value is the full image ref string so K8s YAML serializes it directly; the phantom
+// App brand ties it to the dep graph, catching a missing build module at entrypoint.
 export type BuiltImageRef<App extends string> = string & {
   readonly [BuiltImageRefBrand]: App
 }
@@ -117,13 +93,6 @@ export const Pvc = <N extends string>(name: N): Context.Service<Need<"Pvc", N>, 
 export const App = <N extends string, S = unknown>(name: N): Context.Service<Need<"App", N>, S> =>
   Context.Service<Need<"App", N>, S>(`App:${name}`)
 
-/**
- * Context.Service tag for a `BuiltImageRef<App>`. Modules that build an
- * image emit a Layer providing this service; modules that deploy a
- * container yield `Dep.Image(app)` to receive the typed ref. The
- * dep-graph residual at `AppOfApps.entrypoint` catches a missing
- * provider exactly like for `Dep.Secret`.
- */
 export const Image = <N extends string>(
   name: N
 ): Context.Service<Need<"Image", N>, BuiltImageRef<N>> =>
@@ -138,30 +107,10 @@ interface _ImageRefInput<App extends string> {
 const _fullRef = <App extends string>(input: _ImageRefInput<App>): BuiltImageRef<App> =>
   brand<BuiltImageRef<App>>(`${input.registry}/${input.app}:${input.tag}`)
 
-/**
- * `BuiltImageRef` value namespace.
- *
- *   const apiImage = BuiltImageRef.of({
- *     app: "api",
- *     registry: "ghcr.io/example",
- *     tag: "1.0.0",
- *   });
- *
- * `BuiltImageRef.of` constructs the brand from registry + app + tag.
- * The literal `app` is captured in the brand so a workload's
- * `Dep.Need<"Image", App>` matches only the build module that
- * provides this exact app.
- */
 export const BuiltImageRef = {
   of: <const App extends string>(input: _ImageRefInput<App>): BuiltImageRef<App> => _fullRef(input)
 }
 
-/**
- * Layer providing `Dep.Image(App)` for downstream consumers. Combine
- * with `Application.define` / `Module.fixedNs`'s `provides` slot to
- * have a build module surface its image to sibling workload modules
- * in the composition.
- */
 export const provideImage = <const App extends string>(
   input: _ImageRefInput<App>
 ): Layer.Layer<Provide<"Image", App>> => Layer.succeed(Image(input.app))(_fullRef(input))

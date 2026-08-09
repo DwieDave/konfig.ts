@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import type { Dockerfile, HealthcheckIR, Instruction, PlatformValue, Stage } from "../ir/DockerfileIR"
 import { render } from "./Renderer"
 
-// ───────────────────────── tiny canonical-output parser ────────────────────
 
 const splitFromLine = (line: string): { platform?: PlatformValue; rest: string } => {
   const m = line.match(/^FROM (--platform=(\S+) )?(.+)$/)
@@ -140,7 +139,6 @@ const parseDockerfile = (text: string): Dockerfile => {
   return { args, stages }
 }
 
-// ────────────────────────── fast-check arbitraries ────────────────────────
 
 const idChar = fc.constantFrom(
   "a",
@@ -259,7 +257,6 @@ const dockerfileArb: fc.Arbitrary<Dockerfile> = fc
     return { args: [], stages: unique }
   })
 
-// ─────────────────────────────── tests ────────────────────────────────────
 
 describe("Renderer round-trip", () => {
   it("render→parse→render is fixed-point", () => {

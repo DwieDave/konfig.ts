@@ -62,9 +62,6 @@ describe("allWorkspaces", () => {
     Effect.gen(function*() {
       const root = yield* findRoot(`${FIXTURES}nested-glob`)
       const ws = yield* allWorkspaces(root)
-      // `packages/a` (one level) and `packages/group/b` (two levels) are
-      // both reachable only via recursive `**` descent. Before the fix
-      // `**` failed and orElseSucceed swallowed it to zero workspaces.
       expect(ws.map((w) => ({ name: w.name, relDir: w.relDir }))).toEqual([
         { name: "@fix/a", relDir: "packages/a" },
         { name: "@fix/b", relDir: "packages/group/b" }

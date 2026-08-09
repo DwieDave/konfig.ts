@@ -3,18 +3,9 @@ import { Schema } from "effect"
 const BASE64_CHARSET_RE = /^[A-Za-z0-9+/]{40,}={0,2}$/
 const HEX_RE = /^[0-9a-fA-F]+$/
 
-/**
- * Heuristic for a base64-encoded secret. Deliberately narrower than "long
- * base64 charset" so it does NOT flag common non-secret CI values:
- *
- *  - Pure-hex strings (git SHAs, `sha256` digests, `SENTRY_RELEASE`, …) are
- *    excluded — a 40/64-char commit hash is base64-charset-valid but is not
- *    a secret.
- *  - A mixed-character-class / base64 signal is required: either a base64
- *    special char (`+` `/` `=`) or all three of upper+lower+digit, which
- *    real high-entropy encoded secrets have but low-entropy identifiers
- *    (all-lowercase slugs, numeric ids) do not.
- */
+// Heuristic for a base64-encoded secret, deliberately narrower than "long
+// base64 charset": excludes pure-hex strings (git SHAs, sha256 digests) and
+// requires a base64 special char or a mixed upper+lower+digit signal.
 const _looksLikeBase64Secret = (s: string): boolean => {
   if (!BASE64_CHARSET_RE.test(s)) return false
   if (HEX_RE.test(s)) return false
@@ -129,42 +120,12 @@ export const RunnerSpec = Schema.Struct({
   user: Schema.optionalKey(UserAtom),
   healthcheck: Schema.optionalKey(HealthcheckAtom),
   platform: Schema.optionalKey(PlatformAtom),
-  /**
-   * Emit a separate `prod-deps` stage that runs
-   * `<install-command> <productionFlag>` (e.g. `bun install
-   * --production`) so the runner gets a `node_modules/` tree without
-   * `devDependencies`. Cuts image size when the workload doesn't need
-   * typescript / @types / linters / test runners at runtime.
-   *
-   * Defaults to `false` (runner copies `node_modules` from the
-   * `builder` stage, i.e. includes dev deps).
-   */
   production: Schema.optionalKey(Schema.Boolean),
-  /**
-   * Override the runner stage's base image. Defaults to the
-   * configured `runtime` image (e.g. `oven/bun:1.3.11-alpine`). Set
-   * this when the runtime image of the build (where `tsc` / `vite`
-   * etc. ran) is not what should serve at runtime — e.g. a Vite SPA
-   * built with bun but served by `nginx:1.29-alpine`.
-   *
-   * When set, the runner does NOT auto-copy `/app/node_modules` or
-   * workspace sources — the caller is responsible for listing every
-   * needed COPY via `runner.copy` (typically a few
-   * `Docker.copy.path({ from: "builder", src, dst })` instructions).
-   */
+  // When set, the runner does NOT auto-copy /app/node_modules or workspace
+  // sources — caller must list every needed COPY via runner.copy.
   baseImage: Schema.optionalKey(
     Schema.Struct({ image: Schema.String, tag: Schema.String })
   ),
-  /**
-   * Paths under the runner image to delete after all COPY instructions
-   * (including `node_modules/`) have run. Use this to strip transitive
-   * deps that a workspace doesn't actually need at runtime but are
-   * pulled in via shared workspaces (e.g. `node_modules/sharp` from a
-   * peer image-processing helper that this CronJob never invokes).
-   *
-   * Each entry becomes a single `RUN rm -rf <path>` line. Absolute
-   * paths are passed verbatim.
-   */
   removePaths: Schema.optionalKey(Schema.Array(Schema.String))
 })
 export type RunnerSpec = typeof RunnerSpec.Type

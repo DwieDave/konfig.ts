@@ -8,7 +8,6 @@ import { packageDirs, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
 
 const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 
-// Replace ONLY the first top-level "version" field, preserving all formatting.
 const _setVersion = (file: string, version: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -64,13 +63,11 @@ export const bumpVersionCommand = Command.make(
     Effect.gen(function*() {
       const path = yield* Path
 
-      // Lockstep: core is the canonical current version.
       const core = yield* readJson(path.join(REPO_ROOT, "packages", "core", "package.json"))
       const current = typeof core.version === "string" ? core.version : "0.0.0"
       const resolved = yield* _resolveTarget(target, current)
       yield* Console.log(`bumping ${current} → ${resolved}`)
 
-      // Root (private): track the release version for humans.
       const rootBumped = yield* _setVersion(path.join(REPO_ROOT, "package.json"), resolved)
       if (rootBumped) yield* Console.log("  bumped package.json (root)")
 
@@ -90,7 +87,7 @@ export const bumpVersionCommand = Command.make(
       }
       yield* Console.log(`bumped ${published} published packages + root`)
 
-      // Keep bun.lock in sync so CI's --frozen-lockfile stays green.
+      // bun.lock must stay in sync or CI's --frozen-lockfile fails.
       yield* Effect.tryPromise({
         try: () => _execFile("bun", ["install"], { cwd: REPO_ROOT }),
         catch: (cause) => new RepoScriptError({ message: "'bun install' failed; run it manually to sync bun.lock", cause })

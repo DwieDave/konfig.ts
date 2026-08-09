@@ -70,7 +70,7 @@ describe("Module.fixedNs({ target: Application.target, ... })", () => {
 
   it("rejects bare `string` for name at the call site", () => {
     const dynamicName = "x" as string
-    // @ts-expect-error — `name` must be a literal, `string` is rejected by LiteralName
+    // @ts-expect-error name must be a literal
     defineSops({ name: dynamicName, source })
   })
 })
@@ -118,7 +118,7 @@ describe("Module.dynamicNs({ target: Application.target, ... })", () => {
     const dynamicNs = "x" as string
     defineApi({
       name: "api",
-      // @ts-expect-error — `namespace` must be a literal
+      // @ts-expect-error namespace must be a literal
       namespace: dynamicNs,
       source,
       image: "x"

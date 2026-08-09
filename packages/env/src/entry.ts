@@ -30,7 +30,6 @@ export interface HasEnvClaims {
   readonly envClaims: ReadonlyArray<EnvClaim>
 }
 
-/** Builds a single `EnvClaim` — shared by Secret/Literal/Downward entries. */
 export const _envClaim = ({ envName, label }: EnvClaim): EnvClaim => ({ envName, label })
 
 export interface MakeEntryInput<C extends Config.Config<unknown>, M extends object> {
@@ -38,9 +37,6 @@ export interface MakeEntryInput<C extends Config.Config<unknown>, M extends obje
   readonly metadata: M
 }
 
-// Each Secret/Literal/Downward produces a yieldable
-// Config (an "atom" in state-management terms) intersected with its pure
-// metadata. _makeEntry is the internal helper that does the merge.
 export const _makeEntry = <C extends Config.Config<unknown>, M extends object>(
   input: MakeEntryInput<C, M>
 ): C & M =>
