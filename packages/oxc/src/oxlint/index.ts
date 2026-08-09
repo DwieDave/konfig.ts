@@ -1,6 +1,7 @@
 import { noBannedTypeAssertions } from "./rules/no-banned-type-assertions.ts"
 import { noComments } from "./rules/no-comments.ts"
 import { noMultipleFunctionParams } from "./rules/no-multiple-function-params.ts"
+import { noRecordStringUndefined } from "./rules/no-record-string-undefined.ts"
 import { noSwitch } from "./rules/no-switch.ts"
 import { noSyncSchemaApis } from "./rules/no-sync-schema-apis.ts"
 import { noTypeAssertion } from "./rules/no-type-assertion.ts"
@@ -14,6 +15,7 @@ const plugin: Plugin = {
     "no-banned-type-assertions": noBannedTypeAssertions,
     "no-comments": noComments,
     "no-multiple-function-params": noMultipleFunctionParams,
+    "no-record-string-undefined": noRecordStringUndefined,
     "no-switch": noSwitch,
     "no-sync-schema-apis": noSyncSchemaApis,
     "no-type-assertion": noTypeAssertion,

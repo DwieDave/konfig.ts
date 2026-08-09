@@ -1,5 +1,8 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
+  "extends": [
+    "./node_modules/@effect/tsgo/oxlint-presets/recommended.json"
+  ],
   "jsPlugins": ["./packages/oxc/src/oxlint/index.ts"],
   "ignorePatterns": [
     "**/dist/**",
@@ -13,6 +16,7 @@
     "app/no-banned-type-assertions": "error",
     "app/no-comments": "error",
     "app/no-multiple-function-params": "error",
+    "app/no-record-string-undefined": "error",
     "app/no-switch": "error",
     "app/no-sync-schema-apis": "error",
     "app/no-type-assertion": "warn",
@@ -29,6 +33,7 @@
     {
       "files": ["**/*.test.ts", "**/test-types/**/*.ts"],
       "rules": {
+        "effecttsgo/floating-effect": "off",
         "app/no-type-assertion": "off",
         "app/no-banned-type-assertions": "off",
         "app/no-multiple-function-params": "off",
