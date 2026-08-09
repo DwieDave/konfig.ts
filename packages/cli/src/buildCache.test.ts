@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
+import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { describe, expect, it } from "vitest"
 import { computeInputHash, computeOutputHash } from "./buildCache"
 
 describe("computeOutputHash", () => {
@@ -53,8 +53,8 @@ const _cfgFor = (configDir: string, cacheInclude: readonly string[] = []): Resol
 })
 
 describe("computeInputHash: render-context sensitivity", () => {
-  it("a different k8sVersion is a cache MISS (distinct input hash) for identical files", async () => {
-    const program = Effect.gen(function*() {
+  it.effect("a different k8sVersion is a cache MISS (distinct input hash) for identical files", () =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
@@ -82,14 +82,10 @@ describe("computeInputHash: render-context sensitivity", () => {
 
       expect(base).not.toBe(bumped)
       expect(base).toBe(same)
-      return { base, bumped }
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-    await Effect.runPromise(program)
-  })
-
-  it("editing a non-.ts/.json/.yaml file (e.g. .sh) under root shifts the hash", async () => {
-    const program = Effect.gen(function*() {
+  it.effect("editing a non-.ts/.json/.yaml file (e.g. .sh) under root shifts the hash", () =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
@@ -106,13 +102,10 @@ describe("computeInputHash: render-context sensitivity", () => {
       const edited = yield* computeInputHash({ cfg, envName: "prod", ctx })
 
       expect(base).not.toBe(edited)
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-    await Effect.runPromise(program)
-  })
-
-  it("distinct binary contents under root shift the hash (no lossy UTF-8 collapse)", async () => {
-    const program = Effect.gen(function*() {
+  it.effect("distinct binary contents under root shift the hash (no lossy UTF-8 collapse)", () =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
@@ -121,8 +114,6 @@ describe("computeInputHash: render-context sensitivity", () => {
       yield* fs.makeDirectory(infra, { recursive: true })
       const blob = path.join(infra, "data.bin")
 
-      // 0xFF and 0xFE are both invalid standalone UTF-8; a lossy string
-      // decode maps both to U+FFFD, collapsing the difference.
       yield* fs.writeFile(blob, new Uint8Array([0xff]))
       const ctx = RenderContext.make("prod")
       const base = yield* computeInputHash({ cfg, envName: "prod", ctx })
@@ -131,13 +122,10 @@ describe("computeInputHash: render-context sensitivity", () => {
       const edited = yield* computeInputHash({ cfg, envName: "prod", ctx })
 
       expect(base).not.toBe(edited)
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-    await Effect.runPromise(program)
-  })
-
-  it("editing a cacheInclude file outside root shifts the hash; without cacheInclude it does not", async () => {
-    const program = Effect.gen(function*() {
+  it.effect("editing a cacheInclude file outside root shifts the hash; without cacheInclude it does not", () =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
@@ -158,13 +146,10 @@ describe("computeInputHash: render-context sensitivity", () => {
 
       expect(base).not.toBe(edited)
       expect(blindBase).toBe(blindEdited)
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-    await Effect.runPromise(program)
-  })
-
-  it("cacheInclude glob pattern hashes matching files only", async () => {
-    const program = Effect.gen(function*() {
+  it.effect("cacheInclude glob pattern hashes matching files only", () =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
@@ -186,13 +171,10 @@ describe("computeInputHash: render-context sensitivity", () => {
       yield* fs.writeFileString(matched, "a: 2\n")
       const matchedEdit = yield* computeInputHash({ cfg, envName: "prod", ctx })
       expect(matchedEdit).not.toBe(base)
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-    await Effect.runPromise(program)
-  })
-
-  it("cacheInclude accepts a single file path", async () => {
-    const program = Effect.gen(function*() {
+  it.effect("cacheInclude accepts a single file path", () =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
@@ -207,13 +189,10 @@ describe("computeInputHash: render-context sensitivity", () => {
       const edited = yield* computeInputHash({ cfg, envName: "prod", ctx })
 
       expect(base).not.toBe(edited)
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-    await Effect.runPromise(program)
-  })
-
-  it("differing cluster and flags each shift the hash", async () => {
-    const program = Effect.gen(function*() {
+  it.effect("differing cluster and flags each shift the hash", () =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
@@ -237,8 +216,5 @@ describe("computeInputHash: render-context sensitivity", () => {
       })
 
       expect(new Set([plain, withCluster, withFlags]).size).toBe(3)
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-
-    await Effect.runPromise(program)
-  })
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

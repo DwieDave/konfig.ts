@@ -36,7 +36,7 @@ export class CrdInputDecodeError extends Data.TaggedError("CrdInputDecodeError")
 }
 
 const _decodeOpts = (opts: CrdExtractOptions) =>
-  Schema.decodeUnknownEffect(CrdExtractOptionsSchema)(opts).pipe(
+  Schema.decodeEffect(CrdExtractOptionsSchema)(opts).pipe(
     Effect.mapError((cause) => new CrdInputDecodeError({ cause }))
   )
 
@@ -70,10 +70,10 @@ const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
     const spec = unsafeCoerce<Record<string, unknown> | undefined>(d.spec, reason)
     if (!meta || !spec) continue
 
-    const crdName = String(meta.name ?? "")
+    const crdName = typeof meta.name === "string" ? meta.name : ""
     if (!crdName) continue
 
-    const group = String(spec.group ?? "")
+    const group = typeof spec.group === "string" ? spec.group : ""
     const versions = unsafeCoerce<Array<Record<string, unknown>> | undefined>(spec.versions, reason)
     if (!versions?.length) continue
 
@@ -81,7 +81,7 @@ const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
     let schema: Record<string, unknown> | undefined
 
     for (const v of versions) {
-      const vName = String(v.name ?? "")
+      const vName = typeof v.name === "string" ? v.name : ""
       if (vName) versionNames.push(vName)
       if (!schema) {
         const validation = unsafeCoerce<Record<string, unknown> | undefined>(v.schema, reason)
@@ -108,13 +108,12 @@ const _crdNameToIdentifier = (crdName: string): string => {
 }
 
 const _generateCrdTs = (crd: CrdDocument) =>
-  Effect.tryPromise(async () => {
+  Effect.gen(function*() {
     const identifier = _crdNameToIdentifier(crd.crdName)
     const inputType = `${identifier}Input`
 
-    let compiledTypes: string
-    try {
-      compiledTypes = await compile(
+    const compiledTypes = yield* Effect.tryPromise(() =>
+      compile(
         unsafeCoerce<Parameters<typeof compile>[0]>(
           crd.schema,
           "json-schema-to-typescript's input type is structurally a JSON Schema object"
@@ -127,9 +126,7 @@ const _generateCrdTs = (crd: CrdDocument) =>
           strictIndexSignatures: false
         }
       )
-    } catch {
-      compiledTypes = `export type ${inputType} = Record<string, unknown>;\n`
-    }
+    ).pipe(Effect.orElseSucceed(() => `export type ${inputType} = Record<string, unknown>;\n`))
 
     return [
       compiledTypes,

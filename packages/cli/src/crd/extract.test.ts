@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { CrdInputDecodeError, extractCrdsEffect } from "./extract"
 
 const validOpts = {
@@ -21,7 +21,7 @@ layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         const failure = exit.cause
-        const fails = JSON.stringify(failure)
+        const fails = yield* Schema.encodeUnknownEffect(Schema.UnknownFromJsonString)(failure)
         expect(fails).toContain("CrdInputDecodeError")
       }
     }))

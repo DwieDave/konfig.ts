@@ -1,5 +1,5 @@
 import { decodeKonfigConfigEffect, type KonfigConfig, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Data, Effect } from "effect"
+import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 
@@ -36,11 +36,9 @@ const _parseConfig = (configPath: string) =>
     const text = yield* fs
       .readFileString(configPath)
       .pipe(Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause })))
-    const parsed = yield* Effect.try({
-      // oxlint-disable-next-line app/no-banned-type-assertions app/no-type-assertion
-      try: () => JSON.parse(text) as unknown,
-      catch: (cause) => new ConfigParseError({ path: configPath, cause })
-    })
+    const parsed = yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(text).pipe(
+      Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause }))
+    )
     return yield* decodeKonfigConfigEffect(parsed).pipe(
       Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause }))
     )

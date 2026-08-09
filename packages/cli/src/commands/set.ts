@@ -1,5 +1,5 @@
 import { decodeImagesEffect, ImagesConfig } from "@konfig.ts/core"
-import { Data, Effect } from "effect"
+import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Argument, Command } from "../_unstable"
@@ -14,6 +14,9 @@ export class ImagesFileError extends Data.TaggedError("ImagesFileError")<{
   readonly path: string
   readonly cause: unknown
 }> {}
+
+/** Tab-indented JSON serialization, matching the repo's `images.json` formatting. */
+const _formatImagesConfig = (decoded: ImagesConfig): string => `${JSON.stringify(decoded, null, "\t")}\n`
 
 export const setCommand = Command.make(
   "set",
@@ -39,11 +42,9 @@ export const setCommand = Command.make(
         .readFileString(file)
         .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))
 
-      const parsed = yield* Effect.try({
-        // oxlint-disable-next-line app/no-banned-type-assertions app/no-type-assertion
-        try: () => JSON.parse(text) as unknown,
-        catch: (cause) => new ImagesFileError({ path: file, cause })
-      })
+      const parsed = yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(text).pipe(
+        Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
+      )
 
       const current = yield* decodeImagesEffect(parsed).pipe(
         Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
@@ -66,7 +67,7 @@ export const setCommand = Command.make(
         Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
       )
 
-      const out = `${JSON.stringify(decoded, null, "\t")}\n`
+      const out = _formatImagesConfig(decoded)
       yield* fs
         .writeFileString(file, out)
         .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))

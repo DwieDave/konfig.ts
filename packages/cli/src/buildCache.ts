@@ -1,11 +1,10 @@
 import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
 import { unsafeCoerce } from "@konfig.ts/core"
-import { Data, Effect } from "effect"
+import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
 import * as crypto from "node:crypto"
-import * as nodePath from "node:path"
 
 export class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
   readonly path: string
@@ -104,8 +103,9 @@ const _resolveCacheIncludeFiles = (
         // filter with Node's native glob matcher (node >= 22).
         const candidates: string[] = []
         yield* _collectFiles(_globBase(abs, path.sep), candidates)
+        const pattern = _globToRegExp(abs, path.sep)
         for (const c of candidates) {
-          if (nodePath.matchesGlob(c, abs)) files.push(c)
+          if (pattern.test(c)) files.push(c)
         }
       } else {
         const stat = yield* _orAbsentIfNotFound(fs.stat(abs), () => null)
@@ -164,7 +164,7 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
     const { cfg, envName, ctx } = input
 
     const hash = crypto.createHash("sha256")
-    hash.update(JSON.stringify(cfg.config))
+    hash.update(yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(cfg.config))
     hash.update("\n")
     hash.update(`ctx:${_ctxSignature(ctx)}\n`)
 
@@ -190,6 +190,45 @@ const _globBase = (pattern: string, sep: string): string => {
     staticSegs.push(seg)
   }
   return staticSegs.join(sep) || sep
+}
+
+const _REGEXP_SPECIAL = /[\\^$.|+(){}]/
+
+/**
+ * Converts a glob `pattern` (`*`, `**`, `?`, `[...]`) into a `RegExp` that
+ * matches full paths separated by `sep`. `**` matches across separators;
+ * `*` and `?` stop at a separator.
+ */
+const _globToRegExp = (pattern: string, sep: string): RegExp => {
+  const sepClass = sep === "\\" ? "\\\\" : sep
+  let source = ""
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i]
+    if (c === "*") {
+      if (pattern[i + 1] === "*") {
+        source += ".*"
+        i++
+        if (pattern[i + 1] === sep) i++
+      } else {
+        source += `[^${sepClass}]*`
+      }
+    } else if (c === "?") {
+      source += `[^${sepClass}]`
+    } else if (c === "[") {
+      const end = pattern.indexOf("]", i + 1)
+      if (end === -1) {
+        source += "\\["
+      } else {
+        source += pattern.slice(i, end + 1)
+        i = end
+      }
+    } else if (c !== undefined && _REGEXP_SPECIAL.test(c)) {
+      source += `\\${c}`
+    } else {
+      source += c
+    }
+  }
+  return new RegExp(`^${source}$`)
 }
 
 const _collectFiles = (
@@ -289,6 +328,13 @@ interface ReadEntryInput {
   readonly ctx: RenderContext
 }
 
+/** Parses a cache file's raw text; the caller revalidates by recomputing `inputHash`. */
+const _parseCacheEntry = (text: string): BuildCacheEntry =>
+  unsafeCoerce<BuildCacheEntry>(
+    JSON.parse(text),
+    "parsed JSON shape matches BuildCacheEntry — caller revalidates by recomputing inputHash"
+  )
+
 export const readCacheEntry = (input: ReadEntryInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -298,12 +344,7 @@ export const readCacheEntry = (input: ReadEntryInput) =>
     if (!exists) return undefined
     const text = yield* fs.readFileString(cacheFile).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    return yield* Effect.try(() =>
-      unsafeCoerce<BuildCacheEntry>(
-        JSON.parse(text),
-        "parsed JSON shape matches BuildCacheEntry — caller revalidates by recomputing inputHash"
-      )
-    ).pipe(Effect.orElseSucceed(() => undefined))
+    return yield* Effect.try(() => _parseCacheEntry(text)).pipe(Effect.orElseSucceed(() => undefined))
   })
 
 interface WriteEntryInput {
@@ -312,6 +353,9 @@ interface WriteEntryInput {
   readonly ctx: RenderContext
   readonly entry: BuildCacheEntry
 }
+
+/** Pretty-printed JSON serialization of a cache entry. */
+const _formatCacheEntry = (entry: BuildCacheEntry): string => `${JSON.stringify(entry, null, 2)}\n`
 
 export const writeCacheEntry = (input: WriteEntryInput) =>
   Effect.gen(function*() {
@@ -323,6 +367,6 @@ export const writeCacheEntry = (input: WriteEntryInput) =>
       .makeDirectory(dir, { recursive: true })
       .pipe(Effect.mapError((cause) => new BuildCacheError({ path: dir, cause })))
     yield* fs
-      .writeFileString(cacheFile, `${JSON.stringify(input.entry, null, 2)}\n`)
+      .writeFileString(cacheFile, _formatCacheEntry(input.entry))
       .pipe(Effect.mapError((cause) => new BuildCacheError({ path: cacheFile, cause })))
   })

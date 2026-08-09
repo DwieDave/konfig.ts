@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
 import * as PlatformError from "effect/PlatformError"
 import type { Command } from "effect/unstable/process/ChildProcess"
@@ -9,7 +10,6 @@ import {
   makeHandle,
   ProcessId
 } from "effect/unstable/process/ChildProcessSpawner"
-import { describe, expect, it } from "vitest"
 import { KubeconformNotFound, KubeconformReportError, runKubeconform, validateManifestFile } from "./validator"
 
 interface FakeProc {
@@ -57,47 +57,45 @@ const _spawnFails = (): Layer.Layer<ChildProcessSpawner> =>
   )
 
 describe("validateManifestFile", () => {
-  it("accepts a valid single-document manifest", async () => {
-    const content = `apiVersion: apps/v1
+  it.effect("accepts a valid single-document manifest", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api
   namespace: prod
 spec: {}
 `
-    const issues = await Effect.runPromise(
-      validateManifestFile({ file: "Deployment-api.yaml", content })
-    )
-    expect(issues).toEqual([])
-  })
+      const issues = yield* validateManifestFile({ file: "Deployment-api.yaml", content })
+      expect(issues).toEqual([])
+    }))
 
-  it("flags a missing kind", async () => {
-    const content = `apiVersion: apps/v1
+  it.effect("flags a missing kind", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: apps/v1
 metadata:
   name: api
 `
-    const issues = await Effect.runPromise(
-      validateManifestFile({ file: "x.yaml", content })
-    )
-    expect(issues).toHaveLength(1)
-    expect(issues[0]?.message).toContain("envelope")
-  })
+      const issues = yield* validateManifestFile({ file: "x.yaml", content })
+      expect(issues).toHaveLength(1)
+      expect(issues[0]?.message).toContain("envelope")
+    }))
 
-  it("flags a misspelled metadata.name (uppercase)", async () => {
-    const content = `apiVersion: v1
+  it.effect("flags a misspelled metadata.name (uppercase)", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: NotADnsLabel
 `
-    const issues = await Effect.runPromise(
-      validateManifestFile({ file: "x.yaml", content })
-    )
-    expect(issues).toHaveLength(1)
-    expect(issues[0]?.message).toContain("envelope")
-  })
+      const issues = yield* validateManifestFile({ file: "x.yaml", content })
+      expect(issues).toHaveLength(1)
+      expect(issues[0]?.message).toContain("envelope")
+    }))
 
-  it("walks multi-doc YAML with per-doc indexing", async () => {
-    const content = `apiVersion: v1
+  it.effect("walks multi-doc YAML with per-doc indexing", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm
@@ -107,17 +105,14 @@ kind: Service
 metadata:
   name: SVC
 `
-    const issues = await Effect.runPromise(
-      validateManifestFile({ file: "multi.yaml", content })
-    )
-    expect(issues).toHaveLength(1)
-    expect(issues[0]?.doc).toBe(1)
-  })
+      const issues = yield* validateManifestFile({ file: "multi.yaml", content })
+      expect(issues).toHaveLength(1)
+      expect(issues[0]?.doc).toBe(1)
+    }))
 
-  it("does not mis-split a document whose block scalar contains a literal ---", async () => {
-    // A naive /^---$/m split would break this single ConfigMap into three
-    // fragments; parseYamlAll keeps the block scalar intact as one doc.
-    const content = `apiVersion: v1
+  it.effect("does not mis-split a document whose block scalar contains a literal ---", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm
@@ -127,66 +122,64 @@ data:
     ---
     line three
 `
-    const issues = await Effect.runPromise(
-      validateManifestFile({ file: "cm.yaml", content })
-    )
-    expect(issues).toEqual([])
-  })
+      const issues = yield* validateManifestFile({ file: "cm.yaml", content })
+      expect(issues).toEqual([])
+    }))
 
-  it("accepts a manifest without namespace (cluster-scoped)", async () => {
-    const content = `apiVersion: v1
+  it.effect("accepts a manifest without namespace (cluster-scoped)", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: v1
 kind: Namespace
 metadata:
   name: app
 `
-    const issues = await Effect.runPromise(
-      validateManifestFile({ file: "ns.yaml", content })
-    )
-    expect(issues).toEqual([])
-  })
+      const issues = yield* validateManifestFile({ file: "ns.yaml", content })
+      expect(issues).toEqual([])
+    }))
 })
 
 describe("runKubeconform", () => {
-  it("returns stdout on a zero exit even when stdout mentions the word Invalid", async () => {
-    const summary = "Summary: 3 resources found parsing, 0 Invalid, 0 Errors"
-    const out = await Effect.runPromise(
-      runKubeconform({ dir: "/rendered" }).pipe(
+  it.effect("returns stdout on a zero exit even when stdout mentions the word Invalid", () =>
+    Effect.gen(function*() {
+      const summary = "Summary: 3 resources found parsing, 0 Invalid, 0 Errors"
+      const out = yield* runKubeconform({ dir: "/rendered" }).pipe(
         Effect.provide(_spawnerFor({ stdout: summary, exitCode: 0 }))
       )
-    )
-    expect(out).toBe(summary)
-  })
+      expect(out).toBe(summary)
+    }))
 
-  it("a non-zero exit fails with KubeconformReportError carrying stdout AND stderr", async () => {
-    const exit = await Effect.runPromiseExit(
-      runKubeconform({ dir: "/rendered" }).pipe(
-        Effect.provide(
-          _spawnerFor({
-            stdout: "deployment.apps invalid: missing required field",
-            stderr: "warning: could not resolve schema",
-            exitCode: 1
-          })
+  it.effect("a non-zero exit fails with KubeconformReportError carrying stdout AND stderr", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        runKubeconform({ dir: "/rendered" }).pipe(
+          Effect.provide(
+            _spawnerFor({
+              stdout: "deployment.apps invalid: missing required field",
+              stderr: "warning: could not resolve schema",
+              exitCode: 1
+            })
+          )
         )
       )
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
-      expect(err).toBeInstanceOf(KubeconformReportError)
-      if (err instanceof KubeconformReportError) {
-        expect(err.stdout).toContain("missing required field")
-        expect(err.stderr).toContain("could not resolve schema")
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+        expect(err).toBeInstanceOf(KubeconformReportError)
+        if (err instanceof KubeconformReportError) {
+          expect(err.stdout).toContain("missing required field")
+          expect(err.stderr).toContain("could not resolve schema")
+        }
       }
-    }
-  })
+    }))
 
-  it("a spawn failure (binary missing) fails with KubeconformNotFound", async () => {
-    const exit = await Effect.runPromiseExit(
-      runKubeconform({ dir: "/rendered" }).pipe(Effect.provide(_spawnFails()))
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBeInstanceOf(KubeconformNotFound)
-    }
-  })
+  it.effect("a spawn failure (binary missing) fails with KubeconformNotFound", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        runKubeconform({ dir: "/rendered" }).pipe(Effect.provide(_spawnFails()))
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBeInstanceOf(KubeconformNotFound)
+      }
+    }))
 })

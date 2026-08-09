@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
+import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { describe, expect, it } from "vitest"
 import { renderEnv } from "./buildEnv"
 
 const _writeEnvFile = (root: string, entry: string, body: string) =>
@@ -17,8 +17,8 @@ const _writeEnvFile = (root: string, entry: string, body: string) =>
   })
 
 describe("renderEnv: BundleSetResult env", () => {
-  it("writes per-bundle directories with no Application CR sentinel", async () => {
-    const program = Effect.gen(function*() {
+  it.effect("writes per-bundle directories with no Application CR sentinel", () =>
+    Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-bundle-" })
@@ -57,9 +57,5 @@ export default Bundle.entrypoint(Bundle.fromModules({ modules: [api] as const })
       const applicationFiles = filePaths.filter((p) => p.includes("Application-"))
       expect(apiFiles.length).toBeGreaterThan(0)
       expect(applicationFiles).toEqual([])
-      return rendered
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-
-    await Effect.runPromise(program)
-  })
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

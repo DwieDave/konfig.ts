@@ -1,4 +1,4 @@
-import { Console, Effect } from "effect"
+import { Clock, Console, DateTime, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Argument, Command, Flag } from "../_unstable"
@@ -112,19 +112,20 @@ export const buildCommand = Command.make(
         yield* Console.log(`Rendering env '${args.env}'...`)
       }
 
-      const renderStart = Date.now()
+      const renderStart = yield* Clock.currentTimeMillis
       const renderProgram = renderEnv({ cfg, envName: args.env, ctx })
       const rendered = yield* (args.verbose
         ? renderProgram.pipe(Effect.withSpan(`konfig.render.${args.env}`))
         : renderProgram)
-      const renderMs = Date.now() - renderStart
+      const renderMs = (yield* Clock.currentTimeMillis) - renderStart
 
-      const writeStart = Date.now()
+      const writeStart = yield* Clock.currentTimeMillis
       const written = yield* writeFiles(rendered)
-      const writeMs = Date.now() - writeStart
+      const writeMs = (yield* Clock.currentTimeMillis) - writeStart
 
       if (!args.noCache && cachedInputHash !== undefined) {
         const outputHash = computeOutputHash(rendered.files)
+        const timestamp = yield* DateTime.now.pipe(Effect.map(DateTime.formatIso))
         yield* writeCacheEntry({
           cfg,
           envName: args.env,
@@ -134,7 +135,7 @@ export const buildCommand = Command.make(
             outputHash,
             outDirAbs: rendered.outDirAbs,
             fileCount: written.length,
-            timestamp: new Date().toISOString()
+            timestamp
           }
         })
       }

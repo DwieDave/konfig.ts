@@ -81,19 +81,20 @@ const _loadEnv = (entry: string) =>
     if (program === undefined) {
       return yield* new EnvLoadError({ entry, cause: "default export is missing" })
     }
-    if (!Effect.isEffect(program)) {
+    const isEffectProgram: boolean = Effect.isEffect(program)
+    if (!isEffectProgram) {
       return yield* new EnvLoadError({
         entry,
         cause: "default export is not an Effect — env entries must default-export an AppOfApps or Bundle program Effect"
       })
     }
-    // `Effect.isEffect` proves `program` is an Effect<unknown, unknown, unknown>;
-    // the A/E channels are narrowed here per the env-entry contract (core/README.md).
-    // R is asserted `never` because env entries are user programs whose
-    // requirements are provided downstream by the runtime that runs them.
+    // `isEffectProgram` proves `program` is an Effect; the A/E channels are
+    // narrowed here per the env-entry contract (core/README.md). R is asserted
+    // `never` because env entries are user programs whose requirements are
+    // provided downstream by the runtime that runs them.
     const result = yield* unsafeCoerce<Effect.Effect<EnvResult, AnyRenderError>>(
       program,
-      "Effect.isEffect confirmed above; narrowing the proven Effect's A/E per the env entry contract"
+      "isEffectProgram confirmed above; narrowing the proven Effect's A/E per the env entry contract"
     )
     return result
   })

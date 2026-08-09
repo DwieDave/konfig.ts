@@ -1,5 +1,4 @@
-import { Console, Data, Effect, Option } from "effect"
-import * as path from "node:path"
+import { Console, Data, Effect, Option, Path } from "effect"
 import { Command, Flag } from "../_unstable"
 import { loadChartRegistryEffect } from "../chartRegistry"
 import { resolveCliPaths } from "../cliConfig"
@@ -27,6 +26,7 @@ export const crdExtractCommand = Command.make(
   },
   (flags) =>
     Effect.gen(function*() {
+      const path = yield* Path.Path
       const { cacheDir, outDir, chartsDir, minVersion } = yield* resolveCliPaths
 
       yield* assertHelmVersion(minVersion)
