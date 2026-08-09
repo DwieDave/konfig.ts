@@ -21,7 +21,7 @@ layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         const failure = exit.cause
-        const fails = yield* Schema.encodeUnknownEffect(Schema.UnknownFromJsonString)(failure)
+        const fails = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(failure)
         expect(fails).toContain("CrdInputDecodeError")
       }
     }))

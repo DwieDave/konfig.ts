@@ -78,7 +78,7 @@ describe("Secret", () => {
     Effect.gen(function*() {
       const v = yield* dbCreds
       expect(Object.prototype.toString.call(v.url)).not.toContain("postgres://localhost/api")
-      const json = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(v)
+      const json = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(v)
       expect(json).not.toContain("hunter2")
     }).pipe(
       Effect.provide(

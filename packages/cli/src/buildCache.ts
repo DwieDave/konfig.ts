@@ -164,7 +164,7 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
     const { cfg, envName, ctx } = input
 
     const hash = crypto.createHash("sha256")
-    hash.update(yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(cfg.config))
+    hash.update(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(cfg.config))
     hash.update("\n")
     hash.update(`ctx:${_ctxSignature(ctx)}\n`)
 

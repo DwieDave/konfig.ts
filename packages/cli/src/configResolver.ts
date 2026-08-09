@@ -36,7 +36,7 @@ const _parseConfig = (configPath: string) =>
     const text = yield* fs
       .readFileString(configPath)
       .pipe(Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause })))
-    const parsed = yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(text).pipe(
+    const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
       Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause }))
     )
     return yield* decodeKonfigConfigEffect(parsed).pipe(

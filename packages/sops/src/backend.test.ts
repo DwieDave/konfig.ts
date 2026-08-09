@@ -219,7 +219,7 @@ sops:
       ))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)).toContain("ENC[")
+        expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)).toContain("ENC[")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -289,7 +289,7 @@ ${macOnlyEncrypted === undefined ? "" : `  mac_only_encrypted: ${macOnlyEncrypte
       const exit = yield* renderStagingPassthrough(namespaceMismatchFile(undefined))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)).toContain("mac_only_encrypted")
+        expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)).toContain("mac_only_encrypted")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -391,7 +391,7 @@ describe("Sops.backend recipient input boundary", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("SopsRecipients")
         expect(text).toContain("BoundaryDecodeError")
       }
@@ -477,7 +477,7 @@ sops:
       const exit = yield* runWith(PLAINTEXT_OUTPUT)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("BoundaryDecodeError")
         expect(text).toContain("SopsSecret")
       }
@@ -488,7 +488,7 @@ sops:
       const exit = yield* runWith(ENCRYPTED_BLOCK_PLAINTEXT_VALUES)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("SopsInvocationError")
         expect(text).toContain("ENC[")
       }
@@ -526,7 +526,7 @@ metadata:
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("BoundaryDecodeError")
         expect(text).toContain("SopsSecret")
       }

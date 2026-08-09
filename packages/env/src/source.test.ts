@@ -84,7 +84,7 @@ describe("SecretSource.fromConfig", () => {
       expect(Exit.isFailure(r)).toBe(true)
       if (Exit.isFailure(r)) {
         const err = r.cause.toJSON()
-        const json = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(err)
+        const json = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(err)
         expect(json).toContain("SecretSourceError")
       }
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({})))))
@@ -138,7 +138,7 @@ describe("SecretSource.fromCommand", () => {
       )
       expect(Exit.isFailure(r)).toBe(true)
       if (Exit.isFailure(r)) {
-        const json = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(r.cause)
+        const json = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(r.cause)
         expect(json).toContain("SecretSourceError")
       }
     }))
@@ -154,7 +154,7 @@ describe("SecretSource.fromCommand", () => {
       )
       expect(Exit.isFailure(r)).toBe(true)
       if (Exit.isFailure(r)) {
-        const json = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(r.cause)
+        const json = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(r.cause)
         expect(json).toContain("SecretSourceError")
       }
     }))

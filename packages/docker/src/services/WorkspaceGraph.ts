@@ -61,7 +61,7 @@ const _readPkgJsonIfExists = (
     if (!exists) return undefined
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    return yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(text).pipe(
+    return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
       Effect.map((decoded) =>
         unsafeCoerce<PackageJson>(
           decoded,
@@ -218,7 +218,7 @@ const _parseWorkspacePackage = (
     const pkgPath = p.join(root, relDir, "package.json")
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    return yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(text).pipe(
+    return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
       Effect.map((decoded): Workspace | undefined => {
         const pkg = unsafeCoerce<PackageJson>(
           decoded,

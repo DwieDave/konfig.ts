@@ -12,7 +12,7 @@ const withFs = <A, E>(eff: Effect.Effect<A, E, ReturnType<typeof Effect.gen>>) =
   Effect.provide(eff, NodeServices.layer)
 
 const _causeContains = (cause: unknown, needle: string): boolean => {
-  const encoded = Schema.encodeExit(Schema.UnknownFromJsonString)(cause)
+  const encoded = Schema.encodeExit(Schema.fromJsonString(Schema.Unknown))(cause)
   return Exit.isSuccess(encoded) && encoded.value.includes(needle)
 }
 

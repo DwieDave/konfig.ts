@@ -219,7 +219,7 @@ describe("lower error paths", () => {
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const causeJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const causeJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(causeJson).toContain("BuildScriptMissing")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -237,7 +237,7 @@ describe("lower error paths", () => {
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const causeJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const causeJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(causeJson).toContain("WorkspaceSourceUnknown")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -251,7 +251,7 @@ describe("lower error paths", () => {
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const causeJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const causeJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(causeJson).toContain("SharedRootFileMissing")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -270,7 +270,7 @@ describe("lower error paths", () => {
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const causeJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const causeJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(causeJson).toContain("EngineVersionMissing")
       }
     }).pipe(Effect.provide(NodeServices.layer)))

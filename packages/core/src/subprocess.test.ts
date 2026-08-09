@@ -64,7 +64,7 @@ describe("runProcessString", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         const err = exit.cause
-        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(err)
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(err)
         expect(text).toContain("ProcessError")
         expect(text).toContain("boom: bad flag")
       }
@@ -79,7 +79,7 @@ describe("runProcessString", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("ProcessError")
       }
     }))
@@ -115,7 +115,7 @@ describe("runProcessExit", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("pull failed")
       }
     }))

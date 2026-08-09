@@ -46,7 +46,7 @@ const arbDag = fc
   })
 
 const _causeContains = (cause: unknown, needle: string): boolean => {
-  const encoded = Schema.encodeExit(Schema.UnknownFromJsonString)(cause)
+  const encoded = Schema.encodeExit(Schema.fromJsonString(Schema.Unknown))(cause)
   return Exit.isSuccess(encoded) && encoded.value.includes(needle)
 }
 

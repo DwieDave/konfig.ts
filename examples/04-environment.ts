@@ -80,7 +80,7 @@ const podMainBundle = Effect.gen(function*() {
   const env = yield* apiEnv
   yield* Effect.log(`port from bundle: ${env.port}`)
   yield* Effect.log(`pod from bundle:  ${env.pod}`)
-  const dbUrlJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(env.db.url)
+  const dbUrlJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(env.db.url)
   yield* Effect.log(`db.url is Redacted: ${dbUrlJson}`)
 })
 
@@ -101,7 +101,7 @@ const DbClientLive = Layer.effect(
 
 const podMainSubAtom = Effect.gen(function*() {
   const url = yield* dbCreds.fields.url
-  const urlJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(url)
+  const urlJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(url)
   yield* Effect.log(`db.url sub-config: ${urlJson} (Redacted)`)
 })
 

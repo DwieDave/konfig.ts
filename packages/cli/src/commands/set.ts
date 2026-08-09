@@ -42,7 +42,7 @@ export const setCommand = Command.make(
         .readFileString(file)
         .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))
 
-      const parsed = yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(text).pipe(
+      const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
         Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
       )
 
