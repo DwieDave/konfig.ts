@@ -114,12 +114,12 @@ export interface HandleKind extends Module.HandleKind {
     | Dep.Provide<"App", this["_Name"] & string>
     | Dep.Provide<"Application", this["_Name"] & string>
     | Dep.Provide<"Namespace", this["_Ns"] & string>
-    | (this["_Extra"] & unknown),
+    | this["_Extra"],
     Exclude<
-      this["_R"] & unknown,
+      this["_R"],
       | Dep.Need<"Application", this["_Name"] & string>
       | Dep.Need<"Namespace", this["_Ns"] & string>
-      | (this["_Extra"] & unknown)
+      | this["_Extra"]
     >
   >
 }
@@ -182,16 +182,14 @@ const _ownsLayer = <Name extends string, Ns extends string>(
 /** Normalize the `build` option (Effect or thunk) into a single Effect. */
 const _buildEffect = <R>(
   build: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> | (() => ReadonlyArray<unknown>)
-): Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> =>
-  Effect.isEffect(build) ? build : Effect.sync(build)
+): Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> => Effect.isEffect(build) ? build : Effect.sync(build)
 
 /** Build the Layer that produces this instance's `Application` tag value. */
-const _appLayer = <Name extends string, Ns extends string, R, Extra, InternalOut>(
+const _appLayer = <Name extends string, Ns extends string, R, Extra>(
   tag: Context.Service<Dep.Need<"App", Name>, Application>,
   names: { readonly name: Name; readonly namespace: Ns },
-  opts: ApplicationDefineOptions<Name, Ns, R, Extra>,
-  internalLayer: Layer.Layer<InternalOut>
-): Layer.Layer<Dep.Need<"App", Name>, AnyRenderError, R | Extra> =>
+  opts: ApplicationDefineOptions<Name, Ns, R, Extra>
+): Layer.Layer<Dep.Need<"App", Name>, AnyRenderError, R> =>
   Layer.effect(
     tag,
     _buildEffect(opts.build).pipe(
@@ -207,7 +205,7 @@ const _appLayer = <Name extends string, Ns extends string, R, Extra, InternalOut
         })
       )
     )
-  ).pipe(Layer.provide(internalLayer))
+  )
 
 export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["define"] = <
   const Name extends string,
@@ -230,11 +228,9 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
   const ownsLayer = _ownsLayer(names.name, names.namespace)
   const internalLayer = opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer
 
-  const appLayer = _appLayer(tag, names, opts, internalLayer)
+  const appLayer = _appLayer(tag, names, opts)
 
-  const layer = opts.provides !== undefined
-    ? Layer.mergeAll(appLayer, ownsLayer, opts.provides)
-    : Layer.mergeAll(appLayer, ownsLayer)
+  const layer = appLayer.pipe(Layer.provideMerge(internalLayer))
 
   return unsafeCoerce<
     ApplicationHandle<

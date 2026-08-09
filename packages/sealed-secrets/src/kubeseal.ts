@@ -1,5 +1,5 @@
-import { boundary, ProcessError, processDetail, runProcessString } from "@konfig.ts/core"
-import { Data, Effect, Stream } from "effect"
+import { boundary, processDetail, ProcessError, runProcessString } from "@konfig.ts/core"
+import { Config, Data, Effect, Option, Stream } from "effect"
 import * as YAML from "yaml"
 import { ChildProcess } from "./_unstable"
 import type { SealedSecretScope } from "./crd"
@@ -37,20 +37,16 @@ export interface RunKubesealInput {
   readonly scope: SealedSecretScope
 }
 
-const _readEnv = (name: string): string | undefined => {
-  const v = globalThis.process?.env?.[name]
-  return typeof v === "string" && v.length > 0 ? v : undefined
-}
-
 export const resolveCertPath = (
   input: { readonly certPath?: string }
-): Effect.Effect<string, KubesealCertMissing> => {
-  const fromOpt = input.certPath
-  if (fromOpt !== undefined && fromOpt.length > 0) return Effect.succeed(fromOpt)
-  const fromEnv = _readEnv("KUBESEAL_CERT")
-  if (fromEnv !== undefined) return Effect.succeed(fromEnv)
-  return Effect.fail(new KubesealCertMissing({ hint: "checked opts.certPath, then $KUBESEAL_CERT" }))
-}
+): Effect.Effect<string, KubesealCertMissing> =>
+  Effect.gen(function*() {
+    const fromOpt = input.certPath
+    if (fromOpt !== undefined && fromOpt.length > 0) return fromOpt
+    const fromEnv = yield* Config.string("KUBESEAL_CERT").pipe(Config.option, Effect.orDie)
+    if (Option.isSome(fromEnv) && fromEnv.value.length > 0) return fromEnv.value
+    return yield* new KubesealCertMissing({ hint: "checked opts.certPath, then $KUBESEAL_CERT" })
+  })
 
 export const runKubeseal = (input: RunKubesealInput) =>
   Effect.gen(function*() {

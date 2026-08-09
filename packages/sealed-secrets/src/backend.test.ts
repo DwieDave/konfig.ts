@@ -3,7 +3,7 @@ import { it } from "@effect/vitest"
 import { Yaml } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
-import { Cause, Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Cause, ConfigProvider, Effect, Exit, Layer, Sink, Stream } from "effect"
 import { type Command, isStandardCommand } from "effect/unstable/process/ChildProcess"
 import {
   type ChildProcessHandle,
@@ -133,41 +133,42 @@ describe("SealedSecrets.backend", () => {
   it.effect("reads cert from $KUBESEAL_CERT when certPath omitted", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
-      const original = globalThis.process.env.KUBESEAL_CERT
-      globalThis.process.env.KUBESEAL_CERT = "/from/env.pem"
-      try {
-        const bound = Secret.bind({
-          secret: dbCreds,
-          backend: SealedSecrets.backend({ scope: "namespace-wide" }),
-          source: SecretSource.literal({ data: { url: "u", password: "p" } })
-        })
-        yield* bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink)))
-        const std = sink.lastCmd as { args: ReadonlyArray<string> }
-        expect(std.args.some((a: string) => a === "/from/env.pem")).toBe(true)
-      } finally {
-        if (original === undefined) delete globalThis.process.env.KUBESEAL_CERT
-        else globalThis.process.env.KUBESEAL_CERT = original
-      }
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: SealedSecrets.backend({ scope: "namespace-wide" }),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+      yield* bound.manifest!.render(ctx).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            _makeStubSpawner(sink),
+            ConfigProvider.layer(ConfigProvider.fromEnv({ env: { KUBESEAL_CERT: "/from/env.pem" } }))
+          )
+        )
+      )
+      const std = sink.lastCmd as { args: ReadonlyArray<string> }
+      expect(std.args.some((a: string) => a === "/from/env.pem")).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("fails with RenderError when no cert is available", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
-      const original = globalThis.process.env.KUBESEAL_CERT
-      delete globalThis.process.env.KUBESEAL_CERT
-      try {
-        const bound = Secret.bind({
-          secret: dbCreds,
-          backend: SealedSecrets.backend(),
-          source: SecretSource.literal({ data: { url: "u", password: "p" } })
-        })
-        const exit = yield* Effect.exit(
-          bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink)))
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: SealedSecrets.backend(),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+      const exit = yield* Effect.exit(
+        bound.manifest!.render(ctx).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              _makeStubSpawner(sink),
+              ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }))
+            )
+          )
         )
-        expect(Exit.isFailure(exit)).toBe(true)
-      } finally {
-        if (original !== undefined) globalThis.process.env.KUBESEAL_CERT = original
-      }
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("fails at render time (not bind time) when source is omitted", () =>
@@ -215,7 +216,7 @@ describe("SealedSecrets.backend", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const text = JSON.stringify(exit.cause)
+        const text = Cause.pretty(exit.cause)
         expect(text).toContain("BoundaryDecodeError")
         expect(text).toContain("SealedSecret")
       }

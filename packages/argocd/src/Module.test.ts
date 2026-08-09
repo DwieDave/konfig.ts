@@ -1,5 +1,5 @@
 import { Module } from "@konfig.ts/core"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { describe, expect, expectTypeOf, it } from "vitest"
 import { Application, Sync } from "./index"
 
@@ -9,16 +9,9 @@ const source: Application.ArgoSource = {
   path: "./infra/k8s/manifests/prod/sops-secrets-operator"
 }
 
-const runHandle = <Name extends string, Out, In>(
+const handleEffect = <Name extends string, Out, In>(
   handle: Application.ApplicationHandle<Name, Out, In>
-): Application.Application =>
-  Effect.runSync(
-    (Effect.gen(function*() {
-      return yield* handle
-    }) as Effect.Effect<Application.Application, never, never>).pipe(
-      Effect.provide(handle.layer as Layer.Layer<Out, never, never>)
-    )
-  )
+) => handle.pipe(Effect.provide(handle.layer))
 
 describe("Module.fixedNs({ target: Application.target, ... })", () => {
   const defineSops = Module.fixedNs({
@@ -39,7 +32,7 @@ describe("Module.fixedNs({ target: Application.target, ... })", () => {
 
   it("bakes the configured namespace into every instance", () => {
     const sops = defineSops({ name: "sops-secrets-operator", source })
-    const app = runHandle(sops)
+    const app = Effect.runSync(handleEffect(sops))
 
     expect(app.name).toBe("sops-secrets-operator")
     expect(app.namespace).toBe("sops")
@@ -55,7 +48,7 @@ describe("Module.fixedNs({ target: Application.target, ... })", () => {
       source,
       note: "hello"
     })
-    const app = runHandle(sops)
+    const app = Effect.runSync(handleEffect(sops))
 
     expect(app.manifests).toEqual([
       { kind: "ServiceAccount", name: "sops-secrets-operator", namespace: "sops", note: "hello" }
@@ -70,7 +63,7 @@ describe("Module.fixedNs({ target: Application.target, ... })", () => {
     })
 
     const handle = defineWithEffect({ name: "demo-app", source })
-    const app = runHandle(handle)
+    const app = Effect.runSync(handleEffect(handle))
 
     expect(app.manifests).toEqual([{ kind: "Cm", name: "demo-app", namespace: "demo" }])
   })
@@ -117,8 +110,8 @@ describe("Module.dynamicNs({ target: Application.target, ... })", () => {
       image: "ghcr.io/example/api:1.0"
     })
 
-    expect(runHandle(apiProd).namespace).toBe("prod")
-    expect(runHandle(apiStaging).namespace).toBe("staging")
+    expect(Effect.runSync(handleEffect(apiProd)).namespace).toBe("prod")
+    expect(Effect.runSync(handleEffect(apiStaging)).namespace).toBe("staging")
   })
 
   it("rejects bare `string` for namespace at the call site", () => {
