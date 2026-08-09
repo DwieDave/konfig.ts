@@ -2,7 +2,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { RenderContext, Yaml } from "@konfig.ts/core"
 import { Downward, Literal, Secret, SecretSource } from "@konfig.ts/env"
 import { Environment, Workload } from "@konfig.ts/k8s"
-import { ConfigProvider, Context, Effect, Layer, Redacted } from "effect"
+import { ConfigProvider, Context, Effect, Layer, Redacted, Schema } from "effect"
 
 const dbCreds = Secret.define({
   name: "db-creds",
@@ -80,7 +80,8 @@ const podMainBundle = Effect.gen(function*() {
   const env = yield* apiEnv
   yield* Effect.log(`port from bundle: ${env.port}`)
   yield* Effect.log(`pod from bundle:  ${env.pod}`)
-  yield* Effect.log(`db.url is Redacted: ${String(env.db.url)}`)
+  const dbUrlJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(env.db.url)
+  yield* Effect.log(`db.url is Redacted: ${dbUrlJson}`)
 })
 
 interface DbClientShape {
@@ -100,7 +101,8 @@ const DbClientLive = Layer.effect(
 
 const podMainSubAtom = Effect.gen(function*() {
   const url = yield* dbCreds.fields.url
-  yield* Effect.log(`db.url sub-config: ${String(url)} (Redacted)`)
+  const urlJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(url)
+  yield* Effect.log(`db.url sub-config: ${urlJson} (Redacted)`)
 })
 
 const fakeEnv = ConfigProvider.layer(

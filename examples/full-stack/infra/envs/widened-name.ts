@@ -12,7 +12,7 @@
  * Not registered in konfig.json — pure typing regression.
  */
 import { Application } from "@konfig.ts/argocd"
-import { Effect } from "effect"
+import { Config, Effect } from "effect"
 import { cluster } from "../cluster"
 
 // Source helper.
@@ -34,7 +34,7 @@ void _ok
 // (1) `name` flows in from a string variable; `Name` widens to
 //     `string` and `LiteralName<string>` resolves to the branded
 //     error type, so the call below fails to typecheck.
-const dynamicName: string = process.env.MY_APP_NAME ?? "api"
+const dynamicName: string = Effect.runSync(Config.string("MY_APP_NAME").pipe(Config.withDefault("api")))
 const _widened = Application.define({
   // @ts-expect-error Application name must be a string literal — wrapper widened `Name` to `string`.
   name: dynamicName,
@@ -45,7 +45,7 @@ const _widened = Application.define({
 void _widened
 
 // (2) Same gotcha at the namespace slot.
-const dynamicNs: string = process.env.MY_NS ?? "app"
+const dynamicNs: string = Effect.runSync(Config.string("MY_NS").pipe(Config.withDefault("app")))
 const _widenedNs = Application.define({
   name: "api",
   // @ts-expect-error Application namespace must be a string literal.

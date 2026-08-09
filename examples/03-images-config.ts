@@ -47,4 +47,4 @@ const program = Effect.gen(function*() {
   }).pipe(Effect.catch(() => Effect.log(`✗ unknown top-level key "version" → rejected`)))
 })
 
-Effect.runPromise(program)
+await Effect.runPromise(program)

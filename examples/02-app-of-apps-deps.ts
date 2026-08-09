@@ -70,4 +70,4 @@ const report = Effect.gen(function*() {
   }
 })
 
-Effect.runPromise(report)
+await Effect.runPromise(report)

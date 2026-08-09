@@ -23,9 +23,9 @@ import { Cause, Effect, Redacted } from "effect"
 const config = await Effect.runPromise(
   Environment.runtime(apiEnv).pipe(
     Effect.catchCause((cause): Effect.Effect<never> =>
-      Effect.sync((): never => {
-        console.error(`api: failed to decode env contract — ${Cause.pretty(cause)}`)
-        console.error(
+      Effect.gen(function*() {
+        yield* Effect.logError(`api: failed to decode env contract — ${Cause.pretty(cause)}`)
+        yield* Effect.logError(
           `api: check that every env var declared in apiEnv is set (HTTP_PORT, LOG_LEVEL, NODE_ENV, POD_NAME, DATABASE_*, S3_*, JWT_SIGNING_KEY)`
         )
         return process.exit(78)
@@ -55,4 +55,4 @@ Bun.serve({
   }
 })
 
-console.log(`api listening on :${port} (pod=${podName}, logLevel=${logLevel})`)
+await Effect.runPromise(Effect.log(`api listening on :${port} (pod=${podName}, logLevel=${logLevel})`))
