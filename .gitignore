@@ -8,9 +8,10 @@ dist
 *.log
 .turbo
 .konfig
+.docs/
 scratchpad/
 .claude/
-.docs/workflows/
 /CLAUDE.md
 /AGENTS.md
 coverage
+.docs/
