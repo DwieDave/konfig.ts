@@ -17,7 +17,6 @@
   },
   "devDependencies": {
     "@konfig.ts/docker": "workspace:*",
-    "@types/bun": "catalog:",
-    "typescript": "catalog:"
+    "@types/bun": "catalog:"
   }
 }
