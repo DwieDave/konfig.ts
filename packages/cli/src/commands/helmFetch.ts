@@ -17,7 +17,13 @@ interface FetchOneInput {
   readonly cacheDir: string
 }
 
-const _fetchOne = (input: FetchOneInput) =>
+/**
+ * Fetches a single chart tarball into `input.cacheDir`, skipping the helm
+ * subprocess entirely when the tarball is already cached. Exported so the
+ * cache-hit/cache-miss decision and the argv it plans can be tested
+ * against a stubbed `ChildProcessSpawner` without invoking real helm.
+ */
+export const _fetchOne = (input: FetchOneInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
@@ -31,6 +37,41 @@ const _fetchOne = (input: FetchOneInput) =>
     yield* runProcessExit(cmd)
   })
 
+interface HelmFetchFlags {
+  readonly all: boolean
+}
+
+/**
+ * The `konfig helm fetch` handler body, exported separately from
+ * `Command.make` so it can be exercised directly against a temp charts
+ * dir and a stubbed subprocess spawner in tests.
+ */
+export const helmFetchEffect = (flags: HelmFetchFlags) =>
+  Effect.gen(function*() {
+    const { cacheDir, chartsDir, minVersion } = yield* resolveCliPaths
+
+    yield* assertHelmVersion(minVersion)
+
+    if (!flags.all) {
+      yield* Console.error("Specify --all to fetch all charts")
+      return yield* new MissingAllFlag()
+    }
+
+    const registry = yield* loadChartRegistryEffect(chartsDir)
+
+    for (const def of registry) {
+      yield* Console.log(`Fetching ${def.chart}@${def.version}...`)
+      yield* _fetchOne({
+        repo: def.repo,
+        chart: def.chart,
+        version: def.version,
+        cacheDir
+      })
+    }
+
+    yield* Console.log(`Done. Cache at ${cacheDir}`)
+  })
+
 export const helmFetchCommand = Command.make(
   "fetch",
   {
@@ -39,31 +80,7 @@ export const helmFetchCommand = Command.make(
       Flag.withDefault(false)
     )
   },
-  (flags) =>
-    Effect.gen(function*() {
-      const { cacheDir, chartsDir, minVersion } = yield* resolveCliPaths
-
-      yield* assertHelmVersion(minVersion)
-
-      if (!flags.all) {
-        yield* Console.error("Specify --all to fetch all charts")
-        return yield* new MissingAllFlag()
-      }
-
-      const registry = yield* loadChartRegistryEffect(chartsDir)
-
-      for (const def of registry) {
-        yield* Console.log(`Fetching ${def.chart}@${def.version}...`)
-        yield* _fetchOne({
-          repo: def.repo,
-          chart: def.chart,
-          version: def.version,
-          cacheDir
-        })
-      }
-
-      yield* Console.log(`Done. Cache at ${cacheDir}`)
-    })
+  (flags) => helmFetchEffect(flags)
 ).pipe(Command.withDescription("Pre-fetch Helm chart tarballs into the local cache"))
 
 export const helmCommand = Command.make("helm", {}, () => Console.log("Run helm --help for available subcommands"))

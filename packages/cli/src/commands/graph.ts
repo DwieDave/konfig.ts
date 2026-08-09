@@ -64,6 +64,73 @@ const _detectWidth = (override: Option.Option<number>): number => {
   return typeof cols === "number" && cols > 0 ? cols : 100
 }
 
+export interface RunGraphArgs {
+  readonly cwd: string
+  readonly target: Option.Option<string>
+  readonly withDev: boolean
+  readonly full: boolean
+  readonly width: Option.Option<number>
+}
+
+export const runGraph = (
+  args: RunGraphArgs
+) =>
+  Effect.gen(function*() {
+    const p = yield* Path
+    const root = yield* findRoot(p.resolve(args.cwd))
+    const workspaces = yield* allWorkspaces(root)
+    const nodes: GraphNode[] = workspaces.map((w) => ({
+      name: w.name,
+      relDir: w.relDir,
+      hasBuildScript: w.hasBuildScript
+    }))
+    const edges = _buildEdges(workspaces)
+    let targetName: string | undefined = undefined
+    if (Option.isSome(args.target)) {
+      const raw = args.target.value
+      const resolved = _resolveTargetName(workspaces, raw)
+      if (!resolved) {
+        return yield* new GraphTargetNotFound({
+          target: raw,
+          candidates: workspaces.map((w) => w.name)
+        })
+      }
+      targetName = resolved
+    }
+    const cycle = detectCycle({ nodes, edges, withDev: args.withDev })
+    if (cycle !== null) {
+      return yield* new CircularWorkspaceDep({ cycle: cycle.slice() })
+    }
+    const width = _detectWidth(args.width)
+    const out = renderGraph({
+      nodes,
+      edges,
+      target: targetName,
+      width,
+      withDev: args.withDev,
+      reduce: !args.full
+    })
+    yield* Console.log(out)
+  }).pipe(
+    Effect.catchTags({
+      GraphTargetNotFound: (err) =>
+        Effect.gen(function*() {
+          yield* Console.error(
+            `error: workspace '${err.target}' not found. Available workspaces:`
+          )
+          for (const name of err.candidates) yield* Console.error(`  ${name}`)
+          return yield* err
+        }),
+      CircularWorkspaceDep: (err) =>
+        Effect.gen(function*() {
+          yield* Console.error(
+            `error: workspace cycle detected: ${err.cycle.join(" → ")}`
+          )
+          return yield* err
+        })
+    })
+  )
+
 export const graphCommand = Command.make(
   "graph",
   {
@@ -91,62 +158,7 @@ export const graphCommand = Command.make(
       Flag.optional
     )
   },
-  (args) =>
-    Effect.gen(function*() {
-      const p = yield* Path
-      const root = yield* findRoot(p.resolve(process.cwd()))
-      const workspaces = yield* allWorkspaces(root)
-      const nodes: GraphNode[] = workspaces.map((w) => ({
-        name: w.name,
-        relDir: w.relDir,
-        hasBuildScript: w.hasBuildScript
-      }))
-      const edges = _buildEdges(workspaces)
-      let targetName: string | undefined = undefined
-      if (Option.isSome(args.target)) {
-        const raw = args.target.value
-        const resolved = _resolveTargetName(workspaces, raw)
-        if (!resolved) {
-          return yield* new GraphTargetNotFound({
-            target: raw,
-            candidates: workspaces.map((w) => w.name)
-          })
-        }
-        targetName = resolved
-      }
-      const cycle = detectCycle({ nodes, edges, withDev: args.withDev })
-      if (cycle !== null) {
-        return yield* new CircularWorkspaceDep({ cycle: cycle.slice() })
-      }
-      const width = _detectWidth(args.width)
-      const out = renderGraph({
-        nodes,
-        edges,
-        target: targetName,
-        width,
-        withDev: args.withDev,
-        reduce: !args.full
-      })
-      yield* Console.log(out)
-    }).pipe(
-      Effect.catchTags({
-        GraphTargetNotFound: (err) =>
-          Effect.gen(function*() {
-            yield* Console.error(
-              `error: workspace '${err.target}' not found. Available workspaces:`
-            )
-            for (const name of err.candidates) yield* Console.error(`  ${name}`)
-            return yield* err
-          }),
-        CircularWorkspaceDep: (err) =>
-          Effect.gen(function*() {
-            yield* Console.error(
-              `error: workspace cycle detected: ${err.cycle.join(" → ")}`
-            )
-            return yield* err
-          })
-      })
-    )
+  (args) => runGraph({ ...args, cwd: process.cwd() })
 ).pipe(
   Command.withDescription(
     "Print an ASCII graph of the workspace dependency closure (or the whole monorepo when no target given)"

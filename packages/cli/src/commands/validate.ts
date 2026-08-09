@@ -1,3 +1,4 @@
+import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
 import { Argument, Command, Flag } from "../_unstable"
 import { renderEnv } from "../buildEnv"
@@ -9,6 +10,54 @@ export class StructuralValidationFailed extends Data.TaggedError("StructuralVali
   readonly env: string
   readonly issueCount: number
 }> {}
+
+export interface RunValidateInput {
+  readonly cfg: ResolvedKonfigConfig
+  readonly envName: string
+  readonly ctx: RenderContext
+  readonly strict: boolean
+  readonly ignoreMissingSchemas: boolean
+}
+
+/**
+ * The validate command's render + structural (and optional kubeconform)
+ * validation pipeline, factored out of `Command.make` so it can be
+ * driven with a directly-constructed `ResolvedKonfigConfig` (bypassing
+ * `resolveConfig()`'s cwd-search) in tests.
+ */
+export const runValidate = (input: RunValidateInput) =>
+  Effect.gen(function*() {
+    const { cfg, ctx, envName, ignoreMissingSchemas, strict } = input
+    const rendered = yield* renderEnv({ cfg, envName, ctx })
+
+    const allIssues = yield* Effect.all(
+      rendered.files.map((f) => validateManifestFile({ file: f.path, content: f.content })),
+      { concurrency: "unbounded" }
+    )
+    const issues = allIssues.flat()
+    if (issues.length > 0) {
+      for (const issue of issues) {
+        yield* Console.error(
+          `${issue.file} (doc ${issue.doc}) ${issue.path.join(".")}: ${issue.message}`
+        )
+      }
+      return yield* new StructuralValidationFailed({
+        env: envName,
+        issueCount: issues.length
+      })
+    }
+
+    yield* Console.log(
+      `OK — env '${envName}': ${rendered.files.length} file(s) pass structural validation`
+    )
+
+    if (strict) {
+      yield* Console.log(`Running kubeconform -strict against ${rendered.outDirAbs}...`)
+      const extraArgs = ignoreMissingSchemas ? (["-ignore-missing-schemas"] as const) : []
+      yield* runKubeconform({ dir: rendered.outDirAbs, extraArgs })
+      yield* Console.log(`kubeconform: OK`)
+    }
+  })
 
 export const validateCommand = Command.make(
   "validate",
@@ -32,35 +81,13 @@ export const validateCommand = Command.make(
     Effect.gen(function*() {
       const cfg = yield* resolveConfig()
       const ctx = renderContextFromFlags({ env: args.env, flags: args })
-      const rendered = yield* renderEnv({ cfg, envName: args.env, ctx })
-
-      const allIssues = yield* Effect.all(
-        rendered.files.map((f) => validateManifestFile({ file: f.path, content: f.content })),
-        { concurrency: "unbounded" }
-      )
-      const issues = allIssues.flat()
-      if (issues.length > 0) {
-        for (const issue of issues) {
-          yield* Console.error(
-            `${issue.file} (doc ${issue.doc}) ${issue.path.join(".")}: ${issue.message}`
-          )
-        }
-        return yield* new StructuralValidationFailed({
-          env: args.env,
-          issueCount: issues.length
-        })
-      }
-
-      yield* Console.log(
-        `OK — env '${args.env}': ${rendered.files.length} file(s) pass structural validation`
-      )
-
-      if (args.strict) {
-        yield* Console.log(`Running kubeconform -strict against ${rendered.outDirAbs}...`)
-        const extraArgs = args.ignoreMissingSchemas ? (["-ignore-missing-schemas"] as const) : []
-        yield* runKubeconform({ dir: rendered.outDirAbs, extraArgs })
-        yield* Console.log(`kubeconform: OK`)
-      }
+      return yield* runValidate({
+        cfg,
+        envName: args.env,
+        ctx,
+        strict: args.strict,
+        ignoreMissingSchemas: args.ignoreMissingSchemas
+      })
     })
 ).pipe(
   Command.withDescription(

@@ -115,4 +115,35 @@ describe("formatDiff (FR-3.4)", () => {
     const out = formatDiff({ result: diffFiles({ left, right }), format: "json" })
     expect(() => JSON.parse(out)).not.toThrow()
   })
+
+  it("returns empty string when nothing changed", () => {
+    const left = { "Pod-a.yaml": "kind: Pod\nmetadata:\n  name: a\n" }
+    const out = formatDiff({ result: diffFiles({ left, right: left }) })
+    expect(out).toBe("")
+  })
+
+  it("detail mode on a single-doc file prints full left/right YAML", () => {
+    const left = { "Pod-a.yaml": "kind: Pod\nmetadata:\n  name: a\n" }
+    const right = { "Pod-a.yaml": "kind: Pod\nmetadata:\n  name: b\n" }
+    const out = formatDiff({ result: diffFiles({ left, right }), format: "detail" })
+    expect(out).toContain("left:")
+    expect(out).toContain("right:")
+    expect(out).toContain("name: a")
+    expect(out).toContain("name: b")
+  })
+
+  it("detail mode on a multi-doc file prints per-document YAML and skips Same docs", () => {
+    const left = {
+      "multi.yaml":
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\ndata:\n  k: v\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: svc\n"
+    }
+    const right = {
+      "multi.yaml":
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\ndata:\n  k: v2\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: svc\n"
+    }
+    const out = formatDiff({ result: diffFiles({ left, right }), format: "detail" })
+    expect(out).toContain("[doc ConfigMap||cm] Changed")
+    expect(out).not.toContain("[doc Service||svc]")
+    expect(out).toContain("k: v2")
+  })
 })

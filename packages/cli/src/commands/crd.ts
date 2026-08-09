@@ -15,34 +15,59 @@ export class CrdDrift extends Data.TaggedError("CrdDrift")<{
   readonly drifted: ReadonlyArray<string>
 }> {}
 
-export const crdExtractCommand = Command.make(
-  "extract",
-  {
-    release: Flag.string("release").pipe(Flag.withDescription("Chart release id"), Flag.optional),
-    all: Flag.boolean("all").pipe(
-      Flag.withDescription("Extract for all charts"),
-      Flag.withDefault(false)
-    )
-  },
-  (flags) =>
-    Effect.gen(function*() {
-      const path = yield* Path.Path
-      const { cacheDir, outDir, chartsDir, minVersion } = yield* resolveCliPaths
+const _crdExtractFlags = {
+  release: Flag.string("release").pipe(Flag.withDescription("Chart release id"), Flag.optional),
+  all: Flag.boolean("all").pipe(
+    Flag.withDescription("Extract for all charts"),
+    Flag.withDefault(false)
+  )
+}
 
-      yield* assertHelmVersion(minVersion)
+export interface CrdExtractFlags {
+  readonly release: Option.Option<string>
+  readonly all: boolean
+}
 
-      const registry = yield* loadChartRegistryEffect(chartsDir)
+/**
+ * Underlying effect behind `crd extract`, exported separately from
+ * `Command.make` so it can be driven directly in tests over a temp
+ * config tree without spawning the real CLI binary.
+ */
+export const crdExtractEffect = (flags: CrdExtractFlags) =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path
+    const { cacheDir, outDir, chartsDir, minVersion } = yield* resolveCliPaths
 
-      const releaseId = Option.getOrUndefined(flags.release)
+    yield* assertHelmVersion(minVersion)
 
-      if (releaseId !== undefined) {
-        const def = registry.find((r) => r.id === releaseId)
-        if (!def) {
-          yield* Console.error(
-            `Release '${releaseId}' not found in ${chartsDir}. Available: ${registry.map((r) => r.id).join(", ")}`
-          )
-          return yield* new ReleaseNotFound({ releaseId })
-        }
+    const registry = yield* loadChartRegistryEffect(chartsDir)
+
+    const releaseId = Option.getOrUndefined(flags.release)
+
+    if (releaseId !== undefined) {
+      const def = registry.find((r) => r.id === releaseId)
+      if (!def) {
+        yield* Console.error(
+          `Release '${releaseId}' not found in ${chartsDir}. Available: ${registry.map((r) => r.id).join(", ")}`
+        )
+        return yield* new ReleaseNotFound({ releaseId })
+      }
+      yield* Console.log(`Extracting CRDs for ${def.chart}@${def.version}...`)
+      yield* extractCrdsEffect({
+        repo: def.repo,
+        chart: def.chart,
+        version: def.version,
+        id: def.id,
+        outDir,
+        cacheDir
+      })
+      yield* Console.log(`Written to ${path.join(outDir, `${def.id}.ts`)}`)
+    } else if (flags.all) {
+      if (registry.length === 0) {
+        yield* Console.log(`No chart definitions found in ${chartsDir}`)
+        return
+      }
+      for (const def of registry) {
         yield* Console.log(`Extracting CRDs for ${def.chart}@${def.version}...`)
         yield* extractCrdsEffect({
           repo: def.repo,
@@ -52,65 +77,59 @@ export const crdExtractCommand = Command.make(
           outDir,
           cacheDir
         })
-        yield* Console.log(`Written to ${path.join(outDir, `${def.id}.ts`)}`)
-      } else if (flags.all) {
-        if (registry.length === 0) {
-          yield* Console.log(`No chart definitions found in ${chartsDir}`)
-          return
-        }
-        for (const def of registry) {
-          yield* Console.log(`Extracting CRDs for ${def.chart}@${def.version}...`)
-          yield* extractCrdsEffect({
-            repo: def.repo,
-            chart: def.chart,
-            version: def.version,
-            id: def.id,
-            outDir,
-            cacheDir
-          })
-        }
-        yield* Console.log(`Done. Generated files in ${outDir}`)
-      } else {
-        yield* Console.error("Specify --release <id> or --all")
-        return yield* new MissingCrdFlags()
       }
-    })
-).pipe(Command.withDescription("Extract CRD TypeScript types from Helm charts"))
-
-export const crdVerifyCommand = Command.make("verify", {}, () =>
-  Effect.gen(function*() {
-    const { cacheDir, outDir, chartsDir, minVersion } = yield* resolveCliPaths
-
-    yield* assertHelmVersion(minVersion)
-
-    const registry = yield* loadChartRegistryEffect(chartsDir)
-
-    if (registry.length === 0) {
-      yield* Console.log("No chart definitions found — nothing to verify")
-      return
-    }
-
-    const releases = registry.map((r) => ({
-      repo: r.repo,
-      chart: r.chart,
-      version: r.version,
-      id: r.id,
-      outDir,
-      cacheDir
-    }))
-
-    yield* Console.log(`Verifying ${releases.length} chart(s) against ${outDir}...`)
-
-    const drifted = yield* verifyCrdsEffect({ releases, committedDir: outDir })
-
-    if (drifted.length > 0) {
-      yield* Console.error(`CRD drift detected in: ${drifted.join(", ")}`)
-      yield* Console.error("Run `konfig crd extract --all` to regenerate")
-      return yield* new CrdDrift({ drifted })
+      yield* Console.log(`Done. Generated files in ${outDir}`)
     } else {
-      yield* Console.log("OK — all CRD files match")
+      yield* Console.error("Specify --release <id> or --all")
+      return yield* new MissingCrdFlags()
     }
-  })).pipe(Command.withDescription("Verify committed CRD types match current charts"))
+  })
+
+export const crdExtractCommand = Command.make("extract", _crdExtractFlags, crdExtractEffect).pipe(
+  Command.withDescription("Extract CRD TypeScript types from Helm charts")
+)
+
+/**
+ * Underlying effect behind `crd verify`, exported separately from
+ * `Command.make` for the same reason as `crdExtractEffect`.
+ */
+export const crdVerifyEffect = Effect.gen(function*() {
+  const { cacheDir, outDir, chartsDir, minVersion } = yield* resolveCliPaths
+
+  yield* assertHelmVersion(minVersion)
+
+  const registry = yield* loadChartRegistryEffect(chartsDir)
+
+  if (registry.length === 0) {
+    yield* Console.log("No chart definitions found — nothing to verify")
+    return
+  }
+
+  const releases = registry.map((r) => ({
+    repo: r.repo,
+    chart: r.chart,
+    version: r.version,
+    id: r.id,
+    outDir,
+    cacheDir
+  }))
+
+  yield* Console.log(`Verifying ${releases.length} chart(s) against ${outDir}...`)
+
+  const drifted = yield* verifyCrdsEffect({ releases, committedDir: outDir })
+
+  if (drifted.length > 0) {
+    yield* Console.error(`CRD drift detected in: ${drifted.join(", ")}`)
+    yield* Console.error("Run `konfig crd extract --all` to regenerate")
+    return yield* new CrdDrift({ drifted })
+  } else {
+    yield* Console.log("OK — all CRD files match")
+  }
+})
+
+export const crdVerifyCommand = Command.make("verify", {}, () => crdVerifyEffect).pipe(
+  Command.withDescription("Verify committed CRD types match current charts")
+)
 
 export const crdCommand = Command.make("crd", {}, () => Console.log("Run crd --help for available subcommands")).pipe(
   Command.withSubcommands([crdExtractCommand, crdVerifyCommand]),

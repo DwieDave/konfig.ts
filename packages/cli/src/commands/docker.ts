@@ -13,28 +13,28 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Argument, Command, Flag } from "../_unstable"
 
-class SpecImportError extends Data.TaggedError("SpecImportError")<{
+export class SpecImportError extends Data.TaggedError("SpecImportError")<{
   readonly specPath: string
   readonly cause: unknown
 }> {}
 
-class SpecNotADockerApp extends Data.TaggedError("SpecNotADockerApp")<{
+export class SpecNotADockerApp extends Data.TaggedError("SpecNotADockerApp")<{
   readonly specPath: string
 }> {}
 
-class DiffDrift extends Data.TaggedError("DiffDrift")<{
+export class DiffDrift extends Data.TaggedError("DiffDrift")<{
   readonly target: string
   readonly kind: "prod" | "dev"
 }> {}
 
-interface SpecLoad {
+export interface SpecLoad {
   readonly app: import("@konfig.ts/docker").DockerApp
   readonly targetAbs: string
   readonly specPath: string
   readonly root: string
 }
 
-const _loadSpec = (
+export const loadSpec = (
   targetArg: string
 ): Effect.Effect<
   SpecLoad,
@@ -61,28 +61,36 @@ const _loadSpec = (
     return { app, targetAbs, specPath, root }
   })
 
-const _emitFor = (load: SpecLoad) =>
+export const emitFor = (load: SpecLoad) =>
   emit({ spec: { ...load.app.spec, target: load.targetAbs }, specPath: load.specPath })
 
-const _writeAtomic = (
-  fs: FileSystem,
-  p: Path,
-  path: string,
-  content: string
-): Effect.Effect<void, DockerWriteError> =>
+export interface WriteAtomicInput {
+  readonly fs: FileSystem
+  readonly p: Path
+  readonly path: string
+  readonly content: string
+}
+
+export const writeAtomic = (input: WriteAtomicInput): Effect.Effect<void, DockerWriteError> =>
   Effect.gen(function*() {
+    const { content, fs, p, path } = input
     const tmp = `${path}.tmp.${process.pid}`
     yield* fs.writeFileString(tmp, content)
     yield* fs.rename(tmp, path)
     void p
-  }).pipe(Effect.mapError((cause) => new DockerWriteError({ path, cause })))
+  }).pipe(Effect.mapError((cause) => new DockerWriteError({ path: input.path, cause })))
 
-const _writeOne = (
-  dest: string,
-  content: string,
-  force: boolean
+export interface WriteOneInput {
+  readonly dest: string
+  readonly content: string
+  readonly force: boolean
+}
+
+export const writeOne = (
+  input: WriteOneInput
 ): Effect.Effect<{ written: boolean }, DockerWriteRefused | DockerWriteError, FileSystem | Path> =>
   Effect.gen(function*() {
+    const { content, dest, force } = input
     const fs = yield* FileSystem
     const p = yield* Path
     const existed = yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false))
@@ -97,8 +105,31 @@ const _writeOne = (
       }
       if (head.managed && existing === content) return { written: false }
     }
-    yield* _writeAtomic(fs, p, dest, content)
+    yield* writeAtomic({ fs, p, path: dest, content })
     return { written: true }
+  })
+
+export interface PreviewArgs {
+  readonly target: string
+  readonly prodOnly: boolean
+  readonly devOnly: boolean
+}
+
+export const previewEffect = (
+  args: PreviewArgs
+): Effect.Effect<
+  void,
+  SpecImportError | SpecNotADockerApp | import("@konfig.ts/docker").AnyDockerError,
+  FileSystem | Path
+> =>
+  Effect.gen(function*() {
+    const load = yield* loadSpec(args.target)
+    const e = yield* emitFor(load)
+    if (!args.devOnly) yield* Console.log(e.dockerfile)
+    if (!args.prodOnly && e.dockerfileDev) {
+      if (!args.devOnly) yield* Console.log("\n# ---- Dockerfile.dev ----\n")
+      yield* Console.log(e.dockerfileDev)
+    }
   })
 
 export const previewCommand = Command.make(
@@ -114,17 +145,46 @@ export const previewCommand = Command.make(
       Flag.withDefault(false)
     )
   },
-  (args) =>
-    Effect.gen(function*() {
-      const load = yield* _loadSpec(args.target)
-      const e = yield* _emitFor(load)
-      if (!args.devOnly) yield* Console.log(e.dockerfile)
-      if (!args.prodOnly && e.dockerfileDev) {
-        if (!args.devOnly) yield* Console.log("\n# ---- Dockerfile.dev ----\n")
-        yield* Console.log(e.dockerfileDev)
-      }
-    })
+  (args) => previewEffect(args)
 ).pipe(Command.withDescription("Render Dockerfile(s) for a target to stdout"))
+
+export interface WriteArgs {
+  readonly target: string
+  readonly outDir: { readonly _tag: "Some"; readonly value: string } | { readonly _tag: "None" }
+  readonly prodOnly: boolean
+  readonly devOnly: boolean
+  readonly force: boolean
+}
+
+export const writeEffect = (
+  args: WriteArgs
+): Effect.Effect<
+  void,
+  | SpecImportError
+  | SpecNotADockerApp
+  | import("@konfig.ts/docker").AnyDockerError
+  | DockerWriteRefused
+  | DockerWriteError,
+  FileSystem | Path
+> =>
+  Effect.gen(function*() {
+    const p = yield* Path
+    const load = yield* loadSpec(args.target)
+    const e = yield* emitFor(load)
+    const outDirAbs = args.outDir._tag === "Some"
+      ? p.resolve(process.cwd(), args.outDir.value)
+      : load.targetAbs
+    if (!args.devOnly) {
+      const dest = p.join(outDirAbs, "Dockerfile")
+      const r = yield* writeOne({ dest, content: e.dockerfile, force: args.force })
+      yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`)
+    }
+    if (!args.prodOnly && e.dockerfileDev) {
+      const dest = p.join(outDirAbs, "Dockerfile.dev")
+      const r = yield* writeOne({ dest, content: e.dockerfileDev, force: args.force })
+      yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`)
+    }
+  })
 
 export const writeCommand = Command.make(
   "write",
@@ -141,35 +201,20 @@ export const writeCommand = Command.make(
       Flag.withDefault(false)
     )
   },
-  (args) =>
-    Effect.gen(function*() {
-      const p = yield* Path
-      const load = yield* _loadSpec(args.target)
-      const e = yield* _emitFor(load)
-      const outDirAbs = args.outDir._tag === "Some"
-        ? p.resolve(process.cwd(), args.outDir.value)
-        : load.targetAbs
-      if (!args.devOnly) {
-        const dest = p.join(outDirAbs, "Dockerfile")
-        const r = yield* _writeOne(dest, e.dockerfile, args.force)
-        yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`)
-      }
-      if (!args.prodOnly && e.dockerfileDev) {
-        const dest = p.join(outDirAbs, "Dockerfile.dev")
-        const r = yield* _writeOne(dest, e.dockerfileDev, args.force)
-        yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`)
-      }
-    })
+  (args) => writeEffect(args)
 ).pipe(Command.withDescription("Write Dockerfile + Dockerfile.dev next to a target"))
 
-const _diffOne = (
-  dest: string,
-  emitted: string,
-  kind: "prod" | "dev",
-  target: string,
-  format: DiffFormat
-): Effect.Effect<void, DiffDrift, FileSystem | Path> =>
+export interface DiffOneInput {
+  readonly dest: string
+  readonly emitted: string
+  readonly kind: "prod" | "dev"
+  readonly target: string
+  readonly format: DiffFormat
+}
+
+export const diffOne = (input: DiffOneInput): Effect.Effect<void, DiffDrift, FileSystem | Path> =>
   Effect.gen(function*() {
+    const { dest, emitted, format, kind, target } = input
     const fs = yield* FileSystem
     const onDisk = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
     const head = extractHeader(onDisk)
@@ -184,6 +229,42 @@ const _diffOne = (
     return yield* new DiffDrift({ target, kind })
   })
 
+export interface DiffArgs {
+  readonly target: string
+  readonly format: DiffFormat
+}
+
+export const diffEffect = (
+  args: DiffArgs
+): Effect.Effect<
+  void,
+  SpecImportError | SpecNotADockerApp | import("@konfig.ts/docker").AnyDockerError | DiffDrift,
+  FileSystem | Path
+> =>
+  Effect.gen(function*() {
+    const p = yield* Path
+    const load = yield* loadSpec(args.target)
+    const e = yield* emitFor(load)
+    const fmt = args.format
+    yield* diffOne({
+      dest: p.join(load.targetAbs, "Dockerfile"),
+      emitted: e.dockerfile,
+      kind: "prod",
+      target: args.target,
+      format: fmt
+    })
+    if (e.dockerfileDev) {
+      yield* diffOne({
+        dest: p.join(load.targetAbs, "Dockerfile.dev"),
+        emitted: e.dockerfileDev,
+        kind: "dev",
+        target: args.target,
+        format: fmt
+      })
+    }
+    yield* Console.log(`OK — ${args.target} matches`)
+  })
+
 export const diffCommand = Command.make(
   "diff",
   {
@@ -193,24 +274,7 @@ export const diffCommand = Command.make(
       Flag.withDefault("summary" as const)
     )
   },
-  (args) =>
-    Effect.gen(function*() {
-      const p = yield* Path
-      const load = yield* _loadSpec(args.target)
-      const e = yield* _emitFor(load)
-      const fmt = args.format
-      yield* _diffOne(p.join(load.targetAbs, "Dockerfile"), e.dockerfile, "prod", args.target, fmt)
-      if (e.dockerfileDev) {
-        yield* _diffOne(
-          p.join(load.targetAbs, "Dockerfile.dev"),
-          e.dockerfileDev,
-          "dev",
-          args.target,
-          fmt
-        )
-      }
-      yield* Console.log(`OK — ${args.target} matches`)
-    })
+  (args) => diffEffect(args)
 ).pipe(Command.withDescription("Diff would-emit Dockerfiles vs on-disk; non-zero exit on drift"))
 
 export const dockerCommand = Command.make("docker").pipe(

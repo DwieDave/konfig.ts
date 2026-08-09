@@ -18,6 +18,62 @@ export class ImagesFileError extends Data.TaggedError("ImagesFileError")<{
 /** Tab-indented JSON serialization, matching the repo's `images.json` formatting. */
 const _formatImagesConfig = (decoded: ImagesConfig): string => `${JSON.stringify(decoded, null, "\t")}\n`
 
+export interface SetImageArgs {
+  readonly env: string
+  readonly app: string
+  readonly image: string
+  /** Directory `resolveConfig` searches upward from for `konfig.json` (defaults to `process.cwd()`). */
+  readonly from?: string
+}
+
+/**
+ * Update `<root>/images.json` for `args.env`.`args.app`, Schema-validating
+ * both the read and the write.
+ */
+export const setImageEffect = (args: SetImageArgs) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const cfg = yield* resolveConfig(args.from)
+
+    const file = path.join(cfg.configDir, cfg.config.root, "images.json")
+    const text = yield* fs
+      .readFileString(file)
+      .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))
+
+    const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+      Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
+    )
+
+    const current = yield* decodeImagesEffect(parsed).pipe(
+      Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
+    )
+
+    if (!(args.env in current.envs)) {
+      const known = Object.keys(current.envs)
+      yield* Effect.logError(`unknown env '${args.env}'. Known: ${known.join(", ")}`)
+      return yield* new SetUnknownEnv({ env: args.env, known })
+    }
+
+    const next: ImagesConfig = {
+      envs: {
+        ...current.envs,
+        [args.env]: { ...current.envs[args.env], [args.app]: args.image }
+      }
+    }
+
+    const decoded = yield* decodeImagesEffect(next).pipe(
+      Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
+    )
+
+    const out = _formatImagesConfig(decoded)
+    yield* fs
+      .writeFileString(file, out)
+      .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))
+
+    yield* Effect.log(`set ${args.env}.${args.app} = ${args.image}`)
+  })
+
 export const setCommand = Command.make(
   "set",
   {
@@ -31,49 +87,7 @@ export const setCommand = Command.make(
       Argument.withDescription("Full image ref (e.g. ghcr.io/<org>/<app>:<sha>)")
     )
   },
-  (args) =>
-    Effect.gen(function*() {
-      const fs = yield* FileSystem
-      const path = yield* Path
-      const cfg = yield* resolveConfig()
-
-      const file = path.join(cfg.configDir, cfg.config.root, "images.json")
-      const text = yield* fs
-        .readFileString(file)
-        .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))
-
-      const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-        Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
-      )
-
-      const current = yield* decodeImagesEffect(parsed).pipe(
-        Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
-      )
-
-      if (!(args.env in current.envs)) {
-        const known = Object.keys(current.envs)
-        yield* Effect.logError(`unknown env '${args.env}'. Known: ${known.join(", ")}`)
-        return yield* new SetUnknownEnv({ env: args.env, known })
-      }
-
-      const next: ImagesConfig = {
-        envs: {
-          ...current.envs,
-          [args.env]: { ...current.envs[args.env], [args.app]: args.image }
-        }
-      }
-
-      const decoded = yield* decodeImagesEffect(next).pipe(
-        Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
-      )
-
-      const out = _formatImagesConfig(decoded)
-      yield* fs
-        .writeFileString(file, out)
-        .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))
-
-      yield* Effect.log(`set ${args.env}.${args.app} = ${args.image}`)
-    })
+  (args) => setImageEffect(args)
 ).pipe(
   Command.withDescription("Update an image tag in images.json (Schema-validated read + write)")
 )

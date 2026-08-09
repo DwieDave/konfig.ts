@@ -100,6 +100,24 @@ describe("diffFiles multi-doc handling", () => {
       expect(missingLeft?.key).toContain("Namespace")
     }
   })
+
+  it("flags a removed document (present only on the left) as MissingRight", () => {
+    const left = {
+      "out.yaml": `${MULTI_DOC_LEFT}---\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: extra\n`
+    }
+    const right = { "out.yaml": MULTI_DOC_LEFT }
+    const result = diffFiles({ left, right })
+    const entry = result.entries[0]
+    expect(entry?._tag).toBe("Changed")
+    if (entry?._tag === "Changed") {
+      const missingRight = entry.docs?.find((d) => d._tag === "MissingRight")
+      expect(missingRight).toBeDefined()
+      expect(missingRight?.key).toContain("Namespace")
+      if (missingRight?._tag === "MissingRight") {
+        expect((missingRight.left as { kind: string }).kind).toBe("Namespace")
+      }
+    }
+  })
 })
 
 describe("redact numeric normalization", () => {

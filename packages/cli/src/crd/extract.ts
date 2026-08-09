@@ -40,14 +40,19 @@ const _decodeOpts = (opts: CrdExtractOptions) =>
     Effect.mapError((cause) => new CrdInputDecodeError({ cause }))
   )
 
-interface CrdDocument {
+export interface CrdDocument {
   readonly crdName: string
   readonly group: string
   readonly schema: Record<string, unknown>
   readonly versions: readonly string[]
 }
 
-const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
+/**
+ * Exported (module-private `_` naming kept) purely for direct unit
+ * testing of the malformed/edge-case CRD YAML branches — see
+ * extract.test.ts.
+ */
+export const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
   const docs: unknown[] = []
   // parseYamlAll splits on real YAML document boundaries, so a literal
   // `---` inside a CRD's block scalar won't mis-split the stream.
@@ -99,7 +104,7 @@ const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
   return crds
 }
 
-const _crdNameToIdentifier = (crdName: string): string => {
+export const _crdNameToIdentifier = (crdName: string): string => {
   const resource = crdName.split(".")[0] ?? crdName
   return resource
     .split(/[-_]/)
@@ -191,7 +196,7 @@ const _templateChartYaml = (opts: CrdExtractOptions) =>
     return yield* runProcessString(templateCmd, { allowEmptyStdout: true })
   })
 
-const _dedupeCrdDocuments = (allYaml: ReadonlyArray<string>): Map<string, CrdDocument> => {
+export const _dedupeCrdDocuments = (allYaml: ReadonlyArray<string>): Map<string, CrdDocument> => {
   const seen = new Map<string, CrdDocument>()
   for (const yaml of allYaml) {
     for (const crd of _parseCrdDocs(yaml)) {
