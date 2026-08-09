@@ -1,7 +1,7 @@
 {
   "name": "@konfig.ts/core",
   "version": "0.0.10",
-  "description": "Core abstractions (Manifest, RenderContext, Helm, deps) for konfig.ts — typesafe Kubernetes + ArgoCD config in TypeScript.",
+  "description": "Core abstractions (Manifest, RenderContext, Helm, deps) for konfig.ts \u2014 typesafe Kubernetes + ArgoCD config in TypeScript.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
   "homepage": "https://github.com/DwieDave/konfig.ts#readme",
@@ -11,7 +11,14 @@
     "url": "git+https://github.com/DwieDave/konfig.ts.git",
     "directory": "packages/core"
   },
-  "keywords": ["kubernetes", "k8s", "argocd", "config", "effect", "typescript"],
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "argocd",
+    "config",
+    "effect",
+    "typescript"
+  ],
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.mjs",
@@ -24,7 +31,11 @@
       "import": "./dist/index.mjs"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -45,7 +56,8 @@
     "lint:apply": "oxlint --fix",
     "prepublishOnly": "bun run build",
     "prepack": "node ../../scripts/prepack-exports.mjs strip",
-    "postpack": "node ../../scripts/prepack-exports.mjs restore"
+    "postpack": "node ../../scripts/prepack-exports.mjs restore",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -57,6 +69,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
     "vitest": "catalog:",

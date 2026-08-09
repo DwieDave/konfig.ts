@@ -15,6 +15,7 @@
     "@effect/platform-node": "4.0.0-beta.106",
     "@effect/vitest": "4.0.0-beta.106",
     "@types/bun": "^1.3.14",
+    "@vitest/coverage-v8": "^4.1.10",
     "effect": "4.0.0-beta.106",
     "fast-check": "^4.9.0",
     "vitest": "^4.1.10",
@@ -27,7 +28,8 @@
     "test": "bun run --cwd packages/core test && bun run --cwd packages/env test && bun run --cwd packages/k8s test && bun run --cwd packages/external-secrets test && bun run --cwd packages/sealed-secrets test && bun run --cwd packages/sops test && bun run --cwd packages/argocd test && bun run --cwd packages/docker test && bun run --cwd packages/cli test",
     "lint": "oxlint",
     "lint:apply": "oxlint --fix",
-    "prepare": "effect-tsgo patch --no-typescript --oxlint"
+    "prepare": "effect-tsgo patch --no-typescript --oxlint",
+    "test:coverage": "bun run --cwd packages/core test:coverage && bun run --cwd packages/env test:coverage && bun run --cwd packages/k8s test:coverage && bun run --cwd packages/external-secrets test:coverage && bun run --cwd packages/sealed-secrets test:coverage && bun run --cwd packages/sops test:coverage && bun run --cwd packages/argocd test:coverage && bun run --cwd packages/docker test:coverage && bun run --cwd packages/cli test:coverage && node scripts/coverage-badge.mjs"
   },
   "devDependencies": {
     "@effect/tsgo": "^0.36.0",

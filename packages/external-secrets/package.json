@@ -1,7 +1,7 @@
 {
   "name": "@konfig.ts/external-secrets",
   "version": "0.0.10",
-  "description": "ExternalSecret CR backend for konfig.ts — emits external-secrets.io/v1beta1 manifests bound to atoms from @konfig.ts/env.",
+  "description": "ExternalSecret CR backend for konfig.ts \u2014 emits external-secrets.io/v1beta1 manifests bound to atoms from @konfig.ts/env.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
   "homepage": "https://github.com/DwieDave/konfig.ts#readme",
@@ -11,7 +11,15 @@
     "url": "git+https://github.com/DwieDave/konfig.ts.git",
     "directory": "packages/external-secrets"
   },
-  "keywords": ["kubernetes", "k8s", "external-secrets", "eso", "secret", "effect", "typescript"],
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "external-secrets",
+    "eso",
+    "secret",
+    "effect",
+    "typescript"
+  ],
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.mjs",
@@ -24,7 +32,11 @@
       "import": "./dist/index.mjs"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -45,7 +57,8 @@
     "lint:apply": "oxlint --fix",
     "prepublishOnly": "bun run build",
     "prepack": "node ../../scripts/prepack-exports.mjs strip",
-    "postpack": "node ../../scripts/prepack-exports.mjs restore"
+    "postpack": "node ../../scripts/prepack-exports.mjs restore",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@konfig.ts/core": "workspace:*",
@@ -59,6 +72,7 @@
     "@effect/vitest": "catalog:",
     "@konfig.ts/env": "workspace:*",
     "@types/bun": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "vitest": "catalog:"
   }

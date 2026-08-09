@@ -1,5 +1,7 @@
 # konfig.ts
 
+![line coverage](.github/badges/coverage.svg)
+
 Typesafe Kubernetes + ArgoCD configuration in TypeScript, powered by
 [Effect](https://effect.website/).
 

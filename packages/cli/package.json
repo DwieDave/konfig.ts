@@ -1,7 +1,7 @@
 {
   "name": "@konfig.ts/cli",
   "version": "0.0.10",
-  "description": "konfig CLI — build, validate, diff, and set commands for konfig.ts configurations.",
+  "description": "konfig CLI \u2014 build, validate, diff, and set commands for konfig.ts configurations.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
   "homepage": "https://github.com/DwieDave/konfig.ts#readme",
@@ -11,12 +11,22 @@
     "url": "git+https://github.com/DwieDave/konfig.ts.git",
     "directory": "packages/cli"
   },
-  "keywords": ["kubernetes", "k8s", "argocd", "cli", "konfig"],
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "argocd",
+    "cli",
+    "konfig"
+  ],
   "type": "module",
   "bin": {
     "konfig": "./dist/main.mjs"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -29,7 +39,8 @@
     "test": "vitest run",
     "lint": "oxlint",
     "lint:apply": "oxlint --fix",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -46,6 +57,7 @@
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "@types/semver": "^7.5.8",
+    "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"
   }
 }

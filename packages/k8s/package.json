@@ -11,7 +11,13 @@
     "url": "git+https://github.com/DwieDave/konfig.ts.git",
     "directory": "packages/k8s"
   },
-  "keywords": ["kubernetes", "k8s", "config", "effect", "typescript"],
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "config",
+    "effect",
+    "typescript"
+  ],
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.mjs",
@@ -24,7 +30,11 @@
       "import": "./dist/index.mjs"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -45,7 +55,8 @@
     "lint:apply": "oxlint --fix",
     "prepublishOnly": "bun run build",
     "prepack": "node ../../scripts/prepack-exports.mjs strip",
-    "postpack": "node ../../scripts/prepack-exports.mjs restore"
+    "postpack": "node ../../scripts/prepack-exports.mjs restore",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@konfig.ts/core": "workspace:*",
@@ -59,6 +70,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
     "vitest": "catalog:"
