@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { SecretSource } from "@konfig.ts/env"
-import { Effect, Redacted } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import { describe, expect, it as vitestIt } from "vitest"
 import { Environment, hashSecretValues, Secret } from "./index"
 
@@ -102,9 +102,8 @@ describe("Secret.bind values service", () => {
           source: SecretSource.literal({
             data: { url: "postgres://x", password: "hunter2" }
           })
-        }).layer!
-      ),
-      Effect.provide(NodeServices.layer)
+        }).layer!.pipe(Layer.provideMerge(NodeServices.layer))
+      )
     ))
 })
 
@@ -146,8 +145,7 @@ describe("Environment.bind valuesLayer", () => {
               source: SecretSource.literal({ data: { value: "sig" } })
             }
           }
-        }).valuesLayer
-      ),
-      Effect.provide(NodeServices.layer)
+        }).valuesLayer.pipe(Layer.provideMerge(NodeServices.layer))
+      )
     ))
 })

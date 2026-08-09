@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { ConfigProvider, Effect, Exit, Layer, Redacted, Sink, Stream } from "effect"
+import { ConfigProvider, Effect, Exit, Layer, Redacted, Schema, Sink, Stream } from "effect"
 import type { Command } from "effect/unstable/process/ChildProcess"
 import {
   type ChildProcessHandle,
@@ -84,7 +84,8 @@ describe("SecretSource.fromConfig", () => {
       expect(Exit.isFailure(r)).toBe(true)
       if (Exit.isFailure(r)) {
         const err = r.cause.toJSON()
-        expect(JSON.stringify(err)).toContain("SecretSourceError")
+        const json = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(err)
+        expect(json).toContain("SecretSourceError")
       }
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({})))))
 
@@ -137,7 +138,8 @@ describe("SecretSource.fromCommand", () => {
       )
       expect(Exit.isFailure(r)).toBe(true)
       if (Exit.isFailure(r)) {
-        expect(JSON.stringify(r.cause)).toContain("SecretSourceError")
+        const json = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(r.cause)
+        expect(json).toContain("SecretSourceError")
       }
     }))
 
@@ -152,7 +154,8 @@ describe("SecretSource.fromCommand", () => {
       )
       expect(Exit.isFailure(r)).toBe(true)
       if (Exit.isFailure(r)) {
-        expect(JSON.stringify(r.cause)).toContain("SecretSourceError")
+        const json = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(r.cause)
+        expect(json).toContain("SecretSourceError")
       }
     }))
 })

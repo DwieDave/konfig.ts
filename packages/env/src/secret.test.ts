@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { Config, ConfigProvider, Effect, Redacted } from "effect"
+import { Config, ConfigProvider, Effect, Redacted, Schema } from "effect"
 import { describe, expect } from "vitest"
 import { Secret } from "./secret"
 
@@ -74,22 +74,21 @@ describe("Secret", () => {
       )
     ))
 
-  it("redacted values do not leak in toString / JSON", () =>
-    Effect.runSync(
-      Effect.gen(function*() {
-        const v = yield* dbCreds
-        expect(String(v.url)).not.toContain("postgres://localhost/api")
-        expect(JSON.stringify(v)).not.toContain("hunter2")
-      }).pipe(
-        Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: {
-                DATABASE_URL: "postgres://localhost/api",
-                DATABASE_PASSWORD: "hunter2"
-              }
-            })
-          )
+  it.effect("redacted values do not leak in toString / JSON", () =>
+    Effect.gen(function*() {
+      const v = yield* dbCreds
+      expect(Object.prototype.toString.call(v.url)).not.toContain("postgres://localhost/api")
+      const json = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(v)
+      expect(json).not.toContain("hunter2")
+    }).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: {
+              DATABASE_URL: "postgres://localhost/api",
+              DATABASE_PASSWORD: "hunter2"
+            }
+          })
         )
       )
     ))

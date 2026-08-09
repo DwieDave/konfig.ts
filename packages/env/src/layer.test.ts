@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { ConfigProvider, Context, Effect, Redacted } from "effect"
+import { ConfigProvider, Context, Effect, Layer, Redacted } from "effect"
 import { describe, expect } from "vitest"
 import { Environment } from "./environment"
 import { environmentLayer, type EnvironmentShape } from "./layer"
@@ -35,7 +35,7 @@ describe("environmentLayer", () => {
       expect(env.port).toBe(8080)
       expect(Redacted.value(env.db.url)).toBe("postgres://localhost/api")
       expect(Redacted.value(env.db.password)).toBe("hunter2")
-    }).pipe(Effect.provide(environmentLayer({ tag: ApiEnv, env: apiEnv })), Effect.provide(fakeEnv)))
+    }).pipe(Effect.provide(Layer.provide(environmentLayer({ tag: ApiEnv, env: apiEnv }), fakeEnv))))
 
   it.effect("yields are typed end-to-end", () =>
     Effect.gen(function*() {
@@ -43,7 +43,7 @@ describe("environmentLayer", () => {
       // `port` is number (Literal<"PORT", number>) — not string.
       const portPlus: number = env.port + 1
       expect(portPlus).toBe(8081)
-    }).pipe(Effect.provide(environmentLayer({ tag: ApiEnv, env: apiEnv })), Effect.provide(fakeEnv)))
+    }).pipe(Effect.provide(Layer.provide(environmentLayer({ tag: ApiEnv, env: apiEnv }), fakeEnv))))
 })
 
 // Compile-time: EnvironmentShape is the structural type of `yield* env`.
