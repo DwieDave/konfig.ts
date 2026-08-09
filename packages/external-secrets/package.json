@@ -52,7 +52,7 @@
     "@konfig.ts/k8s": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.98"
+    "effect": "4.0.0-beta.106"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
@@ -60,7 +60,6 @@
     "@konfig.ts/env": "workspace:*",
     "@types/bun": "catalog:",
     "effect": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

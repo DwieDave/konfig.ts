@@ -10,7 +10,6 @@
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
-    "@types/bun": "catalog:",
-    "typescript": "catalog:"
+    "@types/bun": "catalog:"
   }
 }

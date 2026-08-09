@@ -52,7 +52,7 @@
     "yaml": "catalog:"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.98"
+    "effect": "4.0.0-beta.106"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
@@ -60,7 +60,6 @@
     "@types/bun": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

@@ -54,7 +54,7 @@
     "yaml": "catalog:"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.98"
+    "effect": "4.0.0-beta.106"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
@@ -62,7 +62,6 @@
     "@konfig.ts/sealed-secrets": "workspace:*",
     "@types/bun": "catalog:",
     "effect": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:",
     "yaml": "catalog:"
   }

@@ -46,7 +46,6 @@
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "@types/semver": "^7.5.8",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

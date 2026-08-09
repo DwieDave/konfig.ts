@@ -51,14 +51,13 @@
     "@konfig.ts/core": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.98"
+    "effect": "4.0.0-beta.106"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }
