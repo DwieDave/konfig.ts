@@ -6,6 +6,7 @@ import { bumpVersionCommand } from "./commands/bumpVersion"
 import { badgesCommand } from "./commands/badges"
 import { prepackExportsCommand } from "./commands/prepackExports"
 import { rewriteWorkspaceDepsCommand } from "./commands/rewriteWorkspaceDeps"
+import { testCommand } from "./commands/test"
 
 const root = Command.make(
   "repo",
@@ -16,6 +17,7 @@ const root = Command.make(
     bumpVersionCommand,
     prepackExportsCommand,
     rewriteWorkspaceDepsCommand,
+    testCommand,
     badgesCommand
   ])
 )
