@@ -1,0 +1,46 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // "examples/**" is illustrative sample code, not a production surface —
+  // exclude both its files and its bun/npm workspaces from analysis.
+  "ignore": [".generated/**", "dist/**", "scratchpad/**", "examples/**"],
+  "ignoreDependencies": [
+    // Referenced only by name in tsconfig.base.json's `compilerOptions.plugins` —
+    // an optional editor-only TS language-service plugin, not a runtime/build import.
+    "@effect/language-service"
+  ],
+  "ignoreWorkspaces": [
+    "examples",
+    "examples/full-stack",
+    "examples/full-stack/apps/*",
+    "examples/full-stack/shared/*"
+  ],
+  "workspaces": {
+    ".": {
+      // Root has no direct vitest dependency, so the vitest plugin doesn't
+      // auto-enable here — declare the scripts/ test files explicitly.
+      // (Every package's src/index.ts, packages/cli/src/main.ts, and the oxc
+      // plugin entry are already picked up automatically from package.json
+      // exports/bin/scripts — knip flags explicit duplicates of those as
+      // redundant, so they're intentionally left off here.)
+      "entry": ["scripts/**/*.test.ts"],
+      "project": ["scripts/**/*.ts"]
+    },
+    "packages/env": {
+      // test-types/**/*.ts are compile-time-only type assertions (Expect/Equal),
+      // never imported at runtime — they're entry points for tsc, not consumers.
+      "entry": ["test-types/**/*.ts"]
+    },
+    "packages/k8s": {
+      "entry": ["test-types/**/*.ts"]
+    },
+    "packages/argocd": {
+      "entry": ["test-types/**/*.ts"]
+    },
+    "packages/cli": {
+      // vitest.config.mts aliases "@konfig.ts/k8s" straight to a source file path
+      // for test-only fixtures, so knip can't see the import resolve back to this
+      // package.json entry — false positive, the dependency is genuinely used.
+      "ignoreDependencies": ["@konfig.ts/k8s"]
+    }
+  }
+}

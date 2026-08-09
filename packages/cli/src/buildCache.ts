@@ -6,7 +6,7 @@ import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
 import * as crypto from "node:crypto"
 
-export class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
+class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
   readonly path: string
   readonly cause: unknown
 }> {}

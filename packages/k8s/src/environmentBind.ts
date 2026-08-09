@@ -95,7 +95,7 @@ export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
     : never
 }
 
-export type LiteralMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
+type LiteralMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
   readonly [
     K in keyof M as M[K] extends LiteralEntry<infer _EnvName, infer _T> ? K
       : M[K] extends Environment<infer _SubM> ? K

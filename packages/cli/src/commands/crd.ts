@@ -80,7 +80,7 @@ export const crdExtractEffect = (flags: CrdExtractFlags) =>
     }
   })
 
-export const crdExtractCommand = Command.make("extract", _crdExtractFlags, crdExtractEffect).pipe(
+const crdExtractCommand = Command.make("extract", _crdExtractFlags, crdExtractEffect).pipe(
   Command.withDescription("Extract CRD TypeScript types from Helm charts")
 )
 
@@ -118,7 +118,7 @@ export const crdVerifyEffect = Effect.gen(function*() {
   }
 })
 
-export const crdVerifyCommand = Command.make("verify", {}, () => crdVerifyEffect).pipe(
+const crdVerifyCommand = Command.make("verify", {}, () => crdVerifyEffect).pipe(
   Command.withDescription("Verify committed CRD types match current charts")
 )
 

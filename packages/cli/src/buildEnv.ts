@@ -29,12 +29,12 @@ export const envOutDir = (input: EnvOutDirInput): string =>
     ...(input.ctx.cluster !== undefined ? [input.ctx.cluster] : [])
   )
 
-export class EnvEntryNotFound extends Data.TaggedError("EnvEntryNotFound")<{
+class EnvEntryNotFound extends Data.TaggedError("EnvEntryNotFound")<{
   readonly env: string
   readonly entry: string
 }> {}
 
-export class EnvLoadError extends Data.TaggedError("EnvLoadError")<{
+class EnvLoadError extends Data.TaggedError("EnvLoadError")<{
   readonly entry: string
   readonly cause: unknown
 }> {}

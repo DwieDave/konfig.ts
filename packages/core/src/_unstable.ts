@@ -4,7 +4,4 @@
 //
 // See compat.md at repo root for the unstable surface we depend on.
 export { ChildProcess } from "effect/unstable/process"
-export {
-  ChildProcessSpawner,
-  type ChildProcessSpawner as ChildProcessSpawnerType
-} from "effect/unstable/process/ChildProcessSpawner"
+export { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"

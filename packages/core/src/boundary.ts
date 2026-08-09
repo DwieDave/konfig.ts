@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { BoundaryDecodeError } from "./RenderError"
 
-export interface BoundaryInput<S extends Schema.Top> {
+interface BoundaryInput<S extends Schema.Top> {
   readonly schema: S
   readonly label?: string
 }

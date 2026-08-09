@@ -40,6 +40,9 @@ jobs:
         run: bun run lint
         continue-on-error: true
 
+      - name: Dead code (knip)
+        run: bun run knip
+
   examples-check:
     runs-on: ubuntu-latest
     timeout-minutes: 10

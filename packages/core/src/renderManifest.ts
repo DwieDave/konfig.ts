@@ -3,7 +3,7 @@ import type { Manifest, RenderServices } from "./Manifest"
 import type { RenderContext } from "./RenderContext"
 import type { AnyRenderError } from "./RenderError"
 
-export interface RenderManifestInput<A> {
+interface RenderManifestInput<A> {
   readonly manifest: Manifest<A>
   readonly ctx: RenderContext
 }

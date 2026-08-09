@@ -4,9 +4,9 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { ChartId, ChartName, ChartRepoUrl, ChartVersion } from "./chartSchemas"
 
-export const HELM_RELEASE_MARKER = "_konfigHelmRelease" as const
+const HELM_RELEASE_MARKER = "_konfigHelmRelease" as const
 
-export const ChartRegistryEntrySchema = Schema.Struct({
+const ChartRegistryEntrySchema = Schema.Struct({
   id: ChartId,
   repo: ChartRepoUrl,
   chart: ChartName,
@@ -59,9 +59,7 @@ const _loadOne = (
       Effect.tapError((e) =>
         // Surface import failures instead of letting the module silently
         // vanish from the registry.
-        Effect.sync(() =>
-          process.stderr.write(`konfig: failed to load chart module ${absPath}: ${String(e.cause)}\n`)
-        )
+        Effect.sync(() => process.stderr.write(`konfig: failed to load chart module ${absPath}: ${String(e.cause)}\n`))
       ),
       Effect.orElseSucceed(() => undefined)
     )

@@ -75,7 +75,6 @@
     "@types/bun": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
-    "vitest": "catalog:",
-    "yaml": "catalog:"
+    "vitest": "catalog:"
   }
 }

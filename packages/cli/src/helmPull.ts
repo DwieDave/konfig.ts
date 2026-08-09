@@ -1,12 +1,12 @@
 import { ChildProcess } from "./_unstable"
 
-export interface HelmPullChart {
+interface HelmPullChart {
   readonly repo: string
   readonly chart: string
   readonly version: string
 }
 
-export interface HelmPullOptions {
+interface HelmPullOptions {
   readonly destination: string
   readonly untar?: boolean
 }

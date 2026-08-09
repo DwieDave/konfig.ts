@@ -30,8 +30,8 @@ export interface Workspace {
   readonly hasBuildScript: boolean
 }
 
-export type DetectedPmKind = "Bun" | "Npm" | "Pnpm" | "Yarn"
-export type YarnVariant = "classic" | "berry"
+type DetectedPmKind = "Bun" | "Npm" | "Pnpm" | "Yarn"
+type YarnVariant = "classic" | "berry"
 
 export interface DetectedPm {
   readonly kind: DetectedPmKind

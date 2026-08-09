@@ -29,18 +29,18 @@ interface ClusterMeta {
   readonly annotations?: Readonly<Record<string, string>>
 }
 
-export type PersistentVolumeAccessMode =
+type PersistentVolumeAccessMode =
   | "ReadWriteOnce"
   | "ReadOnlyMany"
   | "ReadWriteMany"
   | "ReadWriteOncePod"
 
-export type PersistentVolumeReclaimPolicy = "Retain" | "Recycle" | "Delete"
+type PersistentVolumeReclaimPolicy = "Retain" | "Recycle" | "Delete"
 
-export type PersistentVolumeMode = "Filesystem" | "Block"
+type PersistentVolumeMode = "Filesystem" | "Block"
 
 // "At least one volume source" isn't enforced statically (20+ variants); kube-apiserver rejects a spec with none.
-export interface PersistentVolumeSpecInput extends
+interface PersistentVolumeSpecInput extends
   Omit<
     K8sPersistentVolumeSpec,
     "capacity" | "accessModes" | "persistentVolumeReclaimPolicy" | "volumeMode" | "claimRef"
@@ -76,7 +76,7 @@ export const PersistentVolume = {
     )
 }
 
-export interface PersistentVolumeClaimSpecInput {
+interface PersistentVolumeClaimSpecInput {
   readonly accessModes: ReadonlyArray<PersistentVolumeAccessMode>
   readonly resources: { readonly requests: { readonly storage: string } }
   readonly storageClassName?: string

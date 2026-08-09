@@ -47,14 +47,13 @@
     "@konfig.ts/argocd": "workspace:*",
     "@konfig.ts/core": "workspace:*",
     "@konfig.ts/docker": "workspace:*",
-    "@konfig.ts/k8s": "workspace:*",
     "effect": "catalog:",
     "json-schema-to-typescript": "^15.0.4",
-    "semver": "^7.7.2",
-    "yaml": "catalog:"
+    "semver": "^7.7.2"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@konfig.ts/k8s": "workspace:*",
     "@types/bun": "catalog:",
     "@types/semver": "^7.5.8",
     "@vitest/coverage-v8": "catalog:",

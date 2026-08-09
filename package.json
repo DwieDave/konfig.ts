@@ -28,6 +28,7 @@
     "test": "bun scripts/cli.ts test",
     "lint": "oxlint",
     "lint:apply": "oxlint --fix",
+    "knip": "knip",
     "prepare": "effect-tsgo patch --no-typescript --oxlint",
     "test:coverage": "bun run --cwd packages/core test:coverage && bun run --cwd packages/env test:coverage && bun run --cwd packages/k8s test:coverage && bun run --cwd packages/external-secrets test:coverage && bun run --cwd packages/sealed-secrets test:coverage && bun run --cwd packages/sops test:coverage && bun run --cwd packages/argocd test:coverage && bun run --cwd packages/docker test:coverage && bun run --cwd packages/cli test:coverage && bun scripts/cli.ts badges",
     "repo": "bun scripts/cli.ts"
@@ -36,9 +37,11 @@
     "@effect/platform-node": "catalog:",
     "@effect/tsgo": "^0.36.0",
     "effect": "catalog:",
+    "knip": "^6.32.0",
     "oxlint": "^1.77.0",
     "oxlint-tsgolint": "^7.0.2001",
     "tsdown": "^0.22.14",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "catalog:"
   }
 }

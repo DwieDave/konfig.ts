@@ -5,8 +5,8 @@ import { Path } from "effect/Path"
 import { Command, Flag } from "../_unstable"
 import { loadChartRegistryEffect } from "../chartRegistry"
 import { resolveCliPaths } from "../cliConfig"
-import { assertHelmVersion } from "../helmVersion"
 import { helmPullCommand } from "../helmPull"
+import { assertHelmVersion } from "../helmVersion"
 
 export class MissingAllFlag extends Data.TaggedError("MissingAllFlag") {}
 
@@ -61,7 +61,7 @@ export const helmFetchEffect = (flags: HelmFetchFlags) =>
     yield* Console.log(`Done. Cache at ${cacheDir}`)
   })
 
-export const helmFetchCommand = Command.make(
+const helmFetchCommand = Command.make(
   "fetch",
   {
     all: Flag.boolean("all").pipe(

@@ -7,7 +7,7 @@ export interface RenderContext {
   readonly flags?: ReadonlyMap<string, unknown>
 }
 
-export interface RenderContextFullInput {
+interface RenderContextFullInput {
   readonly env: string
   readonly cluster?: string
   readonly k8sVersion?: string

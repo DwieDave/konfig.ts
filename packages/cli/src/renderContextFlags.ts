@@ -17,7 +17,7 @@ export const renderContextFlags = {
   )
 } as const
 
-export interface RenderContextFlagValues {
+interface RenderContextFlagValues {
   readonly cluster: Option.Option<string>
   readonly k8sVersion: Option.Option<string>
   readonly flag: Option.Option<Record<string, string>>

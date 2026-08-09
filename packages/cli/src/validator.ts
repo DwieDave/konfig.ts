@@ -31,7 +31,7 @@ const _MetadataSchema = Schema.Struct({
 
 // Only checks the envelope (apiVersion/kind/metadata.name); deeper field
 // validation is deferred to `--strict` (kubeconform).
-export const KubeManifestEnvelopeSchema = Schema.Struct({
+const KubeManifestEnvelopeSchema = Schema.Struct({
   apiVersion: Schema.String,
   kind: Schema.String,
   metadata: _MetadataSchema
