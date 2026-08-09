@@ -53,21 +53,21 @@ and copies only what the spec declares. Dev is a single `base → dev` stage.
 
 ## Spec atoms
 
-| Family               | Constructors                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------------------------- |
-| `Docker.app`         | `Docker.app(spec)` — the spec entrypoint                                                              |
-| `Docker.copy`        | `builderArtifact(src, dst)`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, opts?)` |
-| `Docker.runtime`     | `bun({ alpine? })`, `node({ alpine? })` — defaults from the PM; `alpine` defaults `true`              |
-| `Docker.pm`          | `bun()`, `npm()`, `pnpm()` — optional; auto-detected from the root `package.json` + lockfile          |
-| `Docker.build`       | `script(name)`, `command(argv)`, `none()` — defaults to `script("build")` if present                  |
-| `Docker.healthcheck` | `httpGet({ path, port, … })`, `command(argv, opts?)`                                                  |
-| `Docker.user`        | `nonRoot({ uid?, gid?, name? })`, `root()` — a non-root user is injected if you omit one              |
-| `Docker.platform`    | `linuxAmd64()`, `linuxArm64()`, `multi(values)`                                                       |
+| Family               | Constructors                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `Docker.app`         | `Docker.app(spec)` — the spec entrypoint                                                                           |
+| `Docker.copy`        | `builderArtifact(src, dst)`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, opts?)`              |
+| `Docker.runtime`     | `bun({ alpine? })`, `node({ alpine? })` — defaults from the PM; `alpine` defaults `true`                           |
+| `Docker.pm`          | `bun()`, `npm()`, `pnpm()`, `yarn({ variant? })` — optional; auto-detected from the root `package.json` + lockfile |
+| `Docker.build`       | `script(name)`, `command(argv)`, `none()` — defaults to `script("build")` if present                               |
+| `Docker.healthcheck` | `httpGet({ path, port, … })`, `command(argv, opts?)`                                                               |
+| `Docker.user`        | `nonRoot({ uid?, gid?, name? })`, `root()` — a non-root user is injected if you omit one                           |
+| `Docker.platform`    | `linuxAmd64()`, `linuxArm64()`, `multi(values)`                                                                    |
 
 ## Scope
 
 Emits Dockerfiles only — no image building, pushing, tagging, or signing, and no
-BuildKit-specific syntax. `yarn` is not yet a supported PM. `AnyDockerError` is
+BuildKit-specific syntax. `AnyDockerError` is
 the discriminated union of failure modes (`MonorepoRootNotFound`,
 `EngineVersionMissing`, `CircularWorkspaceDep`, …).
 

@@ -72,10 +72,12 @@ konfig.ts is built on [Effect](https://effect.website/), currently in beta.
 Until Effect ships a stable 4.x, install the exact beta konfig.ts is built
 against:
 
-- **`effect@4.0.0-beta.70`** — required by every package.
-- **`@effect/platform-node@4.0.0-beta.70`** — required only when you call
-  `render()` (the Node filesystem/subprocess entrypoint); manifest-only
-  consumers can omit it (it is declared as an optional peer).
+- **`effect@4.0.0-beta.70`** — required by every package (declared as a peer
+  dependency).
+- **`@effect/platform-node@4.0.0-beta.70`** — a regular (non-optional)
+  dependency of `@konfig.ts/core`, since `render()` needs its Node
+  filesystem/subprocess implementations. It is installed automatically
+  whenever you install `@konfig.ts/core`.
 
 The pin is exact on purpose: Effect's beta line makes breaking changes between
 builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes

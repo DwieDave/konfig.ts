@@ -3,11 +3,11 @@
 // pinned `kubernetes-types` package, which is itself a stable mirror
 // of the upstream Kubernetes Go types.
 //
-// Version policy: `kubernetes-types` is pinned to an exact patch
-// version in packages/k8s/package.json — no caret. The minor
-// (currently 1.30) tracks the cluster minor we test against. Bumping
-// is intentional: read upstream release notes, run `bun run check &&
-// bun run test`, and update CHANGELOG.
+// Version policy: `kubernetes-types` is pinned with a tilde range
+// (~1.30.0) in packages/k8s/package.json, allowing patch bumps only.
+// The minor (currently 1.30) tracks the cluster minor we test
+// against. Bumping the minor is intentional: read upstream release
+// notes, run `bun run check && bun run test`, and update CHANGELOG.
 //
 // Each export here is the K8s API type as-is. konfig wrappers (e.g.
 // `ContainerInput` in container.ts) accept a wider, branded shape
