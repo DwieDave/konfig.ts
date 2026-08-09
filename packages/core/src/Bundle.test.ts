@@ -24,66 +24,54 @@ describe("Bundle.make", () => {
 })
 
 describe("Bundle.define", () => {
-  it("returns a yieldable handle whose value is the built Bundle", async () => {
-    const handle = define({
-      name: "api",
-      namespace: "app",
-      build: () => [{ kind: "ConfigMap", metadata: { name: "api-conf" } }]
-    })
+  it.effect("returns a yieldable handle whose value is the built Bundle", () =>
+    Effect.gen(function*() {
+      const handle = define({
+        name: "api",
+        namespace: "app",
+        build: () => [{ kind: "ConfigMap", metadata: { name: "api-conf" } }]
+      })
 
-    const program = Effect.gen(function*() {
-      const b = yield* handle
+      const b = yield* handle.pipe(Effect.provide(handle.layer))
       expect(b.name).toBe("api")
       expect(b.namespace).toBe("app")
       expect(b.manifests).toHaveLength(1)
-    })
-    await Effect.runPromise(
-      program.pipe(Effect.provide(handle.layer)) as Effect.Effect<void, never, never>
-    )
-  })
+    }))
 
-  it("supports an Effect-returning build that reads from a provided Layer", async () => {
-    const handle = define({
-      name: "consumer",
-      namespace: "app",
-      build: Effect.gen(function*() {
-        const ref = yield* Dep.Secret("shared")
-        return [{ kind: "ConfigMap", metadata: { name: ref } }]
+  it.effect("supports an Effect-returning build that reads from a provided Layer", () =>
+    Effect.gen(function*() {
+      const handle = define({
+        name: "consumer",
+        namespace: "app",
+        build: Effect.gen(function*() {
+          const ref = yield* Dep.Secret("shared")
+          return [{ kind: "ConfigMap", metadata: { name: ref } }]
+        })
       })
-    })
 
-    const providerLayer = Dep.provideSecret("shared")
-    const program = Effect.gen(function*() {
-      const b = yield* handle
+      const providerLayer = Dep.provideSecret("shared")
+      const b = yield* handle.pipe(
+        Effect.provide(Layer.provideMerge(handle.layer, providerLayer))
+      )
       expect(b.manifests[0]).toEqual({
         kind: "ConfigMap",
         metadata: { name: "shared" }
       })
-    })
-    await Effect.runPromise(
-      program.pipe(
-        Effect.provide(Layer.provideMerge(handle.layer, providerLayer))
-      ) as Effect.Effect<void, never, never>
-    )
-  })
+    }))
 
-  it("supports a cluster-scoped bundle with no namespace", async () => {
-    const handle = define({
-      name: "crds",
-      build: () => [
-        { kind: "CustomResourceDefinition", metadata: { name: "foos.example.com" } }
-      ]
-    })
+  it.effect("supports a cluster-scoped bundle with no namespace", () =>
+    Effect.gen(function*() {
+      const handle = define({
+        name: "crds",
+        build: () => [
+          { kind: "CustomResourceDefinition", metadata: { name: "foos.example.com" } }
+        ]
+      })
 
-    const program = Effect.gen(function*() {
-      const b = yield* handle
+      const b = yield* handle.pipe(Effect.provide(handle.layer))
       expect(b.namespace).toBeUndefined()
       expect(b.name).toBe("crds")
-    })
-    await Effect.runPromise(
-      program.pipe(Effect.provide(handle.layer)) as Effect.Effect<void, never, never>
-    )
-  })
+    }))
 })
 
 layer(NodeServices.layer)("Bundle.fromModules", (it) => {

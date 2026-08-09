@@ -1,6 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
+import { it } from "@effect/vitest"
 import { Context, Effect, Layer } from "effect"
-import { describe, expect, it } from "vitest"
+import { describe, expect } from "vitest"
 import { _buildLayers, _compose, _resolveEnv } from "./render"
 import { RenderContext } from "./RenderContext"
 
@@ -26,23 +27,20 @@ describe("render — layer composition", () => {
     expect(built).toBe(NodeServices.layer)
   })
 
-  it("merges NodeServices.layer with the caller's layer when provided", async () => {
+  it.effect("merges NodeServices.layer with the caller's layer when provided", () => {
     const Marker = Context.Service<{ readonly tag: "marker" }>("test/render/Marker")
     const extra = Layer.succeed(Marker, { tag: "marker" } as const)
     const built = _buildLayers(extra)
     expect(built).not.toBe(NodeServices.layer)
-    const result = await Effect.runPromise(
-      Effect.gen(function*() {
-        const m = yield* Marker
-        return m.tag
-      }).pipe(Effect.provide(built))
-    )
-    expect(result).toBe("marker")
+    return Effect.gen(function*() {
+      const m = yield* Marker
+      expect(m.tag).toBe("marker")
+    }).pipe(Effect.provide(built))
   })
 })
 
 describe("render — _compose wiring", () => {
-  it("hands the program a ctx keyed on the resolved env and the merged layers", async () => {
+  it.effect("hands the program a ctx keyed on the resolved env and the merged layers", () => {
     const Marker = Context.Service<{ readonly tag: "marker" }>("test/render/ComposeMarker")
     const extra = Layer.succeed(Marker, { tag: "marker" } as const)
 
@@ -55,23 +53,25 @@ describe("render — _compose wiring", () => {
         seenTag = m.tag
       })
 
-    // _compose provides NodeServices + the caller's layer, so the program
-    // resolves the Marker service and observes the ctx render() would build.
-    await Effect.runPromise(_compose(program, { env: "staging", layers: extra }))
-
-    expect(seenEnv).toBe("staging")
-    expect(seenTag).toBe("marker")
+    return _compose(program, { env: "staging", layers: extra }).pipe(
+      Effect.map(() => {
+        expect(seenEnv).toBe("staging")
+        expect(seenTag).toBe("marker")
+      })
+    )
   })
 
-  it("defaults the composed ctx env to 'prod' when no env option is given", async () => {
+  it.effect("defaults the composed ctx env to 'prod' when no env option is given", () => {
     let seenEnv: string | undefined
     const program = (ctx: RenderContext) =>
       Effect.sync(() => {
         seenEnv = ctx.env
       })
 
-    await Effect.runPromise(_compose(program))
-
-    expect(seenEnv).toBe("prod")
+    return _compose(program).pipe(
+      Effect.map(() => {
+        expect(seenEnv).toBe("prod")
+      })
+    )
   })
 })

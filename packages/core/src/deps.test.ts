@@ -1,5 +1,6 @@
+import { it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
-import { describe, expect, expectTypeOf, it } from "vitest"
+import { describe, expect, expectTypeOf } from "vitest"
 import type { ConfigMapRef, Need, SecretRef, ServiceAccountRef } from "./deps"
 import { Application, ConfigMap, Namespace, Secret, ServiceAccount } from "./deps"
 
@@ -10,7 +11,7 @@ type ServiceAccountReq<N extends string> = Need<"ServiceAccount", N>
 type ApplicationReq<N extends string> = Need<"Application", N>
 
 describe("deps — yieldable Key constructors", () => {
-  it("Secret(name): yielding lifts SecretReq<N> into R, layer discharges", async () => {
+  it.effect("Secret(name): yielding lifts SecretReq<N> into R, layer discharges", () => {
     const prog = Effect.gen(function*() {
       const ref = yield* Secret("postgres-credentials")
       return ref
@@ -18,19 +19,19 @@ describe("deps — yieldable Key constructors", () => {
     expectTypeOf(prog).toMatchTypeOf<
       Effect.Effect<SecretRef<"postgres-credentials">, never, SecretReq<"postgres-credentials">>
     >()
-    const result = await Effect.runPromise(
-      prog.pipe(
-        Effect.provide(
-          Layer.succeed(Secret("postgres-credentials"))(
-            "postgres-credentials" as SecretRef<"postgres-credentials">
-          )
+    return prog.pipe(
+      Effect.provide(
+        Layer.succeed(Secret("postgres-credentials"))(
+          "postgres-credentials" as SecretRef<"postgres-credentials">
         )
-      )
+      ),
+      Effect.map((result) => {
+        expect(result).toBe("postgres-credentials")
+      })
     )
-    expect(result).toBe("postgres-credentials")
   })
 
-  it("Two distinct Secret names produce two distinct R slots", async () => {
+  it.effect("Two distinct Secret names produce two distinct R slots", () => {
     const prog = Effect.gen(function*() {
       const a = yield* Secret("a")
       const b = yield* Secret("b")
@@ -39,20 +40,20 @@ describe("deps — yieldable Key constructors", () => {
     expectTypeOf(prog).toMatchTypeOf<
       Effect.Effect<unknown, never, SecretReq<"a"> | SecretReq<"b">>
     >()
-    const result = await Effect.runPromise(
-      prog.pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            Layer.succeed(Secret("a"))("a" as SecretRef<"a">),
-            Layer.succeed(Secret("b"))("b" as SecretRef<"b">)
-          )
+    return prog.pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(Secret("a"))("a" as SecretRef<"a">),
+          Layer.succeed(Secret("b"))("b" as SecretRef<"b">)
         )
-      )
+      ),
+      Effect.map((result) => {
+        expect(result).toEqual({ a: "a", b: "b" })
+      })
     )
-    expect(result).toEqual({ a: "a", b: "b" })
   })
 
-  it("ConfigMap, Namespace, ServiceAccount, Application all behave the same", async () => {
+  it.effect("ConfigMap, Namespace, ServiceAccount, Application all behave the same", () => {
     const prog = Effect.gen(function*() {
       const cm = yield* ConfigMap("settings")
       const ns = yield* Namespace("prod")
@@ -70,35 +71,37 @@ describe("deps — yieldable Key constructors", () => {
         | ApplicationReq<"api">
       >
     >()
-    const result = await Effect.runPromise(
-      prog.pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            Layer.succeed(ConfigMap("settings"))("settings" as ConfigMapRef<"settings">),
-            Layer.succeed(Namespace("prod"))("prod"),
-            Layer.succeed(ServiceAccount("worker"))("worker" as ServiceAccountRef<"worker">),
-            Layer.succeed(Application("api"))("api")
-          )
+    return prog.pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(ConfigMap("settings"))("settings" as ConfigMapRef<"settings">),
+          Layer.succeed(Namespace("prod"))("prod"),
+          Layer.succeed(ServiceAccount("worker"))("worker" as ServiceAccountRef<"worker">),
+          Layer.succeed(Application("api"))("api")
         )
-      )
+      ),
+      Effect.map((result) => {
+        expect(result).toEqual({
+          cm: "settings",
+          ns: "prod",
+          sa: "worker",
+          app: "api"
+        })
+      })
     )
-    expect(result).toEqual({
-      cm: "settings",
-      ns: "prod",
-      sa: "worker",
-      app: "api"
-    })
   })
 
-  it("Two calls with the same name resolve to the same provider value", async () => {
+  it.effect("Two calls with the same name resolve to the same provider value", () => {
     const prog = Effect.gen(function*() {
       const a = yield* Secret("same")
       const b = yield* Secret("same")
       return { a, b }
     })
-    const result = await Effect.runPromise(
-      prog.pipe(Effect.provide(Layer.succeed(Secret("same"))("same" as SecretRef<"same">)))
+    return prog.pipe(
+      Effect.provide(Layer.succeed(Secret("same"))("same" as SecretRef<"same">)),
+      Effect.map((result) => {
+        expect(result).toEqual({ a: "same", b: "same" })
+      })
     )
-    expect(result).toEqual({ a: "same", b: "same" })
   })
 })

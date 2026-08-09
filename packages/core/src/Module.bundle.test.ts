@@ -1,18 +1,11 @@
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { describe, expect, expectTypeOf, it } from "vitest"
 import * as Bundle from "./Bundle"
 import * as Module from "./Module"
 
-const runHandle = <Name extends string, Out, In>(
+const handleEffect = <Name extends string, Out, In>(
   handle: Bundle.BundleHandle<Name, Out, In>
-): Bundle.Bundle =>
-  Effect.runSync(
-    (Effect.gen(function*() {
-      return yield* handle
-    }) as Effect.Effect<Bundle.Bundle, never, never>).pipe(
-      Effect.provide(handle.layer as Layer.Layer<Out, never, never>)
-    )
-  )
+) => handle.pipe(Effect.provide(handle.layer))
 
 describe("Module.fixedNs({ target: Bundle.target, ... })", () => {
   const defineCertManager = Module.fixedNs({
@@ -33,7 +26,7 @@ describe("Module.fixedNs({ target: Bundle.target, ... })", () => {
 
   it("bakes the configured namespace and runs the build", () => {
     const cm = defineCertManager({ name: "cert-manager", version: "v1.14" })
-    const bundle = runHandle(cm)
+    const bundle = Effect.runSync(handleEffect(cm))
 
     expect(bundle.name).toBe("cert-manager")
     expect(bundle.namespace).toBe("cert-manager")
@@ -62,9 +55,9 @@ describe("Module.dynamicNs({ target: Bundle.target, ... })", () => {
     const prod = defineCache({ name: "cache", namespace: "prod", sizeGi: 50 })
     const staging = defineCache({ name: "cache", namespace: "staging", sizeGi: 10 })
 
-    expect(runHandle(prod).namespace).toBe("prod")
-    expect(runHandle(staging).namespace).toBe("staging")
-    expect(runHandle(prod).manifests).toEqual([
+    expect(Effect.runSync(handleEffect(prod)).namespace).toBe("prod")
+    expect(Effect.runSync(handleEffect(staging)).namespace).toBe("staging")
+    expect(Effect.runSync(handleEffect(prod)).manifests).toEqual([
       { kind: "Pvc", name: "cache", namespace: "prod", sizeGi: 50 }
     ])
   })

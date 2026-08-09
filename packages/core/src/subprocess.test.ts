@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { Cause, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { Command } from "effect/unstable/process/ChildProcess"
 import {
@@ -64,7 +64,7 @@ describe("runProcessString", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         const err = exit.cause
-        const text = JSON.stringify(err)
+        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(err)
         expect(text).toContain("ProcessError")
         expect(text).toContain("boom: bad flag")
       }
@@ -79,7 +79,8 @@ describe("runProcessString", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(JSON.stringify(exit.cause)).toContain("ProcessError")
+        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        expect(text).toContain("ProcessError")
       }
     }))
 
@@ -103,10 +104,7 @@ describe("runProcessString", () => {
 })
 
 describe("runProcessExit", () => {
-  it.effect("zero exit succeeds", () =>
-    Effect.gen(function*() {
-      yield* runProcessExit(_cmd).pipe(Effect.provide(_spawnerFor({ exitCode: 0 })))
-    }))
+  it.effect("zero exit succeeds", () => runProcessExit(_cmd).pipe(Effect.provide(_spawnerFor({ exitCode: 0 }))))
 
   it.effect("non-zero exit fails with ProcessError carrying the stderr tail", () =>
     Effect.gen(function*() {
@@ -117,7 +115,8 @@ describe("runProcessExit", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(JSON.stringify(exit.cause)).toContain("pull failed")
+        const text = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(exit.cause)
+        expect(text).toContain("pull failed")
       }
     }))
 })

@@ -1,5 +1,6 @@
+import { it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
-import { describe, expect, it } from "vitest"
+import { describe, expect } from "vitest"
 import { BuiltImageRef, Image, provideImage } from "./deps"
 
 describe("BuiltImageRef + Dep.Image", () => {
@@ -8,46 +9,38 @@ describe("BuiltImageRef + Dep.Image", () => {
     expect(ref).toBe("ghcr.io/example/api:1.0.0")
   })
 
-  it("provideImage yields the typed ref via Dep.Image(app)", async () => {
-    const layer = provideImage({ app: "api", registry: "ghcr.io/example", tag: "1.0.0" })
+  it.effect("provideImage yields the typed ref via Dep.Image(app)", () =>
+    Effect.gen(function*() {
+      const layer = provideImage({ app: "api", registry: "ghcr.io/example", tag: "1.0.0" })
 
-    const program = Effect.gen(function*() {
-      const ref = yield* Image("api")
-      return ref
-    }).pipe(Effect.provide(layer))
+      const result = yield* Image("api").pipe(Effect.provide(layer))
+      expect(result).toBe("ghcr.io/example/api:1.0.0")
+    }))
 
-    const result = await Effect.runPromise(program)
-    expect(result).toBe("ghcr.io/example/api:1.0.0")
-  })
+  it.effect("an Image-using workload is satisfied when the build module's layer is merged", () =>
+    Effect.gen(function*() {
+      const buildLayer = provideImage({
+        app: "worker",
+        registry: "ghcr.io/example",
+        tag: "2.3.4"
+      })
 
-  it("an Image-using workload is satisfied when the build module's layer is merged", async () => {
-    const buildLayer = provideImage({
-      app: "worker",
-      registry: "ghcr.io/example",
-      tag: "2.3.4"
-    })
+      const result = yield* Image("worker").pipe(
+        Effect.map((ref) => ({ image: String(ref) })),
+        Effect.provide(buildLayer)
+      )
+      expect(result.image).toBe("ghcr.io/example/worker:2.3.4")
+    }))
 
-    const program = Effect.gen(function*() {
-      const ref = yield* Image("worker")
-      return { image: String(ref) }
-    }).pipe(Effect.provide(buildLayer))
-
-    const result = await Effect.runPromise(program)
-    expect(result.image).toBe("ghcr.io/example/worker:2.3.4")
-  })
-
-  it("Layer.mergeAll composes image providers", async () => {
+  it.effect("Layer.mergeAll composes image providers", () => {
     const apiLayer = provideImage({ app: "api", registry: "ghcr.io/x", tag: "1" })
     const workerLayer = provideImage({ app: "worker", registry: "ghcr.io/x", tag: "1" })
 
-    const program = Effect.gen(function*() {
+    return Effect.gen(function*() {
       const api = yield* Image("api")
       const worker = yield* Image("worker")
-      return [String(api), String(worker)] as const
+      expect(String(api)).toBe("ghcr.io/x/api:1")
+      expect(String(worker)).toBe("ghcr.io/x/worker:1")
     }).pipe(Effect.provide(Layer.mergeAll(apiLayer, workerLayer)))
-
-    const [a, w] = await Effect.runPromise(program)
-    expect(a).toBe("ghcr.io/x/api:1")
-    expect(w).toBe("ghcr.io/x/worker:1")
   })
 })

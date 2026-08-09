@@ -62,11 +62,11 @@ export interface HandleKind extends Module.HandleKind {
     this["_Name"] & string,
     | Dep.Provide<"App", this["_Name"] & string>
     | Dep.Provide<"Namespace", this["_Ns"] & string>
-    | (this["_Extra"] & unknown),
+    | this["_Extra"],
     Exclude<
-      this["_R"] & unknown,
+      this["_R"],
       | Dep.Need<"Namespace", this["_Ns"] & string>
-      | (this["_Extra"] & unknown)
+      | this["_Extra"]
     >
   >
 }

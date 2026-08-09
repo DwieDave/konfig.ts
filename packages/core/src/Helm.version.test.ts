@@ -1,4 +1,5 @@
 import { NodeServices } from "@effect/platform-node"
+import { describe, expect, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Layer, Sink, Stream } from "effect"
 import type { Command } from "effect/unstable/process/ChildProcess"
 import {
@@ -9,7 +10,6 @@ import {
   makeHandle,
   ProcessId
 } from "effect/unstable/process/ChildProcessSpawner"
-import { describe, expect, it } from "vitest"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
 
@@ -56,30 +56,30 @@ const _release = (minVersion: string) =>
 // reached; NodeServices then supplies FileSystem/Path for the type. The
 // preflight short-circuits before any filesystem work, so those are unused.
 const _run = (minVersion: string, proc: FakeProc) =>
-  Effect.runPromiseExit(
-    _release(minVersion)
-      .render(RenderContext.make("test"))
-      .pipe(Effect.provide(_spawnerFor(proc)), Effect.provide(NodeServices.layer), Effect.scoped)
-  )
+  _release(minVersion)
+    .render(RenderContext.make("test"))
+    .pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, _spawnerFor(proc))), Effect.scoped, Effect.exit)
 
 describe("Helm.release helm-version preflight", () => {
-  it("fails HelmVersionTooLow when the installed helm is older than minVersion", async () => {
-    const exit = await _run("3.16.0", { stdout: "v3.10.0\n", exitCode: 0 })
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      const pretty = Cause.pretty(exit.cause)
-      expect(pretty).toContain("HelmVersionTooLow")
-      expect(pretty).toContain("3.10.0")
-    }
-  })
+  it.effect("fails HelmVersionTooLow when the installed helm is older than minVersion", () =>
+    Effect.gen(function*() {
+      const exit = yield* _run("3.16.0", { stdout: "v3.10.0\n", exitCode: 0 })
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const pretty = Cause.pretty(exit.cause)
+        expect(pretty).toContain("HelmVersionTooLow")
+        expect(pretty).toContain("3.10.0")
+      }
+    }))
 
-  it("fails HelmVersionTooLow ('not found') when helm is absent (non-zero exit)", async () => {
-    const exit = await _run("3.16.0", { stdout: "", stderr: "command not found", exitCode: 127 })
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      const pretty = Cause.pretty(exit.cause)
-      expect(pretty).toContain("HelmVersionTooLow")
-      expect(pretty).toContain("not found")
-    }
-  })
+  it.effect("fails HelmVersionTooLow ('not found') when helm is absent (non-zero exit)", () =>
+    Effect.gen(function*() {
+      const exit = yield* _run("3.16.0", { stdout: "", stderr: "command not found", exitCode: 127 })
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const pretty = Cause.pretty(exit.cause)
+        expect(pretty).toContain("HelmVersionTooLow")
+        expect(pretty).toContain("not found")
+      }
+    }))
 })
