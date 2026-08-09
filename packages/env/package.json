@@ -51,7 +51,7 @@
     "@konfig.ts/core": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.106"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

@@ -91,7 +91,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.106",
+        "effect": "catalog:",
       },
     },
     "packages/cli": {
@@ -134,7 +134,7 @@
         "yaml": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.106",
+        "effect": "catalog:",
       },
     },
     "packages/docker": {
@@ -153,7 +153,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.106",
+        "effect": "catalog:",
       },
     },
     "packages/env": {
@@ -170,7 +170,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.106",
+        "effect": "catalog:",
       },
     },
     "packages/external-secrets": {
@@ -189,7 +189,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.106",
+        "effect": "catalog:",
       },
     },
     "packages/k8s": {
@@ -209,7 +209,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.106",
+        "effect": "catalog:",
       },
     },
     "packages/oxc": {
@@ -237,7 +237,7 @@
         "yaml": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.106",
+        "effect": "catalog:",
       },
     },
     "packages/sops": {
@@ -259,7 +259,7 @@
         "yaml": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.106",
+        "effect": "catalog:",
       },
     },
   },
