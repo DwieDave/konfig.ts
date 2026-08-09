@@ -28,12 +28,13 @@
     "test": "bun run --cwd packages/core test && bun run --cwd packages/env test && bun run --cwd packages/k8s test && bun run --cwd packages/external-secrets test && bun run --cwd packages/sealed-secrets test && bun run --cwd packages/sops test && bun run --cwd packages/argocd test && bun run --cwd packages/docker test && bun run --cwd packages/cli test",
     "lint": "oxlint",
     "lint:apply": "oxlint --fix",
-    "prepare": "effect-tsgo patch"
+    "prepare": "effect-tsgo patch --oxlint"
   },
   "devDependencies": {
-    "@effect/tsgo": "^0.19.0",
+    "@effect/tsgo": "^0.36.0",
     "@typescript/native": "npm:typescript@7.0.2",
-    "oxlint": "^1.40.0",
+    "oxlint": "^1.77.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "tsdown": "^0.22.0",
     "typescript": "catalog:"
   }
