@@ -72,6 +72,8 @@ const STATS = [
     grid-template-areas: "word";
     vertical-align: baseline;
     text-align: left;
+    overflow: hidden;
+    transition: width 500ms ease;
   }
   .rotating-word__item {
     grid-area: word;
@@ -90,11 +92,6 @@ const STATS = [
   .rotating-word__item[data-leaving] {
     opacity: 0;
     transform: translateY(-0.35em);
-  }
-  @media (min-width: 768px) {
-    .rotating-word__item {
-      justify-self: center;
-    }
   }
   @media (prefers-reduced-motion: reduce) {
     .rotating-word__item {
@@ -139,6 +136,19 @@ const STATS = [
       const words = Array.from(this.querySelectorAll("[data-word]")).filter((el): el is HTMLElement => el instanceof HTMLElement)
       if (words.length < 2) return
       let index = 0
+      const fit = (el: HTMLElement) => {
+        this.style.width = `${el.scrollWidth}px`
+      }
+      const first = words[0]
+      if (first !== undefined) fit(first)
+      document.fonts?.ready.then(() => {
+        const active = words[index]
+        if (active !== undefined) fit(active)
+      })
+      window.addEventListener("resize", () => {
+        const active = words[index]
+        if (active !== undefined) fit(active)
+      })
       this.#timer = setInterval(() => {
         const current = words[index]
         index = (index + 1) % words.length
@@ -147,6 +157,7 @@ const STATS = [
         current.removeAttribute("data-active")
         current.setAttribute("data-leaving", "")
         next.setAttribute("data-active", "")
+        fit(next)
         setTimeout(() => current.removeAttribute("data-leaving"), 500)
       }, INTERVAL_MS)
     }
