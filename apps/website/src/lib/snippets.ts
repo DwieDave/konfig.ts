@@ -20,7 +20,7 @@ export const EXAMPLE_ROOT = path.join(findRepoRoot(process.cwd()), "examples", "
 export interface DiagnosticAnchor {
   /** Substring of the line to underline; the first line containing `on` (or `find`) is used. */
   readonly find: string
-  /** Optional line marker to disambiguate — the first line containing it. Defaults to `find`. */
+  /** Optional line marker to disambiguate: the first line containing it. Defaults to `find`. */
   readonly on?: string
   readonly code: string
   /** Editor-style hover text (abridged from the real tsc output). */
@@ -53,6 +53,8 @@ export interface Snippet {
 }
 
 const META_LINE = /^\s*\/\/\s*(@ts-expect-error|Demonstrates:|probe)/
+// `void _x` lines only exist to satisfy unused-variable lint in the examples.
+const VOID_LINE = /^\s*void\s+_[a-zA-Z]\w*\s*$/
 
 export const readExample = (file: string): string => readFileSync(path.join(EXAMPLE_ROOT, file), "utf8")
 
@@ -73,7 +75,9 @@ export const sliceSnippet = (raw: string, spec: SnippetSpec): string => {
     lines = lines.slice(start + 1, end)
   }
   if (spec.stripMeta === true) {
-    lines = lines.filter((l) => !META_LINE.test(l))
+    lines = lines
+      .filter((l) => !META_LINE.test(l) && !VOID_LINE.test(l))
+      .map((l) => l.replace(/\b_(?=[a-zA-Z])/g, ""))
   }
   while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()

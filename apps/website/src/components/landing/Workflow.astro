@@ -6,7 +6,7 @@ const STEPS = [
   {
     cmd: "konfig build prod",
     title: "Render",
-    body: "Loads infra/env/prod.ts, resolves the dep graph, writes one directory per Application. Builds are input-hashed — a no-op build rewrites nothing, so Argo CD sees no churn."
+    body: "Loads infra/env/prod.ts, resolves the dep graph, writes one directory per Application. Builds are input-hashed: a no-op build rewrites nothing, so Argo CD sees no churn."
   },
   {
     cmd: "konfig validate prod --strict",

@@ -43,7 +43,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
     tab: "unbound-secret.ts",
     title: "An env contract with a secret you forgot to bind",
     summary:
-      "`apiEnv` declares three secret members. `Environment.bind` demands a backend for each one — and a `source` when the backend's type says it needs one.",
+      "`apiEnv` declares three secret members. `Environment.bind` demands a backend for each one, and a `source` when the backend's type says it needs one.",
     spec: {
       file: "infra/envs/unbound-secret.ts",
       stripMeta: true,
@@ -79,7 +79,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
     tab: "widened-name.ts",
     title: "An Application name that isn't a literal",
     summary:
-      "Names flow into the dep graph as string literals. Widen one to `string` and the graph can't reason about it — so the call site rejects it.",
+      "Names flow into the dep graph as string literals. Widen one to `string` and the graph can't reason about it, so the call site rejects it.",
     spec: {
       file: "infra/envs/widened-name.ts",
       stripMeta: true,
@@ -100,7 +100,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
     tab: "envname-collision.ts",
     title: "Two members claiming the same env var",
     summary:
-      "`Environment.define` checks env names across every member — literals, secrets, downward — at the type level. A collision is an error on the call.",
+      "`Environment.define` checks env names across every member (literals, secrets, downward) at the type level. A collision is an error on the call.",
     spec: {
       file: "infra/envs/envname-collision.ts",
       stripMeta: true,

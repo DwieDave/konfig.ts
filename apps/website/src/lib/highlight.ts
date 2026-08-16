@@ -1,4 +1,5 @@
-import type { Element, ElementContent } from "hast"
+import type { Element, ElementContent, Root } from "hast"
+import { toHtml } from "hast-util-to-html"
 import { createHighlighter, type BundledLanguage, type DecorationItem } from "shiki"
 import type { ResolvedDiagnostic } from "./snippets"
 
@@ -24,16 +25,24 @@ const tooltip = (d: ResolvedDiagnostic): Element =>
     text(d.message)
   ])
 
-const toDecoration = (d: ResolvedDiagnostic): DecorationItem => ({
+const toDecoration = (d: ResolvedDiagnostic, index: number): DecorationItem => ({
   start: { line: d.line, character: d.colStart },
   end: { line: d.line, character: d.colEnd },
   alwaysWrap: true,
-  properties: { class: "diag", tabindex: "0", "aria-label": `TS${d.code}: ${d.message}` },
-  transform: (element, type) => {
-    if (type === "wrapper") element.children.push(tooltip(d))
-    return element
-  }
+  properties: { class: "diag", tabindex: "0", "data-diag": String(index), "aria-label": `TS${d.code}: ${d.message}` }
 })
+
+// Tooltips are appended in a separate pass: mutating children inside a
+// decoration `transform` makes shiki drop the token tail after the range.
+const appendTooltips = (node: Root | Element, diagnostics: ReadonlyArray<ResolvedDiagnostic>): void => {
+  for (const child of node.children) {
+    if (child.type !== "element") continue
+    const index = child.properties["data-diag"]
+    const d = typeof index === "string" ? diagnostics[Number(index)] : undefined
+    if (d !== undefined) child.children.push(tooltip(d))
+    else appendTooltips(child, diagnostics)
+  }
+}
 
 export const highlight = (
   code: string,
@@ -41,14 +50,14 @@ export const highlight = (
   diagnostics: ReadonlyArray<ResolvedDiagnostic> = []
 ): string => {
   const language: BundledLanguage | "text" = lang === "text" ? "text" : lang
-  return highlighter.codeToHtml(code, {
+  const hast = highlighter.codeToHast(code, {
     lang: language,
     theme: "github-dark",
-    decorations: diagnostics.map(toDecoration),
+    decorations: diagnostics.map((d, i) => toDecoration(d, i)),
     transformers: [
       {
         pre(node) {
-          // Drop shiki's inline background — the CodeBlock frame owns the surface.
+          // Drop shiki's inline background: the CodeBlock frame owns the surface.
           delete node.properties["style"]
           node.properties["tabindex"] = "-1"
         },
@@ -59,4 +68,6 @@ export const highlight = (
       }
     ]
   })
+  appendTooltips(hast, diagnostics)
+  return toHtml(hast)
 }

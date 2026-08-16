@@ -8,7 +8,7 @@ const code = (s: string) => `<code class="rounded bg-zinc-800 px-1.5 py-0.5 font
 const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }> = [
   {
     question: "Why is it built on Effect?",
-    answer: `<p>The dependency graph is Effect's <em>Requirements</em> channel doing what it already does. A module's build is an Effect; ${code("yield* Dep.Secret(\"ghcr-pull\")")} adds a requirement; composing modules provides it. There is no bespoke graph engine to learn — the compiler error you get is the ordinary "this Effect still needs X" error, with a konfig message attached.</p><p class="mt-4">Effect also gives us ${code("Schema")} at every binary boundary (helm, sops, kubeseal stdout), ${code("Config")} for the runtime decoder, and ${code("Redacted")} for secret values.</p>`
+    answer: `<p>The dependency graph is Effect's <em>Requirements</em> channel doing what it already does. A module's build is an Effect; ${code("yield* Dep.Secret(\"ghcr-pull\")")} adds a requirement; composing modules provides it. There is no bespoke graph engine to learn: the compiler error you get is the ordinary "this Effect still needs X" error, with a konfig message attached.</p><p class="mt-4">Effect also gives us ${code("Schema")} at every binary boundary (helm, sops, kubeseal stdout), ${code("Config")} for the runtime decoder, and ${code("Redacted")} for secret values.</p>`
   },
   {
     question: "Do I need Bun?",
@@ -20,7 +20,7 @@ const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }
   },
   {
     question: "Can I keep my Helm charts?",
-    answer: `<p>Yes — that's the intended path. ${code("Helm.release({ repo, chart, version, digest, values })")} pulls the chart, verifies the tarball's SHA-256 against ${code("digest")} on every pull <em>and</em> every cache hit, templates it, and lifts each document as a ${code("RawYaml")} manifest inside your module. ${code("konfig crd extract")} even generates TypeScript types for the CRDs a chart ships.</p>`
+    answer: `<p>Yes, that is the intended path. ${code("Helm.release({ repo, chart, version, digest, values })")} pulls the chart, verifies the tarball's SHA-256 against ${code("digest")} on every pull <em>and</em> every cache hit, templates it, and lifts each document as a ${code("RawYaml")} manifest inside your module. ${code("konfig crd extract")} even generates TypeScript types for the CRDs a chart ships.</p>`
   },
   {
     question: "How do secrets stay out of git?",
@@ -28,7 +28,7 @@ const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }
   },
   {
     question: "Can I adopt it incrementally?",
-    answer: `<p>One Application at a time. Wrap an existing workload in ${code("Module.fixedNs")}, point ${code("konfig build")} at a new manifests directory, and add an Argo CD Application for it. Everything else keeps syncing from wherever it syncs from today.</p><p class="mt-4">Start with the <a href="${SITE.example}" target="_blank" rel="noopener noreferrer">full-stack example</a> — a monorepo with env contracts, a sops backend and Argo CD wiring, plus the worked failures shown above.</p>`
+    answer: `<p>One Application at a time. Wrap an existing workload in ${code("Module.fixedNs")}, point ${code("konfig build")} at a new manifests directory, and add an Argo CD Application for it. Everything else keeps syncing from wherever it syncs from today.</p><p class="mt-4">Start with the <a href="${SITE.example}" target="_blank" rel="noopener noreferrer">full-stack example</a>: a monorepo with env contracts, a sops backend and Argo CD wiring, plus the worked failures shown above.</p>`
   }
 ]
 ---
@@ -40,7 +40,7 @@ const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }
         <Eyebrow>FAQ</Eyebrow>
         <h2 class="text-2xl leading-tighter font-semibold text-white md:text-3xl">Questions a platform team asks first</h2>
         <p class="mt-5 max-w-lg text-lg leading-relaxed text-zinc-400">
-          Something missing? Open an issue — the README and each package's README go deeper.
+          Something missing? Open an issue. The README and each package's README go deeper.
         </p>
         <div class="mt-6">
           <Button href={`${SITE.repo}/issues/new`} external>Ask on GitHub</Button>
