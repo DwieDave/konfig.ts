@@ -39,9 +39,13 @@
     leftAt: number | undefined
   }
 
-  const labelFor = (col: number, row: number): string => {
-    const h = Math.abs((col * 73856093) ^ (row * 19349663)) % LABELS.length
-    return LABELS[h] ?? LABELS[0]
+  /** Random label per activation, never repeating the one just shown. */
+  let lastLabel = ""
+  const nextLabel = (): string => {
+    const pool = LABELS.filter((l) => l !== lastLabel)
+    const pick = pool[Math.floor(Math.random() * pool.length)] ?? LABELS[0]
+    lastLabel = pick
+    return pick
   }
 
   class KonfigHeroGrid extends HTMLElement {
@@ -145,7 +149,7 @@
         } else if (current === undefined || current.col !== col || current.row !== row) {
           this.#release(now)
           this.#cells = this.#cells.filter((c) => !(c.col === col && c.row === row))
-          this.#cells.push({ col, row, label: labelFor(col, row), leftAt: undefined })
+          this.#cells.push({ col, row, label: nextLabel(), leftAt: undefined })
         }
       }
 
