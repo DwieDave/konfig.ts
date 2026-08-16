@@ -49,7 +49,7 @@ const prod = load(SNIPPETS.prodEnv)
                 <span class="text-white">ApplicationHandle</span><span class="text-zinc-500">&lt;</span><span data-part="name" class="mental-model-part text-sky-400">Name</span><span class="text-zinc-500">, </span><span data-part="provides" class="mental-model-part text-emerald-400">Provides</span><span class="text-zinc-500">, </span><span data-part="needs" class="mental-model-part text-violet-400">Needs</span><span class="text-zinc-500">&gt;</span>
               </span>
             </div>
-            <svg data-role="connectors" class="mt-1 h-8 w-full" viewBox="0 0 400 32" fill="none" preserveAspectRatio="none" aria-hidden="true">
+            <svg data-role="connectors" class="mt-1 h-10 w-full" viewBox="0 0 400 32" fill="none" preserveAspectRatio="none" aria-hidden="true">
               <path data-connector="name" d="M67 0 L67 32" stroke="rgb(113 113 122)" stroke-width="1" stroke-opacity="0.5" vector-effect="non-scaling-stroke"></path>
               <path data-connector="provides" d="M200 0 L200 32" stroke="rgb(113 113 122)" stroke-width="1" stroke-opacity="0.5" vector-effect="non-scaling-stroke"></path>
               <path data-connector="needs" d="M333 0 L333 32" stroke="rgb(113 113 122)" stroke-width="1" stroke-opacity="0.5" vector-effect="non-scaling-stroke"></path>
@@ -118,7 +118,7 @@ const prod = load(SNIPPETS.prodEnv)
           const t = target.getBoundingClientRect()
           const x0 = s.left + s.width / 2 - box.left
           const x1 = t.left + t.width / 2 - box.left
-          path.setAttribute("d", `M${x0} 0 L${x0} 16 L${x1} 16 L${x1} 32`)
+          path.setAttribute("d", `M${x0} 0 C${x0} 18, ${x1} 14, ${x1} 32`)
         }
       }
       draw()
