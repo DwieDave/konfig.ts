@@ -1,7 +1,7 @@
 ---
 import { ArrowRight } from "@lucide/astro"
 import GridBackground from "@/components/GridBackground.astro"
-import HeroGrid from "@/components/landing/HeroGrid.astro"
+import GridInteractive from "@/components/GridInteractive.astro"
 import InstallPanel from "@/components/ui/InstallPanel.astro"
 import { SITE } from "@/lib/site"
 
@@ -15,10 +15,10 @@ const STATS = [
 
 <section id="top" class="hero-section relative w-full">
   <GridBackground />
-  <HeroGrid />
+  <GridInteractive />
   <div aria-hidden="true" class="hero-glow pointer-events-none absolute inset-x-0 top-0 h-150"></div>
   <div class="relative mx-auto w-full max-w-295 px-4 pt-20 pb-24">
-    <div data-hero-content class="max-w-4xl text-left md:mx-auto md:text-center">
+    <div data-grid-content class="max-w-4xl text-left md:mx-auto md:text-center">
       <a
         href={SITE.releases}
         target="_blank"

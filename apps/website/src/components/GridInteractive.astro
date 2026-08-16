@@ -1,21 +1,23 @@
 ---
 /**
- * Interactive hero grid: cells under the cursor light up with a faint fill and a tiny
+ * Interactive grid layer (sits above GridBackground, below content): cells under the cursor light up with a faint fill and a tiny
  * mono `Kind/name` label — a nod to konfig rendering one YAML file per resource.
- * Aligns with GridBackground (cell = 73.75rem/6 × 194px, origin x at 50%, y at hero top).
- * Static (empty) on touch, prefers-reduced-motion, and while the hero is off-screen.
+ * Aligns with GridBackground (cell = 73.75rem/6 × 194px, origin x at 50%, y at section top).
+ * Static (empty) on touch, prefers-reduced-motion, and while the section is off-screen.
  */
 ---
 
-<konfig-hero-grid aria-hidden="true" class="pointer-events-none absolute inset-0 block overflow-hidden font-mono">
+<konfig-grid-interactive aria-hidden="true" class="pointer-events-none absolute inset-0 block overflow-hidden font-mono">
   <canvas class="absolute inset-0 h-full w-full"></canvas>
-</konfig-hero-grid>
+</konfig-grid-interactive>
 
 <script>
   const CELL_W_REM = 73.75 / 6
   const CELL_H = 194
   const HOLD_MS = 350
   const FADE_MS = 1100
+  const GLOW_MS = 320
+  const LABEL_GLOW_MS = 900
   const LABELS = [
     "Deployment/api",
     "Service/api",
@@ -37,6 +39,8 @@
     readonly label: string
     /** Timestamp at which the fade-out started; undefined while still hovered. */
     leftAt: number | undefined
+    /** Timestamp of activation; drives the brief entry glow. */
+    readonly enteredAt: number
   }
 
   /** Random label per activation, never repeating the one just shown. */
@@ -48,7 +52,7 @@
     return pick
   }
 
-  class KonfigHeroGrid extends HTMLElement {
+  class KonfigGridInteractive extends HTMLElement {
     #canvas: HTMLCanvasElement | undefined
     #ctx: CanvasRenderingContext2D | undefined
     #cells: Cell[] = []
@@ -149,12 +153,12 @@
         } else if (current === undefined || current.col !== col || current.row !== row) {
           this.#release(now)
           this.#cells = this.#cells.filter((c) => !(c.col === col && c.row === row))
-          this.#cells.push({ col, row, label: nextLabel(), leftAt: undefined })
+          this.#cells.push({ col, row, label: nextLabel(), leftAt: undefined, enteredAt: now })
         }
       }
 
-      // Labels stay clear of the hero copy: measure tight text bounds of each content block.
-      const content = this.parentElement?.querySelector("[data-hero-content]")
+      // Labels stay clear of the section copy: measure tight text bounds of each content block.
+      const content = this.parentElement?.querySelector("[data-grid-content]")
       const copyRects: DOMRect[] = []
       if (content instanceof HTMLElement) {
         for (const child of content.children) {
@@ -183,23 +187,30 @@
         if (elapsed >= HOLD_MS + FADE_MS) continue
         const k = Math.max(0, elapsed - HOLD_MS) / FADE_MS
         const a = 1 - k * k * (3 - 2 * k) // smoothstep ease-out
+        // Entry glow: flash to zinc-400 and settle back to the resting tones.
+        const g = 1 - Math.min(1, (now - c.enteredAt) / GLOW_MS)
+        const glow = g * g
+        const mix = (from: number, to: number) => Math.round(from + (to - from) * glow)
+        const lg = 1 - Math.min(1, (now - c.enteredAt) / LABEL_GLOW_MS)
+        const labelGlow = lg * lg
+        const mixLabel = (from: number, to: number) => Math.round(from + (to - from) * labelGlow)
         alive.push(c)
         const x = originX + c.col * cw
         const y = c.row * CELL_H
         ctx.fillStyle = `rgba(39, 39, 42, ${0.4 * a})` // zinc-800/40
         ctx.fillRect(x + 1, y + 1, cw - 1, CELL_H - 1)
-        ctx.strokeStyle = `rgba(63, 63, 70, ${0.9 * a})` // zinc-700
+        ctx.strokeStyle = `rgba(${mix(63, 113)}, ${mix(63, 113)}, ${mix(70, 122)}, ${0.9 * a})` // zinc-700 <- zinc-500
         ctx.lineWidth = 1
         ctx.strokeRect(x + 0.5, y + 0.5, cw, CELL_H)
         const lw = ctx.measureText(c.label).width
         if (collides(x + 10, y + CELL_H - 18, lw, 10)) continue
-        ctx.fillStyle = `rgba(82, 82, 91, ${a})` // zinc-600
+        ctx.fillStyle = `rgba(${mixLabel(82, 161)}, ${mixLabel(82, 161)}, ${mixLabel(91, 170)}, ${a})` // zinc-600 <- zinc-400
         ctx.fillText(c.label, x + 10, y + CELL_H - 8)
       }
       this.#cells = alive
-      const animating = alive.some((c) => c.leftAt !== undefined)
+      const animating = alive.some((c) => c.leftAt !== undefined || now - c.enteredAt < LABEL_GLOW_MS)
       if (animating && this.#visible) this.#schedule()
     }
   }
-  if (!customElements.get("konfig-hero-grid")) customElements.define("konfig-hero-grid", KonfigHeroGrid)
+  if (!customElements.get("konfig-grid-interactive")) customElements.define("konfig-grid-interactive", KonfigGridInteractive)
 </script>

@@ -1,6 +1,7 @@
 ---
 import { ArrowRight, ArrowUpRight } from "@lucide/astro"
 import GridBackground from "@/components/GridBackground.astro"
+import GridInteractive from "@/components/GridInteractive.astro"
 import Button from "@/components/ui/Button.astro"
 import InstallPanel from "@/components/ui/InstallPanel.astro"
 import { SITE, base } from "@/lib/site"
@@ -8,8 +9,9 @@ import { SITE, base } from "@/lib/site"
 
 <section class="relative w-full py-36 md:py-24">
   <GridBackground />
+  <GridInteractive />
   <div class="relative mx-auto w-full max-w-295 px-4">
-    <div class="flex flex-col items-center text-center">
+    <div data-grid-content class="flex flex-col items-center text-center">
       <p class="mb-3 font-mono text-base text-zinc-500">
         <span>import {"{ "}</span><span class="text-white">AppOfApps</span><span>{" }"} from "@konfig.ts/argocd"</span>
       </p>
