@@ -18,38 +18,46 @@
   const FADE_MS = 1100
   const GLOW_MS = 320
   const LABEL_GLOW_MS = 900
-  const LABELS = [
-    "Deployment/api",
-    "Service/api",
-    "Secret/db-creds",
-    "Application/postgres",
-    "SopsSecret/ghcr-pull",
-    "Namespace/prod",
-    "Ingress/web",
-    "ConfigMap/env",
-    "ExternalSecret/stripe",
-    "CronJob/backup",
-    "HelmRelease/redis",
-    "ServiceAccount/ci"
-  ] as const
+  /** Resource kinds by category, each with a neon accent (tailwind 400 shades) and a name pool. */
+  interface Category {
+    readonly kinds: ReadonlyArray<string>
+    readonly names: ReadonlyArray<string>
+    readonly rgb: readonly [number, number, number]
+  }
+  const CATEGORIES: ReadonlyArray<Category> = [
+    { kinds: ["Deployment", "StatefulSet", "CronJob", "Job"], names: ["api", "web", "worker", "scheduler", "backup", "migrate"], rgb: [52, 211, 153] }, // emerald-400
+    { kinds: ["Service", "Ingress", "HTTPRoute"], names: ["api", "web", "grafana", "public", "internal"], rgb: [56, 189, 248] }, // sky-400
+    { kinds: ["Secret", "SopsSecret", "ExternalSecret", "SealedSecret"], names: ["db-creds", "ghcr-pull", "stripe", "smtp", "jwt-key"], rgb: [251, 191, 36] }, // amber-400
+    { kinds: ["Application", "AppProject", "HelmRelease"], names: ["postgres", "redis", "cert-manager", "traefik", "monitoring"], rgb: [167, 139, 250] }, // violet-400
+    { kinds: ["Namespace", "ConfigMap", "ServiceAccount", "Role"], names: ["prod", "staging", "env", "ci", "argocd"], rgb: [251, 113, 133] } // rose-400
+  ]
 
   interface Cell {
     readonly col: number
     readonly row: number
     readonly label: string
+    readonly rgb: readonly [number, number, number]
     /** Timestamp at which the fade-out started; undefined while still hovered. */
     leftAt: number | undefined
     /** Timestamp of activation; drives the brief entry glow. */
     readonly enteredAt: number
   }
 
-  /** Random label per activation, never repeating the one just shown. */
+  const pickRandom = <T,>(xs: ReadonlyArray<T>): T | undefined => xs[Math.floor(Math.random() * xs.length)]
+  /** Random `Kind/name` pair per activation, never repeating the label just shown. */
   let lastLabel = ""
-  const nextLabel = (): string => {
-    const pool = LABELS.filter((l) => l !== lastLabel)
-    const pick = pool[Math.floor(Math.random() * pool.length)] ?? LABELS[0]
-    lastLabel = pick
-    return pick
+  const nextLabel = (): { label: string; rgb: readonly [number, number, number] } => {
+    for (let i = 0; i < 8; i++) {
+      const cat = pickRandom(CATEGORIES)
+      const kind = cat === undefined ? undefined : pickRandom(cat.kinds)
+      const name = cat === undefined ? undefined : pickRandom(cat.names)
+      if (cat === undefined || kind === undefined || name === undefined) continue
+      const label = `${kind}/${name}`
+      if (label === lastLabel) continue
+      lastLabel = label
+      return { label, rgb: cat.rgb }
+    }
+    return { label: "Deployment/api", rgb: [52, 211, 153] }
   }
 
   class KonfigGridInteractive extends HTMLElement {
@@ -153,7 +161,7 @@
         } else if (current === undefined || current.col !== col || current.row !== row) {
           this.#release(now)
           this.#cells = this.#cells.filter((c) => !(c.col === col && c.row === row))
-          this.#cells.push({ col, row, label: nextLabel(), leftAt: undefined, enteredAt: now })
+          this.#cells.push({ col, row, ...nextLabel(), leftAt: undefined, enteredAt: now })
         }
       }
 
@@ -179,7 +187,7 @@
 
       // Draw.
       ctx.clearRect(0, 0, rect.width, rect.height)
-      ctx.font = `10px ${getComputedStyle(this).fontFamily}`
+      ctx.font = `12px ${getComputedStyle(this).fontFamily}`
       ctx.textBaseline = "bottom"
       const alive: Cell[] = []
       for (const c of this.#cells) {
@@ -193,7 +201,6 @@
         const mix = (from: number, to: number) => Math.round(from + (to - from) * glow)
         const lg = 1 - Math.min(1, (now - c.enteredAt) / LABEL_GLOW_MS)
         const labelGlow = lg * lg
-        const mixLabel = (from: number, to: number) => Math.round(from + (to - from) * labelGlow)
         alive.push(c)
         const x = originX + c.col * cw
         const y = c.row * CELL_H
@@ -203,9 +210,15 @@
         ctx.lineWidth = 1
         ctx.strokeRect(x + 0.5, y + 0.5, cw, CELL_H)
         const lw = ctx.measureText(c.label).width
-        if (collides(x + 10, y + CELL_H - 18, lw, 10)) continue
-        ctx.fillStyle = `rgba(${mixLabel(82, 161)}, ${mixLabel(82, 161)}, ${mixLabel(91, 170)}, ${a})` // zinc-600 <- zinc-400
+        if (collides(x + 10, y + CELL_H - 20, lw, 12)) continue
+        // Neon label: category hue at full brightness + soft bloom on entry, settling to a dimmed rest.
+        const [r, gc, bl] = c.rgb
+        ctx.fillStyle = `rgba(${r}, ${gc}, ${bl}, ${(0.45 + 0.55 * labelGlow) * a})`
+        ctx.shadowColor = `rgba(${r}, ${gc}, ${bl}, ${0.9 * labelGlow * a})`
+        ctx.shadowBlur = 10 * labelGlow
         ctx.fillText(c.label, x + 10, y + CELL_H - 8)
+        ctx.shadowBlur = 0
+        ctx.shadowColor = "transparent"
       }
       this.#cells = alive
       const animating = alive.some((c) => c.leftAt !== undefined || now - c.enteredAt < LABEL_GLOW_MS)
