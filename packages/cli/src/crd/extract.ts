@@ -47,14 +47,8 @@ export interface CrdDocument {
   readonly versions: readonly string[]
 }
 
-export const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
+const _buildCrds = (parsedDocs: ReadonlyArray<unknown>): CrdDocument[] => {
   const docs: unknown[] = []
-  let parsedDocs: ReadonlyArray<unknown>
-  try {
-    parsedDocs = parseYamlAll(yamlText)
-  } catch {
-    parsedDocs = []
-  }
   for (const parsed of parsedDocs) {
     if (parsed && typeof parsed === "object") docs.push(parsed)
   }
@@ -96,6 +90,12 @@ export const _parseCrdDocs = (yamlText: string): CrdDocument[] => {
   }
   return crds
 }
+
+export const _parseCrdDocs = (yamlText: string): Effect.Effect<CrdDocument[], never> =>
+  Effect.try(() => parseYamlAll(yamlText)).pipe(
+    Effect.orElseSucceed((): ReadonlyArray<unknown> => []),
+    Effect.map(_buildCrds)
+  )
 
 export const _crdNameToIdentifier = (crdName: string): string => {
   const resource = crdName.split(".")[0] ?? crdName
@@ -189,15 +189,17 @@ const _templateChartYaml = (opts: CrdExtractOptions) =>
     return yield* runProcessString(templateCmd, { allowEmptyStdout: true })
   })
 
-export const _dedupeCrdDocuments = (allYaml: ReadonlyArray<string>): Map<string, CrdDocument> => {
-  const seen = new Map<string, CrdDocument>()
-  for (const yaml of allYaml) {
-    for (const crd of _parseCrdDocs(yaml)) {
-      if (!seen.has(crd.crdName)) seen.set(crd.crdName, crd)
+export const _dedupeCrdDocuments = (allYaml: ReadonlyArray<string>): Effect.Effect<Map<string, CrdDocument>, never> =>
+  Effect.gen(function*() {
+    const seen = new Map<string, CrdDocument>()
+    for (const yaml of allYaml) {
+      const crds = yield* _parseCrdDocs(yaml)
+      for (const crd of crds) {
+        if (!seen.has(crd.crdName)) seen.set(crd.crdName, crd)
+      }
     }
-  }
-  return seen
-}
+    return seen
+  })
 
 const _writeStub = (opts: CrdExtractOptions) =>
   Effect.gen(function*() {
@@ -236,7 +238,7 @@ export const extractCrdsEffect = (opts: CrdExtractOptions) =>
 
     const crdsDirYaml = yield* _readCrdsDirYaml(decoded, tmpDir)
     const templateYaml = yield* _templateChartYaml(decoded)
-    const crds = _dedupeCrdDocuments([...crdsDirYaml, templateYaml])
+    const crds = yield* _dedupeCrdDocuments([...crdsDirYaml, templateYaml])
 
     if (crds.size === 0) {
       yield* _writeStub(decoded)

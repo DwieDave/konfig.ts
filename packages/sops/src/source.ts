@@ -1,7 +1,7 @@
 import { unsafeCoerce } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
 import { SecretSourceError } from "@konfig.ts/env"
-import { Effect, Redacted, type Scope } from "effect"
+import { Effect, Redacted } from "effect"
 import * as YAML from "yaml"
 import type { ChildProcessSpawner } from "./_unstable"
 import { sopsDecrypt } from "./sops"
@@ -24,7 +24,7 @@ const _defaultExtract = (key: string, parsed: unknown): unknown => {
 // Decrypts the file once; plucks every requested key from the in-memory plaintext.
 const _source = <const K extends string>(
   input: SopsSourceInput<K>
-): SecretSource<K, ChildProcessSpawner | Scope.Scope> => {
+): SecretSource<K, ChildProcessSpawner> => {
   const extract = input.extract ?? _defaultExtract
   const resolve = Effect.gen(function*() {
     const decryptedYaml = yield* sopsDecrypt({ file: input.file }).pipe(

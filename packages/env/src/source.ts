@@ -1,5 +1,5 @@
 import { runProcessString, unsafeCoerce } from "@konfig.ts/core"
-import { Config, Data, Effect, Redacted, type Scope } from "effect"
+import { Config, Data, Effect, Redacted } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "./_unstable"
 
 export class SecretSourceError extends Data.TaggedError("SecretSourceError")<{
@@ -79,7 +79,7 @@ export interface FromCommandInput<K extends string> {
 
 const _fromCommand = <const K extends string>(
   input: FromCommandInput<K>
-): SecretSource<K, ChildProcessSpawner | Scope.Scope> => {
+): SecretSource<K, ChildProcessSpawner> => {
   const resolve = Effect.gen(function*() {
     const out: Record<string, Redacted.Redacted<string>> = {}
     for (const key of input.keys) {
@@ -104,7 +104,7 @@ const _fromCommand = <const K extends string>(
       out,
       "per-key redacted record built from input.keys is the mapped type ResolvedSecretValues<K>"
     )
-  }).pipe(Effect.scoped)
+  })
   return { _tag: "SecretSource", keys: input.keys, resolve }
 }
 

@@ -273,6 +273,7 @@ interface ReadEntryInput {
 }
 
 const _parseCacheEntry = (text: string): BuildCacheEntry =>
+  // oxlint-disable-next-line app/no-parse-coercion
   unsafeCoerce<BuildCacheEntry>(
     JSON.parse(text),
     "parsed JSON shape matches BuildCacheEntry — caller revalidates by recomputing inputHash"

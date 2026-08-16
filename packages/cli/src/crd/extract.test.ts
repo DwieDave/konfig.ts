@@ -227,8 +227,9 @@ describe("extractCrdsEffect end-to-end", () => {
 })
 
 describe("_parseCrdDocs", () => {
+  const parse = (text: string) => Effect.runSync(_parseCrdDocs(text))
   it("parses a well-formed CustomResourceDefinition document", () => {
-    const docs = _parseCrdDocs(_validCrdYaml)
+    const docs = parse(_validCrdYaml)
     expect(docs).toHaveLength(1)
     expect(docs[0]?.crdName).toBe("widgets.example.com")
     expect(docs[0]?.group).toBe("example.com")
@@ -237,7 +238,7 @@ describe("_parseCrdDocs", () => {
   })
 
   it("ignores non-CRD documents in a multi-doc stream", () => {
-    const docs = _parseCrdDocs(`
+    const docs = parse(`
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -250,13 +251,13 @@ ${_validCrdYaml}
   })
 
   it("skips a CRD document missing metadata or spec", () => {
-    expect(_parseCrdDocs(`
+    expect(parse(`
 kind: CustomResourceDefinition
 spec:
   group: example.com
   versions: []
 `)).toEqual([])
-    expect(_parseCrdDocs(`
+    expect(parse(`
 kind: CustomResourceDefinition
 metadata:
   name: foo.example.com
@@ -264,7 +265,7 @@ metadata:
   })
 
   it("skips a CRD document with an empty name", () => {
-    expect(_parseCrdDocs(`
+    expect(parse(`
 kind: CustomResourceDefinition
 metadata:
   name: ""
@@ -276,7 +277,7 @@ spec:
   })
 
   it("skips a CRD document with no versions", () => {
-    expect(_parseCrdDocs(`
+    expect(parse(`
 kind: CustomResourceDefinition
 metadata:
   name: foo.example.com
@@ -287,7 +288,7 @@ spec:
   })
 
   it("falls back to a permissive schema when no version carries openAPIV3Schema", () => {
-    const docs = _parseCrdDocs(`
+    const docs = parse(`
 kind: CustomResourceDefinition
 metadata:
   name: foo.example.com
@@ -303,12 +304,11 @@ spec:
   })
 
   it("returns no documents for unparseable YAML instead of throwing", () => {
-    expect(() => _parseCrdDocs("not: valid: yaml: [unterminated")).not.toThrow()
-    expect(_parseCrdDocs("not: valid: yaml: [unterminated")).toEqual([])
+    expect(parse("not: valid: yaml: [unterminated")).toEqual([])
   })
 
   it("returns no documents for an empty string", () => {
-    expect(_parseCrdDocs("")).toEqual([])
+    expect(parse("")).toEqual([])
   })
 })
 
@@ -328,6 +328,7 @@ describe("_crdNameToIdentifier", () => {
 })
 
 describe("_dedupeCrdDocuments", () => {
+  const dedupe = (allYaml: readonly string[]) => Effect.runSync(_dedupeCrdDocuments(allYaml))
   it("keeps the first document seen for a duplicate CRD name across YAML sources", () => {
     const first = `
 kind: CustomResourceDefinition
@@ -347,13 +348,13 @@ spec:
   versions:
     - name: v2
 `
-    const deduped = _dedupeCrdDocuments([first, second])
+    const deduped = dedupe([first, second])
     expect(deduped.size).toBe(1)
     expect(deduped.get("foo.example.com")?.group).toBe("first.example.com")
   })
 
   it("collects distinct CRDs from multiple YAML sources", () => {
-    const deduped = _dedupeCrdDocuments([
+    const deduped = dedupe([
       _validCrdYaml,
       `
 kind: CustomResourceDefinition
