@@ -1,0 +1,126 @@
+---
+title: Installation
+description: Install the konfig CLI and packages, pin Effect, write konfig.json, and lay out an infra directory.
+sidebar:
+  order: 1
+---
+
+import { Aside, Snippet, Tabs, TabItem } from "@/components/docs"
+
+konfig.ts is a workspace dependency, not a global tool. You add the CLI as a dev dependency, add the packages your manifests import, and point a `konfig.json` at your environment entry files.
+
+## Install the packages
+
+Install `@konfig.ts/cli` as a dev dependency and the library packages as regular dependencies. Which libraries you need depends on what you render:
+
+- `@konfig.ts/core`: `Manifest`, `Module.fixedNs`/`Module.dynamicNs`, `Helm.release`, `Dep.*`, YAML and diff. Always required.
+- `@konfig.ts/k8s`: Kubernetes builders (`Workload.web`, `Container.define`, `Secret.make`, `ConfigMap.make`, `Environment.bind`).
+- `@konfig.ts/env`: env contracts (`Secret.define`, `Literal.define`, `Downward.define`, `Environment.define`, `Environment.runtime`).
+- `@konfig.ts/argocd`: `Application.define`/`.target`, `AppOfApps.fromModules`/`.entrypoint`, `Sync.*`.
+- One secret backend: `@konfig.ts/sops`, `@konfig.ts/sealed-secrets`, or `@konfig.ts/external-secrets`.
+
+<Tabs syncKey="pm">
+<TabItem label="bun">
+```bash
+bun add -d @konfig.ts/cli
+bun add @konfig.ts/core @konfig.ts/k8s @konfig.ts/env @konfig.ts/argocd @konfig.ts/sops effect@4.0.0-rc.109
+```
+</TabItem>
+<TabItem label="pnpm">
+```bash
+pnpm add -D @konfig.ts/cli
+pnpm add @konfig.ts/core @konfig.ts/k8s @konfig.ts/env @konfig.ts/argocd @konfig.ts/sops effect@4.0.0-rc.109
+```
+</TabItem>
+<TabItem label="npm">
+```bash
+npm install --save-dev @konfig.ts/cli
+npm install @konfig.ts/core @konfig.ts/k8s @konfig.ts/env @konfig.ts/argocd @konfig.ts/sops effect@4.0.0-rc.109
+```
+</TabItem>
+<TabItem label="yarn">
+```bash
+yarn add -D @konfig.ts/cli
+yarn add @konfig.ts/core @konfig.ts/k8s @konfig.ts/env @konfig.ts/argocd @konfig.ts/sops effect@4.0.0-rc.109
+```
+</TabItem>
+</Tabs>
+
+The binary is exposed as `konfig`. Run `bunx konfig --help` (or `npx konfig --help`) to confirm the install.
+
+## The Effect peer pin
+
+Every `@konfig.ts/*` library declares `effect` as a peer dependency at an exact version, currently `4.0.0-rc.109`. The CLI additionally depends on `@effect/platform-node` at the same version, because it uses the Node filesystem and subprocess services to write files and call `helm`.
+
+The pin is exact on purpose. Effect 4 (release candidate) still makes breaking changes between builds, so a caret range would let your package manager resolve a build the packages were never compiled against. That would surface as `ERESOLVE` conflicts or runtime type errors instead of a clean install. Install the same exact version in your workspace, as the commands above do. The pin relaxes to a caret range once Effect ships a stable 4.x.
+
+<Aside type="tip">
+If your workspace already depends on Effect for application code, align it to the same version. One `effect` in `node_modules` avoids duplicated `ServiceMap` keys and the type mismatches that come with two copies.
+</Aside>
+
+## konfig.json
+
+Every command walks up from the current directory until it finds a `konfig.json`. This is the file from `examples/full-stack`:
+
+<Snippet file="konfig.json" />
+
+The schema (`KonfigConfig` in `@konfig.ts/core`) accepts these fields. Paths are relative to `konfig.json` unless stated otherwise.
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `root` | yes | Directory holding your infra sources. Env entries, `images.json`, and `outDir.manifests` resolve relative to it. |
+| `envs` | yes | Map of env name to `{ "entry": "<path>" }`, relative to `root`. An env not listed here falls back to `<root>/env/<name>.ts`. |
+| `outDir.manifests` | yes | Where `konfig build` writes rendered manifests, relative to `root`. |
+| `diff.baseline` | no | Baseline manifest tree for `konfig diff`, relative to `root`. Without it `konfig diff` fails with `DiffBaselineMissing`. |
+| `cacheInclude` | no | Extra files, directories, or glob patterns hashed into the build cache on top of everything under `root`. Use it for inputs outside `root` that affect a render. Default `[]`. |
+| `cluster` | no | Path to the cluster constants module. Default `"cluster.ts"`. |
+| `modules` | no | Path to the modules directory. Default `"modules"`. |
+| `charts` | no | Path to the local charts directory. Default `"charts"`. |
+| `crd.outDir` | no | Output directory for `konfig crd extract`. Default `".generated/crd"`. |
+| `helm.cacheDir` | no | Helm tarball cache. Default `".konfig/helm-cache"`. |
+| `helm.minVersion` | no | Minimum `helm` version. Default `"3.16.0"`. |
+| `services.outFile`, `services.globalPaths` | no | Service manifest output file and global path list. |
+| `clusters` | no | Map of cluster name to `{ registry?, ingressClass?, storageClass?, repositoryUrl? }` for multi-cluster envs selected with `--cluster`. |
+
+Decoding is strict: unknown keys are rejected with `ConfigParseError`. The Helm cache directory, CRD output directory, charts directory, and minimum Helm version can also be overridden through the environment variables `KONFIG_HELM_CACHE`, `KONFIG_CRD_OUT_DIR`, `KONFIG_CHARTS_DIR`, and `KONFIG_HELM_MIN_VERSION`; the `helm` and `crd` commands read those variables.
+
+## Project layout
+
+konfig.ts does not prescribe a tree, but the example and the defaults assume this shape:
+
+```text
+konfig.json
+infra/
+  cluster.ts             # cluster-wide constants (domain, repositoryUrl, per-cluster overlays)
+  images.json            # { "envs": { "<env>": { "<app>": "<image ref>" } } }, edited by `konfig set`
+  envs/
+    prod.ts              # default export: AppOfApps.entrypoint(...)
+    staging.ts
+  modules/
+    postgres.ts          # one Module.fixedNs / Module.dynamicNs per Application
+    api.ts
+  secrets/
+    SopsSecret-db-creds.yaml   # encrypted secret sources read by the sops backend
+.generated/manifests/    # outDir.manifests, one directory per env
+.konfig/                 # helm cache and build cache, ignore in git
+```
+
+Each env file's default export must be an `AppOfApps.entrypoint(...)` program. Each module exports a `Module.fixedNs`/`Module.dynamicNs` definition that the env file instantiates with a name, an Argo CD source, and its options.
+
+## Runtime requirements
+
+`konfig build`, `validate`, and most other commands `import()` your `.ts` sources, so the CLI needs a runtime that executes TypeScript directly.
+
+| Requirement | Needed for | Notes |
+| --- | --- | --- |
+| Bun | all commands | Recommended. Runs `.ts` without flags. |
+| Node >= 23.6 | all commands | Native type stripping. |
+| Node 22.6 to 23.5 | all commands | Run with `--experimental-strip-types`. |
+| `tsx` | all commands | `tsx node_modules/.bin/konfig build prod`. |
+| `helm` >= 3.16.0 | modules that use `Helm.release`, `konfig helm fetch`, `konfig crd` | Called as `helm pull` and `helm template`. |
+| `kubeconform` | `konfig validate --strict` | Must be on `PATH`. |
+| `sops` / `kubeseal` | secret backends that encrypt at render time | `Sops.passthrough` reads pre-encrypted files and needs no binary. |
+
+## Next
+
+[Your first environment](/konfig.ts/docs/getting-started/your-first-environment/) walks through one module, one env file, and the first `konfig build`.

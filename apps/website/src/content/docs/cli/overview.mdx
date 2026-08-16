@@ -1,0 +1,90 @@
+---
+title: CLI overview
+description: Install the konfig CLI, understand how it finds konfig.json and env entries, and see every command at a glance.
+sidebar:
+  order: 0
+---
+
+import { Aside, Tabs, TabItem } from "@/components/docs"
+
+`@konfig.ts/cli` ships the `konfig` binary: the front-end that loads your TypeScript env entries, renders them through `@konfig.ts/core`, and writes, validates, or diffs the resulting YAML. It also hosts the Helm/CRD codegen helpers, the `images.json` updater, and the Dockerfile generator from `@konfig.ts/docker`.
+
+## Installation
+
+<Tabs syncKey="pm">
+<TabItem label="bun">
+```bash
+bun add -d @konfig.ts/cli
+bunx konfig --help
+```
+</TabItem>
+<TabItem label="npm">
+```bash
+npm install --save-dev @konfig.ts/cli
+npx konfig --help
+```
+</TabItem>
+<TabItem label="pnpm">
+```bash
+pnpm add -D @konfig.ts/cli
+pnpm exec konfig --help
+```
+</TabItem>
+</Tabs>
+
+`konfig --help` lists the subcommands, `konfig <command> --help` lists arguments and flags, and `konfig --version` prints the package version. The CLI depends on Effect 4 (release candidate) and `@effect/platform-node`; the package pins the exact build it was compiled against, see the [README requirements](https://github.com/DwieDave/konfig.ts/tree/main/packages/cli#requirements).
+
+## Runtime requirement
+
+Most commands `import()` your `.ts` sources at runtime: `konfig build prod` loads the env entry, which pulls in your modules, `docker.ts` specs, and chart files. `konfig` therefore needs a TypeScript-capable runtime:
+
+- Bun (recommended): runs `.ts` with no flags.
+- Node >= 23.6: native type stripping.
+- Node 22.6 to 23.5: pass `--experimental-strip-types`.
+- `tsx`: `tsx node_modules/.bin/konfig ...`.
+
+Commands that load sources: `build`, `validate`, `diff`, `crd extract`, `crd verify`, `helm fetch` (chart registry files), and `docker` (the `docker.ts` spec). Commands that only touch JSON or `package.json` files and run under plain Node: `set` and `graph`.
+
+## Configuration discovery
+
+`build`, `validate`, `diff`, and `set` walk up from the current working directory until they find a `konfig.json`. The directory containing that file becomes `configDir`; every relative path in the config (`root`, `outDir.manifests`, `diff.baseline`, env entries) resolves against it. When no file is found the command fails with `ConfigNotFound`; a file that does not decode against the schema fails with `ConfigParseError`. See [konfig.json](/konfig.ts/docs/cli/configuration/) for every field.
+
+## Env entry resolution
+
+An env is a named render target (`prod`, `staging`). Its entry module is:
+
+1. `envs.<NAME>.entry` from `konfig.json`, joined onto `<configDir>/<root>`, when the env is declared.
+2. Otherwise `<configDir>/<root>/env/<NAME>.ts`.
+
+The entry's default export must be an Effect program, normally `AppOfApps.entrypoint(AppOfApps.fromModules({ ... }))` from `@konfig.ts/argocd`. A `Bundle` set program is also accepted. A missing file fails with `EnvEntryNotFound`; a module without a default export, or whose default export is not an Effect, fails with `EnvLoadError`.
+
+## Shared render flags
+
+`build`, `validate`, and `diff` accept the same three flags. They are folded into the `RenderContext` your modules receive.
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `--cluster <name>` | unset | Target cluster name when one env spans several clusters. Surfaces as `ctx.cluster`; `build` writes into `<outDir>/<env>/<cluster>/`. |
+| `--k8s-version <ver>` | unset | Target Kubernetes version (for example `1.31`). Surfaces as `ctx.k8sVersion` and shapes `apiVersion` picks. |
+| `--flag k=v` | unset | Free-form key/value pairs. Repeatable; merged into one map read via `ctx.flags.get(k)`. |
+
+```bash
+konfig build prod --cluster eu --k8s-version 1.31 --flag canary=true --flag region=eu-central-1
+```
+
+<Aside type="note">
+The cluster, version, and flags are part of the build cache key, so `konfig build prod` and `konfig build prod --cluster eu` keep separate cache slots.
+</Aside>
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| [`konfig build <env>`](/konfig.ts/docs/cli/build/) | Render an env to `outDir.manifests`, skipping the write when inputs are unchanged. |
+| [`konfig validate <env>`](/konfig.ts/docs/cli/validate/) | Render in memory and run structural checks; `--strict` adds kubeconform. |
+| [`konfig diff <env>`](/konfig.ts/docs/cli/diff/) | Structural diff of the render against `diff.baseline`. |
+| [`konfig set <env> <app> <image>`](/konfig.ts/docs/cli/set/) | Update one image reference in `images.json`. |
+| [`konfig crd extract \| verify`](/konfig.ts/docs/cli/crd/) | Generate TypeScript types from chart CRDs and check them for drift. |
+| [`konfig helm fetch --all`](/konfig.ts/docs/cli/helm/) | Pre-fetch chart tarballs into the local cache. |
+| [`konfig docker preview \| write \| diff <target>`](/konfig.ts/docs/cli/docker/) | Generate Dockerfiles from a `docker.ts` spec. |
+| [`konfig graph [target]`](/konfig.ts/docs/cli/graph/) | Print the workspace dependency graph. |

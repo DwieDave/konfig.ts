@@ -1,0 +1,51 @@
+---
+title: konfig validate
+description: Render an env in memory, check every document's Kubernetes envelope, and optionally run kubeconform in strict mode.
+sidebar:
+  order: 3
+---
+
+`konfig validate <env>` renders the env exactly like `build` but keeps the result in memory. It then checks every YAML document structurally and, with `--strict`, hands the rendered tree to `kubeconform` for schema validation.
+
+## Usage
+
+```bash
+konfig validate <env> [--strict] [--ignore-missing-schemas]
+                      [--cluster <name>] [--k8s-version <ver>] [--flag k=v ...]
+```
+
+## Arguments
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `env` | required | Env name to validate. |
+
+## Flags
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `--strict` | `false` | Additionally run `kubeconform -summary -strict <dir>` over the rendered manifests. Requires `kubeconform` on `PATH`. |
+| `--ignore-missing-schemas` | `false` | Append `-ignore-missing-schemas` to the kubeconform invocation, for CRDs the bundled schema set does not know. |
+| `--cluster`, `--k8s-version`, `--flag` | unset | Shared render flags, see [CLI overview](/konfig.ts/docs/cli/overview/). |
+
+## Behaviour
+
+- Structural validation parses each rendered file with the YAML parser and decodes every non-null document against a Kubernetes envelope schema: `apiVersion: string`, `kind: string`, `metadata.name` matching the RFC 1123 label pattern, optional `metadata.namespace` with the same pattern, optional string maps for `labels` and `annotations`. Deeper fields are left to kubeconform.
+- Every issue is printed to stderr as `<file> (doc <n>) <path>: <message>`; a YAML parse failure is reported as one issue for `doc 0`.
+- On success it prints an `OK` line: `env '<env>': <n> file(s) pass structural validation`.
+- `--strict` runs kubeconform against the directory `build` would write to. Pass/fail is decided by the exit code, not by scraping stdout. `--k8s-version` only affects your render (`ctx.k8sVersion`); it is not forwarded to kubeconform.
+- Nothing is written to disk and the build cache is not consulted or updated.
+
+## Exit codes and errors
+
+- `StructuralValidationFailed { env, issueCount }` after any envelope issue; the issues are already on stderr.
+- `KubeconformNotFound` when the binary cannot be spawned. The message reads `kubeconform binary not found`, asks you to install it for `--strict` validation, and includes the attempted command line (`kubeconform -summary -strict <dir> ...`).
+- `KubeconformReportError { stdout, stderr }` when kubeconform exits non-zero; its output is included in the message.
+- The same config, entry, and render errors as [konfig build](/konfig.ts/docs/cli/build/).
+
+## Example
+
+```bash
+konfig validate prod
+konfig validate prod --strict --ignore-missing-schemas
+```

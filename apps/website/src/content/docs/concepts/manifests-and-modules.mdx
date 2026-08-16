@@ -1,0 +1,96 @@
+---
+title: Manifests and modules
+description: The Manifest<A> carrier, the RenderContext it receives, and how Module.fixedNs / Module.dynamicNs turn a build function into a reusable Argo CD Application.
+sidebar:
+  order: 0
+---
+
+import { Aside, Snippet } from "@/components/docs"
+
+Everything konfig.ts renders passes through two shapes from `@konfig.ts/core`: a `Manifest<A>` (a deferred description of one or more Kubernetes objects) and a module wrapper (`Module.fixedNs` / `Module.dynamicNs`) that groups manifests into a named unit a target such as Argo CD can emit.
+
+## The Manifest carrier
+
+`Manifest<A>` is an object with a single `render` function:
+
+```ts
+interface Manifest<out A> {
+  readonly render: (ctx: RenderContext) => Effect.Effect<A, AnyRenderError, RenderServices>
+}
+```
+
+`A` is what the manifest produces when rendered: a typed Kubernetes object, a tuple of them, or a `RawYaml` blob. `RenderServices` is the environment every render can rely on (`FileSystem`, `Path`, `ChildProcessSpawner`, `Scope`), which is why a manifest can read files or shell out to `helm` without you wiring anything.
+
+You rarely construct manifests by hand; `@konfig.ts/k8s` builders such as `Deployment.make` or `Namespace.make` return them. When you do, `Manifest.make` accepts either a plain value or an Effect:
+
+```ts
+import { Manifest } from "@konfig.ts/core"
+
+const ns = Manifest.make((ctx) => ({
+  apiVersion: "v1",
+  kind: "Namespace",
+  metadata: { name: `app-${ctx.env}` }
+}))
+```
+
+The other constructors in `Manifest`:
+
+- `Manifest.combine({ a, b })` renders two manifests concurrently into a `Manifest<readonly [A1, A2]>`.
+- `Manifest.concat(...manifests)` flattens `Manifest<A | A[]>` values into one `Manifest<A[]>`. `A` itself must not be an array type; the signature rejects that at the call site because `Array.isArray` could not tell one level of nesting from two.
+- `Manifest.whenever({ cond, thunk })` yields `Manifest<A | undefined>`; the thunk is only evaluated when `cond` is true.
+- `Manifest.embedYaml({ path })` or `Manifest.embedYaml({ literal })` wraps existing YAML as a `RawYaml` (`{ _tag: "RawYaml", content, origin? }`). A missing file fails with `EmbedYamlReadError`.
+
+## RenderContext
+
+The argument to `render` is the `RenderContext`:
+
+```ts
+interface RenderContext {
+  readonly env: string
+  readonly cluster?: string
+  readonly k8sVersion?: string
+  readonly flags?: ReadonlyMap<string, unknown>
+}
+```
+
+`env` names the render target and keys the `konfig.json` `envs` entry and the output directory (`<outDir>/<env>/`, or `<outDir>/<env>/<cluster>/` when `cluster` is set). The CLI fills the optional fields from flags shared by `build`, `validate`, and `diff`: `--cluster <name>`, `--k8s-version <ver>`, and repeatable `--flag k=v` pairs, which land in `ctx.flags` and are read with `ctx.flags?.get("k")`. All of them are folded into the [build cache](/konfig.ts/docs/concepts/rendering/) key, so two clusters of the same env never share a cache slot.
+
+## Modules
+
+A module is a function from a name (and per-instance options) to a handle that a target knows how to emit. `Module.fixedNs` bakes the namespace into the wrapper; `Module.dynamicNs` lets each call pick one.
+
+<Snippet file="infra/modules/postgres.ts" startAt="export const definePostgres" />
+
+The `build` function receives `({ name, namespace }, opts)`:
+
+- `name` is the string literal passed at the call site (`definePostgres({ name: "postgres", ... })`).
+- `namespace` is the literal from the wrapper (`fixedNs`) or the call (`dynamicNs`).
+- `opts` is whatever you type the second parameter as; the wrapper's call signature becomes `{ name } & ExtraCallArgs & Opts`. For `Application.target`, `ExtraCallArgs` adds a required `source: ArgoSource`.
+
+It returns either a plain `ReadonlyArray` of manifests or an `Effect` producing one. Return an Effect when the module needs to `yield*` a dependency such as `Dep.Secret("ghcr-pull")`; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/). The requirement channel of that Effect becomes the module's `In` type, which is how missing providers surface at the entrypoint.
+
+Names must be string literals. A wrapper that forwards a widened `string` fails with the `_konfig_error: "Module name/namespace must be a string literal..."` hint; make the wrapper generic (`<const Name extends string>`) and forward `Module.LiteralName<Name>`.
+
+### Options and provides
+
+Modules that emit nothing but exist to satisfy the graph use `provides`. `feature-flags.ts` shows the smallest useful shape, a fixed-namespace module with no options (`_opts: Record<never, never>`) that emits a `ConfigMap`:
+
+<Snippet file="infra/modules/feature-flags.ts" startAt="export const defineFeatureFlags" />
+
+Both wrappers accept `provides?: Layer.Layer<Extra>` at wrapper level. When the provided value depends on per-call options (registry and tag for an image), call `Application.define` directly instead, as `infra/modules/builds.ts` does with `Dep.provideImage`.
+
+## The target adapter
+
+`Module.fixedNs` and `Module.dynamicNs` are target-agnostic. A `Module.Target` supplies `define`, plus optional `ExtraConfig` (wrapper-level) and `ExtraCallArgs` (call-level) fields. `@konfig.ts/argocd` ships `Application.target`:
+
+- `ExtraConfig`: `project?`, `syncPolicy?`, `annotations?` (for example `Sync.wave(-1)`).
+- `ExtraCallArgs`: `source: { repoURL, targetRevision, path }`.
+- The handle it returns is an `ApplicationHandle<Name, Out, In>` whose `Out` provides `App`, `Application`, and `Namespace` needs for its own name and namespace, so two modules declaring `namespace: "app"` do not conflict.
+
+`@konfig.ts/core` also exports a `Bundle` target for plain manifest bundles without Argo CD.
+
+<Aside type="note">
+`Application.define` returns a `Context.Service` tag with a `layer` attached. `AppOfApps.fromModules` runs the layers; the module itself never renders anything until the CLI drives the entrypoint.
+</Aside>
+
+Next: [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).

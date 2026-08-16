@@ -1,0 +1,65 @@
+---
+title: "@konfig.ts/sops"
+description: SOPS secret backend for konfig.ts, emitting SopsSecret resources by passthrough or by re-encrypting resolved values to cluster recipients.
+sidebar:
+  order: 4
+  label: sops
+---
+
+import { Aside, Snippet } from "@/components/docs"
+
+`@konfig.ts/sops` is the [SOPS](https://github.com/getsops/sops) backend. Keep encrypted secrets in git and turn them into `SopsSecret` custom resources at render time for the in-cluster [sops-secrets-operator](https://github.com/isindir/sops-secrets-operator) to reconcile. Two modes: `Sops.passthrough` emits an already-encrypted file verbatim (offline, no decrypt), and `Sops.backend` re-encrypts resolved values to your recipients. `Sops.source` decrypts a file into a `SecretSource` you can feed to any backend.
+
+## Install
+
+```bash
+bun add @konfig.ts/sops
+```
+
+`Sops.backend` and `Sops.source` shell out to the `sops` CLI on the machine that runs `konfig build`. Recipient credentials come from each file's own `sops:` metadata. `Sops.passthrough` needs no CLI.
+
+## Usage
+
+The full-stack example ships the GHCR pull secret as an encrypted `SopsSecret` file and provides it as `Dep.Secret("ghcr-pull")`.
+
+<Snippet file="infra/modules/image-pulls.ts" startAt="export const defineImagePulls" title="infra/modules/image-pulls.ts" />
+
+Re-encrypting mode, when the plaintext should flow through konfig:
+
+```ts title="infra/modules/db.ts"
+import { Secret } from "@konfig.ts/k8s"
+import { Sops } from "@konfig.ts/sops"
+
+const bound = Secret.bind({
+  secret: dbCreds,
+  backend: Sops.backend({ recipients: { age: ["age1..."] } }),
+  source: Sops.source({ file: "infra/secrets/db-creds.enc.yaml", keys: ["url", "password"] })
+})
+```
+
+## Surface
+
+| Export | Purpose |
+| --- | --- |
+| `Sops.passthrough` | `({ file })`: emit the file's `SopsSecret`, restamped to the bound namespace; `requiresSource: false` |
+| `Sops.backend` | `({ recipients, type? })`: re-encrypt to `age` / `kms` / `gcpKms` / `azureKv` / `pgp` recipients; `requiresSource: true` |
+| `Sops.source` | `({ file, keys, extract? })`: a `SecretSource` that decrypts once and yields `Redacted` values |
+| `sopsDecrypt`, `sopsEncryptStdin` | Low-level CLI wrappers |
+| `SopsBackendOptions`, `SopsSourceInput`, `SopsRecipients`, `SopsSecret`, `SopsSecretSpec`, `SopsSecretTemplate` | Option and CR types |
+
+## Errors
+
+- `SopsInvocationError`: the `sops` process failed or was not found.
+- Every emitted value is checked for the `ENC[...]` marker; a plaintext value fails the render (an internal `SopsUnencryptedValueError`) rather than emitting plaintext dressed as a secret.
+
+<Aside type="note">
+`Sops.source` composes with other backends: decrypt with SOPS, then seal with `SealedSecrets.backend` or emit a plain `NativeSecret`.
+</Aside>
+
+## Requirements
+
+- `effect@4.0.0-rc.109` as an exact peer dependency (Effect 4, release candidate).
+- Depends on `@konfig.ts/core`, `@konfig.ts/env`, `@konfig.ts/k8s`, and `yaml`.
+- Runtime: Bun recommended; Node >= 23.6 works; Node 22.6 to 23.5 with `--experimental-strip-types`; `tsx` works.
+
+Source and README: [packages/sops](https://github.com/DwieDave/konfig.ts/tree/main/packages/sops).

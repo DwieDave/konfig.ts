@@ -1,0 +1,77 @@
+---
+title: konfig.json
+description: Every field of konfig.json and images.json, with types, defaults, and which commands read them.
+sidebar:
+  order: 1
+---
+
+import { Aside, Snippet } from "@/components/docs"
+
+`konfig.json` is the project file the CLI discovers by walking up from the current directory. It is decoded with the strict `KonfigConfig` schema from `@konfig.ts/core` (`decodeKonfigConfigEffect`): unknown keys are an error, so a typo in a field name fails the command instead of being ignored. All relative paths resolve against the directory that contains the file (`configDir`).
+
+## Fields
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `root` | `string` | required | Directory (relative to `konfig.json`) that holds your env entries, modules, and charts. `build` hashes everything under it for the cache. |
+| `envs` | `Record<string, { entry: string }>` | required (may be `{}`) | Env name to entry file, relative to `root`. Envs not listed fall back to `<root>/env/<name>.ts`. |
+| `outDir.manifests` | `string` | required | Where `build` writes, relative to `root`. Files land in `<root>/<outDir.manifests>/<env>[/<cluster>]/`. |
+| `diff.baseline` | `string` | unset | Baseline manifest tree for `konfig diff`, relative to `root`; the env name is appended. `diff` fails with `DiffBaselineMissing` when absent. |
+| `cacheInclude` | `string[]` | `[]` | Extra files, directories, or glob patterns (relative to `konfig.json`) hashed into the build cache on top of `root`, for inputs that live outside the konfig root. |
+| `cluster` | `string` | `"cluster.ts"` | Path of the cluster module, relative to `root`. |
+| `modules` | `string` | `"modules"` | Path of the modules directory, relative to `root`. |
+| `charts` | `string` | `"charts"` | Path of the chart definitions directory, relative to `root`. |
+| `crd.outDir` | `string` | `".generated/crd"` | Destination for generated CRD types (declarative; the CLI reads `KONFIG_CRD_OUT_DIR`, see below). |
+| `helm.cacheDir` | `string` | `".konfig/helm-cache"` | Helm tarball cache directory (declarative; the CLI reads `KONFIG_HELM_CACHE`). |
+| `helm.minVersion` | `string` | `"3.16.0"` | Minimum `helm` version (declarative; the CLI reads `KONFIG_HELM_MIN_VERSION`, and `Helm.release` takes its own `minVersion` option). |
+| `services.outFile` | `string` | unset | Reserved for the services layer; validated only. |
+| `services.globalPaths` | `string[]` | `[]` | Reserved for the services layer; validated only. |
+| `clusters.<name>` | `{ registry?, ingressClass?, storageClass?, repositoryUrl? }` | unset | Per-cluster values, all optional strings. |
+
+The CLI commands read `root`, `envs`, `outDir.manifests`, `diff.baseline`, and `cacheInclude`. The remaining fields are validated so a project can declare them in one place, but no `konfig` command reads them today. In particular `crd extract`, `crd verify`, and `helm fetch` take their paths from environment variables, not from `konfig.json`:
+
+| Variable | Default | Used by |
+| --- | --- | --- |
+| `KONFIG_CHARTS_DIR` | `infra/k8s-konfig/charts` (resolved from cwd) | `crd`, `helm fetch`: directory of chart registry modules |
+| `KONFIG_HELM_CACHE` | `.konfig/helm-cache` (resolved from cwd) | `crd`, `helm fetch`, and `Helm.release` at render time |
+| `KONFIG_CRD_OUT_DIR` | `.generated/crd` (resolved from cwd) | `crd`: output directory for generated `.ts` files |
+| `KONFIG_HELM_MIN_VERSION` | `3.16.0` | `crd`, `helm fetch`: preflight `helm version` check |
+
+<Aside type="caution">
+`clusters.<name>` in `konfig.json` is not what `--cluster` reads. `--cluster` only sets `ctx.cluster` on the `RenderContext` and changes the output directory; your env entry decides what to do with it (the full-stack example keeps its per-cluster overlays in `infra/cluster.ts`).
+</Aside>
+
+## Example
+
+The full-stack example keeps `konfig.json` at the workspace root with `root: "."`, so every other path is workspace-relative:
+
+<Snippet file="konfig.json" lang="json" title="konfig.json" />
+
+`prod` and `staging` are declared explicitly because their entries live under `infra/envs/`, not the default `<root>/env/` location. `cluster` and `modules` describe the layout for readers and tooling; the CLI does not load them.
+
+## images.json
+
+`konfig set` maintains a second file, `<root>/images.json`, decoded with the strict `ImagesConfig` schema (`packages/core/src/images.ts`):
+
+```ts
+interface ImagesConfig {
+  readonly envs: Record<string, Record<string, string>>  // env -> app -> image reference
+}
+```
+
+```json title="images.json"
+{
+	"envs": {
+		"prod": {
+			"api": "ghcr.io/example/api:sha-1a2b3c4",
+			"worker": "ghcr.io/example/worker:sha-1a2b3c4"
+		},
+		"staging": {
+			"api": "ghcr.io/example/api:sha-9f8e7d6",
+			"worker": "ghcr.io/example/worker:sha-9f8e7d6"
+		}
+	}
+}
+```
+
+Your modules read it with `imagesFor({ cfg, env })` and `requireImage({ e, app, envName })` from `@konfig.ts/core` (or the `*Effect` variants for a typed error channel: `ImagesEnvMissing`, `ImagesAppMissing`). The full-stack example does not ship an `images.json`; it derives image references from its build modules instead. See [konfig set](/konfig.ts/docs/cli/set/) for the write path.

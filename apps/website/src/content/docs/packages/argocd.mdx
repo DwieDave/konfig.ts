@@ -1,0 +1,56 @@
+---
+title: "@konfig.ts/argocd"
+description: Typed Argo CD Application aggregation with a compile-time dependency graph and app-of-apps rendering.
+sidebar:
+  order: 3
+  label: argocd
+---
+
+import { Aside, Snippet } from "@/components/docs"
+
+`@konfig.ts/argocd` wraps each module as an Argo CD `Application` and composes them into an app-of-apps. Every module declares what it provides and what it needs; `AppOfApps.entrypoint` requires the residual needs to reduce to `never`, so a missing provider is a TypeScript error at the env file, not a sync failure. The env file's default export is what `konfig build <env>` renders.
+
+## Install
+
+```bash
+bun add @konfig.ts/argocd
+```
+
+## Usage
+
+The `prod` env of the full-stack example. Each `define*` call is a `Module.fixedNs` adapted with `Application.target`; `src(name)` builds the `{ repoURL, targetRevision, path }` source.
+
+<Snippet file="infra/envs/prod.ts" startAt="export default AppOfApps.entrypoint" title="infra/envs/prod.ts" />
+
+If `api` yields `Dep.Secret("ghcr-pull")` and no listed module provides it, `entrypoint` refuses to compile with `Missing provider for Secret "ghcr-pull"`. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+
+## Surface
+
+| Export | Purpose |
+| --- | --- |
+| `Application.define` | Build an `ApplicationHandle<Name, Out, In>`: a Context tag that also carries a `Layer<Out, _, In>` |
+| `Application.make` | Plain `Application` value constructor, no dependency graph |
+| `Application.target` | Adapter passed as `target` to `Module.fixedNs` / `Module.dynamicNs` |
+| `Application.LiteralName<T>` | Rejects a `string`-widened `name` at the call site |
+| `AppOfApps.fromModules` | Compose handles into a renderable app-of-apps; unmet needs surface in its `R` |
+| `AppOfApps.entrypoint` | Wrap the program as the env's default export; the compile-time check fires here |
+| `AppOfApps.make` | Plain `AppOfAppsResult` from already-built `Application`s |
+| `Sync.wave`, `Sync.hook`, `Sync.options` | Annotation helpers to spread into `annotations` |
+| `buildCR`, `serializeApplicationCR`, `applicationCRFilename`, `emitApplicationCR` | Emit an Application CR as an object, YAML string, filename, or `Manifest<string>` |
+| `ArgoSource`, `SyncPolicy`, `HookPhase`, `AppOfAppsTarget`, `AppOfAppsDefaults` | Option types |
+
+## Errors
+
+This package exports no tagged error classes. Failures are compile-time (unsatisfied needs, duplicate provides via `Compose.NoDuplicateProvides`) or come from `@konfig.ts/core` at render time (`AnyRenderError`).
+
+<Aside type="tip">
+`annotations: Sync.wave(-1)` on a provider module (namespaces, operators, pull secrets) makes Argo CD sync it before the workloads that need it.
+</Aside>
+
+## Requirements
+
+- `effect@4.0.0-rc.109` as an exact peer dependency (Effect 4, release candidate).
+- Depends on `@konfig.ts/core`.
+- Runtime: Bun recommended; Node >= 23.6 works; Node 22.6 to 23.5 with `--experimental-strip-types`; `tsx` works.
+
+Source and README: [packages/argocd](https://github.com/DwieDave/konfig.ts/tree/main/packages/argocd).

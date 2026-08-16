@@ -1,0 +1,59 @@
+---
+title: "@konfig.ts/cli"
+description: The konfig command-line tool that renders, validates, diffs, and manages manifests described by konfig.ts TypeScript sources.
+sidebar:
+  order: 8
+  label: cli
+---
+
+import { Aside } from "@/components/docs"
+
+`@konfig.ts/cli` ships the `konfig` binary: the front-end to `@konfig.ts/core`, `@konfig.ts/argocd`, and `@konfig.ts/docker`. It finds your `konfig.json`, imports the env entry file, runs the `AppOfApps` program it exports, and writes YAML into the configured output directory. This package has no library entrypoint; it is a `bin` only.
+
+## Install
+
+```bash
+bun add -d @konfig.ts/cli    # in a workspace that uses konfig.ts
+bunx @konfig.ts/cli --help   # or run once without installing
+```
+
+## Usage
+
+```bash
+konfig build prod            # render manifests to outDir; input-hashed, a no-op build rewrites nothing
+konfig validate prod --strict
+konfig diff prod --format detail
+konfig set prod api ghcr.io/example/api:1.2.3
+```
+
+Every command walks up from the cwd to find a `konfig.json`. An env is a named render target; its entry file is `envs.<name>.entry`, else `<root>/env/<name>.ts`, and that module's default export must be an `AppOfApps.entrypoint` program.
+
+## Surface
+
+| Command | Purpose |
+| --- | --- |
+| `konfig build <env>` | Render manifests to `outDir.manifests`; `--log text\|json`, `--verbose`, `--no-cache` |
+| `konfig validate <env>` | Render in memory and run structural checks; `--strict` adds kubeconform, `--ignore-missing-schemas` |
+| `konfig diff <env>` | Structural diff against `diff.baseline`; `--format summary\|detail\|json`; Secret data is redacted |
+| `konfig set <env> <app> <image>` | Update one image ref in `images.json` |
+| `konfig crd extract\|verify` | CRD TypeScript codegen from Helm charts and drift check |
+| `konfig helm fetch --all` | Pre-fetch chart tarballs into `helm.cacheDir` |
+| `konfig docker preview\|write\|diff <app>` | Dockerfile generation via `@konfig.ts/docker` |
+| `konfig graph [target] [--with-dev]` | Print the workspace dependency graph |
+
+`build`, `validate`, and `diff` share `--cluster <name>`, `--k8s-version <ver>`, and repeatable `--flag k=v`, all readable from your program's `RenderContext`.
+
+## Errors
+
+Tagged errors raised by the CLI include `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`, `EnvLoadError`, `WriteEnvError`, `StructuralValidationFailed`, `KubeconformNotFound`, `KubeconformReportError`, `DiffBaselineMissing`, `DiffNonEmpty` (non-zero exit on differences), `SetUnknownEnv`, `ImagesFileError`, `ReleaseNotFound`, `MissingCrdFlags`, `CrdDrift`, `MissingAllFlag`, `SpecImportError`, `SpecNotADockerApp`, `DiffDrift`, and `GraphTargetNotFound`. Render-time failures propagate as `AnyRenderError` from `@konfig.ts/core`.
+
+<Aside type="note" title="TypeScript-capable runtime">
+Most commands `import()` your `.ts` sources at runtime. Bun runs them with no flags; Node >= 23.6 strips types natively; Node 22.6 to 23.5 needs `--experimental-strip-types`; `tsx node_modules/.bin/konfig` also works. Pure-YAML commands such as `konfig diff` against a baseline directory run under plain Node.
+</Aside>
+
+## Requirements
+
+- Depends on `effect@4.0.0-rc.109` and `@effect/platform-node` directly (Effect 4, release candidate), plus `@konfig.ts/core`, `@konfig.ts/argocd`, `@konfig.ts/docker`, `json-schema-to-typescript`, and `semver`. No peer dependencies.
+- External tools, only when the corresponding command needs them: `helm`, `kubeconform` (`validate --strict`), `sops`, `kubeseal`.
+
+Source and README: [packages/cli](https://github.com/DwieDave/konfig.ts/tree/main/packages/cli).

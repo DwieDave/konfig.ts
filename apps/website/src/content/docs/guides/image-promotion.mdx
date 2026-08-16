@@ -1,0 +1,114 @@
+---
+title: Image promotion
+description: Keep image tags per environment in images.json, provide them to workloads through Dep.Image, and promote from CI with konfig set followed by a build and commit.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps, Snippet } from "@/components/docs"
+
+Workloads in konfig.ts never hard-code an image string. A workload module asks for `Dep.Image("api")`; a build module provides it. Promotion then means changing one value in `images.json`, re-rendering, and committing, without touching a module.
+
+## The images.json contract
+
+`@konfig.ts/core` defines the file shape as an Effect Schema and decodes it strictly (unknown keys fail):
+
+```ts
+// packages/core/src/images.ts
+export const EnvImages = Schema.Record(Schema.String, Schema.String)
+export const ImagesConfig = Schema.Struct({
+  envs: Schema.Record(Schema.String, EnvImages)
+})
+```
+
+The file lives at `<konfig.json dir>/<root>/images.json`. Values are opaque strings: the schema does not parse them, so a project picks a convention. The `konfig set` help text suggests full refs (`ghcr.io/<org>/<app>:<sha>`); the example's build modules take `registry` and `tag` separately, so the example convention is tag-only with the registry coming from `cluster.ts`.
+
+```json title="images.json"
+{
+	"envs": {
+		"prod": { "api": "1.0.0", "worker": "1.0.0" },
+		"staging": { "api": "sha-3f2a9c1", "worker": "sha-3f2a9c1" }
+	}
+}
+```
+
+Helpers, all exported from `@konfig.ts/core`:
+
+| Helper | Behaviour |
+| --- | --- |
+| `decodeImagesSync(u)` / `decodeImagesEffect(u)` | Strict decode of the parsed JSON |
+| `imagesFor({ cfg, env })` | Env record, throws `ImagesEnvMissing` |
+| `lookupEnvEffect({ cfg, env })` | Same, as an Effect failing with `ImagesEnvMissing` |
+| `requireImage({ e, app, envName })` | One value, throws `ImagesAppMissing` |
+| `requireImageEffect(...)` | Same, as an Effect failing with `ImagesAppMissing` |
+| `lookupEnv({ cfg, env })` | Env record or `undefined` |
+
+`ImagesEnvMissing` carries `{ env }`, `ImagesAppMissing` carries `{ env, app }`. Both are `Data.TaggedError`s, so an env entry that reads the file fails with a named error rather than rendering a workload with `image: undefined`.
+
+## How images reach a workload
+
+A build module is a dependency-graph anchor: it emits no manifests and provides `Dep.Image` for one app via `Dep.provideImage({ app, registry, tag })`, which brands `${registry}/${app}:${tag}` as `BuiltImageRef<"api">`.
+
+<Snippet file="infra/modules/builds.ts" startAt="export const defineApiBuild" endBefore="export const defineWorkerBuild" title="infra/modules/builds.ts" />
+
+The consuming module does `yield* Dep.Image("api")` inside its build and passes the branded string to `Container.define`.
+
+<Snippet file="infra/modules/api.ts" startAt="export const defineApi" endBefore="      const bound" title="infra/modules/api.ts" />
+
+If no module in `AppOfApps.fromModules({ modules })` provides `Image "api"`, `AppOfApps.entrypoint` fails to compile with `_konfig_unsatisfied`; see [Worked failures](/konfig.ts/docs/guides/worked-failures/).
+
+## Reading images.json in the env entry
+
+The example passes literal tags to `defineApiBuild` for offline reproducibility. To drive them from `images.json`, read the file in the env entry and hand the value to the build module. The env entry runs at build time, so a synchronous read is fine here.
+
+```ts title="infra/envs/prod.ts"
+import { decodeImagesSync, imagesFor, requireImage } from "@konfig.ts/core"
+import { readFileSync } from "node:fs"
+
+const images = imagesFor({
+  cfg: decodeImagesSync(JSON.parse(readFileSync("images.json", "utf8"))),
+  env: "prod"
+})
+
+const apiBuild = defineApiBuild({
+  name: "api-build",
+  source: src("api-build"),
+  registry: "ghcr.io/example",
+  tag: requireImage({ e: images, app: "api", envName: "prod" })
+})
+```
+
+A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `ImagesAppMissing`. Both surface as an `EnvLoadError` from `konfig build` with the tagged cause, and no manifest is written.
+
+## Promoting from CI
+
+`konfig set <env> <app> <image>` performs a schema-validated read, replaces one key, and writes the file back tab-indented. It refuses an env that is not already present (`SetUnknownEnv`) and never creates the file (`ImagesFileError`), so a typo in the env name cannot silently add a new environment.
+
+<Steps>
+
+1. Build and push the image in your CI job; capture the tag (a git SHA works well).
+
+2. Update the manifest source and re-render.
+
+   ```bash
+   konfig set staging api sha-${GITHUB_SHA::7}
+   konfig build staging
+   ```
+
+3. Commit both `images.json` and the rendered manifests, then push. Argo CD picks up the change on its next refresh.
+
+   ```bash
+   git add images.json .generated/manifests/staging
+   git commit -m "promote api to sha-${GITHUB_SHA::7} (staging)"
+   git push
+   ```
+
+4. Promote to production by repeating with `prod`, ideally from a job that requires approval.
+
+</Steps>
+
+<Aside type="tip" title="One diff to review">
+Because `Dep.Image` is the only path from `images.json` to a pod spec, the rendered diff of a promotion is exactly the `image:` lines of the affected workloads. `konfig diff staging` shows it structurally before you commit.
+</Aside>
+
+Next: [Dockerfiles](/konfig.ts/docs/guides/dockerfiles/) covers producing the images that end up in `images.json`.

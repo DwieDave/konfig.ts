@@ -1,0 +1,74 @@
+---
+title: Rendering
+description: "What happens between an env entry file and the YAML on disk: the render pipeline, stable serialisation, structural diff, the build cache, validation levels, and the error union."
+sidebar:
+  order: 6
+---
+
+import { Aside } from "@/components/docs"
+
+`konfig build <env>` turns the default export of an env entry file into a directory of YAML files. This page follows that path and names the pieces you can rely on when reading diffs, debugging a failed render, or wiring CI.
+
+## From entrypoint to files
+
+1. The CLI locates `konfig.json` by walking up from the working directory, resolves `envs.<env>.entry` (or `<root>/env/<env>.ts`), and builds a `RenderContext` from the env name and the `--cluster`, `--k8s-version`, and `--flag k=v` flags.
+2. It imports the entry module. The default export must be an Effect (an `AppOfApps.entrypoint(...)` or `Bundle.entrypoint(...)` program); anything else fails with `EnvLoadError`.
+3. Running that Effect yields an `AppOfAppsResult` (or bundle set): a list of `Application` values, each carrying its `manifests` array.
+4. For every application, each `Manifest` is rendered with `manifest.render(ctx)` (concurrency unbounded within an app, four apps at a time to keep `helm` and `sops` subprocess counts sane). Results are flattened: typed objects, arrays, and `RawYaml` blobs are all accepted, and `RawYaml` is split into documents.
+5. Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>.yaml`; the Argo CD `Application` CR for the app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml` (`apps-name` defaults to `apps`).
+6. Files are staged under `<outDir>.tmp` with mode `0600`, then the live directory is replaced atomically, so a killed build never leaves a half-written tree.
+
+`validate` and `diff` run steps 1 to 4 in memory and skip the write.
+
+For scripts outside the CLI, `@konfig.ts/core` exports `render(program, { env?, layers? })`, which builds a `RenderContext` for `env` (default `"prod"`), provides the Node platform services, and runs the program with `NodeRuntime.runMain`.
+
+## Stable YAML
+
+All output goes through `Yaml.serialize`, so two renders of the same input are byte-identical and diffs show semantic changes only:
+
+- Root keys are ordered `apiVersion`, `kind`, `metadata`, `spec`, `status`, then everything else alphabetically. Inside `metadata`: `name`, `namespace`, `labels`, `annotations`, then the rest alphabetically. Every other object is sorted alphabetically.
+- `null` and `undefined` values are dropped.
+- Two-space indent, indented sequences, no line wrapping, plain scalars where possible, YAML **1.1** so strings such as `"yes"`, `"no"`, `"on"`, `"off"` are quoted and are not read back as booleans by go-yaml based tools.
+- CRLF is normalised and the file ends with a single newline.
+
+`Yaml.filenameFor({ kind, metadata: { name } })` produces `<Kind>-<name>.yaml` with `.` and `/` in either part replaced by `-`. It throws if `kind` or `metadata.name` is missing; validate or decode first.
+
+## Structural diff
+
+`konfig diff <env>` renders in memory and compares against `<root>/<diff.baseline>/<env>/`, keyed by relative path. The comparison (`diffFiles` in `@konfig.ts/core`) is structural:
+
+- Both sides are parsed as multi-document YAML; documents are keyed by `(kind, name, namespace)` so reordering documents inside a file is not a change.
+- Values are passed through `redact` before comparison: key order is irrelevant, `null` keys are dropped, `helm.sh/chart` labels, `app.kubernetes.io/managed-by: Helm`, and `meta.helm.sh/release-*` annotations are ignored, and `data` / `stringData` of a `Secret` are replaced by `<redacted>` so a rotation shows as unchanged and no plaintext reaches the terminal.
+- Results are `Same`, `MissingLeft`, `MissingRight`, or `Changed` per file (and per document inside multi-doc files). `--format summary|detail|json` picks the output; any difference exits non-zero (`DiffNonEmpty`).
+
+## Build cache
+
+`konfig build` computes an input hash before rendering: the decoded `konfig.json`, the render-context signature (`cluster`, `k8sVersion`, sorted `flags`), the env entry file, every file under `root`, and any extra `cacheInclude` files or globs. The hash is conservative, so touching any file under `root` invalidates it; there are false negatives but never false positives.
+
+The entry at `.konfig/cache/<env>-<ctx digest>.json` records `inputHash`, `outputHash`, `outDirAbs`, `fileCount`, and a timestamp. A hit is honoured only if the on-disk output tree still hashes to `outputHash`; an out-of-band edit or deletion is a miss. `--no-cache` skips the check and forces a render. A cache hit reports `Cached` with the env name, file count, and output directory instead of render timings.
+
+## Validation levels
+
+`konfig validate <env>` renders in memory and runs the structural check on every file: the YAML must parse, and each document must have `apiVersion`, `kind`, and a `metadata.name` (plus `metadata.namespace` when present) that is a valid RFC 1123 label; `labels` and `annotations` must be string maps. Deeper field validation is left to `--strict`, which runs `kubeconform -summary -strict <dir>` over the rendered tree and decides pass or fail from the exit code. `kubeconform` must be on `PATH` (`KubeconformNotFound` otherwise); `--ignore-missing-schemas` is forwarded for CRDs without published schemas.
+
+## Errors
+
+Every manifest's `render` fails with `AnyRenderError`, a tagged union you can `Effect.catchTag` on:
+
+| Tag | Raised by |
+| --- | --- |
+| `RenderError` | General render failures: secret sources, sops verification, sealed-secrets, and anything a builder cannot type more precisely. Carries `message` and optional `cause`. |
+| `EmbedYamlReadError` | `Manifest.embedYaml({ path })` when the file cannot be read. |
+| `BoundaryDecodeError` | Schema decode failures at a boundary (`boundary({ schema, label })`), for example a malformed `SopsSecret` or `SealedSecret` document. |
+| `HelmVersionTooLow` | `Helm.release({ minVersion })` or `konfig helm fetch` when the `helm` binary is older than required. |
+| `HelmRenderError` | `Helm.release` pull or template failures; wraps `HelmDigestMismatch` and process errors as `cause`. |
+| `HelmDigestMismatch` | Chart tarball hash differs from `digest`. |
+| `CrdExtractError` | `konfig crd extract` / `verify` failures for one chart. |
+
+## Logging flags
+
+`konfig build` accepts `--log text|json` (default `text`) to switch the final report line between prose and a JSON object with `env`, `files`, `outDir`, `renderMs`, `writeMs`, `totalMs`, and `cached`. `--verbose` wraps the render in an Effect span named `konfig.render.<env>` so tracing output includes it.
+
+<Aside type="note">
+Kubernetes YAML under `<outDir>` is derived output. Commit it for Argo CD if you want, but never edit it by hand: the next `konfig build` replaces the whole directory.
+</Aside>

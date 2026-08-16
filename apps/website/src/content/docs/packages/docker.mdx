@@ -1,0 +1,66 @@
+---
+title: "@konfig.ts/docker"
+description: Workspace-graph-aware Dockerfile generator for konfig.ts monorepos, driven by one declarative spec per app.
+sidebar:
+  order: 7
+  label: docker
+---
+
+import { Aside, Snippet } from "@/components/docs"
+
+`@konfig.ts/docker` generates Dockerfiles for apps in a Bun or Node monorepo. You write one `docker.ts` spec next to the app; the package resolves the app's transitive workspace closure and emits a production multi-stage Dockerfile (`base`, `deps`, `builder`, `runner`) and a single-stage `Dockerfile.dev`, with no hand-maintained `COPY` lists. It emits Dockerfiles only: no image building, pushing, tagging, or signing.
+
+## Install
+
+```bash
+bun add -d @konfig.ts/docker
+```
+
+The app's `package.json` must set `engines.<runtime>` (for example `engines.bun`); that is where the runner image tag comes from.
+
+## Usage
+
+The API spec from the full-stack example. `runner.production` re-runs a production install after trimming workspaces to the closure.
+
+<Snippet file="apps/api/docker.ts" startAt="export default Docker.app" title="apps/api/docker.ts" />
+
+Render, write, or check the files with the CLI, then build with the monorepo root as the Docker context:
+
+```bash
+konfig docker preview apps/api   # render to stdout
+konfig docker write apps/api     # writes apps/api/Dockerfile and Dockerfile.dev
+konfig docker diff apps/api      # non-zero exit if the on-disk files drifted
+docker build -f apps/api/Dockerfile .
+```
+
+## Surface
+
+| Export | Purpose |
+| --- | --- |
+| `Docker.app` | The spec entrypoint; returns a `DockerApp` |
+| `Docker.copy` | `builderArtifact(src, dst)`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, opts?)` |
+| `Docker.runtime` | `bun({ alpine? })`, `node({ alpine? })`; `alpine` defaults to `true` |
+| `Docker.pm` | `bun()`, `npm()`, `pnpm()`, `yarn({ variant? })`; auto-detected from the root lockfile when omitted |
+| `Docker.build` | `script(name)`, `command(argv)`, `none()`; defaults to `script("build")` when present |
+| `Docker.healthcheck`, `Docker.user`, `Docker.platform` | `httpGet` / `command`; `nonRoot` / `root`; `linuxAmd64` / `linuxArm64` / `multi` |
+| `DockerSpec`, `RunnerSpec`, `DevSpec`, `decodeDockerSpec`, `decodeDockerSpecSync` | Schemas and decoders for the spec |
+| `findRoot`, `allWorkspaces`, `closureOf`, `detectPm` | Workspace graph services |
+| `buildIR`, `lower`, `validateSpec`, `emit`, `render`, `renderFile`, `extractHeader`, `sha256Hex` | IR lowering and Dockerfile rendering with a hashed header |
+| `bunPm`, `npmPm`, `pnpmPm`, `bunRuntime`, `nodeRuntime` | Package manager and runtime implementations |
+| `isDockerApp`, `DockerAppTypeId`, `PACKAGE_NAME` | Spec identification helpers |
+
+## Errors
+
+`AnyDockerError` is the union of: `MonorepoRootNotFound`, `WorkspaceNotFound`, `UnsupportedPm`, `CircularWorkspaceDep`, `EngineVersionMissing`, `SpecDecodeError`, `BuildScriptMissing`, `WorkspaceSourceUnknown`, `SharedRootFileMissing`, `DockerWriteRefused`, `DockerWriteError`.
+
+<Aside type="caution">
+Workspace `COPY` instructions only resolve from the monorepo root, so always pass the root as the Docker build context.
+</Aside>
+
+## Requirements
+
+- `effect@4.0.0-rc.109` as an exact peer dependency (Effect 4, release candidate).
+- Depends on `@konfig.ts/core` and `yaml`.
+- Runtime: Bun recommended; Node >= 23.6 works; Node 22.6 to 23.5 with `--experimental-strip-types`; `tsx` works.
+
+Source and README: [packages/docker](https://github.com/DwieDave/konfig.ts/tree/main/packages/docker).

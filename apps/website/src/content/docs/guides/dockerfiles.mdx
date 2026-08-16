@@ -1,0 +1,102 @@
+---
+title: Dockerfiles
+description: Generate workspace-aware production and dev Dockerfiles from a docker.ts spec with @konfig.ts/docker and the konfig docker commands.
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps, Snippet } from "@/components/docs"
+
+`@konfig.ts/docker` emits Dockerfiles for apps in a Bun/npm/pnpm/yarn workspace monorepo. You write one `docker.ts` next to the app; the package resolves the app's transitive workspace closure and writes the `COPY` lists for you. It emits files only: no building, pushing, or tagging.
+
+## The spec
+
+`Docker.app(spec)` wraps a `DockerSpec`, an Effect Schema struct decoded on load. The example's API service:
+
+<Snippet file="apps/api/docker.ts" startAt="export default Docker.app" title="apps/api/docker.ts" lang="ts" />
+
+Fields:
+
+- `target`: workspace directory relative to the monorepo root.
+- `runner`: the production stage. `workdir`, `copy`, and `cmd` are required. `production: true` adds a `prod-deps` stage that trims the root `package.json` workspaces to the closure and runs `bun install --production` (or the package manager's equivalent). Optional: `env`, `expose` (number or array), `entrypoint`, `user`, `healthcheck`, `platform`, `baseImage`, `removePaths`.
+- `dev`: single-stage dev image. `cmd` required; `env`, `expose`, `workdir` optional.
+- `packageManager`, `runtime`, `build`, `sharedRootFiles`: optional overrides, described below.
+
+Env values are validated against a secret heuristic (`sk_` prefixes, PEM headers, long base64 strings). A value that looks like a secret fails decoding: runtime secrets belong to `Environment.bind`, not to an image layer.
+
+## Atoms
+
+Each option is a tagged value built with a constructor under `Docker.*`:
+
+| Family | Constructors |
+| --- | --- |
+| `Docker.copy` | `builderArtifact({ src, dst, chown? })`, `workspaceSource(name)`, `workspaceSourceAll()`, `path({ src, dst, from?, chown? })` |
+| `Docker.runtime` | `bun({ alpine? })`, `node({ alpine? })` |
+| `Docker.pm` | `bun()`, `npm()`, `pnpm()`, `yarn({ variant? })` |
+| `Docker.build` | `script(name)`, `command(argv)`, `none()` |
+| `Docker.healthcheck` | `httpGet({ path, port, interval?, timeout?, retries?, startPeriod? })`, `command({ argv, ... })` |
+| `Docker.user` | `nonRoot({ uid?, gid?, name? })`, `root()` |
+| `Docker.platform` | `linuxAmd64()`, `linuxArm64()`, `multi(values)` |
+
+`Docker.copy.workspaceSourceAll()` copies the source of every workspace in the closure into the runner (needed for Bun's `workspace:*` links and export conditions); `workspaceSource("@example/env-contracts")` copies one; `builderArtifact` copies a build output such as `dist` from the `builder` stage. When `runner.baseImage` is set, nothing is copied automatically and `runner.copy` must list everything.
+
+`packageManager` defaults to detection from the root `package.json` and lockfile; `runtime` defaults to match; `build` defaults to `Docker.build.script("build")` when the target has that script and to `none()` otherwise (`BuildScriptMissing` if you name a script that does not exist).
+
+## Runtime version from engines
+
+The runner image tag is read from the app's `package.json` `engines.<runtime>` field (`engines.bun` or `engines.node`). The example declares `"engines": { "bun": "1.3.5" }`, so the runner is `oven/bun:1.3.5-alpine`. A missing field is a hard `EngineVersionMissing` error rather than a floating `latest`.
+
+## Workspace closure resolution
+
+`findRoot(targetAbs)` walks up to the nearest `package.json` with a `workspaces` field (`MonorepoRootNotFound` otherwise). `closureOf` follows `dependencies` and `peerDependencies` that use a workspace protocol (`workspace:*`, `link:`, ...) and rejects cycles (`CircularWorkspaceDep`). `devDependencies` are deliberately excluded so build-only tooling never lands in the runner. The closure drives every generated `COPY`: the `deps` stage copies every workspace's `package.json` so the lockfile resolves, while `builder`, `prod-deps`, and `runner` copy only closure members. The root `package.json`, lockfile, and package-manager config are copied automatically; extra root files an install needs (an `.npmrc`, a patches directory) go in `sharedRootFiles`, and naming one that does not exist is `SharedRootFileMissing`.
+
+## Stages of the production Dockerfile
+
+`base → deps → builder → runner`, plus `prod-deps` between `builder` and `runner` when `runner.production` is `true`:
+
+- `base`: `FROM <runtime>:<engines version>[-alpine]`.
+- `deps`: copies every workspace `package.json` plus the lockfile and installs with scripts disabled.
+- `builder`: copies `node_modules` from `deps`, copies closure sources, runs the build atom.
+- `prod-deps` (optional): rewrites `workspaces` to the closure, drops `devDependencies`, installs with `--production`.
+- `runner`: non-root user, `ENV`, `EXPOSE`, `COPY --chown` of the declared artifacts, `HEALTHCHECK`, `USER`, `CMD`.
+
+Dev is `base → dev`: one install with scripts enabled, closure sources copied in, `NODE_ENV=development`, the watch-mode `cmd`, no user or healthcheck.
+
+Every generated file starts with a header carrying the marker `# konfig-managed: @konfig.ts/docker`, the spec path, and a hash of the spec. `konfig docker write` refuses to overwrite a file without that marker unless you pass `--force`.
+
+## Commands
+
+<Steps>
+
+1. Preview to stdout.
+
+   ```bash
+   konfig docker preview apps/api            # both files
+   konfig docker preview apps/api --prod-only
+   ```
+
+2. Write `Dockerfile` and `Dockerfile.dev` next to the target (`--out-dir` to place them elsewhere, `--force` to replace unmanaged files).
+
+   ```bash
+   konfig docker write apps/api
+   ```
+
+3. Check for drift in CI: non-zero exit if the on-disk files differ from what the spec would emit.
+
+   ```bash
+   konfig docker diff apps/api --format detail
+   ```
+
+4. Build with the **monorepo root** as the context. Every `COPY` path is relative to the root, so a build from `apps/api` fails.
+
+   ```bash
+   docker build -f apps/api/Dockerfile -t ghcr.io/example/api:$TAG .
+   ```
+
+</Steps>
+
+<Aside type="caution" title="Context is the repo root">
+The `deps` stage copies `packages/*/package.json` and the shared lockfile. Run `docker build` from the directory that contains the root `package.json`, and add `node_modules` and `.generated` to `.dockerignore`.
+</Aside>
+
+Next: push the tag and record it with [Image promotion](/konfig.ts/docs/guides/image-promotion/).

@@ -36,10 +36,10 @@ const activeClass = "text-white"
           <a href={DOCS.href} class:list={[linkClass, active === "docs" && activeClass]} aria-current={active === "docs" ? "page" : undefined}>
             {DOCS.label}
           </a>
+          <SearchDialog />
         </div>
 
         <div class="ml-auto hidden items-center gap-4.5 md:flex">
-          <SearchDialog />
           <a href={SITE.npm} target="_blank" rel="noopener noreferrer" class:list={[linkClass, "inline-flex items-center gap-1"]}>
             npm <ArrowUpRight size={14} aria-hidden="true" />
           </a>

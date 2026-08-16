@@ -1,0 +1,59 @@
+---
+title: konfig diff
+description: Structural diff of a rendered env against the baseline tree configured in diff.baseline, with Secret data redacted and Helm noise stripped.
+sidebar:
+  order: 4
+---
+
+import { Aside } from "@/components/docs"
+
+`konfig diff <env>` renders the env in memory and compares it, file by file and document by document, against the YAML tree at `<root>/<diff.baseline>/<env>`. Comparison is structural: it parses YAML on both sides and compares values, so key order, quoting style, and whitespace never show up as changes.
+
+## Usage
+
+```bash
+konfig diff <env> [--format summary|detail|json]
+                  [--cluster <name>] [--k8s-version <ver>] [--flag k=v ...]
+```
+
+## Arguments
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `env` | required | Env to diff. |
+
+## Flags
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `--format` | `summary` | `summary` prints one line per changed file; `detail` adds per-document `left:`/`right:` YAML; `json` prints the full `DiffResult`. |
+| `--cluster`, `--k8s-version`, `--flag` | unset | Shared render flags, see [CLI overview](/konfig.ts/docs/cli/overview/). |
+
+## Behaviour
+
+- Requires `diff.baseline` in `konfig.json`; otherwise the command fails with `DiffBaselineMissing` before rendering.
+- The left side is every `.yaml` file under the baseline directory (recursively, keyed by relative path). The right side is the in-memory render keyed by its path relative to the output directory. Files present on only one side are reported as `+ <file>` (new in render) or `- <file>` (only in baseline).
+- Multi-document files are matched by identity, `kind|namespace|name`, not by position, so reordering documents is not a change. Single-document files are compared as one value.
+- Both sides are normalised before comparison: `null` and `undefined` object values are dropped, the `helm.sh/chart` label and `app.kubernetes.io/managed-by: Helm` label are removed, and the `meta.helm.sh/release-name` / `meta.helm.sh/release-namespace` annotations are removed. This keeps a Helm-managed baseline comparable to a konfig render.
+- For `kind: Secret`, every value under `data` and `stringData` is replaced with `<redacted>` on both sides before comparing and printing. Changed keys are still detected (a key added or removed changes the map); changed values are not, and secret material never reaches the terminal.
+
+## Exit codes and errors
+
+- Exit `0` and an `OK` line (`env '<env>' matches baseline`) when nothing differs.
+- Non-zero with `DiffNonEmpty` after printing the diff when anything differs, so the command works as a CI gate.
+- `DiffBaselineMissing` when `diff` is not configured; config and render errors as in [konfig build](/konfig.ts/docs/cli/build/).
+
+<Aside type="note">
+`konfig diff` compares against a committed baseline tree, not against a live cluster. To compare against what `build` last wrote, point `diff.baseline` at your `outDir.manifests` directory.
+</Aside>
+
+## Example
+
+```bash
+konfig diff prod
+# ~ api/Deployment-api.yaml
+# + api/ConfigMap-feature-flags.yaml
+
+konfig diff prod --format detail
+konfig diff prod --format json > diff.json
+```

@@ -1,0 +1,88 @@
+---
+title: konfig build
+description: Render an env to YAML files under outDir.manifests, with an input-hash cache, atomic writes, and a timing report.
+sidebar:
+  order: 2
+---
+
+import { Aside } from "@/components/docs"
+
+`konfig build <env>` loads the env entry, runs the `AppOfApps` (or `Bundle`) program, renders every manifest through the `RenderContext`, and writes one YAML file per resource plus one Argo CD `Application` per app. A build whose inputs have not changed since the last run writes nothing.
+
+## Usage
+
+```bash
+konfig build <env> [--log text|json] [--verbose] [--no-cache]
+                   [--cluster <name>] [--k8s-version <ver>] [--flag k=v ...]
+```
+
+## Arguments
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `env` | required | Env name to build (for example `prod`). Resolved via `envs.<env>.entry` or `<root>/env/<env>.ts`. |
+
+## Flags
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `--log` | `text` | Output format for the report line: `text` or `json`. |
+| `--verbose` | `false` | Wrap the render in an Effect span named `konfig.render.<env>` so tracing output shows per-render timing. |
+| `--no-cache` | `false` | Skip the input-hash check and force a fresh render (debugging, first build). |
+| `--cluster` | unset | Shared render flag, see [CLI overview](/konfig.ts/docs/cli/overview/). Adds a `<cluster>` directory level to the output path. |
+| `--k8s-version` | unset | Shared render flag. |
+| `--flag k=v` | unset | Shared render flag, repeatable. |
+
+## Output layout
+
+The output root is `<configDir>/<root>/<outDir.manifests>/<env>` (plus `/<cluster>` when `--cluster` is set). Inside it:
+
+- One directory per app named after the app (`Application.name`), containing `<Kind>-<name>.yaml` for every rendered resource. `.` and `/` in names are replaced with `-` in filenames. `RawYaml` output (Helm releases, sops passthrough) is split on real YAML document boundaries into the same per-resource files.
+- One directory named after the app-of-apps program (`"apps"` unless you set `name`), containing `Application-<app>.yaml` for every child app.
+
+```text
+.generated/manifests/prod/
+├── apps/
+│   ├── Application-api.yaml
+│   └── Application-postgres.yaml
+├── api/
+│   ├── Deployment-api.yaml
+│   └── Service-api.yaml
+└── postgres/
+    └── ...
+```
+
+Writes are atomic: everything is staged under `<outDir>.tmp`, then the live directory is removed and the staging directory renamed into place. Files are written with mode `0600`. Apps render with a concurrency of 4 to keep the number of `helm` and `sops` subprocesses bounded.
+
+## Cache
+
+Before rendering, `build` computes a SHA-256 over the decoded `konfig.json`, the render context (`cluster`, `k8sVersion`, sorted `flags`), the env entry file, every file under `root` (skipping `node_modules`, `dist`, `.konfig`), and every path matched by `cacheInclude`. The hash and an output hash are stored in `<configDir>/.konfig/cache/<env>-<ctxKey>.json`, where `ctxKey` is a digest of the render context, so different `--cluster`/`--flag` combinations do not share a slot.
+
+A cache hit requires all of: the input hash matches, the recorded output directory is the one this invocation would write, the directory exists, and its on-disk contents still hash to the recorded output hash. Editing or deleting a generated file by hand is therefore a miss, and the next build rewrites the tree. The hash is conservative: touching any file under `root` invalidates it.
+
+<Aside type="tip">
+Add `.konfig/` to `.gitignore`. It holds only the build cache and the Helm tarball cache.
+</Aside>
+
+## Report
+
+Text mode prints `Rendering env 'prod'...` followed by one report line: `Wrote 42 file(s) to /abs/out/prod` with the render and write times in milliseconds, or on a hit `Cached`, with a note that the env's inputs are unchanged and the file count at the output directory.
+
+`--log json` prints a single JSON object per run:
+
+```json
+{"env":"prod","files":42,"outDir":"/abs/out/prod","renderMs":812,"writeMs":9,"totalMs":821,"cached":false}
+```
+
+## Exit codes and errors
+
+The process exits non-zero when the program fails. Common tagged errors: `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`, `EnvLoadError` (missing or non-Effect default export), any render error from your modules (for example `HelmVersionTooLow`, `HelmDigestMismatch`, unbound secrets), `WriteEnvError`, `BuildCacheError`.
+
+## Example
+
+```bash
+konfig build prod                        # first run renders and writes
+konfig build prod                        # second run: Cached, inputs unchanged
+konfig build prod --cluster eu-west-1    # separate output dir and cache slot
+konfig build prod --no-cache --log json  # force render, machine-readable report
+```

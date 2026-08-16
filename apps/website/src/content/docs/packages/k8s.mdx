@@ -1,0 +1,60 @@
+---
+title: "@konfig.ts/k8s"
+description: Kubernetes resource builders with branded references, typed env vars, workload helpers, and the bind step that connects env contracts to secret backends.
+sidebar:
+  order: 1
+  label: k8s
+---
+
+import { Aside, Snippet } from "@/components/docs"
+
+`@konfig.ts/k8s` builds Kubernetes resources with branded references. Cross-resource links (an env var to a Secret, a volume to a ConfigMap, Ingress TLS to a Secret, `imagePullSecrets`) take a brand rather than a raw string, so a workload pointing at a Secret nobody creates is a compile error instead of a failed `argocd sync`. It also hosts `Environment.bind` and `Secret.bind`, which turn a `@konfig.ts/env` contract into a Deployment env block plus a secret backend's custom resources.
+
+## Install
+
+```bash
+bun add @konfig.ts/k8s
+```
+
+## Usage
+
+The API module of the full-stack example: bind the env contract, define a container whose env mixes bound vars, a Secret key, and a ConfigMap key, then wrap it in `Workload.web` (Deployment + Service).
+
+<Snippet file="infra/modules/api.ts" startAt="const apiContainer = Container.define" endBefore="return [...bound.manifests" title="infra/modules/api.ts" />
+
+`EnvVar.fromSecretForPod` requires `podNamespace` to match the Secret's namespace at the type level, and `Port.ref("http")` only accepts a name declared in `ports`.
+
+## Surface
+
+| Export | Purpose |
+| --- | --- |
+| `Container`, `Pod`, `PodSet` | `Container.define`, pod specs, and shared pod-set inputs for workloads |
+| `Port` | `Port.make({ name, containerPort })`, `Port.ref(name)` for probes and Services |
+| `EnvVar` | `value`, `fromSecretForPod`, `fromConfigMap`; duplicate names in one container are a compile error |
+| `Secret`, `ConfigMap`, `Namespace`, `ServiceAccount` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind` |
+| `Environment` | `Environment.define` re-exported with `bind` (manifest side) and `runtime` (process side) |
+| `NativeSecret` | Built-in backend that emits a plain `Secret` from a source |
+| `Workload` | `Workload.web` (Deployment + Service + optional Ingress, `reloader: "stakater"`), `Workload.cron` (CronJob + ServiceAccount) |
+| `Deployment`, `StatefulSet`, `Job`, `CronJob`, `Service`, `Ingress` | Lower-level resource constructors |
+| `Role`, `RoleBinding`, `ClusterRole`, `ClusterRoleBinding`, `NetworkPolicy`, `PersistentVolume`, `PersistentVolumeClaim` | RBAC, policy, and storage constructors |
+| `Volume`, `Selector` | Typed volumes/mounts; label selectors shared between workloads and NetworkPolicy peers |
+| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef` | Brand constructors and `*RefName` type helpers |
+| `hashSecretValues` | Stamp a pod-spec hash so pods roll on re-render |
+| `SecretBackend`, `BackendEmitInput`, `BackendTag` | The contract secret backend packages implement |
+| `K8s` | Raw Kubernetes types (`kubernetes-types@1.30`) |
+
+## Errors
+
+This package exports no tagged error classes of its own. Bind and render failures surface from the backend in use (`@konfig.ts/sops`, `@konfig.ts/sealed-secrets`) or from `@konfig.ts/env` (`SecretSourceError`, `EnvNameCollision`).
+
+<Aside type="tip">
+`Selector.make({ app: "api" })` mirrors the `{ app: <name> }` labels `Workload.web` applies, so a `NetworkPolicy` peer and the workload it targets share one definition.
+</Aside>
+
+## Requirements
+
+- `effect@4.0.0-rc.109` as an exact peer dependency (Effect 4, release candidate).
+- Depends on `@konfig.ts/core`, `@konfig.ts/env`, and `kubernetes-types`.
+- Runtime: Bun recommended; Node >= 23.6 works; Node 22.6 to 23.5 with `--experimental-strip-types`; `tsx` works.
+
+Source and README: [packages/k8s](https://github.com/DwieDave/konfig.ts/tree/main/packages/k8s).

@@ -1,0 +1,50 @@
+---
+title: konfig graph
+description: Print an ASCII graph of the workspace dependency closure for one package, or the whole monorepo.
+sidebar:
+  order: 9
+---
+
+`konfig graph [target]` renders the workspace dependency graph that `@konfig.ts/docker` uses to compute build closures. Without a target it draws the whole monorepo; with one it draws that package's closure. It reads only `package.json` files, so it runs under plain Node.
+
+## Usage
+
+```bash
+konfig graph [target] [--with-dev] [--full] [--width <n>]
+```
+
+## Arguments
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `target` | unset | Workspace directory (relative path such as `apps/api`) or package name (`@example/api`). Omit to render the whole monorepo. |
+
+## Flags
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `--with-dev` | `false` | Also draw `devDependencies` edges, annotated with `▽`. |
+| `--full` | `false` | Show every direct edge. By default transitively implied edges are hidden (A→C is dropped when A→B→C exists). |
+| `--width <n>` | `stdout.columns` or `100` | Override the detected terminal width. |
+
+## Behaviour
+
+- Finds the monorepo root by walking up from the cwd to a `package.json` with `workspaces` (or `pnpm-workspace.yaml`), then loads every workspace and its `package.json`.
+- Nodes are workspaces; edges are `dependencies` and `peerDependencies` (runtime) and `devDependencies` (dev) whose spec uses the `workspace:` or `link:` protocol and points at another workspace. Non-workspace packages never appear.
+- Runs a cycle check first. A cycle fails the command with `CircularWorkspaceDep` and prints `error: workspace cycle detected: a → b → a`.
+- Dev edges are only drawn and only considered for the cycle check with `--with-dev`.
+- Nodes that define a `build` script are marked so you can see which packages the `builder` stage will compile.
+
+## Exit codes and errors
+
+- `GraphTargetNotFound` when `target` matches neither a workspace name nor a relative directory; stderr lists the available workspace names.
+- `CircularWorkspaceDep { cycle }` on a dependency cycle.
+- `MonorepoRootNotFound` when no workspace root is found above the cwd.
+
+## Example
+
+```bash
+konfig graph                          # whole monorepo
+konfig graph apps/api --with-dev      # api's closure, including dev edges
+konfig graph @example/api --full --width 140
+```

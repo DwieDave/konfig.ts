@@ -1,0 +1,58 @@
+---
+title: "@konfig.ts/core"
+description: Kubernetes-agnostic primitives every konfig.ts package builds on, including Manifest, Dep, Module, Helm, stable YAML, diff, and render.
+sidebar:
+  order: 0
+  label: core
+---
+
+import { Aside, Snippet } from "@/components/docs"
+
+`@konfig.ts/core` holds the primitives the rest of konfig.ts is built on: the `Manifest<A>` carrier, the `Dep.*` kinds that drive compile-time dependency tracking, the `Module` factories, `Helm.release` with digest verification, deterministic YAML serialization, structural diff, and the `render` entrypoint the CLI calls. Most projects reach for the higher-level packages (`@konfig.ts/k8s`, `@konfig.ts/env`, `@konfig.ts/argocd`) and touch core directly only for `Module.*`, `Dep.*`, and `Helm.release`.
+
+## Install
+
+```bash
+bun add @konfig.ts/core
+```
+
+## Usage
+
+A reusable module that creates a namespace and pulls a digest-verified Helm chart. `Module.fixedNs` pins the namespace; `Application.target` (from `@konfig.ts/argocd`) turns the module into an Argo CD `Application` handle.
+
+<Snippet file="infra/modules/postgres.ts" startAt="export const definePostgres" title="infra/modules/postgres.ts" />
+
+Inside a build, `yield* Dep.Secret("ghcr-pull")` records a typed need that another module must satisfy with `Dep.provideSecret("ghcr-pull")`. The graph is checked when you compose modules at `AppOfApps.entrypoint`; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+
+## Surface
+
+| Export | Purpose |
+| --- | --- |
+| `Manifest` | `make`, `combine`, `concat`, `whenever`, `embedYaml`: the `Manifest<A>` carrier and its combinators |
+| `render`, `renderManifest`, `RenderContext` | Run a program against a `RenderContext` (env, cluster, k8s version, `flags`) and write files |
+| `Dep` | Needs (`Secret`, `ConfigMap`, `Namespace`, `ServiceAccount`, `Pvc`, `Image`, `Application`, `App`) and `provide*` layers |
+| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef`, `BuiltImageRef` | Branded reference types carried by the needs |
+| `Module` | `fixedNs`, `dynamicNs` factories; `Target`, `BuildContext`, `LiteralName` types |
+| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.fromModules`, `Bundle.entrypoint`) and the residual-need machinery behind every entrypoint |
+| `Helm` | `Helm.release`: chart pull, SHA-256 digest verification, `helm template` |
+| `Yaml` | `serialize` (stable key order) and `filenameFor` |
+| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYaml`, `parseYamlAll`, `deepEqual`, `redact` | Structural YAML diff with `Secret` data redaction |
+| `KonfigConfig`, `ImagesConfig`, `decodeKonfigConfigSync`, `decodeImagesSync`, `requireImage`, `imagesFor` | Schemas and decoders for `konfig.json` and `images.json` |
+| `boundary`, `makeStrictDecoder`, `brand`, `unsafeCoerce` | Schema decode at boundaries; annotated escape hatches |
+| `runProcessString`, `runProcessExit`, `processDetail` | Subprocess helpers used by Helm and the secret backends |
+
+## Errors
+
+Tagged errors exported from `src/index.ts`: `RenderError`, `BoundaryDecodeError`, `EmbedYamlReadError`, `HelmVersionTooLow`, `HelmRenderError`, `HelmDigestMismatch`, `CrdExtractError`, `ProcessError`, `ImagesEnvMissing`, `ImagesAppMissing`. `AnyRenderError` is the union of the render-time ones.
+
+<Aside type="note">
+`Manifest<A>` does not carry dependencies in its own type. Per-kind tracking lives one level up, in the Effect `Layer`s that `Module` and `Application.define` compose.
+</Aside>
+
+## Requirements
+
+- `effect@4.0.0-rc.109` as an exact peer dependency (Effect 4, release candidate).
+- `@effect/platform-node` and `yaml` are regular dependencies: `render()` needs the Node filesystem and subprocess services, so they install with the package.
+- Runtime: Bun recommended; Node >= 23.6 works; Node 22.6 to 23.5 with `--experimental-strip-types`; `tsx` works.
+
+Source and README: [packages/core](https://github.com/DwieDave/konfig.ts/tree/main/packages/core).

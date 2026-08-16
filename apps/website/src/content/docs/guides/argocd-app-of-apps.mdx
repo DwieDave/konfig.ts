@@ -1,0 +1,110 @@
+---
+title: Argo CD app-of-apps
+description: Define Applications with @konfig.ts/argocd, compose them with AppOfApps.fromModules, control sync order with Sync.wave, and point Argo CD at the rendered root.
+sidebar:
+  order: 0
+---
+
+import { Aside, Steps, Snippet } from "@/components/docs"
+
+`@konfig.ts/argocd` turns each module into one Argo CD `Application` and writes a root directory of `Application` CRs that a single Argo CD root app can sync. This guide walks from `Application.define` to the directory layout Argo CD needs.
+
+## The pieces
+
+- `Application.define({ name, namespace, source, build, provides?, project?, syncPolicy?, annotations? })` builds one Application. `name` and `namespace` must be string literals (`Application.LiteralName<T>`), which is what lets the dependency graph reason about them at the type level.
+- `Application.target` is the target you hand to `Module.fixedNs` / `Module.dynamicNs`. It adds `source` as a per-call argument and `project`, `syncPolicy`, `annotations` as module config.
+- `Application.make(opts)` is the plain value constructor (no dependency graph); `AppOfApps.fromModules` calls it for you.
+- `AppOfApps.fromModules({ target, defaults, modules, name? })` composes the module layers, resolves every `Dep.Need`, and yields an `AppOfAppsResult` (`{ name, target, defaults, apps }`). `name` defaults to `"apps"`.
+- `AppOfApps.entrypoint(program)` is the compile-time gate: it accepts the program only when no residual need is left. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+
+## Two shapes: target and source
+
+`target` describes where the whole environment lives in git and is used to build the child `Application` CRs:
+
+```ts
+interface AppOfAppsTarget {
+  readonly repoURL: string
+  readonly branch: string
+  readonly rootPath: string            // directory Argo's root app syncs
+  readonly controllerNamespace?: string // metadata.namespace of the CRs, default "argocd"
+}
+```
+
+`source` is per module and becomes `spec.source` of that module's `Application`:
+
+```ts
+interface ArgoSource {
+  readonly repoURL: string
+  readonly targetRevision: string
+  readonly path: string
+}
+```
+
+The example builds `source` from `target` with a small helper so every child points at `<rootPath>/<module name>`. Here is the whole entrypoint of the production environment.
+
+<Snippet file="infra/envs/prod.ts" startAt="const branch = " title="infra/envs/prod.ts" />
+
+`cluster.repositoryUrl` comes from a plain TypeScript constant shared by every environment.
+
+<Snippet file="infra/cluster.ts" startAt="export const cluster = {" endBefore="export type Cluster" title="infra/cluster.ts" />
+
+## Sync order with `Sync.*`
+
+`Sync` produces `argocd.argoproj.io/*` annotation records you spread into `annotations` (of `Application.define`, `Module.fixedNs`, or a resource's `metadata.annotations`):
+
+- `Sync.wave(n)` sets `argocd.argoproj.io/sync-wave`.
+- `Sync.hook(phase)` sets `argocd.argoproj.io/hook` with `phase` in `PreSync | Sync | PostSync | SyncFail | PostDelete`.
+- `Sync.options(["Prune=false", ...])` sets `argocd.argoproj.io/sync-options` (comma-joined).
+
+The example places the sops operator at wave -2, secrets and infrastructure at -1, and workloads at the default 0.
+
+<Snippet file="infra/modules/sops-operator.ts" startAt="export const defineSopsOperator" title="infra/modules/sops-operator.ts" />
+
+## Defaults and per-app overrides
+
+`defaults` applies to every child CR: `destination.server` (falls back to `https://kubernetes.default.svc`), `project` (falls back to `"default"`), and `syncPolicy`. A module's own `project` or `syncPolicy` wins; `syncPolicy.automated` and `retry` are merged field by field, `syncOptions` is replaced whole.
+
+## What gets written
+
+`konfig build <env>` renders each Application's manifests into `<outDir.manifests>/<env>/<app name>/` and writes one `Application` CR per module into `<outDir.manifests>/<env>/<result name>/` (`apps/` unless you pass `name`). The CR filename is `applicationCRFilename(app)`, which is `Application-<name>.yaml` with `.` and `/` replaced by `-`. The CR itself comes from `serializeApplicationCR({ app, target, defaults })`; `emitApplicationCR` wraps the same YAML in a `Manifest` when you want to compose it further.
+
+For the example above the tree looks like this:
+
+```text
+.generated/manifests/prod/
+  apps/
+    Application-api.yaml
+    Application-postgres.yaml
+    ...
+  api/
+    Deployment-api.yaml
+    Service-api.yaml
+    ...
+  postgres/
+    ...
+```
+
+<Aside type="note" title="rootPath is a git path, outDir is a filesystem path">
+`target.rootPath` is what ends up in `spec.source.path` of the CRs and must be the path of the rendered directory inside the repository Argo CD clones (`./infra/k8s/manifests/prod` in the example). `outDir.manifests` in `konfig.json` is where the CLI writes locally. Keep the two pointing at the same committed directory.
+</Aside>
+
+## Pointing Argo CD at it
+
+<Steps>
+
+1. Render and commit the output.
+
+   ```bash
+   konfig build prod
+   git add infra/k8s/manifests/prod && git commit -m "render prod"
+   ```
+
+2. Create one root `Application` by hand (or with `Application.make`) whose `spec.source.path` is `<rootPath>/<result name>`, for example `infra/k8s/manifests/prod/apps`, on `target.branch`.
+
+3. Sync the root app. Argo CD creates the child Applications from the CRs in that directory; each child syncs its own `source.path` in sync-wave order.
+
+</Steps>
+
+Because every child CR is generated from the same `target`, changing `branch` or `rootPath` in one place moves the whole environment. Removing a module from `modules` removes its CR on the next build, and with `automated.prune` in `defaults.syncPolicy` Argo CD deletes the child.
+
+Next: [Image promotion](/konfig.ts/docs/guides/image-promotion/) shows how the `apiBuild` and `workerBuild` modules above get their tags in CI.

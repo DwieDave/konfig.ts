@@ -1,0 +1,43 @@
+---
+title: konfig helm
+description: Pre-fetch every registered Helm chart tarball into the local cache so renders and CRD extraction run offline.
+sidebar:
+  order: 7
+---
+
+import { Aside } from "@/components/docs"
+
+`konfig helm` groups Helm chart management. It currently has one subcommand, `fetch`, which downloads every chart in the registry into the tarball cache ahead of time. Use it to warm CI caches or to make later `konfig build` and `konfig crd` runs independent of chart repositories.
+
+## Usage
+
+```bash
+konfig helm fetch --all
+```
+
+## Flags (`fetch`)
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `--all` | `false` | Fetch all charts into the local cache. Required; without it the command prints `Specify --all to fetch all charts` and fails with `MissingAllFlag`. |
+
+## Behaviour
+
+- Reads the same environment-variable configuration as `konfig crd`: registry directory `KONFIG_CHARTS_DIR` (default `infra/k8s-konfig/charts`), cache `KONFIG_HELM_CACHE` (default `.konfig/helm-cache`), minimum version `KONFIG_HELM_MIN_VERSION` (default `3.16.0`). See [konfig crd](/konfig.ts/docs/cli/crd/) for the registry file format.
+- Runs `helm version --short` and fails with `HelmVersionTooLow` when `helm` is absent or too old.
+- For every registry entry prints `Fetching <chart>@<version>...` and runs `helm pull --repo <repo> <chart> --version <version> --destination <cache>`, unless `<cache>/<chart>-<version>.tgz` already exists.
+- Ends with `Done. Cache at <cache>`.
+
+<Aside type="caution">
+`helm fetch` does not verify digests. Digest verification happens at render time: `Helm.release({ digest })` in `@konfig.ts/core` hashes the cached tarball on every pull and every cache hit and fails with `HelmDigestMismatch` when the bytes changed. Render-time cache entries are keyed as `<chart>-<version>-<digest12>.tgz` inside the same `KONFIG_HELM_CACHE` directory.
+</Aside>
+
+## Exit codes and errors
+
+`MissingAllFlag`, `HelmVersionTooLow { required, found }`, `ChartRegistryError`, `ChartRegistryEntryDecodeError`, and process failures from `helm pull`.
+
+## Example
+
+```bash
+KONFIG_HELM_CACHE=~/.cache/konfig-helm konfig helm fetch --all
+```
