@@ -13,9 +13,8 @@ export interface FailureCase {
 }
 
 const MISSING_PROVIDER =
-  `Argument of type 'Effect<AppOfAppsResult, AnyRenderError, Need<"Image", "api"> | Need<"Image", "worker"> | Need<"Secret", "ghcr-pull"> | RenderServices>' is not assignable to parameter of type 'Effect<…> & { readonly _konfig_unsatisfied: … }'.
-  Property '_konfig_unsatisfied' is missing but required in type
-  '{ readonly _konfig_unsatisfied: "Missing provider for Secret \\"ghcr-pull\\". Add a module that provides it to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list." | … }'.`
+  `Missing provider for Secret "ghcr-pull".
+Add a module that provides it to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list.`
 
 export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
   {
@@ -53,22 +52,19 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
           on: "  secrets: {",
           find: "secrets",
           code: "2741",
-          message:
-            `Property 'jwt' is missing in type '{ db: { backend: SecretBackend<…> }; s3: { backend: SecretBackend<…> }; }' but required in type 'SecretMembersOpts<{ readonly db: SecretEntry<"db-creds", …>; readonly s3: SecretEntry<…>; readonly jwt: SecretEntry<…>; … }>'.`
+          message: `Property 'jwt' is missing in secrets.\nEvery secret member of apiEnv (db, s3, jwt) needs a backend.`
         },
         {
           on: "    db: {},",
           find: "db: {}",
           code: "2322",
-          message: `Type '{}' is not assignable to type 'SecretMemberOptions<"db-creds", "password" | "url" | "username">'.`
+          message: `Type '{}' is not assignable to SecretMemberOptions<"db-creds">.\nA member needs at least a backend.`
         },
         {
           on: "    db: { backend: sopsBackend },",
           find: "db: { backend: sopsBackend }",
           code: "2322",
-          message:
-            `Type '{ backend: SecretBackend<string, string, true, …> }' is not assignable to type 'SecretMemberOptions<"db-creds", …>'.
-  Property 'source' is missing but required in type '_SecretMemberBackendRequiresSource<"db-creds", "password" | "url" | "username">'.`
+          message: `Property 'source' is missing.\nSops.backend requires a source; its type says requiresSource: true.`
         }
       ]
     },
@@ -88,8 +84,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
         {
           find: "name: dynamicName",
           code: "2322",
-          message:
-            `Type 'string' is not assignable to type '{ readonly _konfig_error: "Module name/namespace must be a string literal. Make the wrapper generic (\`<const Name extends string>\`) and forward via \`Module.LiteralName<Name>\`."; }'.`
+          message: `Type 'string' is not assignable to type '{ readonly _konfig_error: "Module name/namespace must be a string literal." }'.\nMake the wrapper generic (<const Name extends string>) and forward via Module.LiteralName<Name>.`
         }
       ]
     },
@@ -109,9 +104,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
         {
           find: "Environment.define({",
           code: "2345",
-          message:
-            `Argument of type '{ db: SecretEntry<"db", "url", { readonly url: "DATABASE_URL"; }>; shadow: LiteralEntry<"DATABASE_URL", string>; }' is not assignable to parameter of type '{ … } & _EnvNameCollisionError<"DATABASE_URL">'.
-  Property '_konfig_error' is missing but required in type '_EnvNameCollisionError<"DATABASE_URL">'.`
+          message: `Property '_konfig_error' is missing but required in type _EnvNameCollisionError<"DATABASE_URL">.\nTwo members claim the env var DATABASE_URL.`
         }
       ]
     },
@@ -131,8 +124,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
         {
           find: "modules: [apiV1, apiV2]",
           code: "2345",
-          message:
-            `Property '_konfig_duplicate' is missing in type '{ target: …; defaults: {}; modules: readonly [ApplicationHandle<"api", …>, ApplicationHandle<"api", …>]; }' but required in type '{ readonly _konfig_duplicate: "Duplicate App \\"api\\": two modules in AppOfApps.fromModules({ modules }) provide the same name; the later one silently shadows the earlier. Rename one of them."; }'.`
+          message: `Duplicate App "api": two modules in AppOfApps.fromModules({ modules }) provide the same name; the later one silently shadows the earlier.\nRename one of them.`
         }
       ]
     },
