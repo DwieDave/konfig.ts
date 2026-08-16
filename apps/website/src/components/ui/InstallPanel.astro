@@ -1,9 +1,28 @@
 ---
 import { Check, Copy } from "@lucide/astro"
-import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, PACKAGE_MANAGERS } from "@/lib/install-command"
+import { DEFAULT_PACKAGE_MANAGER, DEFAULT_SPEC, getInstallCommand, PACKAGE_MANAGERS } from "@/lib/install-command"
+
+/**
+ * Install command with a package-manager switch and copy button. The chosen
+ * package manager is shared by every panel on the site (localStorage).
+ */
+interface Props {
+  readonly packages?: string | undefined
+  readonly dev?: boolean | undefined
+  readonly class?: string | undefined
+  /** Wrap long commands instead of truncating (docs). */
+  readonly wrap?: boolean | undefined
+}
+
+const { packages = DEFAULT_SPEC.packages, dev = DEFAULT_SPEC.dev, class: className, wrap = false } = Astro.props
+const spec = { packages, dev }
 ---
 
-<konfig-install-panel class="relative block rounded-md bg-[#101012] p-1 ring-1 ring-zinc-700 ring-inset">
+<konfig-install-panel
+  data-packages={packages}
+  data-dev={dev ? "true" : "false"}
+  class:list={["relative block rounded-md bg-[#101012] p-1 ring-1 ring-zinc-700 ring-inset", className]}
+>
   <div
     data-role="copy"
     role="button"
@@ -58,7 +77,7 @@ import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, PACKAGE_MANAGERS } from "@/
       </ul>
     </div>
 
-    <span data-role="command-text" class="flex-1 truncate">{getInstallCommand(DEFAULT_PACKAGE_MANAGER)}</span>
+    <span data-role="command-text" class:list={["flex-1", wrap ? "break-all whitespace-normal" : "truncate"]}>{getInstallCommand(DEFAULT_PACKAGE_MANAGER, spec)}</span>
 
     <Copy data-role="copy-icon-idle" class="shrink-0 text-zinc-400" size={16} aria-hidden="true" />
     <Check data-role="copy-icon-copied" class="hidden shrink-0 text-zinc-200" size={16} aria-hidden="true" />
@@ -67,16 +86,35 @@ import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, PACKAGE_MANAGERS } from "@/
 </konfig-install-panel>
 
 <script>
-  import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, isPackageManager, type PackageManager } from "@/lib/install-command"
+  import {
+    DEFAULT_PACKAGE_MANAGER,
+    getInstallCommand,
+    isPackageManager,
+    STORAGE_KEY,
+    type InstallSpec,
+    type PackageManager
+  } from "@/lib/install-command"
 
   const COPY_RESET_TIMEOUT_MS = 1500
+  const PM_EVENT = "konfig:pm"
+
+  const readStoredPM = (): PackageManager => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      return stored !== null && isPackageManager(stored) ? stored : DEFAULT_PACKAGE_MANAGER
+    } catch {
+      return DEFAULT_PACKAGE_MANAGER
+    }
+  }
 
   class KonfigInstallPanel extends HTMLElement {
     #pm: PackageManager = DEFAULT_PACKAGE_MANAGER
     #open = false
     #timeout: ReturnType<typeof setTimeout> | undefined
+    #spec: InstallSpec = { packages: "@konfig.ts/cli", dev: true }
 
     connectedCallback() {
+      this.#spec = { packages: this.dataset["packages"] ?? "@konfig.ts/cli", dev: this.dataset["dev"] !== "false" }
       const chip = this.querySelector("[data-role='pm-chip']")
       const popover = this.querySelector("[data-role='pm-popover']")
       const chevron = this.querySelector("[data-role='pm-chevron']")
@@ -111,7 +149,7 @@ import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, PACKAGE_MANAGERS } from "@/
 
       const setPM = (pm: PackageManager) => {
         this.#pm = pm
-        commandText.textContent = getInstallCommand(pm)
+        commandText.textContent = getInstallCommand(pm, this.#spec)
         label.textContent = pm
         chip.setAttribute("aria-label", `Package manager: ${pm}`)
         for (const opt of options) {
@@ -139,7 +177,7 @@ import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, PACKAGE_MANAGERS } from "@/
       const doCopy = () => {
         const clipboard = navigator.clipboard
         if (clipboard === undefined) return flash("error")
-        clipboard.writeText(getInstallCommand(this.#pm)).then(
+        clipboard.writeText(getInstallCommand(this.#pm, this.#spec)).then(
           () => flash("copied"),
           () => flash("error")
         )
@@ -153,7 +191,15 @@ import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, PACKAGE_MANAGERS } from "@/
         opt.addEventListener("click", (e) => {
           e.stopPropagation()
           const pm = opt.dataset["pm"]
-          if (pm !== undefined && isPackageManager(pm)) setPM(pm)
+          if (pm !== undefined && isPackageManager(pm)) {
+            setPM(pm)
+            try {
+              localStorage.setItem(STORAGE_KEY, pm)
+            } catch {
+              // storage unavailable: selection stays per page
+            }
+            document.dispatchEvent(new CustomEvent(PM_EVENT, { detail: pm }))
+          }
           setOpen(false)
         })
       }
@@ -163,6 +209,13 @@ import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, PACKAGE_MANAGERS } from "@/
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") setOpen(false)
       })
+      document.addEventListener(PM_EVENT, (e) => {
+        if (e instanceof CustomEvent && typeof e.detail === "string" && isPackageManager(e.detail) && e.detail !== this.#pm) {
+          setPM(e.detail)
+        }
+      })
+      setPM(readStoredPM())
+
       copy.addEventListener("click", doCopy)
       copy.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
