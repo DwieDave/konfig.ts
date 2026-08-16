@@ -36,19 +36,19 @@ Every command walks up from the cwd to find a `konfig.json`. An env is a named r
 | `konfig validate <env>` | Render in memory and run structural checks; `--strict` adds kubeconform, `--ignore-missing-schemas` |
 | `konfig diff <env>` | Structural diff against `diff.baseline`; `--format summary\|detail\|json`; Secret data is redacted |
 | `konfig set <env> <app> <image>` | Update one image ref in `images.json` |
-| `konfig crd extract\|verify` | CRD TypeScript codegen from Helm charts and drift check |
+| `konfig crd extract\|verify` | CRD TypeScript codegen from Helm charts (`--release <id>` or `--all`) and drift check |
 | `konfig helm fetch --all` | Pre-fetch chart tarballs into `helm.cacheDir` |
-| `konfig docker preview\|write\|diff <app>` | Dockerfile generation via `@konfig.ts/docker` |
-| `konfig graph [target] [--with-dev]` | Print the workspace dependency graph |
+| `konfig docker preview\|write\|diff <target>` | Dockerfile generation via `@konfig.ts/docker`; `--prod-only`, `--dev-only`; `write` adds `--out-dir`, `--force`; `diff` adds `--format` |
+| `konfig graph [target]` | Print the workspace dependency graph; `--with-dev`, `--full`, `--width <n>` |
 
-`build`, `validate`, and `diff` share `--cluster <name>`, `--k8s-version <ver>`, and repeatable `--flag k=v`, all readable from your program's `RenderContext`.
+`build`, `validate`, and `diff` share `--cluster <name>`, `--k8s-version <ver>`, and repeatable `--flag k=v` (exposed as `ctx.flags`, a `Map`), all readable from your program's `RenderContext`.
 
 ## Errors
 
-Tagged errors raised by the CLI include `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`, `EnvLoadError`, `WriteEnvError`, `StructuralValidationFailed`, `KubeconformNotFound`, `KubeconformReportError`, `DiffBaselineMissing`, `DiffNonEmpty` (non-zero exit on differences), `SetUnknownEnv`, `ImagesFileError`, `ReleaseNotFound`, `MissingCrdFlags`, `CrdDrift`, `MissingAllFlag`, `SpecImportError`, `SpecNotADockerApp`, `DiffDrift`, and `GraphTargetNotFound`. Render-time failures propagate as `AnyRenderError` from `@konfig.ts/core`.
+Tagged errors raised by the CLI include `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`, `EnvLoadError`, `WriteEnvError`, `StructuralValidationFailed`, `KubeconformNotFound`, `KubeconformReportError`, `DiffBaselineMissing`, `DiffNonEmpty` (non-zero exit on differences), `SetUnknownEnv`, `ImagesFileError`, `ReleaseNotFound`, `MissingCrdFlags`, `CrdDrift`, `MissingAllFlag`, `SpecImportError`, `SpecNotADockerApp`, `DiffDrift`, `GraphTargetNotFound`, `BuildCacheError`, `ChartRegistryError`, `ChartRegistryEntryDecodeError`, and `CrdInputDecodeError`. Render-time failures propagate as `AnyRenderError` from `@konfig.ts/core`.
 
 <Aside type="note" title="TypeScript-capable runtime">
-Most commands `import()` your `.ts` sources at runtime. Bun runs them with no flags; Node >= 23.6 strips types natively; Node 22.6 to 23.5 needs `--experimental-strip-types`; `tsx node_modules/.bin/konfig` also works. Pure-YAML commands such as `konfig diff` against a baseline directory run under plain Node.
+Most commands `import()` your `.ts` sources at runtime. Bun runs them with no flags; Node >= 23.6 strips types natively; Node 22.6 to 23.5 needs `--experimental-strip-types`; `tsx node_modules/.bin/konfig` also works. `konfig diff` also renders the env in memory before comparing against `diff.baseline`, so it needs the same runtime, and `helm fetch` and `crd` import the chart registry modules under `charts/`. Only `konfig set` and `konfig graph` avoid importing TypeScript sources.
 </Aside>
 
 ## Requirements

@@ -16,7 +16,7 @@ import { Aside, Snippet } from "@/components/docs"
 bun add @konfig.ts/sops
 ```
 
-`Sops.backend` and `Sops.source` shell out to the `sops` CLI on the machine that runs `konfig build`. Recipient credentials come from each file's own `sops:` metadata. `Sops.passthrough` needs no CLI.
+`Sops.backend` and `Sops.source` shell out to the `sops` CLI on the machine that runs `konfig build`: `Sops.backend` encrypts to the `recipients` you pass, and `Sops.source` decrypts with whatever key material `sops` finds for the file's own `sops:` metadata. `Sops.passthrough` needs no CLI.
 
 ## Usage
 
@@ -27,6 +27,7 @@ The full-stack example ships the GHCR pull secret as an encrypted `SopsSecret` f
 Re-encrypting mode, when the plaintext should flow through konfig:
 
 ```ts title="infra/modules/db.ts"
+import { dbCreds } from "@example/env-contracts"
 import { Secret } from "@konfig.ts/k8s"
 import { Sops } from "@konfig.ts/sops"
 
@@ -41,16 +42,16 @@ const bound = Secret.bind({
 
 | Export | Purpose |
 | --- | --- |
-| `Sops.passthrough` | `({ file })`: emit the file's `SopsSecret`, restamped to the bound namespace; `requiresSource: false` |
+| `Sops.passthrough` | `({ file })`: read and verify the file's `SopsSecret` and emit it; `requiresSource: false`. Name and namespace are restamped to the bound contract only when the file was encrypted with `mac_only_encrypted: true`; otherwise a mismatch fails the render |
 | `Sops.backend` | `({ recipients, type? })`: re-encrypt to `age` / `kms` / `gcpKms` / `azureKv` / `pgp` recipients; `requiresSource: true` |
-| `Sops.source` | `({ file, keys, extract? })`: a `SecretSource` that decrypts once and yields `Redacted` values |
-| `sopsDecrypt`, `sopsEncryptStdin` | Low-level CLI wrappers |
+| `Sops.source` | `({ file, keys, extract? })`: a `SecretSource` that decrypts once and yields `Redacted` values; `extract(key, parsed)` defaults to a flat `{ key: value }` lookup |
+| `sopsDecrypt({ file })`, `sopsEncryptStdin({ plaintextYaml, recipients })` | Low-level CLI wrappers (`SopsDecryptInput`, `SopsEncryptStdinInput`) |
 | `SopsBackendOptions`, `SopsSourceInput`, `SopsRecipients`, `SopsSecret`, `SopsSecretSpec`, `SopsSecretTemplate` | Option and CR types |
 
 ## Errors
 
-- `SopsInvocationError`: the `sops` process failed or was not found.
-- Every emitted value is checked for the `ENC[...]` marker; a plaintext value fails the render (an internal `SopsUnencryptedValueError`) rather than emitting plaintext dressed as a secret.
+- `SopsInvocationError` (`{ op: "decrypt" | "encrypt", cause }`): the `sops` process failed or was not found. Inside `Sops.backend` and `Sops.passthrough` it is wrapped in a `RenderError`; inside `Sops.source` it is wrapped in a `SecretSourceError`.
+- Every emitted value is checked for the `ENC[` marker (honouring `sops.encrypted_regex`); a plaintext value fails the render with a `RenderError` whose cause is an internal `SopsUnencryptedValueError`, rather than emitting plaintext dressed as a secret.
 
 <Aside type="note">
 `Sops.source` composes with other backends: decrypt with SOPS, then seal with `SealedSecrets.backend` or emit a plain `NativeSecret`.

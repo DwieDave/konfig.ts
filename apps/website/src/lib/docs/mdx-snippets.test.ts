@@ -64,7 +64,9 @@ describe("MDX snippet usages", () => {
     })
 
     it(`${rel}: has no em-dashes and valid frontmatter`, () => {
-      expect(source.includes("—"), "em-dash").toBe(false)
+      // Quoted program output inside code may contain an em-dash; prose must not.
+      const prose = source.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "")
+      expect(prose.includes("—"), "em-dash in prose").toBe(false)
       expect(source.startsWith("---\n"), "frontmatter").toBe(true)
       expect(/^title:\s*.+$/m.test(source), "title").toBe(true)
     })

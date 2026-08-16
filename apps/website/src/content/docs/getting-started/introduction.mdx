@@ -20,9 +20,9 @@ Because both layers come from the same declarations, the mistakes you would othe
 
 - **A dependency graph checked at the type level.** Modules declare what they need (`Dep.Need<...>`) and what they provide (`Dep.Provide<...>`). `AppOfApps.fromModules` composes them, and `AppOfApps.entrypoint` refuses to compile until every need has a provider. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
 - **One env contract for both sides.** `Secret.define`, `Literal.define`, and `Downward.define` from `@konfig.ts/env` produce atoms that `Environment.bind` turns into a Deployment env block and Secret resources, and that `Environment.runtime` decodes inside the running process. Rename a variable once and both sides move.
-- **Deterministic YAML and structural diffs.** Output uses stable key ordering (YAML 1.1, deterministic field sort, Argo CD friendly). `konfig diff` compares rendered output against a baseline structurally, so reordered keys and multi-document files do not show up as noise.
+- **Deterministic YAML and structural diffs.** Output uses stable key ordering (`apiVersion`, `kind`, `metadata`, `spec`, `status` first, then alphabetical) and is emitted as YAML 1.1 so kubectl and go-yaml readers do not coerce strings like `yes` or `on`. `konfig diff` compares rendered output against a baseline structurally, so reordered keys and multi-document files do not show up as noise.
 - **Secret backends as typed values.** sops, sealed-secrets, and external-secrets each lower a `Secret.define` to the matching custom resource, with schema validation on the binary's output. Whether a backend requires a source file is encoded in its type, so forgetting the source for a sops backend is a compile error.
-- **Helm with digest verification.** `Helm.release({ digest })` hashes the cached chart tarball on every pull and every cache hit. A chart whose bytes change fails the next render.
+- **Helm with digest verification.** `Helm.release` requires a `digest` and hashes the cached chart tarball on every pull and every cache hit (`HelmDigestMismatch` on mismatch). A chart whose bytes change fails the next render.
 
 ## A compile error instead of a sync failure
 
@@ -48,8 +48,8 @@ The `konfig` CLI imports your `.ts` sources at runtime, so it needs a TypeScript
 | Runtime | Status |
 | --- | --- |
 | Bun | Recommended, runs `.ts` with no flags |
-| Node >= 23.6 | Works, native type stripping |
-| Node 22.6 to 23.5 | Works with `--experimental-strip-types` |
+| Node >= 22.18 or >= 23.6 | Works, native type stripping (packages declare `engines.node >= 22`) |
+| Node 22.6 to 22.17 | Works with `--experimental-strip-types` |
 | `tsx` | Works: `tsx node_modules/.bin/konfig ...` |
 
 Rendering Helm-based modules calls the `helm` binary; `konfig validate --strict` calls `kubeconform`. Type-checking and in-memory renders of manifest-only projects need neither.

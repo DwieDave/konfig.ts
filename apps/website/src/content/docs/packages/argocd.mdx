@@ -31,13 +31,13 @@ If `api` yields `Dep.Secret("ghcr-pull")` and no listed module provides it, `ent
 | `Application.define` | Build an `ApplicationHandle<Name, Out, In>`: a Context tag that also carries a `Layer<Out, _, In>` |
 | `Application.make` | Plain `Application` value constructor, no dependency graph |
 | `Application.target` | Adapter passed as `target` to `Module.fixedNs` / `Module.dynamicNs` |
-| `Application.LiteralName<T>` | Rejects a `string`-widened `name` at the call site |
+| `Application.LiteralName<T>`, `Application.ApplicationHandle`, `Application.HandleKind` | Types: reject a `string`-widened `name` at the call site; the handle and kind produced by `define` |
 | `AppOfApps.fromModules` | Compose handles into a renderable app-of-apps; unmet needs surface in its `R` |
 | `AppOfApps.entrypoint` | Wrap the program as the env's default export; the compile-time check fires here |
 | `AppOfApps.make` | Plain `AppOfAppsResult` from already-built `Application`s |
-| `Sync.wave`, `Sync.hook`, `Sync.options` | Annotation helpers to spread into `annotations` |
+| `Sync.wave(n)`, `Sync.hook(phase)`, `Sync.options([...])` | `argocd.argoproj.io/*` annotation helpers to spread into `annotations` |
 | `buildCR`, `serializeApplicationCR`, `applicationCRFilename`, `emitApplicationCR` | Emit an Application CR as an object, YAML string, filename, or `Manifest<string>` |
-| `ArgoSource`, `SyncPolicy`, `HookPhase`, `AppOfAppsTarget`, `AppOfAppsDefaults` | Option types |
+| `ArgoSource`, `SyncPolicy`, `HookPhase`, `AppOfAppsTarget`, `AppOfAppsDefaults`, `AppOfAppsResult` | Option and result types |
 
 ## Errors
 

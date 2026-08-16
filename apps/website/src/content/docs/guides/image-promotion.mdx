@@ -21,7 +21,7 @@ export const ImagesConfig = Schema.Struct({
 })
 ```
 
-The file lives at `<konfig.json dir>/<root>/images.json`. Values are opaque strings: the schema does not parse them, so a project picks a convention. The `konfig set` help text suggests full refs (`ghcr.io/<org>/<app>:<sha>`); the example's build modules take `registry` and `tag` separately, so the example convention is tag-only with the registry coming from `cluster.ts`.
+`konfig set` reads and writes the file at `<konfig.json dir>/<root>/images.json`; `konfig build` itself never reads it, your env entry does (see below). Values are opaque strings: the schema does not parse them, so a project picks a convention. The `konfig set` help text suggests full refs (`ghcr.io/<org>/<app>:<sha>`); the example's build modules take `registry` and `tag` separately, so the convention shown here is tag-only with the registry passed alongside. The example project itself ships no `images.json` and passes literal tags.
 
 ```json title="images.json"
 {
@@ -59,14 +59,15 @@ If no module in `AppOfApps.fromModules({ modules })` provides `Image "api"`, `Ap
 
 ## Reading images.json in the env entry
 
-The example passes literal tags to `defineApiBuild` for offline reproducibility. To drive them from `images.json`, read the file in the env entry and hand the value to the build module. The env entry runs at build time, so a synchronous read is fine here.
+The example passes literal tags to `defineApiBuild` for offline reproducibility. To drive them from `images.json`, read the file in the env entry and hand the value to the build module. The env entry is imported once by `konfig build`, so a synchronous read at module top level is fine here.
 
 ```ts title="infra/envs/prod.ts"
 import { decodeImagesSync, imagesFor, requireImage } from "@konfig.ts/core"
 import { readFileSync } from "node:fs"
+// src and defineApiBuild as in the prod.ts shown in the Argo CD guide
 
 const images = imagesFor({
-  cfg: decodeImagesSync(JSON.parse(readFileSync("images.json", "utf8"))),
+  cfg: decodeImagesSync(JSON.parse(readFileSync(new URL("../../images.json", import.meta.url), "utf8"))),
   env: "prod"
 })
 
@@ -78,11 +79,11 @@ const apiBuild = defineApiBuild({
 })
 ```
 
-A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `ImagesAppMissing`. Both surface as an `EnvLoadError` from `konfig build` with the tagged cause, and no manifest is written.
+A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `ImagesAppMissing`. Both are thrown while `konfig build` imports the entry, so they surface as an `EnvLoadError` whose `cause` is the tagged error, and no manifest is written.
 
 ## Promoting from CI
 
-`konfig set <env> <app> <image>` performs a schema-validated read, replaces one key, and writes the file back tab-indented. It refuses an env that is not already present (`SetUnknownEnv`) and never creates the file (`ImagesFileError`), so a typo in the env name cannot silently add a new environment.
+`konfig set <env> <app> <image>` performs a schema-validated read, replaces (or adds) one app key under an existing env, and writes the file back tab-indented. It refuses an env that is not already present (`SetUnknownEnv`) and never creates the file (a missing file is an `ImagesFileError`), so a typo in the env name cannot silently add a new environment.
 
 <Steps>
 
@@ -95,7 +96,7 @@ A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `Im
    konfig build staging
    ```
 
-3. Commit both `images.json` and the rendered manifests, then push. Argo CD picks up the change on its next refresh.
+3. Commit both `images.json` and the rendered manifests (the example's `outDir.manifests` is `.generated/manifests`; use whatever directory your `konfig.json` and `rootPath` point at), then push. Argo CD picks up the change on its next refresh.
 
    ```bash
    git add images.json .generated/manifests/staging
@@ -108,7 +109,7 @@ A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `Im
 </Steps>
 
 <Aside type="tip" title="One diff to review">
-Because `Dep.Image` is the only path from `images.json` to a pod spec, the rendered diff of a promotion is exactly the `image:` lines of the affected workloads. `konfig diff staging` shows it structurally before you commit.
+When `Dep.Image` is the only path from `images.json` to a pod spec, the rendered diff of a promotion is exactly the `image:` lines of the affected workloads. `konfig diff staging` renders the env in memory and compares it structurally against `<root>/<diff.baseline>/staging` from `konfig.json`, so with the baseline pointed at your committed manifests you see the promotion before you commit (without a `diff` entry the command fails with `DiffBaselineMissing`).
 </Aside>
 
 Next: [Dockerfiles](/konfig.ts/docs/guides/dockerfiles/) covers producing the images that end up in `images.json`.

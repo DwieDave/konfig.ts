@@ -8,7 +8,7 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`@konfig.ts/docker` generates Dockerfiles for apps in a Bun or Node monorepo. You write one `docker.ts` spec next to the app; the package resolves the app's transitive workspace closure and emits a production multi-stage Dockerfile (`base`, `deps`, `builder`, `runner`) and a single-stage `Dockerfile.dev`, with no hand-maintained `COPY` lists. It emits Dockerfiles only: no image building, pushing, tagging, or signing.
+`@konfig.ts/docker` generates Dockerfiles for apps in a Bun or Node monorepo. You write one `docker.ts` spec next to the app; the package resolves the app's transitive workspace closure and emits a production multi-stage Dockerfile (`base`, `deps`, `builder`, `runner`, plus `prod-deps` when `runner.production` is set) and, when the spec has a `dev` block, a `Dockerfile.dev` (`base` + `dev`), with no hand-maintained `COPY` lists. It emits Dockerfiles only: no image building, pushing, tagging, or signing.
 
 ## Install
 
@@ -16,7 +16,7 @@ import { Aside, Snippet } from "@/components/docs"
 bun add -d @konfig.ts/docker
 ```
 
-The app's `package.json` must set `engines.<runtime>` (for example `engines.bun`); that is where the runner image tag comes from.
+The app's `package.json` must set `engines.<runtime>` and `engines.<package manager>` (for example `engines.bun`, or `engines.node` plus `engines.pnpm`); that is where the image tags come from, and a missing entry fails with `EngineVersionMissing`.
 
 ## Usage
 
@@ -28,7 +28,7 @@ Render, write, or check the files with the CLI, then build with the monorepo roo
 
 ```bash
 konfig docker preview apps/api   # render to stdout
-konfig docker write apps/api     # writes apps/api/Dockerfile and Dockerfile.dev
+konfig docker write apps/api     # writes apps/api/Dockerfile and Dockerfile.dev; refuses to overwrite files without the konfig header unless --force
 konfig docker diff apps/api      # non-zero exit if the on-disk files drifted
 docker build -f apps/api/Dockerfile .
 ```
@@ -38,16 +38,16 @@ docker build -f apps/api/Dockerfile .
 | Export | Purpose |
 | --- | --- |
 | `Docker.app` | The spec entrypoint; returns a `DockerApp` |
-| `Docker.copy` | `builderArtifact(src, dst)`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, opts?)` |
+| `Docker.copy` | `builderArtifact({ src, dst, chown? })`, `workspaceSource(name)`, `workspaceSourceAll()`, `path({ src, dst, from?, chown? })` |
 | `Docker.runtime` | `bun({ alpine? })`, `node({ alpine? })`; `alpine` defaults to `true` |
 | `Docker.pm` | `bun()`, `npm()`, `pnpm()`, `yarn({ variant? })`; auto-detected from the root lockfile when omitted |
-| `Docker.build` | `script(name)`, `command(argv)`, `none()`; defaults to `script("build")` when present |
-| `Docker.healthcheck`, `Docker.user`, `Docker.platform` | `httpGet` / `command`; `nonRoot` / `root`; `linuxAmd64` / `linuxArm64` / `multi` |
-| `DockerSpec`, `RunnerSpec`, `DevSpec`, `decodeDockerSpec`, `decodeDockerSpecSync` | Schemas and decoders for the spec |
+| `Docker.build` | `script(name)`, `command(argv)`, `none()`; when omitted, `script("build")` if the app has a `build` script, else `none()` |
+| `Docker.healthcheck`, `Docker.user`, `Docker.platform` | `httpGet({ path, port, ... })` / `command({ argv, ... })`; `nonRoot({ uid?, gid?, name? })` / `root()`; `linuxAmd64()` / `linuxArm64()` / `multi([...])` |
+| `DockerSpec`, `RunnerSpec`, `DevSpec`, `decodeDockerSpec`, `decodeDockerSpecSync` | Schemas and decoders for the spec; the atom schemas (`CopyAtom`, `RuntimeAtom`, `PackageManagerAtom`, `BuildAtom`, `HealthcheckAtom`, `UserAtom`, `PlatformAtom`) are exported too |
 | `findRoot`, `allWorkspaces`, `closureOf`, `detectPm` | Workspace graph services |
-| `buildIR`, `lower`, `validateSpec`, `emit`, `render`, `renderFile`, `extractHeader`, `sha256Hex` | IR lowering and Dockerfile rendering with a hashed header |
+| `buildIR`, `lower`, `prepareContext`, `validateSpec`, `emit`, `render`, `renderFile`, `renderHeader`, `extractHeader`, `HEADER_MARKER`, `sha256Hex` | IR lowering and Dockerfile rendering with a hashed header |
 | `bunPm`, `npmPm`, `pnpmPm`, `bunRuntime`, `nodeRuntime` | Package manager and runtime implementations |
-| `isDockerApp`, `DockerAppTypeId`, `PACKAGE_NAME` | Spec identification helpers |
+| `isDockerApp`, `makeDockerApp`, `DockerAppTypeId`, `PACKAGE_NAME` | Spec identification helpers |
 
 ## Errors
 

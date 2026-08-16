@@ -27,7 +27,7 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
 
    <Snippet file="infra/envs/staging.ts" startAt="const featureFlags = defineFeatureFlags" endBefore="const postgres = definePostgres" />
 
-   `name` is a literal string and becomes both the Application name and the output directory. `source` is the Argo CD `source` block for the child Application; `rootPath` must match the directory `konfig build` writes into, because that is where Argo CD will look for the rendered files.
+   `name` is a literal string and becomes both the Application name and the output directory. `source` is the Argo CD `source` block for the child Application; `rootPath` must be the repository path where the rendered tree for this env is committed, because that is where Argo CD will look. In the example it is `./infra/k8s/manifests/staging`, a committed copy of the `.generated/manifests/staging` output.
 
    The entrypoint composes every instance:
 
@@ -55,11 +55,11 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
    konfig build staging
    ```
 
-   The CLI loads the entry file, renders every Application concurrently (bounded at 4, to keep `helm` and `sops` subprocess counts down), and writes one file per resource. The output layout is:
+   The CLI loads the entry file (`EnvLoadError` if the default export is not an Effect program), renders every Application concurrently (bounded at 4, to keep `helm` and `sops` subprocess counts down), stages all files under `<outDir>.tmp`, then swaps the staging tree into place so an interrupted build never leaves a half-written directory. The output layout is:
 
    ```text
    .generated/manifests/staging/          # <outDir.manifests>/<env>[/<cluster>]
-     apps/                                # the app-of-apps: one Application CR per module instance
+     apps/                                # the app-of-apps (`AppOfApps.fromModules({ name })`, default "apps"): one Application CR per module instance
        Application-feature-flags.yaml
        Application-postgres.yaml
      feature-flags/                       # one directory per Application, named after `name`
@@ -69,9 +69,9 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
        StatefulSet-postgres-postgresql.yaml   # Helm output is split into one file per document
    ```
 
-   Every file is named `<Kind>-<metadata.name>.yaml` (`Yaml.filenameFor`, with `.` and `/` in names replaced by `-`). Helm releases render through `helm template` and are split on real YAML document boundaries, so each chart resource lands in its own file too. Passing `--cluster <name>` adds a cluster segment after the env directory.
+   Every file is named `<Kind>-<metadata.name>.yaml` (`Yaml.filenameFor`, with `.` and `/` in kind and name replaced by `-`). Helm releases render through `helm template` and are split on real YAML document boundaries, so each chart resource lands in its own file too. Passing `--cluster <name>` adds a cluster segment after the env directory.
 
-   Builds are input-hashed. A second run with unchanged sources reports the env as cached with the file count and output directory, and rewrites nothing; `--no-cache` forces a render. Extra inputs outside `root` can be added to the hash with `cacheInclude` in `konfig.json`.
+   Builds are input-hashed over everything under `root`, with the entry stored in `.konfig/cache/` next to `konfig.json`. A second run with unchanged sources and an untouched output tree reports the env as cached with the file count and output directory, and rewrites nothing; `--no-cache` forces a render, `--log json` switches the report to one JSON line. Extra inputs outside `root` can be added to the hash with `cacheInclude` in `konfig.json`.
 
 5. ### Validate
 
@@ -80,18 +80,18 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
    konfig validate staging --strict
    ```
 
-   `konfig validate` renders in memory and checks every document's envelope: `apiVersion`, `kind`, and a DNS-safe `metadata.name`. Failures are listed per file and the command exits with `StructuralValidationFailed`. With `--strict` it additionally runs `kubeconform -strict` over the on-disk output directory, so run `konfig build` first; `--ignore-missing-schemas` is forwarded to kubeconform for CRDs it does not know.
+   `konfig validate` renders in memory and checks every document's envelope: `apiVersion`, `kind`, a DNS-label `metadata.name`, and, when present, a DNS-label `metadata.namespace` and string-valued `labels`/`annotations`. Failures are listed per file and the command exits with `StructuralValidationFailed`. With `--strict` it additionally runs `kubeconform -summary -strict` over the on-disk output directory (`KubeconformNotFound` if the binary is missing), so run `konfig build` first; `--ignore-missing-schemas` is forwarded to kubeconform for CRDs it does not know.
 
 6. ### Diff against a baseline
 
-   Point `diff.baseline` in `konfig.json` at a manifest tree (for example the copy committed for Argo CD), then:
+   Point `diff.baseline` in `konfig.json` at a manifest tree relative to `root` (for example the copy committed for Argo CD); the env name is appended, so `staging` reads `<root>/<baseline>/staging`. Then:
 
    ```bash
    konfig diff staging
    konfig diff staging --format detail
    ```
 
-   The diff is structural: it parses both sides as YAML, ignores key order and multi-document ordering, and reports only real changes. `--format` accepts `summary` (default), `detail`, or `json`. A clean run reports that the env matches the baseline; differences exit non-zero with `DiffNonEmpty`, which makes the command usable as a CI gate.
+   The diff is structural: it parses both sides as YAML, matches documents by kind and name so key order and multi-document ordering do not matter, redacts `Secret` data, and reports only real changes. `--format` accepts `summary` (default), `detail`, or `json`. A clean run reports that the env matches the baseline; differences exit non-zero with `DiffNonEmpty`, which makes the command usable as a CI gate.
 
 </Steps>
 

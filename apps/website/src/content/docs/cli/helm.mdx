@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside } from "@/components/docs"
 
-`konfig helm` groups Helm chart management. It currently has one subcommand, `fetch`, which downloads every chart in the registry into the tarball cache ahead of time. Use it to warm CI caches or to make later `konfig build` and `konfig crd` runs independent of chart repositories.
+`konfig helm` groups Helm chart management. It currently has one subcommand, `fetch`, which downloads every chart in the registry into the tarball cache ahead of time. Use it to warm CI caches so later `konfig crd` runs are independent of chart repositories. It does not pre-warm the render-time cache used by `konfig build`: `Helm.release` keys its tarballs by digest (see the caution below), so a build still pulls once per chart and digest.
 
 ## Usage
 
@@ -29,7 +29,7 @@ konfig helm fetch --all
 - Ends with `Done. Cache at <cache>`.
 
 <Aside type="caution">
-`helm fetch` does not verify digests. Digest verification happens at render time: `Helm.release({ digest })` in `@konfig.ts/core` hashes the cached tarball on every pull and every cache hit and fails with `HelmDigestMismatch` when the bytes changed. Render-time cache entries are keyed as `<chart>-<version>-<digest12>.tgz` inside the same `KONFIG_HELM_CACHE` directory.
+`helm fetch` does not verify digests. Digest verification happens at render time: `Helm.release({ digest })` in `@konfig.ts/core` hashes the cached tarball on every pull and every cache hit and fails with `HelmDigestMismatch` when the bytes changed. Render-time cache entries are keyed as `<chart>-<version>-<digest12>.tgz` inside the same `KONFIG_HELM_CACHE` directory, so a tarball fetched here (`<chart>-<version>.tgz`) is not reused by `Helm.release`; only `konfig crd` reads that filename.
 </Aside>
 
 ## Exit codes and errors

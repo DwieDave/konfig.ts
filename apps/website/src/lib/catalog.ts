@@ -20,8 +20,8 @@ export interface FailureCase {
 }
 
 const MISSING_PROVIDER =
-  `Missing provider for Secret "ghcr-pull".
-Add a module that provides it to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list.`
+  `Missing provider for Image "api", Image "worker" and Secret "ghcr-pull".
+Add a module that provides them to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list.`
 
 export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
   {
@@ -29,7 +29,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
     tab: "broken.ts",
     title: "A module needs a Secret nobody provides",
     summary:
-      "`api` does `yield* Dep.Secret(\"ghcr-pull\")` in its build. Leave the `imagePulls` module out of the list and `entrypoint` refuses to compile.",
+      "`api` and `worker` do `yield* Dep.Secret(\"ghcr-pull\")` and `yield* Dep.Image(...)` in their builds. Leave the `imagePulls` and build modules out of the list and `entrypoint` refuses to compile.",
     spec: {
       file: "infra/envs/broken.ts",
       stripMeta: true,
@@ -42,7 +42,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
         }
       ]
     },
-    tsc: `infra/envs/broken.ts(30,3): error TS2345: Property '_konfig_unsatisfied' is missing … "Missing provider for Secret \\"ghcr-pull\\"…"`
+    tsc: `infra/envs/broken.ts(30,3): error TS2345: Property '_konfig_unsatisfied' is missing … "Missing provider for Image \\"api\\"…" | "Missing provider for Image \\"worker\\"…" | "Missing provider for Secret \\"ghcr-pull\\"…"`
   },
   {
     id: "unbound-secret",

@@ -22,7 +22,7 @@ All refs are `string & { [Brand]: ... }`; the runtime value is the plain name an
 | `BuiltImageRef<App>` | app name | `yield* Dep.Image(app)`, `BuiltImageRef.of({ app, registry, tag })` |
 | `PortName<N>` | port name | `Port.make({ name, ... })`, `Port.ref(name)` |
 
-`Secret.make` and `ConfigMap.make` infer `K` from the keys of `data` / `stringData`, so `EnvVar.fromConfigMap({ ref: featureFlags.ref, key: "NEW_UI" })` only accepts keys that exist. Renaming a key in the ConfigMap breaks every consumer at compile time.
+`Secret.make` infers `K` from the keys of `data` / `stringData` and `ConfigMap.make` from `data` / `binaryData`, so `EnvVar.fromConfigMap({ ref: featureFlags.ref, key: "NEW_UI" })` only accepts keys that exist. Renaming a key in the ConfigMap breaks every consumer at compile time.
 
 Escape hatches exist for genuinely external resources: `SecretRef.of(name)`, `ConfigMapRef.of(name)`, `ServiceAccountRef.of(name)`, `PvcRef.of(name)`. They mint a ref without any provider, so use them only for objects managed outside konfig.ts.
 
@@ -34,7 +34,7 @@ The following inputs take a branded ref and reject a raw string:
 - `Volume.fromSecret({ ref })`, `Volume.fromConfigMap({ ref })`, `Volume.fromPvc({ claim })`.
 - `imagePullSecrets: [{ name }]` on `Workload.web`, `Workload.cron`, `ServiceAccount.make`, and the pod spec inputs.
 - `Ingress.tls({ secretName })` and the `tls` array of `Ingress.make` / `Workload.web`.
-- `Port.ref` in probes (`httpGet.port`, `tcpSocket.port`, `grpc.port`) and in `Service` `targetPort`.
+- `Port.ref` in probes (`httpGet.port`, `tcpSocket.port`, `grpc.port`) and in the `targetPort` of `Workload.web` `service.ports` and `Service.fromContainer`; both accept a number or a `PortName` declared on the containers. Plain `Service.make` takes untyped `ServicePort` objects.
 
 ### Namespace match
 
@@ -57,7 +57,7 @@ The following inputs take a branded ref and reject a raw string:
 - `service: { ports: ServicePortSpec<PortNames>[], type? }` where `targetPort` is a number or `Port.ref` of a port declared on one of the containers.
 - `ingress?: { ingressClassName?, rules?, tls?, annotations? }`.
 
-It renders `[Deployment, Service]` or `[Deployment, Service, Ingress]`, with `selector.matchLabels` fixed to `{ app: name }` and merged last into the pod labels so a colliding `podLabels` entry cannot desync the selector. `Workload.cron` takes `{ name, namespace, schedule, containers, concurrencyPolicy?, successfulJobsHistoryLimit?, failedJobsHistoryLimit?, volumes?, imagePullSecrets?, restartPolicy? }` and renders a private `ServiceAccount` plus a `CronJob`.
+It renders `[Deployment, Service]` or `[Deployment, Service, Ingress]`, with `selector.matchLabels` fixed to `{ app: name }` and merged last into the pod labels so a colliding `podLabels` entry cannot desync the selector. `Workload.cron` takes `{ name, namespace, schedule, containers, labels?, annotations?, concurrencyPolicy?, successfulJobsHistoryLimit?, failedJobsHistoryLimit?, volumes?, imagePullSecrets?, restartPolicy? }` (`restartPolicy` defaults to `"OnFailure"`) and renders a `ServiceAccount` named after the job plus a `CronJob` that uses it.
 
 For anything outside those two shapes, use `Deployment.make`, `StatefulSet.make`, `Job.make`, `CronJob.make`, `Service.make`, and `Ingress.make` directly, as `infra/modules/worker.ts` does with `Deployment.make`.
 
@@ -65,8 +65,8 @@ For anything outside those two shapes, use `Deployment.make`, `StatefulSet.make`
 
 A Deployment does not restart when a referenced Secret changes. Two options:
 
-- `Workload.web({ reloader: "stakater" })` adds `reloader.stakater.com/auto: "true"`; `"stakater-strict"` adds `reloader.stakater.com/match: "true"` as well; `{ secrets: [...], configMaps: [...] }` emits the per-resource `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` annotations. Requires Stakater Reloader in the cluster and rolls on in-cluster change.
-- `hashSecretValues({ values, salt })` returns a SHA-256 hex digest of a `Record<string, Redacted<string>>` (netstring-framed, prefixed with a version tag and the salt). Put it in a pod annotation and the pod template changes whenever the values change at render time. Values are captured at build time only; a rotation between builds needs the reloader.
+- `Workload.web({ reloader: "stakater" })` adds `reloader.stakater.com/auto: "true"` to the Deployment; `"stakater-strict"` adds `reloader.stakater.com/match: "true"` as well; `{ secrets: [...], configMaps: [...] }` emits the comma-joined `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` annotations; `"off"` (the default) emits nothing. Requires Stakater Reloader in the cluster and rolls on in-cluster change.
+- `hashSecretValues({ values, salt })` returns a SHA-256 hex digest of a `Record<string, Redacted<string>>` (netstring-framed, prefixed with the version tag `konfig/secret-values-hash/v1` and the salt, keys sorted). Put it in a pod annotation and the pod template changes whenever the values change at render time. Values are captured at build time only; a rotation between builds needs the reloader.
 
 <Aside type="caution">
 `hashSecretValues` is a change-detection fingerprint, not a cryptographic commitment safe to publish. The salt is non-secret and only stops the digest from being a pure function of the plaintext.

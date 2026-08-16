@@ -35,7 +35,7 @@ A provider attaches a `Layer` through the wrapper's `provides` field. `image-pul
 
 The provided value is a branded ref (`SecretRef<"ghcr-pull">`), not a manifest. Nothing checks that the module also emitted a Secret named `ghcr-pull`; the provide is a promise you make. Keep provider and manifest in the same module so they cannot drift.
 
-`Secret.bind` and `Environment.bind` return `refLayer` (and `layer` when a `source` was given) so a module can forward them as `provides` instead of writing `Dep.provideSecret` by hand.
+`Secret.bind` returns a `DeclaredSecret` carrying `refLayer` (a `Provide<"Secret", N>` layer) and, when a `source` was given, `values` / `layer` (a `Provide<"SecretValues", N>` layer); `Environment.bind` exposes the same per member under `members` plus a merged `valuesLayer`. They can stand in for `Dep.provideSecret` when you call `Application.define` directly and build the secret before passing `provides`; the `provides` slot of `Module.fixedNs` / `Module.dynamicNs` is fixed at wrapper level and cannot see values computed inside `build`.
 
 ## Consuming
 
@@ -55,7 +55,7 @@ Each `yield*` adds a `Need` to the Effect's requirement channel `R`. `Module.fix
 
 ### Ordering
 
-The fold is a left fold, so **providers must come before consumers** in `modules`. Listing `api` before `apiBuild` leaks `Need<"Image", "api">` even though a provider exists later in the array. `infra/envs/prod.ts` lists the sops operator, image pulls, feature flags, postgres, and the build anchors before `api` and `worker` for this reason. Sync ordering inside the cluster is a separate concern, handled with `Sync.wave` annotations.
+The fold is a left fold, so **providers must come before consumers** in `modules`. Listing `api` before `apiBuild` leaks `Need<"Image", "api">` even though a provider exists later in the array. `infra/envs/prod.ts` lists the sops operator, image pulls, feature flags, postgres, the build anchors, and the redis cache before `api` and `worker` for this reason. Sync ordering inside the cluster is a separate concern, handled with `Sync.wave` annotations.
 
 ### Duplicates
 
@@ -69,6 +69,6 @@ The graph keys providers by literal name. If a wrapper forwards `name` typed as 
 
 ## Runtime behaviour
 
-Every check above is erased. At runtime `Compose.composeLayers` produces one merged `Layer`, `Effect.forEach(modules, mod => mod)` yields each `Application`, and `AppOfApps.make` packages them with `target` and `defaults`. Effect's own layer machinery would surface a missing service as a defect if it ever got that far; the type-level fold exists so it does not.
+Every check above is erased. At runtime `Compose.composeLayers` reduces the handles with `Layer.provideMerge` into one `Layer`, `Effect.forEach(modules, mod => mod)` yields each `Application`, and `AppOfApps.make` packages them with `name` (default `"apps"`), `target`, and `defaults`. Effect's own layer machinery would surface a missing service as a defect if it ever got that far; the type-level fold exists so it does not.
 
 Next: [Branded refs](/konfig.ts/docs/concepts/branded-refs/).

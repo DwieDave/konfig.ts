@@ -25,11 +25,11 @@ An env contract is a TypeScript value that describes every environment variable 
 
 <Snippet file="shared/env-contracts/src/bundles.ts" startAt="export const apiEnv" endBefore="// Strict subset of apiEnv" />
 
-`workerEnv` reuses `dbCreds` and adds its own `worker` group, so a rotation of `db-creds` covers both apps and no member name is duplicated.
+`workerEnv` reuses `dbCreds` and adds its own `worker` group, so a rotation of `db-creds` covers both apps and no env var name is claimed twice.
 
 ### Env name collisions
 
-Two members claiming the same variable would let one silently overwrite the other in the pod. `Environment.define` rejects that at the type level for top-level members (a `_konfig_error: 'Environment: envName "X" is claimed by multiple members'` hint) and, as the authoritative check including nested environments, throws `EnvNameCollision` at module load.
+Two members claiming the same variable would let one silently overwrite the other in the pod. `Environment.define` rejects that at the type level for direct leaf members (a `_konfig_error: 'Environment: envName "X" is claimed by multiple members'` hint) and, as the authoritative check including nested environments, throws `EnvNameCollision { envName, claims }` when the defining module is evaluated.
 
 <Diagnostics case="envname-collision" />
 
@@ -46,7 +46,7 @@ Environment.bind({
 })
 ```
 
-`secrets` is keyed by member name (nested environments nest the record). Each entry is `{ backend, source?, labels?, annotations? }`, and its shape depends on the backend's `RequiresSource` parameter (see [Secret backends](/konfig.ts/docs/concepts/secret-backends/)): a backend typed `SecretBackend<N, K, true>` makes `source` mandatory, `false` makes it optional, and `{ source }` alone is allowed for members that only need runtime values without a manifest.
+`secrets` is keyed by member name (nested environments nest the record) and is required as soon as any member, nested or not, is a Secret. Each entry is `{ backend, source?, labels?, annotations? }`, and its shape depends on the backend's `RequiresSource` parameter (see [Secret backends](/konfig.ts/docs/concepts/secret-backends/)): a backend typed `SecretBackend<N, K, true>` makes `source` mandatory, `false` makes it optional, and `{ source }` alone is allowed for members that only need render-time values without a manifest. `literals` is keyed the same way and overrides a `Literal` member's `value` (re-serialised with its `serialize`).
 
 <Snippet file="infra/modules/api.ts" startAt="      const bound = Environment.bind({" endBefore="      const apiContainer = Container.define({" />
 
@@ -61,7 +61,7 @@ The result is a `DeclaredEnvironment`:
 - `bound.members.<name>`: per member, the declared shape. For a secret that is `{ ref, name, namespace, keys, envVars, manifest?, refLayer, values?, layer? }`; `ref` is a `SecretRef<N, K, Ns>` usable anywhere a ref is required, as `api.ts` does with `bound.members.db.ref` for an extra `DATABASE_URL_PRIMARY` variable. Nested environments give nested records.
 - `bound.valuesLayer`: merged `Layer` providing `Dep.SecretValues` for every member that had a `source`, in case a manifest needs the plaintext at render time (for example to feed `hashSecretValues`).
 
-`Secret.bind({ secret, backend?, source?, namespace?, labels?, annotations? })` is the single-member version used by `infra/modules/image-pulls.ts` for the pull credential that never becomes an env var.
+`Secret.bind({ secret, backend?, source?, namespace?, labels?, annotations? })` is the single-member version used by `infra/modules/image-pulls.ts` for the pull credential that never becomes an env var; it returns the `DeclaredSecret` shape described above (`manifest` is `undefined` when no `backend` is given, and `namespace` falls back to the contract's own).
 
 ## Decoding at runtime
 

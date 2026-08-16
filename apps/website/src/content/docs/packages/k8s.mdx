@@ -30,15 +30,15 @@ The API module of the full-stack example: bind the env contract, define a contai
 | --- | --- |
 | `Container`, `Pod`, `PodSet` | `Container.define`, pod specs, and shared pod-set inputs for workloads |
 | `Port` | `Port.make({ name, containerPort })`, `Port.ref(name)` for probes and Services |
-| `EnvVar` | `value`, `fromSecretForPod`, `fromConfigMap`; duplicate names in one container are a compile error |
+| `EnvVar` | `value`, `fromSecret`, `fromSecretForPod`, `fromConfigMap`, `raw`; duplicate names in one container are a compile error at `Container.define` |
 | `Secret`, `ConfigMap`, `Namespace`, `ServiceAccount` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind` |
 | `Environment` | `Environment.define` re-exported with `bind` (manifest side) and `runtime` (process side) |
-| `NativeSecret` | Built-in backend that emits a plain `Secret` from a source |
+| `NativeSecret` | `NativeSecret.backend({ type?, immutable?, silenceWarning? })`: built-in backend that emits a plain `Secret` from a source |
 | `Workload` | `Workload.web` (Deployment + Service + optional Ingress, `reloader: "stakater"`), `Workload.cron` (CronJob + ServiceAccount) |
 | `Deployment`, `StatefulSet`, `Job`, `CronJob`, `Service`, `Ingress` | Lower-level resource constructors |
 | `Role`, `RoleBinding`, `ClusterRole`, `ClusterRoleBinding`, `NetworkPolicy`, `PersistentVolume`, `PersistentVolumeClaim` | RBAC, policy, and storage constructors |
 | `Volume`, `Selector` | Typed volumes/mounts; label selectors shared between workloads and NetworkPolicy peers |
-| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef` | Brand constructors and `*RefName` type helpers |
+| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef` | Brand constructors; `SecretRefName`, `ConfigMapRefName`, `PvcRefName` type helpers |
 | `hashSecretValues` | Stamp a pod-spec hash so pods roll on re-render |
 | `SecretBackend`, `BackendEmitInput`, `BackendTag` | The contract secret backend packages implement |
 | `K8s` | Raw Kubernetes types (`kubernetes-types@1.30`) |

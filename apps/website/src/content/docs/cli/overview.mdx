@@ -40,7 +40,7 @@ Most commands `import()` your `.ts` sources at runtime: `konfig build prod` load
 
 - Bun (recommended): runs `.ts` with no flags.
 - Node >= 23.6: native type stripping.
-- Node 22.6 to 23.5: pass `--experimental-strip-types`.
+- Node 22.6 to 23.5: run with `NODE_OPTIONS=--experimental-strip-types` (the `konfig` bin is a Node script, so the flag has to reach the `node` process).
 - `tsx`: `tsx node_modules/.bin/konfig ...`.
 
 Commands that load sources: `build`, `validate`, `diff`, `crd extract`, `crd verify`, `helm fetch` (chart registry files), and `docker` (the `docker.ts` spec). Commands that only touch JSON or `package.json` files and run under plain Node: `set` and `graph`.

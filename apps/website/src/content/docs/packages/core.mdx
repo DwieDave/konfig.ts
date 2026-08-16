@@ -30,14 +30,15 @@ Inside a build, `yield* Dep.Secret("ghcr-pull")` records a typed need that anoth
 | --- | --- |
 | `Manifest` | `make`, `combine`, `concat`, `whenever`, `embedYaml`: the `Manifest<A>` carrier and its combinators |
 | `render`, `renderManifest`, `RenderContext` | Run a program against a `RenderContext` (env, cluster, k8s version, `flags`) and write files |
-| `Dep` | Needs (`Secret`, `ConfigMap`, `Namespace`, `ServiceAccount`, `Pvc`, `Image`, `Application`, `App`) and `provide*` layers |
-| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef`, `BuiltImageRef` | Branded reference types carried by the needs |
+| `Dep` | Needs (`Secret`, `SecretValues`, `ConfigMap`, `Namespace`, `ServiceAccount`, `Pvc`, `Image`, `Application`, `App`) and `provide*` layers |
+| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef`, `BuiltImageRef` | Branded reference types carried by the needs (`BuiltImageRef` is also a value with `of`); `*RefName`, `*RefKeys` helpers extract the brand parameters |
 | `Module` | `fixedNs`, `dynamicNs` factories; `Target`, `BuildContext`, `LiteralName` types |
-| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.fromModules`, `Bundle.entrypoint`) and the residual-need machinery behind every entrypoint |
-| `Helm` | `Helm.release`: chart pull, SHA-256 digest verification, `helm template` |
+| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`, `Bundle.entrypoint`) and the residual-need machinery behind every entrypoint (`Compose.makeResidualEntrypoint`, `Compose.NoDuplicateProvides`) |
+| `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template` |
 | `Yaml` | `serialize` (stable key order) and `filenameFor` |
 | `diffFiles`, `formatDiff`, `hasDifferences`, `parseYaml`, `parseYamlAll`, `deepEqual`, `redact` | Structural YAML diff with `Secret` data redaction |
-| `KonfigConfig`, `ImagesConfig`, `decodeKonfigConfigSync`, `decodeImagesSync`, `requireImage`, `imagesFor` | Schemas and decoders for `konfig.json` and `images.json` |
+| `KonfigConfig`, `EnvEntry`, `OutDir`, `CrdConfig`, `HelmConfig`, `DiffConfig`, `ServicesConfig`, `ClusterSpec`, `decodeKonfigConfigSync`, `decodeKonfigConfigEffect` | Schemas and decoders for `konfig.json`; `ResolvedKonfigConfig` pairs the decoded config with its directory |
+| `ImagesConfig`, `EnvImages`, `decodeImagesSync`, `decodeImagesEffect`, `imagesFor`, `lookupEnv`, `lookupEnvEffect`, `requireImage`, `requireImageEffect` | Schema and lookups for `images.json` |
 | `boundary`, `makeStrictDecoder`, `brand`, `unsafeCoerce` | Schema decode at boundaries; annotated escape hatches |
 | `runProcessString`, `runProcessExit`, `processDetail` | Subprocess helpers used by Helm and the secret backends |
 
