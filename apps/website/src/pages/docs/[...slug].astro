@@ -1,13 +1,12 @@
 ---
 import type { CollectionEntry } from "astro:content"
 import { getCollection, getEntry, render } from "astro:content"
-import { ArrowLeft, ArrowRight, ChevronDown, Menu, Pencil } from "@lucide/astro"
+import { ArrowLeft, ArrowRight, ChevronDown, Menu } from "@lucide/astro"
 
 import DocsSidebarTree from "@/components/docs/DocsSidebarTree.astro"
 import TableOfContents from "@/components/ui/toc/TableOfContents.astro"
 import DocShell from "@/layouts/DocShell.astro"
 import { buildSidebar, entryHref, entryLabel, entrySlug, flatten } from "@/lib/docs/sidebar"
-import { SITE } from "@/lib/site"
 
 export async function getStaticPaths() {
   const entries = await getCollection("docs")
@@ -39,7 +38,6 @@ const tocItems = headings
   .filter((h) => h.depth >= 2 && h.depth <= 3)
   .map((h) => ({ id: h.slug, label: h.text, indent: h.depth === 3, class: "text-sm leading-snug" }))
 
-const editUrl = `${SITE.repo}/edit/main/apps/website/src/content/docs/${entry.filePath?.replace(/^.*src\/content\/docs\//, "") ?? `${entry.id}.mdx`}`
 ---
 
 <DocShell title={`${entry.data.title} | konfig.ts docs`} description={entry.data.description}>
@@ -67,15 +65,7 @@ const editUrl = `${SITE.repo}/edit/main/apps/website/src/content/docs/${entry.fi
   </article>
 
   <div class="not-prose mt-12 border-t border-border pt-6">
-    <a
-      href={editUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      class="inline-flex items-center gap-2 text-sm text-muted-foreground no-underline transition-colors hover:text-foreground"
-    >
-      <Pencil size={14} aria-hidden="true" /> Edit this page on GitHub
-    </a>
-    <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {
         prev !== undefined && (
           <a
