@@ -29,6 +29,8 @@ html {
   --color-border-strong: var(--border-strong);
   --color-ring: var(--ring);
   --color-brand: var(--brand);
+  --color-navigation-foreground: var(--navigation-foreground);
+  --color-navigation-heading: var(--navigation-heading);
 }
 
 @theme {
@@ -92,6 +94,8 @@ html {
   --border-strong: oklch(0.871 0.006 286.286);
   --ring: oklch(0.696 0.17 162.48);
   --brand: oklch(0.696 0.17 162.48);
+  --navigation-foreground: oklch(0.37 0.013 285.805);
+  --navigation-heading: oklch(0.37 0.013 285.805);
 }
 
 .dark {
@@ -111,6 +115,8 @@ html {
   --border-strong: oklch(0.37 0.013 285.805);
   --ring: oklch(0.765 0.177 163.223);
   --brand: oklch(0.765 0.177 163.223);
+  --navigation-foreground: oklch(0.705 0.015 286.067); /* zinc-400 */
+  --navigation-heading: oklch(0.871 0.006 286.286); /* zinc-300 */
 }
 
 /* Diagnostic decorations rendered by CodeBlock (see src/lib/highlight.ts). */
@@ -174,4 +180,141 @@ html {
 
 .diag-tip .diag-heading {
   color: rgb(248 113 113);
+}
+
+/* ---------------------------------------------------------------------------
+   Docs typography (from effect.website DESIGN.md): `prose prose-effect`
+   --------------------------------------------------------------------------- */
+@plugin "@tailwindcss/typography";
+
+.prose-effect {
+  --tw-prose-body: oklch(0.87 0.006 286.286); /* zinc-300 */
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--foreground);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--subtle-foreground);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--card);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+.prose-effect :where(a):not(:where([class~="not-prose"] *)) {
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.prose-effect :where(a):not(:where([class~="not-prose"] *)):hover {
+  text-decoration: none;
+}
+.prose-effect :where(code):not(:where([class~="not-prose"] *, pre *)) {
+  background: var(--muted);
+  border-radius: var(--radius-md);
+  padding: 0.125rem 0.375rem;
+  font-size: 0.85em;
+  font-weight: 400;
+}
+.prose-effect :where(code):not(:where([class~="not-prose"] *, pre *))::before,
+.prose-effect :where(code):not(:where([class~="not-prose"] *, pre *))::after {
+  content: none;
+}
+.prose-effect :where(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"] *)) {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  scroll-margin-top: 5.5rem;
+}
+.prose :where(h1):not(:where([class~="not-prose"] *)) {
+  font-size: var(--text-3xl);
+  line-height: var(--text-3xl--line-height);
+}
+@media (min-width: 768px) {
+  .prose :where(h1):not(:where([class~="not-prose"] *)) {
+    font-size: var(--text-4xl);
+    line-height: var(--text-4xl--line-height);
+  }
+}
+.prose :where(h2):not(:where([class~="not-prose"] *)) {
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl--line-height);
+}
+.prose :where(h3):not(:where([class~="not-prose"] *)) {
+  font-size: var(--text-xl);
+  line-height: var(--text-xl--line-height);
+}
+.prose :where(h4):not(:where([class~="not-prose"] *)) {
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+}
+.prose :where(h1, h2, h3, h4, h5, h6) code {
+  font-size: 0.85em;
+}
+.prose-effect :where(table):not(:where([class~="not-prose"] *)) {
+  font-size: 0.875rem;
+}
+.prose-effect :where(.expressive-code):not(:where([class~="not-prose"] *)) {
+  margin-block: 1.5rem;
+}
+
+/* docs-tabs: context-aware tab component used in docs MDX */
+@layer utilities {
+  docs-tabs {
+    display: block;
+    margin-block: 1.5rem;
+  }
+  .docs-tabs-list {
+    display: flex;
+    border-bottom: 1px solid oklch(from currentColor l c h / 0.15);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .docs-tabs-list::-webkit-scrollbar {
+    display: none;
+  }
+  .docs-tab-panel {
+    display: none;
+  }
+  .docs-tab-panel:first-of-type {
+    display: block;
+  }
+  docs-tabs[data-initialized] .docs-tab-panel {
+    display: none;
+  }
+  docs-tabs[data-initialized] .docs-tab-panel[data-active] {
+    display: block;
+  }
+  .docs-tabs-panels {
+    padding-top: 1rem;
+  }
+  .docs-tabs-list [role="tab"] {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0.5;
+    cursor: pointer;
+    transition:
+      opacity 150ms,
+      border-color 150ms;
+    white-space: nowrap;
+  }
+  .docs-tabs-list [role="tab"]:hover {
+    opacity: 0.8;
+  }
+  .docs-tabs-list [role="tab"][aria-selected="true"] {
+    opacity: 1;
+    font-weight: 600;
+    border-bottom-color: currentColor;
+  }
 }

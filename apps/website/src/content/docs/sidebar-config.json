@@ -1,0 +1,9 @@
+{
+  "groups": {
+    "getting-started": 0,
+    "concepts": 1,
+    "cli": 2,
+    "guides": 3,
+    "packages": 4
+  }
+}

@@ -1,0 +1,186 @@
+---
+import { Search } from "@lucide/astro"
+import { base } from "@/lib/site"
+
+/**
+ * Cmd+K search over the Pagefind index that `astro-pagefind` writes at build
+ * time. In `astro dev` the index does not exist until a build has run; the
+ * dialog then shows a hint instead of results.
+ */
+---
+
+<konfig-search data-base={base}>
+  <button
+    type="button"
+    data-role="open"
+    class="flex h-8 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 px-2.5 text-sm text-zinc-400 transition-colors hover:border-zinc-700 hover:text-white"
+    aria-label="Search documentation"
+  >
+    <Search size={14} aria-hidden="true" />
+    <span class="hidden lg:inline">Search</span>
+    <kbd class="hidden rounded border border-zinc-800 bg-zinc-950 px-1 font-mono text-[10px] text-zinc-500 lg:inline">⌘K</kbd>
+  </button>
+
+  <dialog
+    data-role="dialog"
+    class="m-0 max-h-none w-full max-w-none bg-transparent p-0 backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+    aria-label="Search documentation"
+  >
+    <div class="mx-auto mt-[10vh] w-[min(40rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl">
+      <div class="flex items-center gap-3 border-b border-zinc-800 px-4">
+        <Search size={16} class="shrink-0 text-zinc-500" aria-hidden="true" />
+        <input
+          data-role="input"
+          type="search"
+          placeholder="Search the docs…"
+          autocomplete="off"
+          spellcheck="false"
+          class="h-12 w-full bg-transparent font-sans text-base text-white placeholder:text-zinc-500 focus:outline-none"
+        />
+        <kbd class="rounded border border-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">esc</kbd>
+      </div>
+      <div data-role="results" role="listbox" class="max-h-[60vh] overflow-y-auto p-2 text-sm"></div>
+      <p data-role="status" class="border-t border-zinc-800 px-4 py-2 font-mono text-[11px] text-zinc-500" aria-live="polite">Type to search</p>
+    </div>
+  </dialog>
+</konfig-search>
+
+<script>
+  interface PagefindResultData {
+    readonly url: string
+    readonly meta: { readonly title?: string }
+    readonly excerpt: string
+    readonly sub_results: ReadonlyArray<{ readonly title: string; readonly url: string; readonly excerpt: string }>
+  }
+  interface PagefindResult {
+    readonly id: string
+    readonly data: () => Promise<PagefindResultData>
+  }
+  interface Pagefind {
+    readonly init: () => Promise<void>
+    readonly debouncedSearch: (term: string) => Promise<{ readonly results: ReadonlyArray<PagefindResult> } | null>
+  }
+
+  class KonfigSearch extends HTMLElement {
+    #pagefind: Pagefind | undefined
+    #loadFailed = false
+
+    async #load(): Promise<Pagefind | undefined> {
+      if (this.#pagefind !== undefined || this.#loadFailed) return this.#pagefind
+      const url = `${this.dataset["base"] ?? ""}/pagefind/pagefind.js`
+      try {
+        // Not `import(url)`: the bundler rewrites that and (with rolldown) leaves a
+        // dangling preload helper behind. A plain dynamic import at runtime works.
+        const importer = new Function("u", "return import(u)") as (u: string) => Promise<unknown>
+        const mod: unknown = await importer(url)
+        if (typeof mod === "object" && mod !== null && "debouncedSearch" in mod && "init" in mod) {
+          const pf = mod as Pagefind
+          await pf.init()
+          this.#pagefind = pf
+        }
+      } catch {
+        this.#loadFailed = true
+      }
+      return this.#pagefind
+    }
+
+    connectedCallback() {
+      const open = this.querySelector("[data-role='open']")
+      const dialog = this.querySelector("[data-role='dialog']")
+      const input = this.querySelector("[data-role='input']")
+      const results = this.querySelector("[data-role='results']")
+      const status = this.querySelector("[data-role='status']")
+      if (
+        !(open instanceof HTMLButtonElement) ||
+        !(dialog instanceof HTMLDialogElement) ||
+        !(input instanceof HTMLInputElement) ||
+        !(results instanceof HTMLElement) ||
+        !(status instanceof HTMLElement)
+      ) {
+        return
+      }
+
+      const show = () => {
+        dialog.showModal()
+        input.value = ""
+        results.replaceChildren()
+        status.textContent = "Type to search"
+        input.focus()
+        void this.#load().then((pf) => {
+          if (pf === undefined) status.textContent = "Search index is built with `astro build`; not available in dev."
+        })
+      }
+      open.addEventListener("click", show)
+      document.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault()
+          if (dialog.open) dialog.close()
+          else show()
+        }
+      })
+      dialog.addEventListener("click", (e) => {
+        if (e.target === dialog) dialog.close()
+      })
+
+      const render = (items: ReadonlyArray<PagefindResultData>) => {
+        results.replaceChildren(
+          ...items.map((item) => {
+            const a = document.createElement("a")
+            a.href = item.url
+            a.setAttribute("role", "option")
+            a.className =
+              "block rounded-md px-3 py-2 no-underline transition-colors hover:bg-zinc-900 focus:bg-zinc-900 focus:outline-none"
+            const title = document.createElement("div")
+            title.className = "font-medium text-white"
+            title.textContent = item.meta.title ?? item.url
+            const excerpt = document.createElement("div")
+            excerpt.className = "mt-0.5 line-clamp-2 text-xs text-zinc-400 [&_mark]:bg-transparent [&_mark]:text-emerald-400"
+            excerpt.innerHTML = item.excerpt
+            a.append(title, excerpt)
+            return a
+          })
+        )
+      }
+
+      input.addEventListener("input", async () => {
+        const term = input.value.trim()
+        if (term.length === 0) {
+          results.replaceChildren()
+          status.textContent = "Type to search"
+          return
+        }
+        const pf = await this.#load()
+        if (pf === undefined) return
+        const res = await pf.debouncedSearch(term)
+        if (res === null) return
+        const top = await Promise.all(res.results.slice(0, 10).map((r) => r.data()))
+        render(top)
+        status.textContent = res.results.length === 0 ? "No results" : `${res.results.length} result${res.results.length === 1 ? "" : "s"}`
+      })
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown") {
+          const first = results.querySelector("a")
+          if (first instanceof HTMLElement) {
+            e.preventDefault()
+            first.focus()
+          }
+        }
+      })
+      results.addEventListener("keydown", (e) => {
+        if (!(document.activeElement instanceof HTMLAnchorElement)) return
+        const links = Array.from(results.querySelectorAll("a"))
+        const i = links.indexOf(document.activeElement)
+        if (e.key === "ArrowDown" && links[i + 1]) {
+          e.preventDefault()
+          links[i + 1]?.focus()
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault()
+          if (i === 0) input.focus()
+          else links[i - 1]?.focus()
+        }
+      })
+    }
+  }
+  if (!customElements.get("konfig-search")) customElements.define("konfig-search", KonfigSearch)
+</script>

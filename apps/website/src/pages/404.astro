@@ -1,0 +1,17 @@
+---
+import Button from "@/components/ui/Button.astro"
+import PageLayout from "@/layouts/PageLayout.astro"
+import { base } from "@/lib/site"
+---
+
+<PageLayout title="Not found | konfig.ts">
+  <section class="mx-auto flex w-full max-w-295 flex-col items-start gap-6 px-4 py-32">
+    <p class="font-mono text-sm tracking-wider text-zinc-400 uppercase"><span class="text-zinc-500">//</span> 404</p>
+    <h1 class="text-3xl leading-tighter font-bold text-white md:text-4xl">Nothing renders at this path</h1>
+    <p class="max-w-lg text-lg text-zinc-400">The page you asked for is not part of this site. Try the docs or head back to the start.</p>
+    <div class="flex gap-3">
+      <Button href={`${base}/docs/getting-started/introduction/`}>Open the docs</Button>
+      <Button href={`${base}/`}>Back home</Button>
+    </div>
+  </section>
+</PageLayout>

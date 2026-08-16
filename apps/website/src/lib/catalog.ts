@@ -2,8 +2,15 @@ import { loadSnippet, type Snippet, type SnippetSpec } from "./snippets"
 
 /** Every code sample on the page, sourced from `examples/full-stack`. */
 
+export type FailureCaseId =
+  | "missing-provider"
+  | "unbound-secret"
+  | "widened-name"
+  | "envname-collision"
+  | "app-name-collision"
+
 export interface FailureCase {
-  readonly id: string
+  readonly id: FailureCaseId
   readonly tab: string
   readonly title: string
   readonly summary: string

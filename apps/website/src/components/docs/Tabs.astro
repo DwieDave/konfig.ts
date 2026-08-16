@@ -1,0 +1,106 @@
+---
+interface Props {
+  syncKey?: string
+}
+
+const { syncKey } = Astro.props
+---
+
+<docs-tabs data-sync-key={syncKey}>
+  <div class="docs-tabs-list" role="tablist"></div>
+  <div class="docs-tabs-panels">
+    <slot />
+  </div>
+</docs-tabs>
+
+<script>
+  const STORAGE_PREFIX = "docs-synced-tabs__"
+
+  class DocsTabs extends HTMLElement {
+    static synced = new Map<string, Set<DocsTabs>>()
+
+    tabs: HTMLButtonElement[] = []
+    panels: HTMLElement[] = []
+    syncKey: string | undefined
+
+    connectedCallback() {
+      this.syncKey = this.dataset.syncKey || undefined
+      const tablist = this.querySelector<HTMLElement>("[role=tablist]")!
+      const panelsWrapper = this.querySelector(".docs-tabs-panels")!
+
+      this.panels = [...panelsWrapper.querySelectorAll<HTMLElement>(":scope > .docs-tab-panel")]
+
+      this.panels.forEach((panel, i) => {
+        const label = panel.dataset.label ?? `Tab ${i + 1}`
+        const panelId = `dtp-${Math.random().toString(36).slice(2, 8)}`
+        panel.id = panelId
+
+        const btn = document.createElement("button")
+        btn.type = "button"
+        btn.setAttribute("role", "tab")
+        btn.textContent = label
+        btn.setAttribute("aria-controls", panelId)
+        btn.setAttribute("aria-selected", "false")
+        btn.tabIndex = -1
+
+        btn.addEventListener("click", () => this.selectTab(i, true))
+        btn.addEventListener("keydown", (e: KeyboardEvent) => {
+          const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0
+          if (dir === 0) return
+          e.preventDefault()
+          this.selectTab((i + dir + this.tabs.length) % this.tabs.length, true)
+        })
+
+        tablist.append(btn)
+        this.tabs.push(btn)
+      })
+
+      // Signal CSS to switch from :first-of-type fallback to data-active control
+      this.setAttribute("data-initialized", "")
+
+      if (this.syncKey) {
+        const group = DocsTabs.synced.get(this.syncKey) ?? new Set<DocsTabs>()
+        group.add(this)
+        DocsTabs.synced.set(this.syncKey, group)
+        const stored = localStorage.getItem(STORAGE_PREFIX + this.syncKey)
+        const idx = stored
+          ? Math.max(
+              0,
+              this.tabs.findIndex((t) => t.textContent === stored),
+            )
+          : 0
+        this.selectTab(idx, false)
+      } else {
+        this.selectTab(0, false)
+      }
+    }
+
+    selectTab(index: number, sync: boolean) {
+      this.tabs.forEach((t, i) => {
+        t.setAttribute("aria-selected", i === index ? "true" : "false")
+        t.tabIndex = i === index ? 0 : -1
+      })
+      this.panels.forEach((p, i) => {
+        p.toggleAttribute("data-active", i === index)
+      })
+      if (sync) {
+        this.tabs[index]?.focus()
+        const label = this.tabs[index]?.textContent
+        if (this.syncKey && label) {
+          localStorage.setItem(STORAGE_PREFIX + this.syncKey, label)
+          DocsTabs.synced.get(this.syncKey)?.forEach((other) => {
+            if (other === this) return
+            const idx = other.tabs.findIndex((t) => t.textContent === label)
+            if (idx >= 0) other.selectTab(idx, false)
+          })
+        }
+      }
+    }
+
+    disconnectedCallback() {
+      if (this.syncKey) DocsTabs.synced.get(this.syncKey)?.delete(this)
+    }
+  }
+
+  customElements.define("docs-tabs", DocsTabs)
+</script>

@@ -19,7 +19,7 @@ const el = (tagName: string, properties: Element["properties"], children: Readon
 })
 
 const tooltip = (d: ResolvedDiagnostic): Element =>
-  el("span", { class: "diag-tip", role: "tooltip" }, [
+  el("span", { class: "diag-tip", role: "tooltip", "data-pagefind-ignore": "" }, [
     el("span", { class: "diag-heading" }, [text("error ")]),
     el("span", { class: "diag-code" }, [text(`TS${d.code}: `)]),
     text(d.message)

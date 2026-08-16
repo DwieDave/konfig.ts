@@ -1,0 +1,56 @@
+---
+import Footer from "@/components/Footer.astro"
+import Navigation from "@/components/navigation/Navigation.astro"
+import BaseLayout from "@/layouts/BaseLayout.astro"
+
+/**
+ * Three-column documentation shell (sidebar / main / table-of-contents), after
+ * effect.website's DocShell. Columns adapt to the slots that are filled.
+ */
+interface Props {
+  readonly title?: string | undefined
+  readonly description?: string | undefined
+}
+
+const { title, description } = Astro.props
+const hasSidebar = Astro.slots.has("sidebar")
+const hasToc = Astro.slots.has("toc")
+const gridCols = hasToc ? "lg:grid-cols-[240px_1fr] xl:grid-cols-[240px_1fr_240px]" : "lg:grid-cols-[240px_1fr]"
+const railClass = "sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto px-6 py-8"
+---
+
+<BaseLayout {...title ? { title } : undefined} {...description ? { description } : undefined}>
+  <Navigation active="docs" />
+
+  <div class="relative w-full">
+    <slot name="mobile-nav" />
+
+    <div class:list={["mx-auto grid w-full max-w-352 grid-cols-1", gridCols]}>
+      {
+        hasSidebar && (
+          <aside class="hidden border-r border-border lg:block">
+            <div data-doc-rail class={railClass}>
+              <slot name="sidebar" />
+            </div>
+          </aside>
+        )
+      }
+
+      <main id="main" class="min-w-0 px-6 py-12 lg:px-12 lg:py-16">
+        <slot />
+      </main>
+
+      {
+        hasToc && (
+          <aside class="hidden border-l border-border xl:block">
+            <div data-doc-rail class={railClass}>
+              <slot name="toc" />
+            </div>
+          </aside>
+        )
+      }
+    </div>
+
+    <Footer />
+  </div>
+</BaseLayout>

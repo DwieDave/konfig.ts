@@ -1,32 +1,47 @@
 ---
 import { ArrowUpRight, Menu, X } from "@lucide/astro"
+import SearchDialog from "@/components/navigation/SearchDialog.astro"
 import Wordmark from "@/components/Wordmark.astro"
-import { SITE } from "@/lib/site"
+import { SITE, base } from "@/lib/site"
 
+interface Props {
+  readonly active?: "home" | "docs" | undefined
+}
+
+const { active = "home" } = Astro.props
+const home = `${base}/`
 const LINKS = [
-  { label: "Why", href: "#break-it" },
-  { label: "Features", href: "#catches" },
-  { label: "Workflow", href: "#workflow" },
-  { label: "Packages", href: "#packages" },
-  { label: "FAQ", href: "#faq" }
+  { id: "docs", label: "Docs", href: `${base}/docs/getting-started/introduction/` },
+  { id: "why", label: "Why", href: `${home}#break-it` },
+  { id: "features", label: "Features", href: `${home}#catches` },
+  { id: "packages", label: "Packages", href: `${home}#packages` },
+  { id: "faq", label: "FAQ", href: `${home}#faq` }
 ] as const
 
 const linkClass = "text-sm font-medium text-zinc-400 no-underline transition-colors hover:text-white"
+const activeClass = "text-white"
 ---
 
 <div class="sticky top-0 z-100 w-full">
   <div class="w-full border-b border-zinc-800 bg-zinc-950">
     <header class="relative mx-auto w-full max-w-352 px-4">
       <nav class="flex h-16 items-center" aria-label="Main">
-        <a href="#top" class="flex items-center no-underline" aria-label="konfig.ts, top of page">
+        <a href={home} class="flex items-center no-underline" aria-label="konfig.ts home">
           <Wordmark class="text-lg" />
         </a>
 
         <div class="ml-8 hidden items-center gap-6 md:flex">
-          {LINKS.map((l) => <a href={l.href} class={linkClass}>{l.label}</a>)}
+          {
+            LINKS.map((l) => (
+              <a href={l.href} class:list={[linkClass, l.id === active && activeClass]} aria-current={l.id === active ? "page" : undefined}>
+                {l.label}
+              </a>
+            ))
+          }
         </div>
 
         <div class="ml-auto hidden items-center gap-4.5 md:flex">
+          <SearchDialog />
           <a href={SITE.npm} target="_blank" rel="noopener noreferrer" class:list={[linkClass, "inline-flex items-center gap-1"]}>
             npm <ArrowUpRight size={14} aria-hidden="true" />
           </a>

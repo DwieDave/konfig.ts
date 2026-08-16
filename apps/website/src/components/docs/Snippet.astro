@@ -1,0 +1,35 @@
+---
+import CodeBlock from "@/components/ui/CodeBlock.astro"
+import { load } from "@/lib/catalog"
+import type { Lang } from "@/lib/highlight"
+
+/**
+ * Renders a file (or a slice of it) from `examples/full-stack` in an MDX page.
+ * The example repo is the source of truth; a missing marker fails the build.
+ */
+interface Props {
+  readonly file: string
+  readonly startAt?: string | undefined
+  readonly startAfter?: string | undefined
+  readonly endBefore?: string | undefined
+  readonly lines?: readonly [number, number] | undefined
+  readonly title?: string | undefined
+  readonly lang?: Lang | undefined
+  readonly stripMeta?: boolean | undefined
+}
+
+const { file, startAt, startAfter, endBefore, lines, title, lang, stripMeta = true } = Astro.props
+const between = startAt !== undefined || startAfter !== undefined || endBefore !== undefined
+  ? {
+    ...(startAt !== undefined ? { startAt } : {}),
+    ...(startAfter !== undefined ? { startAfter } : {}),
+    ...(endBefore !== undefined ? { endBefore } : {})
+  }
+  : undefined
+const snippet = load({ file, ...(between ? { between } : {}), ...(lines ? { lines } : {}), stripMeta })
+const inferred: Lang = lang ?? (file.endsWith(".json") ? "json" : file.endsWith(".yaml") || file.endsWith(".yml") ? "yaml" : "ts")
+---
+
+<div class="not-prose my-6">
+  <CodeBlock code={snippet.code} lang={inferred} title={title ?? `examples/full-stack/${file}`} />
+</div>

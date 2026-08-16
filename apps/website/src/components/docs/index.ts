@@ -1,0 +1,7 @@
+export { default as Aside } from "./Aside.astro"
+export { default as Badge } from "./Badge.astro"
+export { default as Diagnostics } from "./Diagnostics.astro"
+export { default as Snippet } from "./Snippet.astro"
+export { default as Steps } from "./Steps.astro"
+export { default as TabItem } from "./TabItem.astro"
+export { default as Tabs } from "./Tabs.astro"

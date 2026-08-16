@@ -1,0 +1,109 @@
+---
+import type { CollectionEntry } from "astro:content"
+import { getCollection, getEntry, render } from "astro:content"
+import { ArrowLeft, ArrowRight, ChevronDown, Menu, Pencil } from "@lucide/astro"
+
+import DocsSidebarTree from "@/components/docs/DocsSidebarTree.astro"
+import TableOfContents from "@/components/ui/toc/TableOfContents.astro"
+import DocShell from "@/layouts/DocShell.astro"
+import { buildSidebar, entryHref, entryLabel, entrySlug, flatten } from "@/lib/docs/sidebar"
+import { SITE } from "@/lib/site"
+
+export async function getStaticPaths() {
+  const entries = await getCollection("docs")
+  return entries.map((entry) => ({
+    params: { slug: entrySlug(entry.id) },
+    props: { entry, entries }
+  }))
+}
+
+interface Props {
+  readonly entry: CollectionEntry<"docs">
+  readonly entries: ReadonlyArray<CollectionEntry<"docs">>
+}
+
+const { entry, entries } = Astro.props
+const { Content, headings } = await render(entry)
+
+const currentId = entry.id
+const currentLabel = entryLabel(entry)
+const groupConfig = (await getEntry("docsSidebar", "groups"))?.data ?? {}
+const sidebarItems = buildSidebar(entries, currentId, groupConfig)
+
+const order = flatten(sidebarItems)
+const index = order.findIndex((e) => e.id === currentId)
+const prev = index > 0 ? order[index - 1] : undefined
+const next = index >= 0 && index < order.length - 1 ? order[index + 1] : undefined
+
+const tocItems = headings
+  .filter((h) => h.depth >= 2 && h.depth <= 3)
+  .map((h) => ({ id: h.slug, label: h.text, indent: h.depth === 3, class: "text-sm leading-snug" }))
+
+const editUrl = `${SITE.repo}/edit/main/apps/website/src/content/docs/${entry.filePath?.replace(/^.*src\/content\/docs\//, "") ?? `${entry.id}.mdx`}`
+---
+
+<DocShell title={`${entry.data.title} | konfig.ts docs`} description={entry.data.description}>
+  <div slot="mobile-nav" class="sticky top-16 z-40 border-b border-border bg-background/95 backdrop-blur-sm lg:hidden">
+    <details class="group">
+      <summary class="flex w-full cursor-pointer list-none items-center gap-2 px-6 py-3 text-sm font-medium text-navigation-heading select-none">
+        <Menu class="h-5 w-5" aria-hidden="true" />
+        <span>Docs menu</span>
+        <span class="truncate text-muted-foreground">/ {currentLabel}</span>
+        <ChevronDown class="ml-auto h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <nav aria-label="Documentation navigation" class="max-h-[60vh] overflow-y-auto border-t border-border px-6 py-4">
+        <DocsSidebarTree items={sidebarItems} currentId={currentId} />
+      </nav>
+    </details>
+  </div>
+
+  <nav slot="sidebar" aria-label="Documentation navigation">
+    <DocsSidebarTree items={sidebarItems} currentId={currentId} />
+  </nav>
+
+  <article class="prose prose-effect max-w-none" data-pagefind-body>
+    <h1 class="mt-0!">{entry.data.title}</h1>
+    <Content />
+  </article>
+
+  <div class="not-prose mt-12 border-t border-border pt-6">
+    <a
+      href={editUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="inline-flex items-center gap-2 text-sm text-muted-foreground no-underline transition-colors hover:text-foreground"
+    >
+      <Pencil size={14} aria-hidden="true" /> Edit this page on GitHub
+    </a>
+    <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {
+        prev !== undefined && (
+          <a
+            href={entryHref(prev.id)}
+            class="group flex flex-col gap-1 rounded-md border border-border p-4 no-underline transition-colors hover:border-border-strong hover:bg-muted/40"
+          >
+            <span class="inline-flex items-center gap-1 font-mono text-xs tracking-wider text-muted-foreground uppercase">
+              <ArrowLeft size={12} aria-hidden="true" /> Previous
+            </span>
+            <span class="text-sm font-medium text-foreground">{entryLabel(prev)}</span>
+          </a>
+        )
+      }
+      {
+        next !== undefined && (
+          <a
+            href={entryHref(next.id)}
+            class="group flex flex-col gap-1 rounded-md border border-border p-4 text-right no-underline transition-colors hover:border-border-strong hover:bg-muted/40 sm:col-start-2"
+          >
+            <span class="inline-flex items-center justify-end gap-1 font-mono text-xs tracking-wider text-muted-foreground uppercase">
+              Next <ArrowRight size={12} aria-hidden="true" />
+            </span>
+            <span class="text-sm font-medium text-foreground">{entryLabel(next)}</span>
+          </a>
+        )
+      }
+    </div>
+  </div>
+
+  {tocItems.length > 0 && <TableOfContents slot="toc" items={tocItems} />}
+</DocShell>

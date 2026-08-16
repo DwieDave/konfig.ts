@@ -1,0 +1,66 @@
+---
+
+---
+
+<div class="docs-steps">
+  <slot />
+</div>
+
+<style>
+  .docs-steps :global(ol) {
+    counter-reset: steps-counter;
+    list-style: none;
+    padding-inline-start: 0;
+    margin: 0;
+  }
+
+  .docs-steps :global(ol > li) {
+    counter-increment: steps-counter;
+    position: relative;
+    padding-inline-start: 2.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .docs-steps :global(ol > li:last-child) {
+    padding-bottom: 0;
+  }
+
+  /* Number circle */
+  .docs-steps :global(ol > li::before) {
+    content: counter(steps-counter);
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    line-height: 1.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    text-align: center;
+    color: white;
+    background-color: var(--color-zinc-700, #3f3f46);
+    border-radius: 9999px;
+  }
+
+  /* Vertical connector line */
+  .docs-steps :global(ol > li:not(:last-child)::after) {
+    content: "";
+    position: absolute;
+    inset-inline-start: 0.6875rem;
+    top: 1.75rem;
+    bottom: 0.25rem;
+    width: 1px;
+    background-color: var(--border);
+  }
+
+  /* The numbered circle stays a mid-tone neutral in both themes (no semantic
+     token maps to it without inverting), so it keeps an explicit dark override. */
+  :global(.dark) .docs-steps :global(ol > li::before) {
+    background-color: var(--color-zinc-600, #52525b);
+  }
+
+  .docs-steps :global(ol > li > :first-child) {
+    margin-top: 0;
+  }
+</style>

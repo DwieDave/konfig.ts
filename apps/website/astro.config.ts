@@ -1,4 +1,7 @@
+import mdx from "@astrojs/mdx"
 import tailwindcss from "@tailwindcss/vite"
+import expressiveCode from "astro-expressive-code"
+import pagefind from "astro-pagefind"
 import { defineConfig, fontProviders } from "astro/config"
 import { fileURLToPath } from "node:url"
 
@@ -9,8 +12,12 @@ export default defineConfig({
   site: "https://dwiedave.github.io",
   base: "/konfig.ts",
   output: "static",
-  trailingSlash: "never",
+  trailingSlash: "always",
   compressHTML: true,
+  integrations: [expressiveCode(), mdx(), pagefind()],
+  redirects: {
+    "/docs": "/docs/getting-started/introduction/"
+  },
   vite: {
     plugins: [tailwindcss()],
     resolve: {
