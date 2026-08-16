@@ -1,0 +1,47 @@
+---
+import BothSides from "@/components/landing/BothSides.astro"
+import BreakIt from "@/components/landing/BreakIt.astro"
+import CallToAction from "@/components/landing/CallToAction.astro"
+import Catches from "@/components/landing/Catches.astro"
+import FAQ from "@/components/landing/FAQ.astro"
+import Hero from "@/components/landing/Hero.astro"
+import MentalModel from "@/components/landing/MentalModel.astro"
+import NotList from "@/components/landing/NotList.astro"
+import Packages from "@/components/landing/Packages.astro"
+import Workflow from "@/components/landing/Workflow.astro"
+import SectionDivider from "@/components/SectionDivider.astro"
+import PageLayout from "@/layouts/PageLayout.astro"
+---
+
+<PageLayout>
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 z-0 hidden lg:block">
+    <div class="mx-auto h-full w-full max-w-295">
+      <div class="landing-rails-center absolute inset-y-0 left-1/2 w-px -translate-x-1/2"></div>
+    </div>
+  </div>
+  <Hero />
+  <SectionDivider />
+  <BreakIt />
+  <SectionDivider />
+  <BothSides />
+  <SectionDivider />
+  <Catches />
+  <SectionDivider />
+  <MentalModel />
+  <SectionDivider />
+  <Workflow />
+  <SectionDivider />
+  <Packages />
+  <SectionDivider />
+  <NotList />
+  <SectionDivider />
+  <FAQ />
+  <SectionDivider />
+  <CallToAction />
+</PageLayout>
+
+<style>
+  .landing-rails-center {
+    background-image: repeating-linear-gradient(to bottom, rgb(39 39 42) 0, rgb(39 39 42) 2px, transparent 2px, transparent 4px);
+  }
+</style>

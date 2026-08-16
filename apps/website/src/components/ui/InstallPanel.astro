@@ -1,0 +1,176 @@
+---
+import { Check, Copy } from "@lucide/astro"
+import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, PACKAGE_MANAGERS } from "@/lib/install-command"
+---
+
+<konfig-install-panel class="relative block rounded-md bg-[#101012] p-1 ring-1 ring-zinc-700 ring-inset">
+  <div
+    data-role="copy"
+    role="button"
+    tabindex="0"
+    class="flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-1 text-left font-mono text-sm text-zinc-300 transition-colors hover:bg-[#17171A]"
+    aria-label="Copy install command"
+  >
+    <div data-role="pm-dropdown" class="relative shrink-0">
+      <button
+        type="button"
+        data-role="pm-chip"
+        aria-haspopup="listbox"
+        aria-expanded="false"
+        aria-label={`Package manager: ${DEFAULT_PACKAGE_MANAGER}`}
+        class="flex cursor-pointer items-center gap-1.5 rounded-sm border-r border-zinc-800 py-0.5 pr-3 pl-1 text-xs text-zinc-300 transition-colors hover:text-white"
+      >
+        <span data-role="pm-label" class="font-semibold">{DEFAULT_PACKAGE_MANAGER}</span>
+        <svg data-role="pm-chevron" class="size-4 text-zinc-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="m6 9 6 6 6-6"></path>
+        </svg>
+      </button>
+
+      <ul
+        data-role="pm-popover"
+        role="listbox"
+        hidden
+        class="absolute top-full left-0 z-20 mt-2 w-36 overflow-hidden rounded-md border border-zinc-800 bg-zinc-900 shadow-xl"
+      >
+        {
+          PACKAGE_MANAGERS.map((pm) => {
+            const isDefault = pm === DEFAULT_PACKAGE_MANAGER
+            return (
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  data-role="pm-option"
+                  data-pm={pm}
+                  aria-selected={isDefault ? "true" : "false"}
+                  class:list={[
+                    "flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-zinc-800",
+                    isDefault ? "text-white" : "text-zinc-400"
+                  ]}
+                >
+                  <span class="flex-1">{pm}</span>
+                  <Check data-role="pm-check" size={16} class:list={["shrink-0 text-zinc-500", isDefault ? "" : "hidden"]} aria-hidden="true" />
+                </button>
+              </li>
+            )
+          })
+        }
+      </ul>
+    </div>
+
+    <span data-role="command-text" class="flex-1 truncate">{getInstallCommand(DEFAULT_PACKAGE_MANAGER)}</span>
+
+    <Copy data-role="copy-icon-idle" class="shrink-0 text-zinc-400" size={16} aria-hidden="true" />
+    <Check data-role="copy-icon-copied" class="hidden shrink-0 text-zinc-200" size={16} aria-hidden="true" />
+  </div>
+  <p role="status" aria-live="polite" data-role="status" class="sr-only"></p>
+</konfig-install-panel>
+
+<script>
+  import { DEFAULT_PACKAGE_MANAGER, getInstallCommand, isPackageManager, type PackageManager } from "@/lib/install-command"
+
+  const COPY_RESET_TIMEOUT_MS = 1500
+
+  class KonfigInstallPanel extends HTMLElement {
+    #pm: PackageManager = DEFAULT_PACKAGE_MANAGER
+    #open = false
+    #timeout: ReturnType<typeof setTimeout> | undefined
+
+    connectedCallback() {
+      const chip = this.querySelector("[data-role='pm-chip']")
+      const popover = this.querySelector("[data-role='pm-popover']")
+      const chevron = this.querySelector("[data-role='pm-chevron']")
+      const dropdown = this.querySelector("[data-role='pm-dropdown']")
+      const label = this.querySelector("[data-role='pm-label']")
+      const copy = this.querySelector("[data-role='copy']")
+      const commandText = this.querySelector("[data-role='command-text']")
+      const status = this.querySelector("[data-role='status']")
+      const idle = this.querySelector("[data-role='copy-icon-idle']")
+      const done = this.querySelector("[data-role='copy-icon-copied']")
+      if (
+        !(chip instanceof HTMLButtonElement) ||
+        !(popover instanceof HTMLElement) ||
+        !(dropdown instanceof HTMLElement) ||
+        !(label instanceof HTMLElement) ||
+        !(copy instanceof HTMLElement) ||
+        !(commandText instanceof HTMLElement) ||
+        !(status instanceof HTMLElement)
+      ) {
+        return
+      }
+      const options = Array.from(this.querySelectorAll("[data-role='pm-option']")).filter(
+        (el): el is HTMLButtonElement => el instanceof HTMLButtonElement
+      )
+
+      const setOpen = (open: boolean) => {
+        this.#open = open
+        chip.setAttribute("aria-expanded", String(open))
+        popover.hidden = !open
+        chevron?.classList.toggle("rotate-180", open)
+      }
+
+      const setPM = (pm: PackageManager) => {
+        this.#pm = pm
+        commandText.textContent = getInstallCommand(pm)
+        label.textContent = pm
+        chip.setAttribute("aria-label", `Package manager: ${pm}`)
+        for (const opt of options) {
+          const selected = opt.dataset["pm"] === pm
+          opt.setAttribute("aria-selected", String(selected))
+          opt.classList.toggle("text-white", selected)
+          opt.classList.toggle("text-zinc-400", !selected)
+          opt.querySelector("[data-role='pm-check']")?.classList.toggle("hidden", !selected)
+        }
+      }
+
+      const feedback = (state: "idle" | "copied" | "error") => {
+        const copied = state === "copied"
+        idle?.classList.toggle("hidden", copied)
+        done?.classList.toggle("hidden", !copied)
+        status.textContent = state === "copied" ? "Copied" : state === "error" ? "Could not copy" : ""
+      }
+
+      const flash = (state: "copied" | "error") => {
+        feedback(state)
+        if (this.#timeout !== undefined) clearTimeout(this.#timeout)
+        this.#timeout = setTimeout(() => feedback("idle"), COPY_RESET_TIMEOUT_MS)
+      }
+
+      const doCopy = () => {
+        const clipboard = navigator.clipboard
+        if (clipboard === undefined) return flash("error")
+        clipboard.writeText(getInstallCommand(this.#pm)).then(
+          () => flash("copied"),
+          () => flash("error")
+        )
+      }
+
+      chip.addEventListener("click", (e) => {
+        e.stopPropagation()
+        setOpen(!this.#open)
+      })
+      for (const opt of options) {
+        opt.addEventListener("click", (e) => {
+          e.stopPropagation()
+          const pm = opt.dataset["pm"]
+          if (pm !== undefined && isPackageManager(pm)) setPM(pm)
+          setOpen(false)
+        })
+      }
+      document.addEventListener("mousedown", (e) => {
+        if (this.#open && e.target instanceof Node && !dropdown.contains(e.target)) setOpen(false)
+      })
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") setOpen(false)
+      })
+      copy.addEventListener("click", doCopy)
+      copy.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          doCopy()
+        }
+      })
+    }
+  }
+  if (!customElements.get("konfig-install-panel")) customElements.define("konfig-install-panel", KonfigInstallPanel)
+</script>

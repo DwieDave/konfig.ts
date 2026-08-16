@@ -1,0 +1,120 @@
+---
+import { ArrowDown, Check, ShieldCheck, GitBranch, KeyRound, Link2, Network, Rows3 } from "@lucide/astro"
+import ComplexityChart from "@/components/landing/ComplexityChart.astro"
+import Eyebrow from "@/components/ui/Eyebrow.astro"
+
+type Icon = "refs" | "deps" | "env" | "secrets" | "helm" | "yaml"
+
+interface Feature {
+  readonly problem: string
+  readonly icon: Icon
+  readonly title: string
+  readonly description: string
+  readonly items: ReadonlyArray<string>
+}
+
+const FEATURES: ReadonlyArray<Feature> = [
+  {
+    problem: "The Deployment references a Secret. Nobody created it. You find out from the pod events.",
+    icon: "refs",
+    title: "Branded refs",
+    description: "Secret.make(...).ref is a SecretRef<\"name\">. secretKeyRef, volumes, imagePullSecrets and Ingress TLS take the brand, not a string.",
+    items: ["Wrong namespace won't compile", "Typo'd port names won't compile", "Duplicate env names won't compile"]
+  },
+  {
+    problem: "The image-pull secret lives in another Application. Sync order was right — until it wasn't.",
+    icon: "deps",
+    title: "Dep graph at the type level",
+    description: "yield* Dep.Secret(\"ghcr-pull\") records a Need. AppOfApps.entrypoint requires every Need to meet a Provide.",
+    items: ["_konfig_unsatisfied names the missing provider", "Duplicate App names are rejected", "Sync.wave / hook annotations stay typed"]
+  },
+  {
+    problem: "The app reads DATABASE_URL. The Deployment sets DB_URL. Both are strings; nothing complains.",
+    icon: "env",
+    title: "Env contracts",
+    description: "One Environment.define feeds both Environment.bind (manifest) and Environment.runtime (process).",
+    items: ["Secret / Literal / Downward atoms", "Effect Config schemas for literals", "Missing binding is a compile error"]
+  },
+  {
+    problem: "A plaintext value slipped into the sops file. It rendered fine. It's in git now.",
+    icon: "secrets",
+    title: "Secret backends",
+    description: "sops, sealed-secrets and external-secrets lower the same Secret.define to the right CR — with the binary's stdout schema-validated.",
+    items: ["requiresSource is part of the backend's type", "sops fails closed on unencrypted values", "Stakater reloader / pod-hash rotation"]
+  },
+  {
+    problem: "The chart is pinned by version. The tarball behind that version quietly changed.",
+    icon: "helm",
+    title: "Helm with digest verification",
+    description: "Helm.release({ digest }) hashes the cached .tgz on every pull and every cache hit.",
+    items: ["Flip a byte, fail the next render", "Charts stay charts — templated docs lift as RawYaml", "helm.minVersion enforced"]
+  },
+  {
+    problem: "The diff is 400 lines. 396 of them are key reordering.",
+    icon: "yaml",
+    title: "Deterministic YAML, structural diff",
+    description: "Stable key ordering, YAML 1.1, Argo-friendly output; konfig diff compares documents, not lines.",
+    items: ["Ignores reordering, redacts Secret data", "Input-hashed builds rewrite nothing on no-op", "kubeconform on --strict"]
+  }
+]
+---
+
+<section id="catches" class="relative w-full py-24 md:pt-40 md:pb-24">
+  <div class="relative mx-auto w-full max-w-295 px-4">
+    <div class="mb-8 grid grid-cols-1 gap-12 md:mb-16 lg:grid-cols-2 lg:gap-8">
+      <div>
+        <Eyebrow>What konfig.ts catches</Eyebrow>
+        <h2 class="max-w-md text-2xl leading-tighter font-semibold text-white md:text-3xl">
+          The failure modes of YAML, moved to compile time
+        </h2>
+      </div>
+      <div class="flex flex-col justify-center">
+        <ComplexityChart />
+      </div>
+    </div>
+
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {
+        FEATURES.map((f) => (
+          <article class="flex flex-col border border-zinc-800 bg-zinc-950 p-5">
+            <p class="text-base leading-snug font-medium text-zinc-400">{f.problem}</p>
+            <div class="my-4 flex items-center gap-2">
+              <div class="h-px flex-1 bg-zinc-800" />
+              <ArrowDown class="h-4 w-4 text-white" aria-hidden="true" />
+              <div class="h-px flex-1 bg-zinc-800" />
+            </div>
+            <h3 class="flex items-center gap-2 font-mono text-base font-medium text-white uppercase">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center bg-zinc-800">
+                {f.icon === "refs" ? (
+                  <Link2 class="h-4 w-4 text-zinc-200" aria-hidden="true" />
+                ) : f.icon === "deps" ? (
+                  <Network class="h-4 w-4 text-zinc-200" aria-hidden="true" />
+                ) : f.icon === "env" ? (
+                  <GitBranch class="h-4 w-4 text-zinc-200" aria-hidden="true" />
+                ) : f.icon === "secrets" ? (
+                  <KeyRound class="h-4 w-4 text-zinc-200" aria-hidden="true" />
+                ) : f.icon === "helm" ? (
+                  <ShieldCheck class="h-4 w-4 text-zinc-200" aria-hidden="true" />
+                ) : (
+                  <Rows3 class="h-4 w-4 text-zinc-200" aria-hidden="true" />
+                )}
+              </span>
+              {f.title}
+            </h3>
+            <p class="mt-2 font-mono text-xs leading-relaxed text-zinc-500">{f.description}</p>
+            <ul class="m-0 mt-3 flex list-none flex-col gap-1.5 p-0">
+              {f.items.map((item) => (
+                <li class="flex items-start gap-2">
+                  <span class="flex h-6 w-6 shrink-0 items-center justify-center">
+                    <Check class="h-4 w-4 text-emerald-500" aria-hidden="true" />
+                  </span>
+                  <span class="text-sm text-zinc-400">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        ))
+      }
+    </div>
+  </div>
+</section>

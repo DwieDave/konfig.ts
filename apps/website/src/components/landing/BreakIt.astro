@@ -1,0 +1,124 @@
+---
+import { ArrowUpRight } from "@lucide/astro"
+import CodeBlock from "@/components/ui/CodeBlock.astro"
+import Eyebrow from "@/components/ui/Eyebrow.astro"
+import { FAILURE_CASES, load } from "@/lib/catalog"
+import { SITE } from "@/lib/site"
+
+const cases = FAILURE_CASES.map((c) => ({ ...c, snippet: load(c.spec) }))
+---
+
+<section id="break-it" class="relative w-full py-24 md:pt-40 md:pb-24">
+  <div class="mx-auto w-full max-w-295 px-4">
+    <div class="mb-10 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-8">
+      <div>
+        <Eyebrow>Break it, then watch it not compile</Eyebrow>
+        <h2 class="max-w-lg text-2xl leading-tighter font-semibold text-white md:text-3xl">
+          Every one of these is a real file in the example repo
+        </h2>
+      </div>
+      <p class="max-w-lg text-lg leading-snug text-zinc-400 lg:justify-self-end">
+        <code class="font-mono text-base text-zinc-200">examples/full-stack/infra/envs/</code> ships worked failures — files
+        that exist to <em>not</em> typecheck. Hover a squiggle to read what the compiler says.
+      </p>
+    </div>
+
+    <konfig-tabs class="block">
+      <div
+        role="tablist"
+        aria-label="Worked failures"
+        class="-mb-px flex flex-wrap gap-1 overflow-x-auto border-b border-zinc-800 font-mono text-xs"
+      >
+        {
+          cases.map((c, i) => (
+            <button
+              type="button"
+              role="tab"
+              id={`tab-${c.id}`}
+              aria-controls={`panel-${c.id}`}
+              aria-selected={i === 0 ? "true" : "false"}
+              tabindex={i === 0 ? 0 : -1}
+              class="tab -mb-px cursor-pointer border-b-2 border-transparent px-3 py-2.5 text-zinc-400 transition-colors hover:text-white aria-selected:border-white aria-selected:text-white focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-zinc-300"
+            >
+              {c.tab}
+            </button>
+          ))
+        }
+      </div>
+
+      {
+        cases.map((c, i) => (
+          <div
+            role="tabpanel"
+            id={`panel-${c.id}`}
+            aria-labelledby={`tab-${c.id}`}
+            hidden={i !== 0}
+            tabindex="0"
+            class="pt-6 focus-visible:outline-none"
+          >
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8">
+              <div class="min-w-0">
+                <CodeBlock code={c.snippet.code} lang="ts" title={`infra/envs/${c.tab}`} diagnostics={c.snippet.diagnostics} />
+                <div class="mt-3 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-950 px-4 py-3 font-mono text-xs leading-relaxed">
+                  <span class="text-zinc-500">$ </span><span class="text-zinc-300">bun run check</span>
+                  <div class="mt-1 whitespace-pre-wrap text-red-400/90">{c.tsc}</div>
+                  <div class="text-zinc-500">Found 1 error.</div>
+                </div>
+              </div>
+              <aside class="flex flex-col gap-4 lg:pt-1">
+                <h3 class="text-lg leading-snug font-semibold text-white">{c.title}</h3>
+                <p class="text-base leading-relaxed text-zinc-400" set:html={c.summary.replace(/`([^`]+)`/g, '<code class="font-mono text-sm text-zinc-200">$1</code>')} />
+                <a
+                  href={`${SITE.repo}/blob/main/examples/full-stack/${c.spec.file}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 font-mono text-xs text-zinc-400 no-underline transition-colors hover:text-white"
+                >
+                  {c.spec.file}
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </a>
+              </aside>
+            </div>
+          </div>
+        ))
+      }
+    </konfig-tabs>
+  </div>
+</section>
+
+<script>
+  class KonfigTabs extends HTMLElement {
+    connectedCallback() {
+      const tabs = Array.from(this.querySelectorAll("[role='tab']")).filter(
+        (el): el is HTMLButtonElement => el instanceof HTMLButtonElement
+      )
+      const panels = Array.from(this.querySelectorAll("[role='tabpanel']")).filter(
+        (el): el is HTMLElement => el instanceof HTMLElement
+      )
+      const activate = (index: number, focus: boolean) => {
+        tabs.forEach((tab, i) => {
+          const selected = i === index
+          tab.setAttribute("aria-selected", String(selected))
+          tab.tabIndex = selected ? 0 : -1
+          if (selected && focus) tab.focus()
+        })
+        panels.forEach((panel, i) => {
+          panel.hidden = i !== index
+        })
+      }
+      tabs.forEach((tab, i) => {
+        tab.addEventListener("click", () => activate(i, false))
+        tab.addEventListener("keydown", (e) => {
+          const last = tabs.length - 1
+          if (e.key === "ArrowRight") activate(i === last ? 0 : i + 1, true)
+          else if (e.key === "ArrowLeft") activate(i === 0 ? last : i - 1, true)
+          else if (e.key === "Home") activate(0, true)
+          else if (e.key === "End") activate(last, true)
+          else return
+          e.preventDefault()
+        })
+      })
+    }
+  }
+  if (!customElements.get("konfig-tabs")) customElements.define("konfig-tabs", KonfigTabs)
+</script>

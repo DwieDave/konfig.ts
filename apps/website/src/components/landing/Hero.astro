@@ -1,0 +1,90 @@
+---
+import { ArrowRight } from "@lucide/astro"
+import GridBackground from "@/components/GridBackground.astro"
+import InstallPanel from "@/components/ui/InstallPanel.astro"
+import { SITE } from "@/lib/site"
+
+const BUILT_ON = ["Effect", "Bun", "Argo CD", "Helm", "sops", "sealed-secrets", "external-secrets"] as const
+const STATS = [
+  { label: "tests", value: "659" },
+  { label: "line coverage", value: "95%" },
+  { label: "packages", value: "9" }
+] as const
+---
+
+<section id="top" class="hero-section relative w-full">
+  <GridBackground />
+  <div aria-hidden="true" class="hero-glow pointer-events-none absolute inset-x-0 top-0 h-150"></div>
+  <div class="relative mx-auto w-full max-w-295 px-4 pt-20 pb-24">
+    <div class="max-w-4xl text-left md:mx-auto md:text-center">
+      <a
+        href={SITE.releases}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="group mb-4 inline-flex items-center gap-2 font-mono text-sm tracking-wider text-zinc-300 uppercase no-underline transition-colors hover:text-white"
+      >
+        <span class="text-zinc-500 group-hover:text-zinc-400">//</span>
+        <span>v{SITE.version} — built on Effect {SITE.effectVersion}</span>
+        <ArrowRight class="text-zinc-500 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-300" size={16} aria-hidden="true" />
+      </a>
+
+      <h1 class="text-4xl leading-tighter font-bold text-white md:text-[3.4rem]">
+        Kubernetes config that fails at <span class="font-mono text-emerald-400">tsc</span>, not at
+        <span class="font-mono text-red-400">argocd sync</span>
+      </h1>
+
+      <p class="mt-6 max-w-3xl text-lg leading-snug text-zinc-400 md:mx-auto">
+        Typesafe Kubernetes + ArgoCD manifests in TypeScript, powered by Effect. Branded refs, env contracts and a
+        compile-time dependency graph catch the mistakes you'd otherwise discover during a Sunday-morning sync.
+      </p>
+
+      <div class="mx-auto mt-8 max-w-xl">
+        <InstallPanel />
+      </div>
+
+      <div class="mt-14 flex flex-col items-center gap-5">
+        <p class="font-mono text-sm font-medium tracking-wider text-zinc-400 uppercase">// Built on</p>
+        <ul class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 font-mono text-sm text-zinc-300">
+          {BUILT_ON.map((name) => <li class="tracking-tight">{name}</li>)}
+        </ul>
+        <ul class="mt-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+          {
+            STATS.map((s) => (
+              <li class="flex items-baseline gap-2 font-mono text-sm">
+                <span class="font-semibold text-white">{s.value}</span>
+                <span class="text-zinc-500">{s.label}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero-section {
+    --hero-glow-gradient:
+      radial-gradient(ellipse 50% 80% at 70% -20%, rgba(255, 255, 255, 0.12) 0%, transparent 40%),
+      radial-gradient(ellipse 30% 50% at 80% 0%, rgba(255, 255, 255, 0.08) 0%, transparent 30%);
+  }
+  @keyframes hero-glow-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+  .hero-glow {
+    background: var(--hero-glow-gradient);
+    animation: hero-glow-pulse 4s ease-in-out infinite;
+    will-change: opacity;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-glow {
+      animation: none;
+    }
+  }
+</style>

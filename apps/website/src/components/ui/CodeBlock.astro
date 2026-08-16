@@ -1,0 +1,149 @@
+---
+import { highlight, type Lang } from "@/lib/highlight"
+import type { ResolvedDiagnostic } from "@/lib/snippets"
+
+interface Props {
+  readonly code: string
+  readonly lang: Lang
+  readonly title?: string | undefined
+  readonly diagnostics?: ReadonlyArray<ResolvedDiagnostic> | undefined
+  readonly class?: string | undefined
+  /** Frame variant: `editor` (title bar + gutter) or `plain`. */
+  readonly variant?: "editor" | "plain" | undefined
+  readonly id?: string | undefined
+  readonly lineNumbers?: boolean | undefined
+}
+
+const { code, lang, title, diagnostics = [], class: className, variant = "editor", id, lineNumbers = true } = Astro.props
+const html = highlight(code, lang, diagnostics)
+const errorCount = diagnostics.length
+---
+
+<figure
+  id={id}
+  class:list={[
+    "code-frame relative overflow-hidden rounded-md border border-zinc-800 bg-[#0d0d10] text-left",
+    lineNumbers ? "" : "code-frame--plain",
+    className
+  ]}
+>
+  {
+    variant === "editor" && (
+      <figcaption class="flex h-9 items-center gap-3 border-b border-zinc-800 bg-zinc-950 px-3 font-mono text-xs text-zinc-400">
+        <span class="flex items-center gap-1.5" aria-hidden="true">
+          <span class="size-2.5 rounded-full bg-zinc-800" />
+          <span class="size-2.5 rounded-full bg-zinc-800" />
+          <span class="size-2.5 rounded-full bg-zinc-800" />
+        </span>
+        <span class="truncate text-zinc-300">{title}</span>
+        {errorCount > 0 && (
+          <span class="ml-auto inline-flex items-center gap-1.5 text-red-400">
+            <span class="size-1.5 rounded-full bg-red-400" aria-hidden="true" />
+            {errorCount} {errorCount === 1 ? "error" : "errors"}
+          </span>
+        )}
+      </figcaption>
+    )
+  }
+  <div class="code-scroll overflow-x-auto" set:html={html} />
+</figure>
+
+<style>
+  .code-frame :global(pre) {
+    margin: 0;
+    padding: 1rem 0;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    background: transparent;
+    counter-reset: line;
+  }
+  .code-frame :global(code) {
+    /* grid drops the whitespace-only text nodes between .line spans from layout,
+       while keeping them in the DOM so copy/paste preserves newlines. */
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr);
+    min-width: max-content;
+    font-family: inherit;
+  }
+  .code-frame :global(.line) {
+    display: block;
+    white-space: pre;
+    padding-inline: 1.25rem 1.5rem;
+    position: relative;
+  }
+  .code-frame :global(.line)::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 2ch;
+    margin-right: 1.5rem;
+    text-align: right;
+    color: rgb(63 63 70);
+    user-select: none;
+  }
+  .code-frame--plain :global(.line)::before {
+    display: none;
+  }
+  .code-frame :global(.line[data-diag-line])::before {
+    color: rgb(248 113 113);
+  }
+  .code-frame :global(.line[data-diag-line]) {
+    background: linear-gradient(to right, rgb(248 113 113 / 0.06), transparent 60%);
+  }
+  .code-frame :global(.line[data-diag-line])::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgb(248 113 113);
+  }
+</style>
+
+<script>
+  // Diagnostics live inside a horizontally scrolling frame, which would clip
+  // their tooltips. On hover/focus we lift the tip to viewport coordinates.
+  const MARGIN = 12
+  const place = (diag: HTMLElement, tip: HTMLElement) => {
+    const r = diag.getBoundingClientRect()
+    tip.style.position = "fixed"
+    tip.style.top = `${r.bottom + 6}px`
+    tip.style.left = `${r.left}px`
+    tip.style.right = "auto"
+    tip.style.display = "block"
+    const t = tip.getBoundingClientRect()
+    if (t.right > window.innerWidth - MARGIN) {
+      tip.style.left = `${Math.max(MARGIN, window.innerWidth - MARGIN - t.width)}px`
+    }
+    if (t.bottom > window.innerHeight - MARGIN) {
+      tip.style.top = `${Math.max(MARGIN, r.top - 6 - t.height)}px`
+    }
+  }
+  const hide = (tip: HTMLElement) => {
+    tip.style.display = ""
+    tip.style.position = ""
+    tip.style.top = ""
+    tip.style.left = ""
+  }
+  const wire = (diag: Element) => {
+    if (!(diag instanceof HTMLElement)) return
+    const tip = diag.querySelector(".diag-tip")
+    if (!(tip instanceof HTMLElement)) return
+    const show = () => place(diag, tip)
+    const off = () => hide(tip)
+    diag.addEventListener("mouseenter", show)
+    diag.addEventListener("mouseleave", off)
+    diag.addEventListener("focus", show)
+    diag.addEventListener("blur", off)
+    diag.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        off()
+        diag.blur()
+      }
+    })
+    document.addEventListener("scroll", off, { passive: true, capture: true })
+  }
+  document.querySelectorAll(".diag").forEach(wire)
+</script>

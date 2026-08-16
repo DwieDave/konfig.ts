@@ -1,0 +1,27 @@
+---
+import Eyebrow from "@/components/ui/Eyebrow.astro"
+
+const NOTS = [
+  { title: "Not a kustomize replacement", body: "For overlaying hand-written YAML you already have. konfig owns the manifest source." },
+  { title: "Not a runtime mutator", body: "It emits manifests; Argo CD or kubectl applies them. No admission controller, no operator." },
+  { title: "Not a higher-level abstraction", body: "No Crossplane, no OAM, no “Service” model beyond the explicit Workload.web helper." },
+  { title: "Not a helm replacement", body: "It calls helm. Charts you depend on stay charts; each templated document lifts as a RawYaml manifest." }
+] as const
+---
+
+<section id="not" class="relative w-full py-24 md:pt-40 md:pb-24">
+  <div class="mx-auto w-full max-w-295 px-4">
+    <Eyebrow>What it is not</Eyebrow>
+    <h2 class="max-w-lg text-2xl leading-tighter font-semibold text-white md:text-3xl">Scope, stated up front</h2>
+    <div class="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {
+        NOTS.map((n) => (
+          <article class="border border-zinc-800 bg-zinc-950 p-5">
+            <h3 class="font-mono text-sm font-medium text-white uppercase">{n.title}</h3>
+            <p class="mt-3 text-sm leading-relaxed text-zinc-400">{n.body}</p>
+          </article>
+        ))
+      }
+    </div>
+  </div>
+</section>

@@ -1,0 +1,14 @@
+{
+	"pid": 49650,
+	"port": 4321,
+	"url": "http://localhost:4321",
+	"urls": {
+		"local": [
+			"http://localhost:4321/konfig.ts"
+		],
+		"network": [],
+		"networkInterfaceNames": []
+	},
+	"background": true,
+	"startedAt": "2026-08-16T14:32:30.368Z"
+}

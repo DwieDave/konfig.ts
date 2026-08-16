@@ -1,0 +1,40 @@
+---
+import { ArrowUpRight } from "@lucide/astro"
+import Eyebrow from "@/components/ui/Eyebrow.astro"
+import { PACKAGES, SITE } from "@/lib/site"
+---
+
+<section id="packages" class="relative w-full py-24 md:pt-40 md:pb-24">
+  <div class="mx-auto w-full max-w-295 px-4">
+    <div class="mb-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div>
+        <Eyebrow>Packages</Eyebrow>
+        <h2 class="max-w-lg text-2xl leading-tighter font-semibold text-white md:text-3xl">Take the CLI, or just the pieces you need</h2>
+      </div>
+      <p class="max-w-lg text-lg leading-snug text-zinc-400 lg:justify-self-end">
+        Everything is published under <code class="font-mono text-base text-zinc-200">@konfig.ts/*</code> with provenance attestation. Manifest-only consumers can skip
+        <code class="font-mono text-base text-zinc-200">@effect/platform-node</code>.
+      </p>
+    </div>
+    <ul class="m-0 grid list-none grid-cols-1 gap-px overflow-hidden rounded-md border border-zinc-800 bg-zinc-800 p-0 md:grid-cols-3">
+      {
+        PACKAGES.map((p) => (
+          <li class="bg-zinc-950">
+            <a
+              href={`${SITE.repo}/tree/main/packages/${p.dir}#readme`}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="group flex h-full flex-col gap-2 p-5 no-underline transition-colors hover:bg-zinc-900/60"
+            >
+              <span class="flex items-center justify-between font-mono text-sm font-medium text-white">
+                {p.name}
+                <ArrowUpRight size={14} class="text-zinc-500 transition-colors group-hover:text-white" aria-hidden="true" />
+              </span>
+              <span class="text-sm leading-relaxed text-zinc-400">{p.blurb}</span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>

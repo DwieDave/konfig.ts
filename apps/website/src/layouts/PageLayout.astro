@@ -1,0 +1,26 @@
+---
+import DitheredOverlay from "@/components/DitheredOverlay.astro"
+import Footer from "@/components/Footer.astro"
+import GridRails from "@/components/GridRails.astro"
+import Navigation from "@/components/navigation/Navigation.astro"
+import BaseLayout from "@/layouts/BaseLayout.astro"
+
+interface Props {
+  readonly title?: string | undefined
+  readonly description?: string | undefined
+}
+
+const { title, description } = Astro.props
+---
+
+<BaseLayout {...title ? { title } : undefined} {...description ? { description } : undefined}>
+  <div class="relative min-h-screen bg-background text-foreground antialiased">
+    <DitheredOverlay />
+    <GridRails />
+    <Navigation />
+    <main id="main" class="relative w-full">
+      <slot />
+    </main>
+    <Footer />
+  </div>
+</BaseLayout>

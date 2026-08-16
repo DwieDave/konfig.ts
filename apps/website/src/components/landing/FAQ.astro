@@ -1,0 +1,78 @@
+---
+import Button from "@/components/ui/Button.astro"
+import Eyebrow from "@/components/ui/Eyebrow.astro"
+import { SITE } from "@/lib/site"
+
+const code = (s: string) => `<code class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-sm text-zinc-200">${s}</code>`
+
+const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }> = [
+  {
+    question: "Why is it built on Effect?",
+    answer: `<p>The dependency graph is Effect's <em>Requirements</em> channel doing what it already does. A module's build is an Effect; ${code("yield* Dep.Secret(\"ghcr-pull\")")} adds a requirement; composing modules provides it. There is no bespoke graph engine to learn — the compiler error you get is the ordinary "this Effect still needs X" error, with a konfig message attached.</p><p class="mt-4">Effect also gives us ${code("Schema")} at every binary boundary (helm, sops, kubeseal stdout), ${code("Config")} for the runtime decoder, and ${code("Redacted")} for secret values.</p>`
+  },
+  {
+    question: "Do I need Bun?",
+    answer: `<p>The CLI ${code("import()")}s your ${code(".ts")} sources at runtime, so it needs a TypeScript-capable runtime. Bun is the smoothest path; Node ≥ 23.6 (native type stripping) and Node 22.6+ with ${code("--experimental-strip-types")} work too, as does ${code("tsx")}. Pure-YAML commands like ${code("konfig diff")} run under plain Node.</p>`
+  },
+  {
+    question: "Why the exact Effect version pin?",
+    answer: `<p>Effect 4 is still in release-candidate. Its pre-release line makes breaking changes between builds, so a caret range would show up as ${code("ERESOLVE")} conflicts instead of a working install. Every ${code("@konfig.ts/*")} package pins the exact build it is developed against; the pin relaxes once Effect ships a stable 4.x.</p>`
+  },
+  {
+    question: "Can I keep my Helm charts?",
+    answer: `<p>Yes — that's the intended path. ${code("Helm.release({ repo, chart, version, digest, values })")} pulls the chart, verifies the tarball's SHA-256 against ${code("digest")} on every pull <em>and</em> every cache hit, templates it, and lifts each document as a ${code("RawYaml")} manifest inside your module. ${code("konfig crd extract")} even generates TypeScript types for the CRDs a chart ships.</p>`
+  },
+  {
+    question: "How do secrets stay out of git?",
+    answer: `<p>${code("Secret.define")} declares the shape only. At compose time you bind it to a backend: sops (encrypted file in the repo, decrypted in-cluster by the operator), sealed-secrets (${code("kubeseal")} against the cluster cert), or external-secrets (fetched from your vault). Whether a backend needs a plaintext ${code("source")} is encoded in its type; the sops backend fails closed if it sees an unencrypted value.</p>`
+  },
+  {
+    question: "Can I adopt it incrementally?",
+    answer: `<p>One Application at a time. Wrap an existing workload in ${code("Module.fixedNs")}, point ${code("konfig build")} at a new manifests directory, and add an Argo CD Application for it. Everything else keeps syncing from wherever it syncs from today.</p><p class="mt-4">Start with the <a href="${SITE.example}" target="_blank" rel="noopener noreferrer">full-stack example</a> — a monorepo with env contracts, a sops backend and Argo CD wiring, plus the worked failures shown above.</p>`
+  }
+]
+---
+
+<section id="faq" class="relative w-full py-24 md:pt-40 md:pb-24">
+  <div class="mx-auto w-full max-w-295">
+    <div class="flex flex-col lg:flex-row">
+      <div class="w-full px-4 lg:w-1/2">
+        <Eyebrow>FAQ</Eyebrow>
+        <h2 class="text-2xl leading-tighter font-semibold text-white md:text-3xl">Questions a platform team asks first</h2>
+        <p class="mt-5 max-w-lg text-lg leading-relaxed text-zinc-400">
+          Something missing? Open an issue — the README and each package's README go deeper.
+        </p>
+        <div class="mt-6">
+          <Button href={`${SITE.repo}/issues/new`} external>Ask on GitHub</Button>
+        </div>
+      </div>
+
+      <div class="mt-8 w-full px-4 lg:mt-0 lg:w-1/2 lg:pt-28 lg:pr-4 lg:pl-3">
+        <div class="space-y-4">
+          {
+            FAQS.map(({ question, answer }) => (
+              <details class="group rounded-md border border-zinc-700 hover:border-zinc-600 hover:bg-zinc-900/50">
+                <summary class="flex cursor-pointer list-none items-center justify-between bg-transparent px-5 py-4 text-base leading-snug font-medium text-zinc-300 hover:bg-transparent hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-300">
+                  {question}
+                  <span class="ml-2 flex h-6 w-6 shrink-0 items-center justify-center bg-zinc-800/80 text-zinc-400 transition-all duration-200 group-hover:bg-zinc-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform duration-200 group-open:rotate-180" aria-hidden="true">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </span>
+                </summary>
+                <div class="grid transition-[grid-template-rows] duration-200 ease-out [grid-template-rows:0fr] group-open:[grid-template-rows:1fr]">
+                  <div class="overflow-hidden">
+                    <div
+                      class="px-5 pt-0 pb-5 text-[15px] leading-relaxed text-zinc-400 [&_a]:text-zinc-200 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-white [&_p:not(:last-child)]:mb-4"
+                      set:html={answer}
+                    />
+                  </div>
+                </div>
+              </details>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

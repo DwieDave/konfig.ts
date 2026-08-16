@@ -1,0 +1,54 @@
+---
+import "../styles/global.css"
+import { Font } from "astro:assets"
+import { SITE, base } from "@/lib/site"
+
+interface Props {
+  readonly title?: string | undefined
+  readonly description?: string | undefined
+}
+
+const { title = SITE.title, description = SITE.description } = Astro.props
+const canonical = new URL(Astro.url.pathname, Astro.site)
+const ogImage = new URL(`${base}/og.png`, Astro.site)
+---
+
+<!doctype html>
+<html lang="en" class="dark" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="color-scheme" content="dark" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:site_name" content="konfig.ts" />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <Font cssVariable="--font-atkinson-sans" preload />
+    <Font cssVariable="--font-atkinson-mono" preload />
+    <style is:inline>
+      html {
+        background: oklch(0.141 0.005 285.823);
+        color-scheme: dark;
+        font-family: var(--font-atkinson-sans, ui-sans-serif, system-ui, sans-serif);
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-background text-foreground antialiased">
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200] focus:rounded-md focus:bg-zinc-100 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-zinc-900"
+      >Skip to content</a
+    >
+    <slot />
+  </body>
+</html>

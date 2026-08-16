@@ -1,0 +1,68 @@
+---
+import { ArrowUpRight } from "@lucide/astro"
+import Wordmark from "@/components/Wordmark.astro"
+import { PACKAGES, SITE } from "@/lib/site"
+
+const year = 2026
+const linkClass = "text-sm text-zinc-400 no-underline transition-colors hover:text-white"
+const ext = { target: "_blank", rel: "noopener noreferrer" }
+---
+
+<footer class="relative w-full px-4 pt-16 md:px-8 md:pt-20">
+  <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-zinc-950/0 via-zinc-950/0 to-zinc-900/50" aria-hidden="true"></div>
+  <div class="absolute top-0 right-0 left-0 h-px bg-zinc-800" aria-hidden="true"></div>
+
+  <div class="relative mx-auto w-full max-w-295">
+    <div class="mb-12 grid grid-cols-2 gap-x-6 gap-y-8 md:mb-20 md:gap-x-0 lg:grid-cols-4">
+      <div class="col-span-2 flex flex-col gap-4 lg:col-span-1 lg:pl-4">
+        <Wordmark class="text-base" />
+        <p class="max-w-xs text-sm text-zinc-500">
+          Typesafe Kubernetes + ArgoCD configuration in TypeScript, powered by Effect.
+        </p>
+      </div>
+
+      <div class="flex flex-col gap-4 lg:border-l lg:border-dashed lg:border-zinc-800 lg:pl-4">
+        <h3 class="font-mono text-sm font-semibold text-zinc-100 uppercase">Packages</h3>
+        <ul class="flex flex-col items-start gap-2">
+          {
+            PACKAGES.slice(0, 5).map((p) => (
+              <li>
+                <a href={`${SITE.repo}/tree/main/packages/${p.dir}`} {...ext} class:list={[linkClass, "font-mono text-xs"]}>
+                  {p.name}
+                </a>
+              </li>
+            ))
+          }
+          <li>
+            <a href="#packages" class:list={[linkClass, "text-xs"]}>All packages →</a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="flex flex-col gap-4 lg:border-l lg:border-dashed lg:border-zinc-800 lg:pl-4">
+        <h3 class="font-mono text-sm font-semibold text-zinc-100 uppercase">Resources</h3>
+        <ul class="flex flex-col items-start gap-2">
+          <li><a href={`${SITE.repo}#readme`} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>README <ArrowUpRight size={14} aria-hidden="true" /></a></li>
+          <li><a href={SITE.example} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>Full-stack example <ArrowUpRight size={14} aria-hidden="true" /></a></li>
+          <li><a href={`${SITE.repo}/tree/main/packages/cli#readme`} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>CLI reference <ArrowUpRight size={14} aria-hidden="true" /></a></li>
+          <li><a href={SITE.releases} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>Releases <ArrowUpRight size={14} aria-hidden="true" /></a></li>
+        </ul>
+      </div>
+
+      <div class="flex flex-col gap-4 lg:border-l lg:border-dashed lg:border-zinc-800 lg:pl-4">
+        <h3 class="font-mono text-sm font-semibold text-zinc-100 uppercase">Community</h3>
+        <ul class="flex flex-col items-start gap-2">
+          <li><a href={SITE.repo} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>GitHub <ArrowUpRight size={14} aria-hidden="true" /></a></li>
+          <li><a href={`${SITE.repo}/issues`} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>Issues <ArrowUpRight size={14} aria-hidden="true" /></a></li>
+          <li><a href={SITE.npm} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>npm <ArrowUpRight size={14} aria-hidden="true" /></a></li>
+          <li><a href="https://effect.website" {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>Effect <ArrowUpRight size={14} aria-hidden="true" /></a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flex flex-col items-start justify-between gap-3 border-t border-zinc-800 py-6 text-xs text-zinc-500 md:flex-row md:items-center">
+      <p>MIT License · © {year} {SITE.author}</p>
+      <p class="font-mono">Design after <a href="https://effect.website" {...ext} class="text-zinc-400 underline underline-offset-4 hover:text-white">effect.website</a> · Atkinson Hyperlegible</p>
+    </div>
+  </div>
+</footer>

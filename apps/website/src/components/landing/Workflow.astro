@@ -1,0 +1,84 @@
+---
+import CodeBlock from "@/components/ui/CodeBlock.astro"
+import Eyebrow from "@/components/ui/Eyebrow.astro"
+
+const STEPS = [
+  {
+    cmd: "konfig build prod",
+    title: "Render",
+    body: "Loads infra/env/prod.ts, resolves the dep graph, writes one directory per Application. Builds are input-hashed — a no-op build rewrites nothing, so Argo CD sees no churn."
+  },
+  {
+    cmd: "konfig validate prod --strict",
+    title: "Validate",
+    body: "Renders in memory and runs structural checks; --strict hands every document to kubeconform against the pinned --k8s-version."
+  },
+  {
+    cmd: "konfig diff prod",
+    title: "Diff",
+    body: "Structural multi-document diff against the committed baseline. Key reordering is invisible; Secret data is redacted before it hits your terminal."
+  },
+  {
+    cmd: "konfig set prod api ghcr.io/example/api:1.2.0",
+    title: "Promote",
+    body: "Rewrites images.json (schema-validated before and after) so image promotion is a one-line commit that re-renders deterministically."
+  }
+] as const
+
+const OTHERS = [
+  { cmd: "konfig docker write apps/api", what: "workspace-graph-aware multi-stage Dockerfile" },
+  { cmd: "konfig crd extract | verify", what: "TypeScript types from the CRDs in your Helm charts, drift-checked" },
+  { cmd: "konfig helm fetch --all", what: "warm the chart cache; digests verified" },
+  { cmd: "konfig graph --dev", what: "ASCII workspace dependency graph" }
+] as const
+
+const SHELL = STEPS.map((s) => `$ ${s.cmd}`).join("\n")
+---
+
+<section id="workflow" class="relative w-full overflow-hidden py-24 md:pt-40 md:pb-24">
+  <div class="absolute inset-0 bg-linear-to-b from-zinc-950/0 via-zinc-950/0 to-zinc-900/50" aria-hidden="true"></div>
+  <div class="relative mx-auto w-full max-w-295">
+    <div class="mb-12 grid grid-cols-1 gap-8 px-4 lg:grid-cols-2 lg:items-center">
+      <div>
+        <Eyebrow>The workflow</Eyebrow>
+        <h2 class="max-w-2xl text-2xl leading-tighter font-semibold text-white md:text-3xl">Four commands from source to a clean Argo CD sync</h2>
+        <p class="mt-4 max-w-lg text-lg leading-snug text-zinc-400">
+          konfig emits manifests; Argo CD applies them. There's no operator, no admission controller, nothing running in the cluster.
+        </p>
+      </div>
+      <div class="min-w-0">
+        <CodeBlock code={SHELL} lang="bash" title="zsh" lineNumbers={false} />
+      </div>
+    </div>
+
+    <div class="px-4">
+      <ol class="m-0 grid list-none grid-cols-1 gap-6 p-0 md:grid-cols-4">
+        {
+          STEPS.map((s, i) => (
+            <li class="flex flex-col gap-2">
+              <span class="font-mono text-sm text-zinc-400">0{i + 1}</span>
+              <p class="text-base leading-relaxed text-zinc-400">
+                <span class="font-medium text-white">{s.title}: </span>
+                {s.body}
+              </p>
+            </li>
+          ))
+        }
+      </ol>
+
+      <div class="mt-12 border-t border-dashed border-zinc-800 pt-6">
+        <p class="mb-3 font-mono text-xs tracking-wider text-zinc-500 uppercase">Also in the box</p>
+        <ul class="m-0 grid list-none grid-cols-1 gap-x-8 gap-y-2 p-0 md:grid-cols-2">
+          {
+            OTHERS.map((o) => (
+              <li class="flex flex-wrap items-baseline gap-x-3 text-sm">
+                <code class="font-mono text-zinc-200">{o.cmd}</code>
+                <span class="text-zinc-500">{o.what}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>

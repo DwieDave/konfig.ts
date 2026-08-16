@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   // "examples/**" is illustrative sample code, not a production surface —
   // exclude both its files and its bun/npm workspaces from analysis.
-  "ignore": [".generated/**", "dist/**", "scratchpad/**", "examples/**"],
+  "ignore": [".generated/**", "dist/**", "scratchpad/**", "examples/**", "website/**", "effect/**"],
   "ignoreDependencies": [
     // Referenced only by name in tsconfig.base.json's `compilerOptions.plugins` —
     // an optional editor-only TS language-service plugin, not a runtime/build import.
@@ -12,7 +12,9 @@
     "examples",
     "examples/full-stack",
     "examples/full-stack/apps/*",
-    "examples/full-stack/shared/*"
+    "examples/full-stack/shared/*",
+    // Astro app — checked by `astro check` in its own workspace.
+    "apps/website"
   ],
   "workspaces": {
     ".": {

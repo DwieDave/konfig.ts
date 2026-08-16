@@ -1,0 +1,62 @@
+---
+import { Check } from "@lucide/astro"
+import CodeBlock from "@/components/ui/CodeBlock.astro"
+import Eyebrow from "@/components/ui/Eyebrow.astro"
+import { SNIPPETS, load } from "@/lib/catalog"
+
+const contract = load(SNIPPETS.envContract)
+const secrets = load(SNIPPETS.envSecrets)
+const bind = load(SNIPPETS.envBind)
+const runtime = load(SNIPPETS.envRuntime)
+---
+
+<section id="both-sides" class="relative w-full py-24 md:pt-40 md:pb-24">
+  <div class="mx-auto w-full max-w-295 px-4">
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-12">
+      <div>
+        <Eyebrow>One source, both sides of the wire</Eyebrow>
+        <h2 class="max-w-lg text-2xl leading-tighter font-semibold text-white md:text-3xl">
+          Declare the env contract once. The pod spec and the process both import it.
+        </h2>
+        <p class="mt-4 max-w-lg text-lg text-zinc-400">
+          <code class="font-mono text-base text-zinc-200">apiEnv</code> is a value. <code class="font-mono text-base text-zinc-200">Environment.bind</code>
+          turns it into the Deployment env block plus the secret backend's CRs; <code class="font-mono text-base text-zinc-200">Environment.runtime</code>
+          decodes the same variables at startup into a typed record.
+        </p>
+        <ul class="m-0 mt-5 list-none space-y-2 p-0">
+          <li class="flex items-center gap-2 text-sm text-zinc-400">
+            <Check class="h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+            <span>Rename <code class="font-mono text-zinc-200">DATABASE_URL</code> in one place — the typechecker flags every consumer</span>
+          </li>
+          <li class="flex items-center gap-2 text-sm text-zinc-400">
+            <Check class="h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+            <span>Secret members are <code class="font-mono text-zinc-200">Redacted</code> at runtime; literals carry an Effect <code class="font-mono text-zinc-200">Config</code> schema</span>
+          </li>
+          <li class="flex items-center gap-2 text-sm text-zinc-400">
+            <Check class="h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+            <span>Downward API fields (<code class="font-mono text-zinc-200">metadata.name</code>) are part of the same contract</span>
+          </li>
+        </ul>
+      </div>
+      <div class="flex flex-col gap-3">
+        <CodeBlock code={secrets.code} lang="ts" title="shared/env-contracts/src/secrets.ts" />
+        <CodeBlock code={contract.code} lang="ts" title="shared/env-contracts/src/bundles.ts" />
+      </div>
+    </div>
+
+    <div class="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div>
+        <p class="mb-3 font-mono text-xs tracking-wider text-zinc-500 uppercase">
+          <span class="text-zinc-600">←</span> manifest side · <span class="text-zinc-300">Environment.bind</span>
+        </p>
+        <CodeBlock code={bind.code} lang="ts" title="infra/modules/api.ts" />
+      </div>
+      <div>
+        <p class="mb-3 font-mono text-xs tracking-wider text-zinc-500 uppercase">
+          process side · <span class="text-zinc-300">Environment.runtime</span> <span class="text-zinc-600">→</span>
+        </p>
+        <CodeBlock code={runtime.code} lang="ts" title="apps/api/src/main.ts" />
+      </div>
+    </div>
+  </div>
+</section>
