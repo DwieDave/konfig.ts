@@ -90,7 +90,7 @@ export const filenameFor = (resource: {
   if (typeof name !== "string" || name.length === 0) {
     throw new Error(`filenameFor: resource '${kind}' has no metadata.name`)
   }
-  return `${kind}-${_sanitizeNameForFilename(name)}.yaml`
+  return `${_sanitizeNameForFilename(kind)}-${_sanitizeNameForFilename(name)}.yaml`
 }
 
 const _sanitizeNameForFilename = (name: string): string => name.replace(/[./]/g, "-")

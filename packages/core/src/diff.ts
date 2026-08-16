@@ -26,6 +26,11 @@ const _redactAnnotationMap = (annotations: Record<string, unknown>): Record<stri
   }
   return out
 }
+const _redactSecretDataMap = (data: Record<string, unknown>): Record<string, unknown> => {
+  const out: Record<string, unknown> = {}
+  for (const k of Object.keys(data)) out[k] = "<redacted>"
+  return out
+}
 
 export interface RedactOptions {
   // Normalize numeric strings only ("1.0" == 1); "true" stays a string.
@@ -63,6 +68,10 @@ export const redact = (input: RedactInput): unknown => {
       }
       if (k === "annotations" && parentKey === "metadata" && v !== null && typeof v === "object") {
         out[k] = _redactAnnotationMap(unsafeCoerce(v, "metadata.annotations is Record<string, string>"))
+        continue
+      }
+      if ((k === "data" || k === "stringData") && obj.kind === "Secret" && v !== null && typeof v === "object") {
+        out[k] = _redactSecretDataMap(unsafeCoerce(v, "Secret data/stringData is a map of key -> value"))
         continue
       }
       out[k] = redact({ value: v, parentKey: k, options })

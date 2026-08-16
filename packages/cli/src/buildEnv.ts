@@ -300,7 +300,7 @@ export const writeFiles = (
         .makeDirectory(path.dirname(stagedPath), { recursive: true })
         .pipe(Effect.mapError((cause) => new WriteEnvError({ path: stagedPath, cause })))
       yield* fs
-        .writeFileString(stagedPath, file.content)
+        .writeFileString(stagedPath, file.content, { mode: 0o600 })
         .pipe(Effect.mapError((cause) => new WriteEnvError({ path: stagedPath, cause })))
       written.push(file.path)
     }
