@@ -29,7 +29,7 @@ const OTHERS = [
   { cmd: "konfig docker write apps/api", what: "workspace-graph-aware multi-stage Dockerfile" },
   { cmd: "konfig crd extract | verify", what: "TypeScript types from the CRDs in your Helm charts, drift-checked" },
   { cmd: "konfig helm fetch --all", what: "warm the chart cache; digests verified" },
-  { cmd: "konfig graph --dev", what: "ASCII workspace dependency graph" }
+  { cmd: "konfig graph --with-dev", what: "ASCII workspace dependency graph" }
 ] as const
 
 const SHELL = STEPS.map((s) => `$ ${s.cmd}`).join("\n")

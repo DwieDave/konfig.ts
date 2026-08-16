@@ -30,7 +30,10 @@ const STATS = [
 
       <h1 class="text-4xl leading-tighter font-bold text-white md:text-[3.4rem]">
         Kubernetes config that fails at <span class="font-mono text-emerald-400">tsc</span>, not at
-        <span class="font-mono text-red-400">argocd sync</span>
+        <konfig-rotating-word class="rotating-word font-mono text-red-400" aria-label="argocd sync, or flux reconcile">
+          <span data-word class="rotating-word__item" data-active>argocd sync</span>
+          <span data-word class="rotating-word__item">flux reconcile</span>
+        </konfig-rotating-word>
       </h1>
 
       <p class="mt-6 max-w-3xl text-lg leading-snug text-zinc-400 md:mx-auto">
@@ -63,6 +66,42 @@ const STATS = [
 </section>
 
 <style>
+  /* Stack both words in one inline-grid cell; fade/slide between them. */
+  .rotating-word {
+    display: inline-grid;
+    grid-template-areas: "word";
+    vertical-align: baseline;
+    text-align: left;
+  }
+  .rotating-word__item {
+    grid-area: word;
+    justify-self: start;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(0.35em);
+    transition:
+      opacity 500ms ease,
+      transform 500ms ease;
+  }
+  .rotating-word__item[data-active] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .rotating-word__item[data-leaving] {
+    opacity: 0;
+    transform: translateY(-0.35em);
+  }
+  @media (min-width: 768px) {
+    .rotating-word__item {
+      justify-self: center;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rotating-word__item {
+      transition: none;
+    }
+  }
+
   .hero-section {
     --hero-glow-gradient:
       radial-gradient(ellipse 50% 80% at 70% -20%, rgba(255, 255, 255, 0.12) 0%, transparent 40%),
@@ -88,3 +127,33 @@ const STATS = [
     }
   }
 </style>
+
+<script>
+  const INTERVAL_MS = 3200
+
+  class KonfigRotatingWord extends HTMLElement {
+    #timer: ReturnType<typeof setInterval> | undefined
+
+    connectedCallback() {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+      const words = Array.from(this.querySelectorAll("[data-word]")).filter((el): el is HTMLElement => el instanceof HTMLElement)
+      if (words.length < 2) return
+      let index = 0
+      this.#timer = setInterval(() => {
+        const current = words[index]
+        index = (index + 1) % words.length
+        const next = words[index]
+        if (current === undefined || next === undefined) return
+        current.removeAttribute("data-active")
+        current.setAttribute("data-leaving", "")
+        next.setAttribute("data-active", "")
+        setTimeout(() => current.removeAttribute("data-leaving"), 500)
+      }, INTERVAL_MS)
+    }
+
+    disconnectedCallback() {
+      if (this.#timer !== undefined) clearInterval(this.#timer)
+    }
+  }
+  if (!customElements.get("konfig-rotating-word")) customElements.define("konfig-rotating-word", KonfigRotatingWord)
+</script>

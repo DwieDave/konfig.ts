@@ -14,7 +14,7 @@ const ext = { target: "_blank", rel: "noopener noreferrer" }
 
   <div class="relative mx-auto w-full max-w-295">
     <div class="mb-12 grid grid-cols-2 gap-x-6 gap-y-8 md:mb-20 md:gap-x-0 lg:grid-cols-4">
-      <div class="col-span-2 flex flex-col gap-4 lg:col-span-1 lg:pl-4">
+      <div class="col-span-2 flex flex-col gap-4 pl-4 lg:col-span-1 lg:pr-8">
         <Wordmark class="text-base" />
         <p class="max-w-xs text-sm text-zinc-500">
           Typesafe Kubernetes + ArgoCD configuration in TypeScript, powered by Effect.
@@ -27,7 +27,7 @@ const ext = { target: "_blank", rel: "noopener noreferrer" }
           {
             PACKAGES.slice(0, 5).map((p) => (
               <li>
-                <a href={`${base}/docs/packages/${p.dir}/`} class:list={[linkClass, "font-mono text-xs"]}>
+                <a href={`https://www.npmjs.com/package/${p.name}`} {...ext} class:list={[linkClass, "font-mono text-xs"]}>
                   {p.name}
                 </a>
               </li>
@@ -61,9 +61,9 @@ const ext = { target: "_blank", rel: "noopener noreferrer" }
       </div>
     </div>
 
-    <div class="flex flex-col items-start justify-between gap-3 border-t border-zinc-800 py-6 text-xs text-zinc-500 md:flex-row md:items-center">
+    <div class="flex flex-col items-start justify-between gap-3 border-t border-zinc-800 px-4 py-6 text-xs text-zinc-500 md:flex-row md:items-center">
       <p>MIT License · © {year} <a href={SITE.repo.replace(/\/konfig\.ts$/, "")} target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-white">{SITE.author}</a></p>
-      <p class="font-mono">Design after <a href="https://effect.website" {...ext} class="text-zinc-400 underline underline-offset-4 hover:text-white">effect.website</a></p>
+      <p class="font-mono">Designed after <a href="https://effect.website" {...ext} class="text-zinc-400 underline underline-offset-4 hover:text-white">effect.website</a></p>
     </div>
   </div>
 </footer>
