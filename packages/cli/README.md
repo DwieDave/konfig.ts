@@ -32,14 +32,14 @@ baseline directory) run under plain Node.
 
 Every command walks up from the cwd to find a `konfig.json`. Key fields:
 
-| Field                               | Meaning                                                                           |
-| ----------------------------------- | --------------------------------------------------------------------------------- |
-| `root`                              | directory (relative to `konfig.json`) holding your `env/`, `modules/`, and charts |
-| `envs`                              | optional `<env> → { entry }` map overriding the default env-file path             |
-| `outDir.manifests`                  | where rendered manifests are written                                              |
+| Field                               | Meaning                                                                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `root`                              | directory (relative to `konfig.json`) holding your `env/`, `modules/`, and charts                                  |
+| `envs`                              | optional `<env> → { entry }` map overriding the default env-file path                                              |
+| `outDir.manifests`                  | where rendered manifests are written                                                                               |
 | `helm.cacheDir` / `helm.minVersion` | accepted by the schema, but not read yet: `helm fetch`, `crd` and `Helm.release` use the `KONFIG_*` env vars below |
-| `diff.baseline`                     | baseline manifest tree for `konfig diff`                                          |
-| `clusters`                          | per-cluster registry / ingressClass / storageClass / repositoryUrl                |
+| `diff.baseline`                     | baseline manifest tree for `konfig diff`                                                                           |
+| `clusters`                          | per-cluster registry / ingressClass / storageClass / repositoryUrl                                                 |
 
 Paths for the Helm cache, chart registry and CRD codegen come from environment
 variables (defaults in parentheses): `KONFIG_HELM_CACHE` (`.konfig/helm-cache`),
