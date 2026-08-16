@@ -138,16 +138,16 @@ console.log(`api listening on :${config.port}`)
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/), currently in beta.
+konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
 Until Effect ships a stable 4.x, every `@konfig.ts/*` package requires the
-exact beta it is developed against:
+exact pre-release it is developed against:
 
-- **`effect@4.0.0-beta.70`** — required by every package.
-- **`@effect/platform-node@4.0.0-beta.70`** — required only for `render()`
-  (the Node filesystem/subprocess entrypoint in `@konfig.ts/core`);
-  manifest-only consumers can omit it (it is declared as an optional peer).
+- **`effect@4.0.0-rc.109`** — required by every package.
+- **`@effect/platform-node@4.0.0-rc.109`** — a regular dependency of
+  `@konfig.ts/core` (its `render()` entrypoint needs the Node filesystem and
+  subprocess services), so it is installed automatically with core.
 
-The pin is exact on purpose: Effect's beta line makes breaking changes
+The pin is exact on purpose: Effect's pre-release line makes breaking changes
 between builds, so a looser range would surface as `ERESOLVE` install
 conflicts rather than a working install. It relaxes to a caret range once
 Effect reaches a stable 4.x.

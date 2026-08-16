@@ -63,15 +63,15 @@ requirement. See the `Environment` section of
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/), currently in beta.
-Until Effect ships a stable 4.x, install the exact beta konfig.ts is built
+konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
+Until Effect ships a stable 4.x, install the exact pre-release konfig.ts is built
 against:
 
-- **`effect@4.0.0-beta.70`** — required by every package.
-- **`@effect/platform-node@4.0.0-beta.70`** — required only when you call
+- **`effect@4.0.0-rc.109`** — required by every package.
+- **`@effect/platform-node@4.0.0-rc.109`** — required only when you call
   `render()` (the Node filesystem/subprocess entrypoint); manifest-only
   consumers can omit it (it is declared as an optional peer).
 
-The pin is exact on purpose: Effect's beta line makes breaking changes between
+The pin is exact on purpose: Effect's pre-release line makes breaking changes between
 builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
 to a caret range once Effect reaches a stable 4.x.

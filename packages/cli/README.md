@@ -37,9 +37,14 @@ Every command walks up from the cwd to find a `konfig.json`. Key fields:
 | `root`                              | directory (relative to `konfig.json`) holding your `env/`, `modules/`, and charts |
 | `envs`                              | optional `<env> → { entry }` map overriding the default env-file path             |
 | `outDir.manifests`                  | where rendered manifests are written                                              |
-| `helm.cacheDir` / `helm.minVersion` | Helm tarball cache and minimum `helm` version                                     |
+| `helm.cacheDir` / `helm.minVersion` | accepted by the schema, but not read yet: `helm fetch`, `crd` and `Helm.release` use the `KONFIG_*` env vars below |
 | `diff.baseline`                     | baseline manifest tree for `konfig diff`                                          |
 | `clusters`                          | per-cluster registry / ingressClass / storageClass / repositoryUrl                |
+
+Paths for the Helm cache, chart registry and CRD codegen come from environment
+variables (defaults in parentheses): `KONFIG_HELM_CACHE` (`.konfig/helm-cache`),
+`KONFIG_CHARTS_DIR` (`infra/k8s-konfig/charts`), `KONFIG_CRD_OUT_DIR`
+(`.generated/crd`), `KONFIG_HELM_MIN_VERSION` (`3.16.0`).
 
 An **env** is a named render target (`prod`, `staging`). Its entry file is
 `envs.NAME.entry`, else `<root>/env/NAME.ts`; that module's **default export**
@@ -55,7 +60,7 @@ konfig set <env> <app> <imageRef>   # update one image tag in images.json
 konfig crd extract|verify           # CRD TypeScript codegen from Helm charts
 konfig helm fetch --all             # pre-fetch chart tarballs into the cache
 konfig docker preview|write|diff <app>   # Dockerfile generation (@konfig.ts/docker)
-konfig graph [--dev]                # print the workspace dependency graph
+konfig graph [target] [--with-dev] [--full] [--width <n>]   # print the workspace dependency graph
 ```
 
 `build` / `validate` / `diff` share `--cluster <name>`, `--k8s-version <ver>`,
@@ -63,14 +68,14 @@ and repeatable `--flag k=v`, all readable from your program's `RenderContext`.
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/), currently in beta.
-Until Effect ships a stable 4.x, the CLI pins the exact beta it is built against
+konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
+Until Effect ships a stable 4.x, the CLI pins the exact pre-release it is built against
 and installs them as direct dependencies:
 
-- **`effect@4.0.0-beta.70`**
-- **`@effect/platform-node@4.0.0-beta.70`** — the CLI uses `render()` and the
+- **`effect@4.0.0-rc.109`**
+- **`@effect/platform-node@4.0.0-rc.109`** — the CLI uses `render()` and the
   Node filesystem/subprocess services.
 
-The pin is exact on purpose: Effect's beta line makes breaking changes between
+The pin is exact on purpose: Effect's pre-release line makes breaking changes between
 builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
 to a caret range once Effect reaches a stable 4.x.

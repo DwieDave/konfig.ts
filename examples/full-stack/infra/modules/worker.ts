@@ -10,7 +10,7 @@ export interface WorkerOpts {
   readonly sopsBase: string
 }
 
-// konfig: WHY reuses db-creds SopsSecret; AppOfApps dedupes the duplicate manifest by (kind, namespace, name)
+// konfig: WHY reuses the db-creds contract; api and worker each emit an identical SopsSecret into their own Application directory (konfig does not dedupe across Applications)
 export const defineWorker = Module.fixedNs({
   target: Application.target,
   namespace: "app",

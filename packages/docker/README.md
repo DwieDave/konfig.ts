@@ -46,10 +46,12 @@ konfig docker diff apps/api         # non-zero exit if the on-disk files drifted
 docker build -f apps/api/Dockerfile .
 ```
 
-Production is a four-stage build (`base → deps → builder → runner`): `deps`
-installs from the full workspace set, `builder` copies only the target's
-closure and runs the build, `runner` is non-root, pinned to `engines.<runtime>`,
-and copies only what the spec declares. Dev is a single `base → dev` stage.
+Production is a multi-stage build (`base → deps → builder → runner`, plus a
+`prod-deps` stage when `runner.production` is `true`): `deps` installs from the
+full workspace set, `builder` copies only the target's closure and runs the
+build, `prod-deps` re-installs production-only dependencies for that closure,
+`runner` is non-root, pinned to `engines.<runtime>`, and copies only what the
+spec declares. Dev is a single `base → dev` stage.
 
 ## Spec atoms
 
@@ -73,15 +75,15 @@ the discriminated union of failure modes (`MonorepoRootNotFound`,
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/), currently in beta.
-Until Effect ships a stable 4.x, install the exact beta konfig.ts is built
+konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
+Until Effect ships a stable 4.x, install the exact pre-release konfig.ts is built
 against:
 
-- **`effect@4.0.0-beta.70`** — required by every package.
-- **`@effect/platform-node@4.0.0-beta.70`** — required only when you call
+- **`effect@4.0.0-rc.109`** — required by every package.
+- **`@effect/platform-node@4.0.0-rc.109`** — required only when you call
   `render()` (the Node filesystem/subprocess entrypoint); manifest-only
   consumers can omit it (it is declared as an optional peer).
 
-The pin is exact on purpose: Effect's beta line makes breaking changes between
+The pin is exact on purpose: Effect's pre-release line makes breaking changes between
 builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
 to a caret range once Effect reaches a stable 4.x.

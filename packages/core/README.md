@@ -68,17 +68,17 @@ lives one level up, in the Effect `Layer`s that `Module` and
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/), currently in beta.
-Until Effect ships a stable 4.x, install the exact beta konfig.ts is built
+konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
+Until Effect ships a stable 4.x, install the exact pre-release konfig.ts is built
 against:
 
-- **`effect@4.0.0-beta.70`** — required by every package (declared as a peer
+- **`effect@4.0.0-rc.109`** — required by every package (declared as a peer
   dependency).
-- **`@effect/platform-node@4.0.0-beta.70`** — a regular (non-optional)
+- **`@effect/platform-node@4.0.0-rc.109`** — a regular (non-optional)
   dependency of `@konfig.ts/core`, since `render()` needs its Node
   filesystem/subprocess implementations. It is installed automatically
   whenever you install `@konfig.ts/core`.
 
-The pin is exact on purpose: Effect's beta line makes breaking changes between
+The pin is exact on purpose: Effect's pre-release line makes breaking changes between
 builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
 to a caret range once Effect reaches a stable 4.x.
