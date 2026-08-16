@@ -8,7 +8,7 @@ export const SITE = {
   example: "https://github.com/DwieDave/konfig.ts/tree/main/examples/full-stack",
   version: "0.0.10",
   effectVersion: "4.0.0-rc",
-  author: "David Stahl-Gruber"
+  author: "@DwieDave"
 } as const
 
 export const base = import.meta.env.BASE_URL.replace(/\/$/, "")
