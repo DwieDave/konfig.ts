@@ -13,13 +13,23 @@
     "scratchpad/**"
   ],
   "rules": {
+    "app/no-ambient-nondeterminism": "error",
+    "app/no-any": "error",
     "app/no-banned-type-assertions": "error",
+    "app/no-bare-error": "error",
     "app/no-comments": "error",
+    "app/no-effect-asvoid": "error",
     "app/no-multiple-function-params": "error",
+    "app/no-node-child-process": "error",
+    "app/no-parse-coercion": "error",
     "app/no-record-string-undefined": "error",
+    "app/no-service-option": "error",
+    "app/no-silent-error-swallow": "error",
     "app/no-switch": "error",
     "app/no-sync-schema-apis": "error",
+    "app/no-try-catch": "error",
     "app/no-type-assertion": "warn",
+    "app/no-typeof-object": "warn",
     "app/no-yieldless-effect-gen": "error",
     "app/private-function-prefix": "error"
   },
@@ -27,13 +37,18 @@
     {
       "files": ["packages/oxc/src/**/*.ts"],
       "rules": {
-        "app/no-type-assertion": "off"
+        "app/no-type-assertion": "off",
+        "app/no-typeof-object": "off"
       }
     },
     {
       "files": ["**/*.test.ts", "**/test-types/**/*.ts"],
       "rules": {
         "effecttsgo/floating-effect": "off",
+        "app/no-bare-error": "off",
+        "app/no-typeof-object": "off",
+        "app/no-effect-asvoid": "off",
+        "app/no-try-catch": "off",
         "app/no-type-assertion": "off",
         "app/no-banned-type-assertions": "off",
         "app/no-multiple-function-params": "off",

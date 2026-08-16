@@ -51,4 +51,32 @@ describe("no-banned-type-assertions", () => {
     const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
     expect(harness.reports).toHaveLength(0)
   })
+
+  it("reports nested `any` (e.g. `as any[]`)", () => {
+    const node: AstNode = {
+      type: "TSAsExpression",
+      expression: { type: "Identifier", name: "x" },
+      typeAnnotation: { type: "TSArrayType", elementType: { type: "TSAnyKeyword" } }
+    }
+    const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
+    expect(harness.reports).toHaveLength(1)
+    expect(harness.reports[0]?.message).toContain("as any")
+  })
+
+  it("does not report nested `unknown` (e.g. `Record<string, unknown>`)", () => {
+    const node: AstNode = {
+      type: "TSAsExpression",
+      expression: { type: "Identifier", name: "x" },
+      typeAnnotation: {
+        type: "TSTypeReference",
+        typeName: { type: "Identifier", name: "Record" },
+        typeArguments: {
+          type: "TSTypeParameterInstantiation",
+          params: [{ type: "TSStringKeyword" }, { type: "TSUnknownKeyword" }]
+        }
+      }
+    }
+    const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
+    expect(harness.reports).toHaveLength(0)
+  })
 })
