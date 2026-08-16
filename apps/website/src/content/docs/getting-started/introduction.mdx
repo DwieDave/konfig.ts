@@ -1,17 +1,59 @@
 ---
 title: Introduction
-description: What konfig.ts is, what it is not, and what you need to run it.
+description: What konfig.ts is, what it gives you, what it is not, and what you need to run it.
 sidebar:
   order: 0
 ---
 
-import { Aside } from "@/components/docs"
-import Diagnostics from "@/components/docs/Diagnostics.astro"
+import { Aside, Diagnostics } from "@/components/docs"
 
-konfig.ts renders Kubernetes manifests and Argo CD `Application` resources from TypeScript.
+konfig.ts renders Kubernetes manifests and Argo CD `Application` resources from TypeScript. It is a set of `@konfig.ts/*` packages built on [Effect](https://effect.website/), plus a `konfig` CLI that loads your `.ts` sources, renders them, and writes YAML into a directory Argo CD can sync.
 
-<Aside type="tip">Placeholder page: the real content is written in the content pass.</Aside>
+The point is not YAML generation by itself. konfig.ts wires two layers of an application from one TypeScript source:
 
-## A first failure
+- The **manifest layer**: Deployments, Services, Secrets, Helm releases, Argo CD Applications, and the dependency graph between them.
+- The **runtime config layer**: the environment variables your process reads at startup, decoded with Effect `Config`.
+
+Because both layers come from the same declarations, the mistakes you would otherwise discover at `argocd sync` time (a workload referencing a Secret nobody created, an env var read in code but missing from the pod spec, a chart pinned by version but not by digest) become TypeScript errors or fail-closed render errors.
+
+## What you get
+
+- **A dependency graph checked at the type level.** Modules declare what they need (`Dep.Need<...>`) and what they provide (`Dep.Provide<...>`). `AppOfApps.fromModules` composes them, and `AppOfApps.entrypoint` refuses to compile until every need has a provider. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+- **One env contract for both sides.** `Secret.define`, `Literal.define`, and `Downward.define` from `@konfig.ts/env` produce atoms that `Environment.bind` turns into a Deployment env block and Secret resources, and that `Environment.runtime` decodes inside the running process. Rename a variable once and both sides move.
+- **Deterministic YAML and structural diffs.** Output uses stable key ordering (YAML 1.1, deterministic field sort, Argo CD friendly). `konfig diff` compares rendered output against a baseline structurally, so reordered keys and multi-document files do not show up as noise.
+- **Secret backends as typed values.** sops, sealed-secrets, and external-secrets each lower a `Secret.define` to the matching custom resource, with schema validation on the binary's output. Whether a backend requires a source file is encoded in its type, so forgetting the source for a sops backend is a compile error.
+- **Helm with digest verification.** `Helm.release({ digest })` hashes the cached chart tarball on every pull and every cache hit. A chart whose bytes change fails the next render.
+
+## A compile error instead of a sync failure
+
+The example below is one of the worked-failure files shipped in `examples/full-stack/infra/envs/`. The `api` module does `yield* Dep.Secret("ghcr-pull")`, but no module in the list provides that Secret, so `AppOfApps.entrypoint` rejects the program before anything is rendered.
 
 <Diagnostics case="missing-provider" />
+
+## What konfig.ts is not
+
+- **Not a kustomize replacement.** If you have hand-written YAML and want to overlay it, konfig.ts is the wrong tool. It owns the manifest source.
+- **Not a runtime mutator.** It emits manifests; Argo CD or `kubectl` applies them. There is no admission controller and no operator.
+- **Not a higher-level platform abstraction.** No Crossplane, no OAM, no "Service" model that hides Deployment, Service, and Ingress. `Workload.web` is a helper that emits those resources explicitly.
+- **Not a Helm replacement.** It shells out to `helm template`. Charts you depend on stay charts; each templated document is lifted into the render as a `RawYaml` manifest.
+
+## Requirements
+
+<Aside type="caution" title="Exact Effect pin">
+Every `@konfig.ts/*` package is built against Effect 4 (release candidate) and declares an exact peer version, currently `effect@4.0.0-rc.109`. The pin is exact on purpose: the release-candidate line makes breaking changes between builds, and a caret range would surface as `ERESOLVE` conflicts instead of a working install. Install exactly the version the packages declare. The pin relaxes once Effect ships a stable 4.x.
+</Aside>
+
+The `konfig` CLI imports your `.ts` sources at runtime, so it needs a TypeScript-capable runtime:
+
+| Runtime | Status |
+| --- | --- |
+| Bun | Recommended, runs `.ts` with no flags |
+| Node >= 23.6 | Works, native type stripping |
+| Node 22.6 to 23.5 | Works with `--experimental-strip-types` |
+| `tsx` | Works: `tsx node_modules/.bin/konfig ...` |
+
+Rendering Helm-based modules calls the `helm` binary; `konfig validate --strict` calls `kubeconform`. Type-checking and in-memory renders of manifest-only projects need neither.
+
+## Next
+
+Continue with [Installation](/konfig.ts/docs/getting-started/installation/), then build one Application end to end in [Your first environment](/konfig.ts/docs/getting-started/your-first-environment/). To understand what the compile error above catches, read [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).

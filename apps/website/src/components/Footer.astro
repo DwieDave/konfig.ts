@@ -1,7 +1,7 @@
 ---
 import { ArrowUpRight } from "@lucide/astro"
 import Wordmark from "@/components/Wordmark.astro"
-import { PACKAGES, SITE } from "@/lib/site"
+import { PACKAGES, SITE, base } from "@/lib/site"
 
 const year = 2026
 const linkClass = "text-sm text-zinc-400 no-underline transition-colors hover:text-white"
@@ -27,14 +27,14 @@ const ext = { target: "_blank", rel: "noopener noreferrer" }
           {
             PACKAGES.slice(0, 5).map((p) => (
               <li>
-                <a href={`${SITE.repo}/tree/main/packages/${p.dir}`} {...ext} class:list={[linkClass, "font-mono text-xs"]}>
+                <a href={`${base}/docs/packages/${p.dir}/`} class:list={[linkClass, "font-mono text-xs"]}>
                   {p.name}
                 </a>
               </li>
             ))
           }
           <li>
-            <a href="#packages" class:list={[linkClass, "text-xs"]}>All packages →</a>
+            <a href={`${base}/#packages`} class:list={[linkClass, "text-xs"]}>All packages</a>
           </li>
         </ul>
       </div>
@@ -42,9 +42,10 @@ const ext = { target: "_blank", rel: "noopener noreferrer" }
       <div class="flex flex-col gap-4 lg:border-l lg:border-dashed lg:border-zinc-800 lg:pl-4">
         <h3 class="font-mono text-sm font-semibold text-zinc-100 uppercase">Resources</h3>
         <ul class="flex flex-col items-start gap-2">
+          <li><a href={`${base}/docs/getting-started/introduction/`} class={linkClass}>Documentation</a></li>
+          <li><a href={`${base}/docs/cli/overview/`} class={linkClass}>CLI reference</a></li>
           <li><a href={`${SITE.repo}#readme`} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>README <ArrowUpRight size={14} aria-hidden="true" /></a></li>
           <li><a href={SITE.example} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>Full-stack example <ArrowUpRight size={14} aria-hidden="true" /></a></li>
-          <li><a href={`${SITE.repo}/tree/main/packages/cli#readme`} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>CLI reference <ArrowUpRight size={14} aria-hidden="true" /></a></li>
           <li><a href={SITE.releases} {...ext} class:list={[linkClass, "inline-flex items-center gap-2"]}>Releases <ArrowUpRight size={14} aria-hidden="true" /></a></li>
         </ul>
       </div>

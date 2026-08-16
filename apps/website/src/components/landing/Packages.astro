@@ -1,7 +1,7 @@
 ---
 import { ArrowUpRight } from "@lucide/astro"
 import Eyebrow from "@/components/ui/Eyebrow.astro"
-import { PACKAGES, SITE } from "@/lib/site"
+import { PACKAGES, base } from "@/lib/site"
 ---
 
 <section id="packages" class="relative w-full py-24 md:pt-40 md:pb-24">
@@ -20,9 +20,7 @@ import { PACKAGES, SITE } from "@/lib/site"
         PACKAGES.map((p) => (
           <li class="bg-zinc-950">
             <a
-              href={`${SITE.repo}/tree/main/packages/${p.dir}#readme`}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={`${base}/docs/packages/${p.dir}/`}
               class="group flex h-full flex-col gap-2 p-5 no-underline transition-colors hover:bg-zinc-900/60"
             >
               <span class="flex items-center justify-between font-mono text-sm font-medium text-white">
