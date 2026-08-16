@@ -61,6 +61,19 @@ import { base } from "@/lib/site"
     readonly debouncedSearch: (term: string) => Promise<{ readonly results: ReadonlyArray<PagefindResult> } | null>
   }
 
+  const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object"
+
+  const asPagefind = (mod: unknown): Pagefind | undefined => {
+    if (!isRecord(mod)) return undefined
+    const init = mod["init"]
+    const debouncedSearch = mod["debouncedSearch"]
+    if (typeof init !== "function" || typeof debouncedSearch !== "function") return undefined
+    return {
+      init: () => Promise.resolve(init()).then(() => undefined),
+      debouncedSearch: (term: string) => Promise.resolve(debouncedSearch(term))
+    }
+  }
+
   class KonfigSearch extends HTMLElement {
     #pagefind: Pagefind | undefined
     #loadFailed = false
@@ -71,10 +84,10 @@ import { base } from "@/lib/site"
       try {
         // Not `import(url)`: the bundler rewrites that and (with rolldown) leaves a
         // dangling preload helper behind. A plain dynamic import at runtime works.
-        const importer = new Function("u", "return import(u)") as (u: string) => Promise<unknown>
+        const importer = new Function("u", "return import(u)")
         const mod: unknown = await importer(url)
-        if (typeof mod === "object" && mod !== null && "debouncedSearch" in mod && "init" in mod) {
-          const pf = mod as Pagefind
+        const pf = asPagefind(mod)
+        if (pf !== undefined) {
           await pf.init()
           this.#pagefind = pf
         }

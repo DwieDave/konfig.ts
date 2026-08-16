@@ -95,7 +95,10 @@
         "app/no-multiple-function-params": "off",
         "app/no-ambient-nondeterminism": "off",
         "app/private-function-prefix": "off",
-        "effecttsgo/node-builtin-import": "off"
+        "effecttsgo/node-builtin-import": "off",
+        "app/no-try-catch": "off",
+        "app/no-typeof-object": "off",
+        "app/no-type-assertion": "error"
       }
     }
   ]
