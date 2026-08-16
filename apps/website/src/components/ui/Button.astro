@@ -3,18 +3,24 @@ interface Props {
   readonly href: string
   readonly external?: boolean | undefined
   readonly size?: "sm" | "md" | undefined
+  readonly variant?: "primary" | "secondary" | undefined
   readonly class?: string | undefined
 }
-const { href, external = false, size = "sm", class: className } = Astro.props
-const sizeClass = size === "md" ? "rounded-md px-6 py-3 text-base bg-zinc-900/50" : "rounded-lg px-4 py-2 text-sm bg-zinc-900"
+const { href, external = false, size = "sm", variant = "secondary", class: className } = Astro.props
+const sizeClass = size === "md" ? "h-11 rounded-lg px-5 text-sm" : "h-9 rounded-lg px-4 text-sm"
+const variantClass =
+  variant === "primary"
+    ? "bg-white text-zinc-950 hover:bg-zinc-200 border border-transparent"
+    : "bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800"
 ---
 
 <a
   href={href}
   {...external ? { target: "_blank", rel: "noopener noreferrer" } : {}}
   class:list={[
-    "group inline-flex items-center justify-center gap-2 border border-zinc-700 font-medium text-white no-underline transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-300",
+    "group inline-flex items-center justify-center gap-2 font-medium whitespace-nowrap no-underline transition-colors hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-300",
     sizeClass,
+    variantClass,
     className
   ]}
 >

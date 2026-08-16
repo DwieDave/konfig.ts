@@ -1,5 +1,5 @@
 ---
-import { ArrowRight } from "@lucide/astro"
+import { ArrowRight, ArrowUpRight } from "@lucide/astro"
 import GridBackground from "@/components/GridBackground.astro"
 import Button from "@/components/ui/Button.astro"
 import InstallPanel from "@/components/ui/InstallPanel.astro"
@@ -19,12 +19,15 @@ import { SITE } from "@/lib/site"
       <div class="mx-auto mt-8 w-full max-w-xl">
         <InstallPanel />
       </div>
-      <div class="mt-6 flex flex-row items-center justify-center gap-3">
-        <Button href={`${SITE.repo}#readme`} external size="md" class="w-44">
-          <ArrowRight class="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+      <div class="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <Button href={`${SITE.repo}#readme`} external size="md" variant="primary">
           Read the README
+          <ArrowRight class="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
         </Button>
-        <Button href={SITE.example} external size="md" class="w-44">Full-stack example</Button>
+        <Button href={SITE.example} external size="md">
+          Full-stack example
+          <ArrowUpRight class="size-4 text-zinc-500 transition-colors group-hover:text-white" aria-hidden="true" />
+        </Button>
       </div>
     </div>
   </div>
