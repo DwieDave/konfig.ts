@@ -1,0 +1,201 @@
+---
+/**
+ * Interactive hero grid: cells under the cursor light up with a faint fill and a tiny
+ * mono `Kind/name` label — a nod to konfig rendering one YAML file per resource.
+ * Aligns with GridBackground (cell = 73.75rem/6 × 194px, origin x at 50%, y at hero top).
+ * Static (empty) on touch, prefers-reduced-motion, and while the hero is off-screen.
+ */
+---
+
+<konfig-hero-grid aria-hidden="true" class="pointer-events-none absolute inset-0 block overflow-hidden font-mono">
+  <canvas class="absolute inset-0 h-full w-full"></canvas>
+</konfig-hero-grid>
+
+<script>
+  const CELL_W_REM = 73.75 / 6
+  const CELL_H = 194
+  const HOLD_MS = 350
+  const FADE_MS = 1100
+  const LABELS = [
+    "Deployment/api",
+    "Service/api",
+    "Secret/db-creds",
+    "Application/postgres",
+    "SopsSecret/ghcr-pull",
+    "Namespace/prod",
+    "Ingress/web",
+    "ConfigMap/env",
+    "ExternalSecret/stripe",
+    "CronJob/backup",
+    "HelmRelease/redis",
+    "ServiceAccount/ci"
+  ] as const
+
+  interface Cell {
+    readonly col: number
+    readonly row: number
+    readonly label: string
+    /** Timestamp at which the fade-out started; undefined while still hovered. */
+    leftAt: number | undefined
+  }
+
+  const labelFor = (col: number, row: number): string => {
+    const h = Math.abs((col * 73856093) ^ (row * 19349663)) % LABELS.length
+    return LABELS[h] ?? LABELS[0]
+  }
+
+  class KonfigHeroGrid extends HTMLElement {
+    #canvas: HTMLCanvasElement | undefined
+    #ctx: CanvasRenderingContext2D | undefined
+    #cells: Cell[] = []
+    #raf = 0
+    #visible = false
+    #pending: { x: number; y: number } | undefined
+    #cleanup: Array<() => void> = []
+
+    connectedCallback() {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+      if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return
+      const canvas = this.querySelector("canvas")
+      if (!(canvas instanceof HTMLCanvasElement)) return
+      const ctx = canvas.getContext("2d")
+      if (ctx === null) return
+      this.#canvas = canvas
+      this.#ctx = ctx
+
+      const resize = () => this.#resize()
+      const ro = new ResizeObserver(resize)
+      ro.observe(this)
+      const io = new IntersectionObserver(([entry]) => {
+        this.#visible = entry?.isIntersecting ?? false
+        if (!this.#visible) this.#cells = []
+        this.#schedule()
+      })
+      io.observe(this)
+      const onMove = (e: PointerEvent) => {
+        if (!this.#visible) return
+        this.#pending = { x: e.clientX, y: e.clientY }
+        this.#schedule()
+      }
+      const onLeave = () => {
+        this.#pending = undefined
+        this.#release(performance.now())
+        this.#schedule()
+      }
+      window.addEventListener("pointermove", onMove, { passive: true })
+      document.addEventListener("pointerleave", onLeave)
+      this.#cleanup.push(
+        () => ro.disconnect(),
+        () => io.disconnect(),
+        () => window.removeEventListener("pointermove", onMove),
+        () => document.removeEventListener("pointerleave", onLeave)
+      )
+      resize()
+    }
+
+    disconnectedCallback() {
+      for (const fn of this.#cleanup) fn()
+      this.#cleanup = []
+      cancelAnimationFrame(this.#raf)
+    }
+
+    #resize() {
+      const canvas = this.#canvas
+      const ctx = this.#ctx
+      if (canvas === undefined || ctx === undefined) return
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const { width, height } = this.getBoundingClientRect()
+      canvas.width = Math.round(width * dpr)
+      canvas.height = Math.round(height * dpr)
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      this.#schedule()
+    }
+
+    #release(now: number) {
+      for (const c of this.#cells) if (c.leftAt === undefined) c.leftAt = now
+    }
+
+    #schedule() {
+      if (this.#raf !== 0) return
+      this.#raf = requestAnimationFrame((t) => {
+        this.#raf = 0
+        this.#tick(t)
+      })
+    }
+
+    #tick(now: number) {
+      const ctx = this.#ctx
+      if (ctx === undefined) return
+      const rect = this.getBoundingClientRect()
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+      const cw = CELL_W_REM * rem
+      const originX = rect.width / 2
+
+      // Resolve the pending pointer position into a hovered cell.
+      const p = this.#pending
+      if (p !== undefined) {
+        const x = p.x - rect.left
+        const y = p.y - rect.top
+        const inside = x >= 0 && y >= 0 && x < rect.width && y < rect.height
+        const col = Math.floor((x - originX) / cw)
+        const row = Math.floor(y / CELL_H)
+        const current = this.#cells.find((c) => c.leftAt === undefined)
+        if (!inside) {
+          this.#release(now)
+        } else if (current === undefined || current.col !== col || current.row !== row) {
+          this.#release(now)
+          this.#cells = this.#cells.filter((c) => !(c.col === col && c.row === row))
+          this.#cells.push({ col, row, label: labelFor(col, row), leftAt: undefined })
+        }
+      }
+
+      // Labels stay clear of the hero copy: measure tight text bounds of each content block.
+      const content = this.parentElement?.querySelector("[data-hero-content]")
+      const copyRects: DOMRect[] = []
+      if (content instanceof HTMLElement) {
+        for (const child of content.children) {
+          const range = document.createRange()
+          range.selectNodeContents(child)
+          copyRects.push(range.getBoundingClientRect())
+        }
+      }
+      const PAD = 14
+      const collides = (lx: number, ly: number, lw: number, lh: number) =>
+        copyRects.some(
+          (r) =>
+            lx < r.right - rect.left + PAD &&
+            lx + lw > r.left - rect.left - PAD &&
+            ly < r.bottom - rect.top + PAD &&
+            ly + lh > r.top - rect.top - PAD
+        )
+
+      // Draw.
+      ctx.clearRect(0, 0, rect.width, rect.height)
+      ctx.font = `10px ${getComputedStyle(this).fontFamily}`
+      ctx.textBaseline = "bottom"
+      const alive: Cell[] = []
+      for (const c of this.#cells) {
+        const elapsed = c.leftAt === undefined ? 0 : now - c.leftAt
+        if (elapsed >= HOLD_MS + FADE_MS) continue
+        const k = Math.max(0, elapsed - HOLD_MS) / FADE_MS
+        const a = 1 - k * k * (3 - 2 * k) // smoothstep ease-out
+        alive.push(c)
+        const x = originX + c.col * cw
+        const y = c.row * CELL_H
+        ctx.fillStyle = `rgba(39, 39, 42, ${0.4 * a})` // zinc-800/40
+        ctx.fillRect(x + 1, y + 1, cw - 1, CELL_H - 1)
+        ctx.strokeStyle = `rgba(63, 63, 70, ${0.9 * a})` // zinc-700
+        ctx.lineWidth = 1
+        ctx.strokeRect(x + 0.5, y + 0.5, cw, CELL_H)
+        const lw = ctx.measureText(c.label).width
+        if (collides(x + 10, y + CELL_H - 18, lw, 10)) continue
+        ctx.fillStyle = `rgba(82, 82, 91, ${a})` // zinc-600
+        ctx.fillText(c.label, x + 10, y + CELL_H - 8)
+      }
+      this.#cells = alive
+      const animating = alive.some((c) => c.leftAt !== undefined)
+      if (animating && this.#visible) this.#schedule()
+    }
+  }
+  if (!customElements.get("konfig-hero-grid")) customElements.define("konfig-hero-grid", KonfigHeroGrid)
+</script>
