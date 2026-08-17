@@ -73,6 +73,19 @@ const STATS = [
 </section>
 
 <style>
+  /* Headline squiggle: the docs' diagnostic underline, so the failing word reads as a tsc error. */
+  .rotating-word {
+    padding-bottom: 0.18em; /* room for the underline inside the overflow clip */
+  }
+  .rotating-word__item {
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-color: rgb(248 113 113 / 0.7);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.12em;
+    text-decoration-skip-ink: none;
+  }
+
   /* Stack both words in one inline-grid cell; fade/slide between them. */
   .rotating-word {
     display: inline-grid;
@@ -106,10 +119,30 @@ const STATS = [
     }
   }
 
-  .hero-section {
-    --hero-glow-gradient:
-      radial-gradient(ellipse 50% 80% at 70% -20%, rgba(255, 255, 255, 0.12) 0%, transparent 40%),
-      radial-gradient(ellipse 30% 50% at 80% 0%, rgba(255, 255, 255, 0.08) 0%, transparent 30%);
+  /* Glow hue drifts through the same neons the hover grid uses for resource categories
+     (emerald → sky → amber → violet → fuchsia); registered so the colour interpolates. */
+  @property --hero-glow-color {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: rgb(52 211 153);
+  }
+  @keyframes hero-glow-hue {
+    0%,
+    100% {
+      --hero-glow-color: rgb(52 211 153);
+    }
+    20% {
+      --hero-glow-color: rgb(56 189 248);
+    }
+    40% {
+      --hero-glow-color: rgb(251 191 36);
+    }
+    60% {
+      --hero-glow-color: rgb(167 139 250);
+    }
+    80% {
+      --hero-glow-color: rgb(232 121 249);
+    }
   }
   @keyframes hero-glow-pulse {
     0%,
@@ -121,8 +154,13 @@ const STATS = [
     }
   }
   .hero-glow {
-    background: var(--hero-glow-gradient);
-    animation: hero-glow-pulse 4s ease-in-out infinite;
+    --hero-glow-color: rgb(52 211 153);
+    background:
+      radial-gradient(ellipse 50% 80% at 70% -20%, color-mix(in srgb, var(--hero-glow-color) 14%, transparent) 0%, transparent 40%),
+      radial-gradient(ellipse 30% 50% at 80% 0%, color-mix(in srgb, var(--hero-glow-color) 9%, transparent) 0%, transparent 30%);
+    animation:
+      hero-glow-pulse 4s ease-in-out infinite,
+      hero-glow-hue 40s linear infinite;
     will-change: opacity;
   }
   @media (prefers-reduced-motion: reduce) {
