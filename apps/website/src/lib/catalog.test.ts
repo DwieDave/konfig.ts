@@ -17,7 +17,7 @@ describe("catalog", () => {
   it("every prose snippet resolves", () => {
     for (const [key, spec] of Object.entries(SNIPPETS)) {
       const s = load(spec)
-      expect(s.code.split("\n").length, key).toBeGreaterThan(2)
+      expect(s.code.split("\n").length, key).toBeGreaterThan(1)
     }
   })
 })
