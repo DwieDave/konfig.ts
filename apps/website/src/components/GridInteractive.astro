@@ -172,10 +172,11 @@
         for (const child of content.children) {
           const range = document.createRange()
           range.selectNodeContents(child)
-          copyRects.push(range.getBoundingClientRect())
+          // Per-line boxes, not the union: a short centred line must not block the cells beside it.
+          for (const r of range.getClientRects()) copyRects.push(r)
         }
       }
-      const PAD = 14
+      const PAD = 6
       const collides = (lx: number, ly: number, lw: number, lh: number) =>
         copyRects.some(
           (r) =>
