@@ -1,6 +1,17 @@
 ---
 import { Check, Copy } from "@lucide/astro"
-import { DEFAULT_PACKAGE_MANAGER, DEFAULT_SPEC, getInstallCommand, PACKAGE_MANAGERS } from "@/lib/install-command"
+import BunLogo from "@/assets/logos/bun.svg"
+import NpmLogo from "@/assets/logos/npm.svg"
+import PnpmLogo from "@/assets/logos/pnpm.svg"
+import YarnLogo from "@/assets/logos/yarn.svg"
+import { DEFAULT_PACKAGE_MANAGER, DEFAULT_SPEC, getInstallCommand, PACKAGE_MANAGERS, type PackageManager } from "@/lib/install-command"
+
+const PM_ICONS: Record<PackageManager, { readonly Icon: typeof BunLogo; readonly className: string }> = {
+  bun: { Icon: BunLogo, className: "h-4 w-auto" },
+  pnpm: { Icon: PnpmLogo, className: "h-4 w-auto" },
+  npm: { Icon: NpmLogo, className: "h-5 w-auto fill-white" },
+  yarn: { Icon: YarnLogo, className: "h-4 w-auto" }
+}
 
 /**
  * Install command with a package-manager switch and copy button. The chosen
@@ -39,6 +50,14 @@ const spec = { packages, dev }
         aria-label={`Package manager: ${DEFAULT_PACKAGE_MANAGER}`}
         class="flex cursor-pointer items-center gap-1.5 rounded-sm border-r border-zinc-800 py-0.5 pr-3 pl-1 text-xs text-zinc-300 transition-colors hover:text-white"
       >
+        <span data-role="pm-icon-active" aria-hidden="true" class="flex items-center">
+          {
+            PACKAGE_MANAGERS.map((pm) => {
+              const { Icon, className } = PM_ICONS[pm]
+              return <Icon data-pm-icon={pm} class:list={[className, pm === DEFAULT_PACKAGE_MANAGER ? "" : "hidden"]} />
+            })
+          }
+        </span>
         <span data-role="pm-label" class="font-semibold">{DEFAULT_PACKAGE_MANAGER}</span>
         <svg data-role="pm-chevron" class="size-4 text-zinc-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="m6 9 6 6 6-6"></path>
@@ -54,6 +73,7 @@ const spec = { packages, dev }
         {
           PACKAGE_MANAGERS.map((pm) => {
             const isDefault = pm === DEFAULT_PACKAGE_MANAGER
+            const { Icon, className } = PM_ICONS[pm]
             return (
               <li>
                 <button
@@ -67,6 +87,7 @@ const spec = { packages, dev }
                     isDefault ? "text-white" : "text-zinc-400"
                   ]}
                 >
+                  <Icon class={className} aria-hidden="true" />
                   <span class="flex-1">{pm}</span>
                   <Check data-role="pm-check" size={16} class:list={["shrink-0 text-zinc-500", isDefault ? "" : "hidden"]} aria-hidden="true" />
                 </button>
@@ -151,6 +172,9 @@ const spec = { packages, dev }
         this.#pm = pm
         commandText.textContent = getInstallCommand(pm, this.#spec)
         label.textContent = pm
+        for (const icon of this.querySelectorAll("[data-pm-icon]")) {
+          icon.classList.toggle("hidden", icon.getAttribute("data-pm-icon") !== pm)
+        }
         chip.setAttribute("aria-label", `Package manager: ${pm}`)
         for (const opt of options) {
           const selected = opt.dataset["pm"] === pm
