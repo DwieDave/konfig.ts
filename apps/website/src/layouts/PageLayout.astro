@@ -18,7 +18,8 @@ const { title, description } = Astro.props
     <DitheredOverlay />
     <GridRails />
     <Navigation active="home" />
-    <main id="main" class="relative w-full">
+    <!-- overflow-x-clip: a too-wide element (e.g. the rotating hero word) must never widen the document and shift the sticky nav -->
+    <main id="main" class="relative w-full overflow-x-clip">
       <slot />
     </main>
     <Footer />
