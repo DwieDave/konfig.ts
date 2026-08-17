@@ -15,8 +15,10 @@ import PageLayout from "@/layouts/PageLayout.astro"
 
 <PageLayout>
   <div aria-hidden="true" class="pointer-events-none absolute inset-0 z-0 hidden lg:block">
-    <div class="mx-auto h-full w-full max-w-295">
-      <div class="landing-rails-center absolute inset-y-0 left-1/2 w-px -translate-x-1/2"></div>
+    <div class="relative mx-auto h-full w-full max-w-295">
+      <konfig-scroll-rail class="landing-rails-center absolute inset-y-0 left-1/2 block w-px -translate-x-1/2">
+        <span class="landing-rails-fill absolute inset-x-0 top-0 block"></span>
+      </konfig-scroll-rail>
     </div>
   </div>
   <Hero />
@@ -41,7 +43,47 @@ import PageLayout from "@/layouts/PageLayout.astro"
 </PageLayout>
 
 <style>
+  /* Dashed centre rail; the solid fill grows with scroll position — read it as sync progress through the page. */
   .landing-rails-center {
+    --rail-progress: 0;
     background-image: repeating-linear-gradient(to bottom, rgb(39 39 42) 0, rgb(39 39 42) 2px, transparent 2px, transparent 4px);
   }
+  .landing-rails-fill {
+    height: calc(var(--rail-progress) * 100%);
+    background: rgb(63 63 70); /* zinc-700 */
+    transition: height 120ms linear;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .landing-rails-fill {
+      transition: none;
+    }
+  }
 </style>
+
+<script>
+  /** Fills `--rail-progress` (0..1) with how far the viewport bottom has travelled through this element. */
+  class KonfigScrollRail extends HTMLElement {
+    #raf = 0
+    #onScroll = () => {
+      if (this.#raf !== 0) return
+      this.#raf = requestAnimationFrame(() => {
+        this.#raf = 0
+        const rect = this.getBoundingClientRect()
+        const p = rect.height <= 0 ? 0 : (window.innerHeight - rect.top) / rect.height
+        this.style.setProperty("--rail-progress", String(Math.min(1, Math.max(0, p))))
+      })
+    }
+    connectedCallback() {
+      window.addEventListener("scroll", this.#onScroll, { passive: true })
+      window.addEventListener("resize", this.#onScroll)
+      this.#onScroll()
+    }
+    disconnectedCallback() {
+      window.removeEventListener("scroll", this.#onScroll)
+      window.removeEventListener("resize", this.#onScroll)
+      cancelAnimationFrame(this.#raf)
+    }
+  }
+
+  if (!customElements.get("konfig-scroll-rail")) customElements.define("konfig-scroll-rail", KonfigScrollRail)
+</script>
