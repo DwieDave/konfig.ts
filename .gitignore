@@ -21,3 +21,6 @@ coverage
 
 # Astro generated types/cache
 .astro/
+
+# Local planning docs, kept out of the repo
+docs/superpowers/
