@@ -6,8 +6,6 @@ export const SITE = {
   npm: "https://www.npmjs.com/package/@konfig.ts/core",
   releases: "https://github.com/DwieDave/konfig.ts/releases",
   example: "https://github.com/DwieDave/konfig.ts/tree/main/examples/full-stack",
-  version: "0.0.10",
-  effectVersion: "4.0.0-rc",
   author: "@DwieDave"
 } as const
 

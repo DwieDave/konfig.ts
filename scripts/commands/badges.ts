@@ -19,6 +19,32 @@ const TestResults = Schema.Struct({
   numPassedTests: Schema.Number
 })
 
+/** Shape of `.github/badges/stats.json`, consumed by apps/website at build time. */
+export const RepoStats = Schema.Struct({
+  tests: Schema.Number,
+  lineCoverage: Schema.Number,
+  linesCovered: Schema.Number,
+  linesTotal: Schema.Number,
+  effectVersion: Schema.String,
+  packages: Schema.Number
+})
+export type RepoStats = typeof RepoStats.Type
+
+export const _makeStats = (input: {
+  readonly tests: number
+  readonly linesCovered: number
+  readonly linesTotal: number
+  readonly effectVersion: string
+  readonly packages: number
+}): RepoStats => ({
+  tests: input.tests,
+  lineCoverage: input.linesTotal === 0 ? 0 : Number(((input.linesCovered / input.linesTotal) * 100).toFixed(1)),
+  linesCovered: input.linesCovered,
+  linesTotal: input.linesTotal,
+  effectVersion: input.effectVersion,
+  packages: input.packages
+})
+
 const _coverageColor = (pct: number) => pct >= 90 ? "#4c1" : pct >= 75 ? "#a3c51c" : pct >= 60 ? "#dfb317" : "#e05d44"
 
 const _writeBadge = (input: { readonly file: string; readonly svg: string }) =>
@@ -85,11 +111,18 @@ export const badgesCommand = Command.make(
         svg: renderBadge({ label: "effect", value: effectVersion, color: "#312e81" })
       })
 
+      // Machine-readable copy of the same numbers, consumed by apps/website at build time.
+      const packages = (yield* coveragePackageNames).length
+      const stats = _makeStats({ tests, linesCovered, linesTotal, effectVersion, packages })
+      yield* _writeBadge({ file: path.join(outDir, "stats.json"), svg: `${JSON.stringify(stats, null, 2)}\n` })
+
       yield* Console.log(`line coverage ${pct.toFixed(1)}% (${linesCovered}/${linesTotal})`)
       yield* Console.log(`tests ${tests}`)
       yield* Console.log(`effect ${effectVersion}`)
-      yield* Console.log(`wrote coverage.svg, tests.svg, effect.svg -> .github/badges/`)
+      yield* Console.log(`wrote coverage.svg, tests.svg, effect.svg, stats.json -> .github/badges/`)
     })
 ).pipe(
-  Command.withDescription("Render the README badges (line coverage, test count, effect version) from local data")
+  Command.withDescription(
+    "Render the README badges (line coverage, test count, effect version) and stats.json from local data"
+  )
 )

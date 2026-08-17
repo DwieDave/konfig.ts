@@ -6,6 +6,7 @@ on:
     paths:
       - "apps/website/**"
       - "examples/full-stack/**"
+      - "packages/**"
       - "bun.lock"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
@@ -28,6 +29,8 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: Regenerate test and coverage stats (.github/badges/stats.json)
+        run: bun run test:coverage
       - name: Check website
         run: bun run --cwd apps/website check
       - name: Build website
