@@ -56,13 +56,13 @@ const STEPS = [
           Rename <code class="font-mono text-base text-zinc-200">DATABASE_URL</code> in one place and the typechecker flags every consumer.
         </p>
 
-        <ol class="m-0 mt-8 flex list-none flex-col gap-3 p-0">
+        <ol class="m-0 mt-6 flex list-none flex-col gap-2 p-0">
           {
             STEPS.map((s, i) => (
               <li
                 data-step-item={s.id}
                 class:list={[
-                  "step-item rounded-md border p-4 transition-all",
+                  "step-item rounded-md border px-4 py-3 transition-all",
                   i === 0 ? "border-zinc-700 bg-zinc-900/40" : "step-item--pending border-zinc-800 bg-transparent"
                 ]}
               >
@@ -72,7 +72,7 @@ const STEPS = [
                   </span>
                   <div class="min-w-0 flex-1">
                     <h3 class="text-base font-semibold text-white">{s.title}</h3>
-                    <p class="mt-1 text-sm leading-relaxed text-zinc-400">{s.body}</p>
+                    <p class="mt-0.5 text-sm leading-snug text-zinc-400">{s.body}</p>
                     {
                       s.reveal !== undefined && (
                         <button
@@ -82,7 +82,7 @@ const STEPS = [
                           aria-expanded="false"
                           class:list={[
                             i === 0 ? "" : "step-button--pending",
-                            "mt-3 inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:border-zinc-500 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-300"
+                            "mt-2 inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:border-zinc-500 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-300"
                           ]}
                         >
                           <ArrowDown size={14} aria-hidden="true" />
@@ -109,7 +109,7 @@ const STEPS = [
         </ul>
       </div>
 
-      <div class="step-stage grid min-w-0">
+      <div class="step-stage grid min-w-0 self-start md:sticky md:top-24">
         <div id="step-declare" data-step="declare" data-active class="step-panel flex flex-col gap-3">
           <p class="font-mono text-xs tracking-wider text-zinc-500 uppercase"><span class="text-zinc-300">01</span> · shared/env-contracts</p>
           <CodeBlock code={secrets.code} lang="ts" title="shared/env-contracts/src/secrets.ts" />
