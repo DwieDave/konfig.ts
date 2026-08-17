@@ -160,9 +160,13 @@ export const SNIPPETS = {
     file: "shared/env-contracts/src/secrets.ts",
     between: { startAfter: "@konfig.ts/env", endBefore: "export const s3Creds" }
   },
-  envRuntime: {
+  envRuntimeImports: {
     file: "apps/api/src/main.ts",
-    lines: [2, 22]
+    lines: [2, 3]
+  },
+  envRuntimeUse: {
+    file: "apps/api/src/main.ts",
+    between: { startAt: "const port = config.http.port", endBefore: "Bun.serve" }
   },
   envBind: {
     file: "infra/modules/api.ts",
