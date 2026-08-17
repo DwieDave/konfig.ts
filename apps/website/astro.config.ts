@@ -4,6 +4,7 @@ import expressiveCode from "astro-expressive-code"
 import pagefind from "astro-pagefind"
 import { defineConfig, fontProviders } from "astro/config"
 import { fileURLToPath } from "node:url"
+import { rehypeTableWrap } from "./src/lib/docs/rehype-table-wrap"
 
 const SANS = "@fontsource-variable/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin"
 const MONO = "@fontsource-variable/atkinson-hyperlegible-mono/files/atkinson-hyperlegible-mono-latin"
@@ -15,6 +16,9 @@ export default defineConfig({
   trailingSlash: "always",
   compressHTML: true,
   integrations: [expressiveCode(), mdx(), pagefind()],
+  markdown: {
+    rehypePlugins: [rehypeTableWrap]
+  },
   redirects: {
     "/docs": "/docs/getting-started/introduction/"
   },

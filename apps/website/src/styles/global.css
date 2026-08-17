@@ -259,6 +259,20 @@ html {
 .prose-effect :where(table):not(:where([class~="not-prose"] *)) {
   font-size: 0.875rem;
 }
+/* Tables are wrapped by rehypeTableWrap (src/lib/docs/rehype-table-wrap.ts):
+   wide tables scroll inside their column instead of widening the document. */
+.prose-effect :where(.docs-table-wrap):not(:where([class~="not-prose"] *)) {
+  overflow-x: auto;
+  margin-block: 2em;
+}
+.prose-effect :where(.docs-table-wrap > table):not(:where([class~="not-prose"] *)) {
+  margin-block: 0;
+}
+/* Long unbreakable inline tokens (paths, generics) must wrap in running text.
+   Inside table cells keep them intact — the wrapper scrolls instead. */
+.prose-effect :where(p, li, dd, blockquote) :where(code):not(:where([class~="not-prose"] *, pre *)) {
+  overflow-wrap: anywhere;
+}
 .prose-effect :where(.expressive-code):not(:where([class~="not-prose"] *)) {
   margin-block: 1.5rem;
 }
