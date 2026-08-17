@@ -11,16 +11,16 @@ import { Aside } from "@/components/docs"
 
 ## From entrypoint to files
 
-1. The CLI locates `konfig.json` by walking up from the working directory (`ConfigNotFound` otherwise), decodes it strictly (`ConfigParseError`), resolves `<root>/<envs.<env>.entry>` (or `<root>/env/<env>.ts` when the env is not listed; `EnvEntryNotFound` if the file is absent), and builds a `RenderContext` from the env name and the `--cluster`, `--k8s-version`, and `--flag k=v` flags.
-2. It imports the entry module. The default export must be an Effect (an `AppOfApps.entrypoint(...)` or `Bundle.entrypoint(...)` program); a missing default export, a non-Effect, or an import failure fails with `EnvLoadError { entry, cause }`.
-3. Running that Effect yields an `AppOfAppsResult` (or `BundleSetResult`): a list of `Application` (or `Bundle`) values, each carrying its `manifests` array.
-4. For every application, each `Manifest` is rendered with `manifest.render(ctx)` (concurrency unbounded within an app, four apps at a time). Results are flattened: typed objects, arrays, and `RawYaml` blobs are all accepted, and `RawYaml` is split into documents. Values without a string `kind` and `metadata.name` are dropped silently.
-5. Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>.yaml` (`outDir` is `<root>/<outDir.manifests>` from `konfig.json`); the Argo CD `Application` CR for the app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml` (`apps-name` is the `name` given to `AppOfApps.fromModules`, default `apps`). Bundles emit no CR.
-6. Files are staged under `<outDir>/<env>[/<cluster>].tmp` with mode `0600`; the previous live directory is then removed and the staged tree renamed into its place, so a build that dies while rendering never touches the previous output.
+1. **Locate and load configuration.** The CLI finds `konfig.json` by walking up from the working directory and decodes it strictly. It then resolves the entry file for the env: `<root>/<envs.<env>.entry>`, or `<root>/env/<env>.ts` when the env is not listed. From the env name and the `--cluster`, `--k8s-version`, and `--flag k=v` flags it builds the render context. Errors at this step: `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`.
+2. **Import the entry module.** Its default export must be an Effect: an `AppOfApps.entrypoint(...)` or `Bundle.entrypoint(...)` program. A missing default export, a non-Effect, or an import failure fails with `EnvLoadError { entry, cause }`.
+3. **Run it.** The result is a list of Applications (or Bundles), each carrying its `manifests` array.
+4. **Render every manifest.** Each manifest's `render` is called with the context; concurrency is unbounded within an app, four apps at a time. Results are flattened: typed objects, arrays, and raw YAML blobs are all accepted, and raw YAML is split into documents. Values without a string `kind` and `metadata.name` are dropped silently.
+5. **Assign file names.** Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>.yaml`, where `outDir` is `<root>/<outDir.manifests>` from `konfig.json`. The Argo CD Application CR for each app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml`; `apps-name` is the `name` given to `AppOfApps.fromModules`, default `apps`. Bundles emit no CR.
+6. **Write atomically.** Files are staged under `<outDir>/<env>[/<cluster>].tmp` with mode `0600`. The previous live directory is then removed and the staged tree renamed into its place, so a build that dies while rendering never touches the previous output.
 
 `validate` and `diff` run steps 1 to 4 in memory and skip the write.
 
-For scripts outside the CLI, `@konfig.ts/core` exports `render(program, { env?, layers?, runMain? })`, where `program` is `(ctx: RenderContext) => Effect<void, E, R>`. It builds a `RenderContext` for `env` (default `"prod"`), provides `NodeServices.layer` (merged with `layers`), scopes the Effect, and runs it with `NodeRuntime.runMain`.
+For scripts outside the CLI, `@konfig.ts/core` exports `render(program, { env?, layers?, runMain? })`. You pass a function from the render context to an Effect; it builds a context for `env` (default `"prod"`), provides the Node services (merged with any `layers` you pass), scopes the Effect, and runs it with Effect's Node runtime.
 
 ## Stable YAML
 
@@ -28,28 +28,43 @@ All output goes through `Yaml.serialize`, so two renders of the same input are b
 
 - Root keys are ordered `apiVersion`, `kind`, `metadata`, `spec`, `status`, then everything else alphabetically. Inside `metadata`: `name`, `namespace`, `labels`, `annotations`, then the rest alphabetically. Every other object is sorted alphabetically.
 - `null` and `undefined` values are dropped.
-- Two-space indent, indented sequences, no line wrapping, plain scalars where possible, YAML **1.1** so strings such as `"yes"`, `"no"`, `"on"`, `"off"` are quoted and are not read back as booleans by go-yaml based tools.
+- Two-space indent, indented sequences, no line wrapping, plain scalars where possible.
+- YAML **1.1** semantics, so strings such as `"yes"`, `"no"`, `"on"`, `"off"` are quoted and are not read back as booleans by go-yaml based tools.
 - CRLF is normalised and the file ends with a single newline.
 
 `Yaml.filenameFor({ kind, metadata: { name } })` produces `<Kind>-<name>.yaml` with `.` and `/` in either part replaced by `-`. It throws if `kind` or `metadata.name` is missing; validate or decode first.
 
 ## Structural diff
 
-`konfig diff <env>` renders in memory and compares against `<root>/<diff.baseline>/<env>/` (`DiffBaselineMissing` when `konfig.json` has no `diff` block), keyed by relative path; only `.yaml` files in the baseline are read. The comparison (`diffFiles({ left, right })` in `@konfig.ts/core`) is structural:
+`konfig diff <env>` renders in memory and compares the result against a committed baseline, so you can see what a change would do before writing anything. The baseline is `<root>/<diff.baseline>/<env>/` (`DiffBaselineMissing` when `konfig.json` has no `diff` block); files are matched by relative path, and only `.yaml` files in the baseline are read. The comparison (`diffFiles({ left, right })` in `@konfig.ts/core`) is structural rather than textual:
 
-- Both sides are parsed as multi-document YAML; when a file holds more than one document on either side, documents are keyed by `(kind, namespace, name)` so reordering documents inside a file is not a change.
-- Values are passed through `redact` before comparison: key order is irrelevant, `null` / `undefined` entries are dropped, the `helm.sh/chart` label, `app.kubernetes.io/managed-by: Helm`, and the `meta.helm.sh/release-name` / `meta.helm.sh/release-namespace` annotations are ignored, and every value under `data` / `stringData` of a `kind: Secret` document is replaced by `<redacted>` so a rotation shows as unchanged and no plaintext reaches the terminal (adding or removing a key still shows).
-- Results are `Same`, `MissingLeft`, `MissingRight`, or `Changed` per file (and per document inside multi-doc files). `--format summary|detail|json` picks the output (default `summary`); any difference exits non-zero (`DiffNonEmpty`).
+- Both sides are parsed as multi-document YAML. When a file holds more than one document on either side, documents are keyed by kind, namespace, and name, so reordering documents inside a file is not a change.
+- Values are normalised before comparison: key order is irrelevant and `null` / `undefined` entries are dropped.
+- Helm bookkeeping is ignored: the `helm.sh/chart` label, `app.kubernetes.io/managed-by: Helm`, and the `meta.helm.sh/release-name` / `meta.helm.sh/release-namespace` annotations.
+- Every value under `data` / `stringData` of a `kind: Secret` document is replaced by `<redacted>`, so a rotation shows as unchanged and no plaintext reaches the terminal. Adding or removing a key still shows.
+- Each file (and each document inside a multi-doc file) is reported as `Same`, `MissingLeft`, `MissingRight`, or `Changed`. `--format summary|detail|json` picks the output (default `summary`); any difference exits non-zero (`DiffNonEmpty`).
 
 ## Build cache
 
-`konfig build` computes a SHA-256 input hash before rendering: the decoded `konfig.json`, the render-context signature (`cluster`, `k8sVersion`, sorted `flags`), the env entry file, every file under `root` (skipping `node_modules`, `dist`, and `.konfig`), and any extra `cacheInclude` files, directories, or globs (relative to the `konfig.json` directory). Touching any file under `root` invalidates it, so unnecessary re-renders are possible. The reverse is not guaranteed: files outside `root` that feed the render (a shared contracts package, for example) are only hashed when listed in `cacheInclude`; without that, a change there can be served a stale hit.
+`konfig build` skips the render entirely when nothing that feeds it has changed. Before rendering it computes a SHA-256 hash over the decoded `konfig.json`, the render-context signature (`cluster`, `k8sVersion`, sorted `flags`), the env entry file, every file under `root` (skipping `node_modules`, `dist`, and `.konfig`), and any extra `cacheInclude` files, directories, or globs (relative to the `konfig.json` directory).
 
-The entry at `<configDir>/.konfig/cache/<env>-<ctx digest>.json` records `inputHash`, `outputHash`, `outDirAbs`, `fileCount`, and a `timestamp`. A hit is honoured only if `inputHash` and `outDirAbs` match and the on-disk output tree still hashes to `outputHash`; an out-of-band edit or deletion is a miss. `--no-cache` skips the check, forces a render, and does not write a new entry. A cache hit prints `Cached` with the env name, file count, and output directory instead of render timings (`cached: true`, zero timings in `--log json`).
+The hash is conservative in one direction only. Touching any file under `root` invalidates it, so unnecessary re-renders are possible. The reverse is not guaranteed: files outside `root` that feed the render (a shared contracts package, for example) are only hashed when listed in `cacheInclude`; without that, a change there can be served a stale hit.
+
+The cache entry lives at `<configDir>/.konfig/cache/<env>-<ctx digest>.json` and records the input hash, an output hash, the absolute output directory, the file count, and a timestamp (`inputHash`, `outputHash`, `outDirAbs`, `fileCount`, `timestamp`). A hit is honoured only if `inputHash` and `outDirAbs` match and the on-disk output tree still hashes to `outputHash`; an out-of-band edit or deletion is a miss. `--no-cache` skips the check, forces a render, and does not write a new entry. A cache hit prints `Cached` with the env name, file count, and output directory instead of render timings (`cached: true` and zero timings in `--log json`).
 
 ## Validation levels
 
-`konfig validate <env>` renders in memory and runs the structural check on every file: the YAML must parse, and each document must have `apiVersion`, `kind`, and a `metadata.name` that is a valid RFC 1123 subdomain (lowercase alphanumerics, dashes, and dots; max 253 chars), except for `Namespace` and `Service`, which require the stricter RFC 1123 label (no dots, max 63 chars); `metadata.namespace`, when present, always uses the RFC 1123 label rule regardless of kind; `labels` and `annotations` must be string maps. Any issue fails with `StructuralValidationFailed { env, issueCount }`. Deeper field validation is left to `--strict`, which stages the same in-memory render into a scratch directory, runs `kubeconform -summary -strict` over it, and decides pass or fail from the exit code (`KubeconformReportError` on non-zero); `--strict` no longer depends on a prior `konfig build`. `kubeconform` must be on `PATH` (`KubeconformNotFound` otherwise); `--ignore-missing-schemas` is forwarded as `-ignore-missing-schemas` for CRDs without published schemas, and `--k8s-version` is forwarded as `-kubernetes-version <ver>`.
+`konfig validate <env>` renders in memory and checks every file structurally, without a cluster. The YAML must parse, and each document must have `apiVersion`, `kind`, and a valid `metadata.name`; `labels` and `annotations` must be string maps. Name rules follow Kubernetes:
+
+| Field | Rule |
+| --- | --- |
+| `metadata.name` (most kinds) | RFC 1123 subdomain: lowercase alphanumerics, dashes, and dots; max 253 chars |
+| `metadata.name` of `Namespace` and `Service` | RFC 1123 label: no dots, max 63 chars |
+| `metadata.namespace` (when present) | RFC 1123 label, regardless of kind |
+
+Any issue fails with `StructuralValidationFailed { env, issueCount }`.
+
+Deeper, schema-level validation is left to `--strict`. It stages the same in-memory render into a scratch directory, runs `kubeconform -summary -strict` over it, and decides pass or fail from the exit code (`KubeconformReportError` on non-zero); it no longer depends on a prior `konfig build`. `kubeconform` must be on `PATH` (`KubeconformNotFound` otherwise). `--ignore-missing-schemas` is forwarded as `-ignore-missing-schemas` for CRDs without published schemas, and `--k8s-version` is forwarded as `-kubernetes-version <ver>`.
 
 ## Errors
 
@@ -67,7 +82,7 @@ Every manifest's `render` fails with `AnyRenderError`, a tagged union you can `E
 
 ## Logging flags
 
-`konfig build` accepts `--log text|json` (default `text`) to switch the final report line between prose and a JSON object with `env`, `files`, `outDir`, `renderMs`, `writeMs`, `totalMs`, and `cached`; in `text` mode a `Rendering env '<env>'...` line precedes the render. `--verbose` wraps the render in an Effect span named `konfig.render.<env>` so tracing output includes it.
+`konfig build` accepts `--log text|json` (default `text`) to switch the final report line between prose and a JSON object with `env`, `files`, `outDir`, `renderMs`, `writeMs`, `totalMs`, and `cached`. In `text` mode a `Rendering env '<env>'...` line precedes the render. `--verbose` wraps the render in an Effect span named `konfig.render.<env>` so tracing output includes it.
 
 <Aside type="note">
 Kubernetes YAML under `<outDir>` is derived output. Commit it for Argo CD if you want, but never edit it by hand: the next `konfig build` replaces the whole directory.

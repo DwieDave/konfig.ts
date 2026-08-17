@@ -8,7 +8,7 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`@konfig.ts/docker` generates Dockerfiles for apps in a Bun or Node monorepo. You write one `docker.ts` spec next to the app; the package resolves the app's transitive workspace closure and emits a production multi-stage Dockerfile (`base`, `deps`, `builder`, `runner`, plus `prod-deps` when `runner.production` is set) and, when the spec has a `dev` block, a `Dockerfile.dev` (`base` + `dev`), with no hand-maintained `COPY` lists. It emits Dockerfiles only: no image building, pushing, tagging, or signing.
+`@konfig.ts/docker` generates Dockerfiles for the apps in a Bun or Node monorepo. You write one `docker.ts` spec next to each app and the package works out the rest: it resolves the app's transitive workspace dependencies and emits a Dockerfile that copies exactly those packages, so there is no hand-maintained `COPY` list to keep in sync. The output is a production multi-stage Dockerfile with `base`, `deps`, `builder`, and `runner` stages (plus a `prod-deps` stage when `runner.production` is set). If the spec has a `dev` block, it also emits a `Dockerfile.dev` made of the `base` and `dev` stages. The package stops at Dockerfiles: it does not build, push, tag, or sign images.
 
 ## Install
 
@@ -16,7 +16,7 @@ import { Aside, Snippet } from "@/components/docs"
 bun add -d @konfig.ts/docker
 ```
 
-The app's `package.json` must set `engines.<runtime>` and `engines.<package manager>` (for example `engines.bun`, or `engines.node` plus `engines.pnpm`); that is where the image tags come from, and a missing entry fails with `EngineVersionMissing`.
+The base image tags come from the app's `package.json`. It must set `engines.<runtime>` and `engines.<package manager>`, for example `engines.bun`, or `engines.node` plus `engines.pnpm`. A missing entry fails with `EngineVersionMissing`.
 
 ## Usage
 
@@ -51,7 +51,22 @@ docker build -f apps/api/Dockerfile .
 
 ## Errors
 
-`AnyDockerError` is the union of: `MonorepoRootNotFound`, `WorkspaceNotFound`, `UnsupportedPm`, `CircularWorkspaceDep`, `EngineVersionMissing`, `SpecDecodeError`, `BuildScriptMissing`, `WorkspaceSourceUnknown`, `SharedRootFileMissing`, `DockerWriteRefused`, `DockerWriteError`.
+Every failure the package can produce is a tagged error, and `AnyDockerError` is the union of all of them.
+
+| Error | When it is raised |
+| --- | --- |
+| `MonorepoRootNotFound` | No monorepo root could be found walking up from the starting directory |
+| `WorkspaceNotFound` | The target app is not a workspace of the monorepo |
+| `UnsupportedPm` | The package manager could not be determined: no `packageManager` field and either no recognized lockfile or several conflicting ones |
+| `CircularWorkspaceDep` | The workspace graph contains a cycle |
+| `EngineVersionMissing` | The app's `package.json` lacks the required `engines.*` entry |
+| `SpecDecodeError` | The `docker.ts` spec did not decode against the schema |
+| `BuildScriptMissing` | The spec names a build script the app's `package.json` does not define |
+| `WorkspaceSourceUnknown` | A `workspaceSource(name)` copy names a workspace outside the app's closure |
+| `SharedRootFileMissing` | A file listed in `sharedRootFiles` does not exist at the monorepo root |
+| `PlatformMultiUnsupported` | `Docker.platform.multi([...])` was used; a single `FROM --platform` line cannot express multiple platforms |
+| `DockerWriteRefused` | `write` would overwrite a file that lacks the konfig header and `--force` was not given |
+| `DockerWriteError` | Writing a Dockerfile to disk failed |
 
 <Aside type="caution">
 Workspace `COPY` instructions only resolve from the monorepo root, so always pass the root as the Docker build context.

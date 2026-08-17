@@ -7,11 +7,11 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-Everything konfig.ts renders passes through two shapes from `@konfig.ts/core`: a `Manifest<A>` (a deferred description of one or more Kubernetes objects) and a module wrapper (`Module.fixedNs` / `Module.dynamicNs`) that groups manifests into a named unit a target such as Argo CD can emit.
+konfig.ts describes a cluster with two building blocks. A **manifest** is a deferred description of one or more Kubernetes objects: nothing is produced until the CLI renders it. A **module** groups manifests into a named unit (an Argo CD Application, for example) that you can instantiate several times with different names and options. Both come from `@konfig.ts/core`.
 
 ## The Manifest carrier
 
-`Manifest<A>` (exported as `Manifest.Manifest<A>`) is an object with a `render` function plus a phantom `[ManifestTypeId]` variance witness:
+A manifest is a recipe rather than a finished object. It holds a `render` function; the CLI calls that function at build time with a render context and gets the Kubernetes object back:
 
 ```ts
 interface Manifest<out A> {
@@ -20,9 +20,9 @@ interface Manifest<out A> {
 }
 ```
 
-`A` is what the manifest produces when rendered: a typed Kubernetes object, a tuple of them, or a `RawYaml` blob. `RenderServices` is the environment every render can rely on (`FileSystem`, `Path`, `ChildProcessSpawner`, `Scope`), which is why a manifest can read files or shell out to `helm` without you wiring anything.
+The type parameter is what rendering produces: a typed Kubernetes object, a tuple of them, or a raw YAML blob. Every render also has access to a small set of services (a file system, a path module, a process spawner, and a resource scope). That is why a manifest can read a file from disk or shell out to `helm` without you wiring anything up.
 
-You rarely construct manifests by hand; `@konfig.ts/k8s` builders such as `Deployment.make` or `Namespace.make` return them. When you do, `Manifest.make` takes a function of the `RenderContext` that returns either a plain value or an Effect:
+You rarely build manifests by hand. Builders in `@konfig.ts/k8s` such as `Deployment.make` or `Namespace.make` return them. When you do need one, `Manifest.make` takes a function of the render context that returns either a plain value or an Effect:
 
 ```ts
 import { Manifest } from "@konfig.ts/core"
@@ -34,16 +34,18 @@ const ns = Manifest.make((ctx) => ({
 }))
 ```
 
-The other constructors in `Manifest`:
+A few more constructors combine, gate, or wrap manifests:
 
-- `Manifest.combine({ a, b })` renders two manifests concurrently into a `Manifest<readonly [A1, A2]>`.
-- `Manifest.concat(...manifests)` flattens `Manifest<A | A[]>` values into one `Manifest<A[]>`. `A` itself must not be an array type; the signature rejects that at the call site because `Array.isArray` could not tell one level of nesting from two.
-- `Manifest.whenever({ cond, thunk })` yields `Manifest<A | undefined>`; the thunk is only evaluated when `cond` is true.
-- `Manifest.embedYaml({ path })` or `Manifest.embedYaml({ literal })` wraps existing YAML as a `RawYaml` (`{ _tag: "RawYaml", content, origin? }`; `origin` is the path for the file variant). A file that cannot be read fails with `EmbedYamlReadError { path, cause }`.
+| Constructor | What it does |
+| --- | --- |
+| `Manifest.combine({ a, b })` | Renders two manifests concurrently and returns a manifest of the pair. |
+| `Manifest.concat(...manifests)` | Flattens manifests of single values or arrays into one manifest of an array. The element type itself must not be an array; the signature rejects that at the call site because one level of nesting could not be told apart from two at runtime. |
+| `Manifest.whenever({ cond, thunk })` | Produces the manifest only when the condition is true, otherwise `undefined`. The thunk is not evaluated when the condition is false. |
+| `Manifest.embedYaml({ path })` / `Manifest.embedYaml({ literal })` | Wraps existing YAML you already have (a file or a string) as a raw YAML blob. The blob records where it came from; a file that cannot be read fails with `EmbedYamlReadError`. |
 
 ## RenderContext
 
-The argument to `render` is the `RenderContext`:
+Every render receives one argument: the context that says which environment is being rendered and which optional knobs the CLI was started with.
 
 ```ts
 interface RenderContext {
@@ -54,44 +56,50 @@ interface RenderContext {
 }
 ```
 
-`env` names the render target and keys the `konfig.json` `envs` entry and the output directory (`<outDir>/<env>/`, or `<outDir>/<env>/<cluster>/` when `cluster` is set). The CLI fills the optional fields from flags shared by `build`, `validate`, and `diff`: `--cluster <name>`, `--k8s-version <ver>`, and repeatable `--flag k=v` pairs, which land in `ctx.flags` as strings and are read with `ctx.flags?.get("k")`. All of them are folded into the [build cache](/konfig.ts/docs/concepts/rendering/) key, so two clusters of the same env never share a cache slot. `RenderContext.make(env)` and `RenderContext.makeFull({ env, cluster?, k8sVersion?, flags? })` build one by hand.
+The environment name does two jobs. It picks the matching entry in `konfig.json`, and it names the output directory (`<outDir>/<env>/`, or `<outDir>/<env>/<cluster>/` when a cluster is set).
+
+The optional fields come from flags that `build`, `validate`, and `diff` all accept:
+
+| Flag | Where it lands |
+| --- | --- |
+| `--cluster <name>` | `ctx.cluster` |
+| `--k8s-version <ver>` | `ctx.k8sVersion` |
+| `--flag k=v` (repeatable) | `ctx.flags`, as strings; read one with `ctx.flags?.get("k")` |
+
+All of these are part of the [build cache](/konfig.ts/docs/concepts/rendering/) key, so two clusters of the same env never share a cache slot. To build a context outside the CLI, use `RenderContext.make(env)` or `RenderContext.makeFull({ ... })`.
 
 ## Modules
 
-A module is a function from a name (and per-instance options) to a handle that a target knows how to emit. `Module.fixedNs` bakes the namespace into the wrapper; `Module.dynamicNs` lets each call pick one.
+A module is a function: give it a name (and per-instance options) and it returns a handle that a target knows how to emit. The two wrappers differ only in where the namespace comes from. `Module.fixedNs` bakes the namespace into the wrapper; `Module.dynamicNs` lets each call choose one.
 
 <Snippet file="infra/modules/postgres.ts" startAt="export const definePostgres" />
 
-The `build` function receives `({ name, namespace }, opts)`:
+Your `build` function receives two arguments. The first is `{ name, namespace }`: the name is the string literal passed at the call site (`definePostgres({ name: "postgres", ... })`), and the namespace is the literal from the wrapper or from the call, depending on which wrapper you used. The second is your options object, typed however you declare the parameter. The wrapper's call signature is derived from that: callers pass `name`, your options, anything the target requires (for Argo CD, a required `source`), and, for `dynamicNs`, a `namespace`.
 
-- `name` is the string literal passed at the call site (`definePostgres({ name: "postgres", ... })`).
-- `namespace` is the literal from the wrapper (`fixedNs`) or the call (`dynamicNs`).
-- `opts` is whatever you type the second parameter as; the wrapper's call signature becomes `{ name } & ExtraCallArgs & Opts` (`dynamicNs` adds `namespace`). For `Application.target`, `ExtraCallArgs` adds a required `source: ArgoSource`.
+`build` returns a list of manifests, either directly or wrapped in an Effect. Return an Effect when the module depends on something another module provides, for example `yield* Dep.Secret("ghcr-pull")` for a pull secret; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/). Whatever the Effect requires becomes the module's declared input, which is how a missing provider becomes a compile error at the entrypoint.
 
-It returns either a plain `ReadonlyArray` of manifests or an `Effect` producing one. Return an Effect when the module needs to `yield*` a dependency such as `Dep.Secret("ghcr-pull")`; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/). The requirement channel of that Effect becomes the module's `In` type, which is how missing providers surface at the entrypoint.
-
-Names must be string literals. A wrapper that forwards a widened `string` fails with the `_konfig_error: "Module name/namespace must be a string literal..."` hint; make the wrapper generic (`<const Name extends string>`) and forward `Module.LiteralName<Name>`.
+Names must be string literals, because the dependency graph keys everything by literal name. A wrapper that forwards a widened `string` fails with the hint `_konfig_error: "Module name/namespace must be a string literal..."`. To fix it, make the wrapper generic over `<const Name extends string>` and forward the name through `Module.LiteralName<Name>`.
 
 ### Options and provides
 
-`feature-flags.ts` shows the smallest useful shape, a fixed-namespace module with no options (`_opts: Record<never, never>`) that emits a `ConfigMap`:
+The smallest useful module has a fixed namespace, no options, and emits one ConfigMap. `feature-flags.ts` shows that shape (its options parameter is typed as an empty record):
 
 <Snippet file="infra/modules/feature-flags.ts" startAt="export const defineFeatureFlags" />
 
-Both wrappers accept `provides?: Layer.Layer<Extra>` at wrapper level; modules that emit nothing but exist to satisfy the graph use it. When the provided value depends on per-call options (registry and tag for an image), call `Application.define` directly instead, as `infra/modules/builds.ts` does with `Dep.provideImage` and `build: () => []`.
+A module can also announce that it satisfies a need for other modules by passing a layer through the wrapper's `provides` field. Modules that emit nothing but exist to satisfy the graph use this. The field is declared once per wrapper, so it cannot depend on per-call options. When the provided value does depend on them (the registry and tag of an image, for example), call `Application.define` directly instead, as `infra/modules/builds.ts` does with `Dep.provideImage` and an empty `build`.
 
 ## The target adapter
 
-`Module.fixedNs` and `Module.dynamicNs` are target-agnostic. A `Module.Target` supplies `define`, plus optional `ExtraConfig` (wrapper-level) and `ExtraCallArgs` (call-level) fields. `@konfig.ts/argocd` ships `Application.target`:
+The wrappers do not know about Argo CD. They delegate to a **target**, an object with a `define` function plus optional extra fields at wrapper level and at call level. `@konfig.ts/argocd` ships `Application.target`:
 
-- `ExtraConfig`: `project?`, `syncPolicy?`, `annotations?` (for example `Sync.wave(-1)`).
-- `ExtraCallArgs`: `source: { repoURL, targetRevision, path }`.
-- The handle it returns is an `ApplicationHandle<Name, Out, In>` whose `Out` provides `App`, `Application`, and `Namespace` needs for its own name and namespace, so two modules declaring `namespace: "app"` do not conflict.
+- Wrapper-level extras: `project`, `syncPolicy`, and `annotations` (for example `Sync.wave(-1)`), all optional.
+- Call-level extras: a required `source` with `repoURL`, `targetRevision`, and `path`.
+- The handle it returns provides the App, Application, and Namespace needs for its own name and namespace, so two modules that both declare `namespace: "app"` do not conflict.
 
 `@konfig.ts/core` also exports a `Bundle` target for plain manifest bundles without Argo CD.
 
 <Aside type="note">
-`Application.define` returns a `Context.Service` tag with a `layer` attached. `AppOfApps.fromModules` runs the layers; the module itself never renders anything until the CLI drives the entrypoint.
+`Application.define` returns a service tag with a layer attached. `AppOfApps.fromModules` runs those layers; the module itself renders nothing until the CLI drives the entrypoint.
 </Aside>
 
 Next: [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).

@@ -13,11 +13,13 @@ konfig.ts is a workspace dependency, not a global tool. You add the CLI as a dev
 
 Install `@konfig.ts/cli` as a dev dependency and the library packages as regular dependencies. Which libraries you need depends on what you render:
 
-- `@konfig.ts/core`: `Manifest`, `Module.fixedNs`/`Module.dynamicNs`, `Helm.release`, `Dep.*`, YAML and diff. Always required.
-- `@konfig.ts/k8s`: Kubernetes builders (`Workload.web`, `Container.define`, `Secret.make`, `ConfigMap.make`, `Environment.bind`).
-- `@konfig.ts/env`: env contracts (`Secret.define`, `Literal.define`, `Downward.define`, `Environment.define`) and the `runtime` decoder, which `@konfig.ts/k8s` re-exports as `Environment.runtime` next to `Environment.bind`.
-- `@konfig.ts/argocd`: `Application.define`/`.target`, `AppOfApps.fromModules`/`.entrypoint`, `Sync.*`.
-- One secret backend: `@konfig.ts/sops`, `@konfig.ts/sealed-secrets`, or `@konfig.ts/external-secrets`.
+| Package | What it gives you | When you need it |
+| --- | --- | --- |
+| `@konfig.ts/core` | Manifests, module wrappers, Helm releases, dependency declarations, YAML output and diffing | Always |
+| `@konfig.ts/k8s` | Builders for Kubernetes resources: workloads, containers, Secrets, ConfigMaps, and binding an env contract to a pod | When you build Kubernetes resources directly |
+| `@konfig.ts/env` | The env contract: declare secrets, literals, and downward-API values, plus the runtime decoder for the running process. `@konfig.ts/k8s` re-exports the decoder as `Environment.runtime` | When you declare env contracts |
+| `@konfig.ts/argocd` | Argo CD Applications, the app-of-apps entrypoint, and sync options | When you compose modules into an Argo CD environment |
+| `@konfig.ts/sops`, `@konfig.ts/sealed-secrets`, or `@konfig.ts/external-secrets` | One secret backend | When you render Secrets |
 
 <Install packages="@konfig.ts/cli" dev />
 
@@ -27,21 +29,23 @@ The binary is exposed as `konfig`. Run `bunx konfig --help` (or `npx konfig --he
 
 ## The Effect peer pin
 
-Every `@konfig.ts/*` library declares `effect` as a peer dependency at an exact version, currently `4.0.0-rc.109`. `@konfig.ts/core` and the CLI additionally depend on `@effect/platform-node` at the same version (as a regular dependency, not a peer), because they use the Node filesystem and subprocess services to write files and call `helm`. All packages declare `engines.node >= 22`.
+Every `@konfig.ts/*` library declares `effect` as a peer dependency at an exact version, currently `4.0.0-rc.109`. `@konfig.ts/core` and the CLI additionally depend on `@effect/platform-node` at the same version, as a regular dependency rather than a peer, because they use the Node filesystem and subprocess services to write files and call `helm`. All packages declare `engines.node >= 22`.
 
-The pin is exact on purpose. Effect 4 (release candidate) still makes breaking changes between builds, so a caret range would let your package manager resolve a build the packages were never compiled against. That would surface as `ERESOLVE` conflicts or runtime type errors instead of a clean install. Install the same exact version in your workspace, as the commands above do. The pin relaxes to a caret range once Effect ships a stable 4.x.
+The pin is exact on purpose. Effect 4 is still a release candidate and makes breaking changes between builds. A caret range would let your package manager resolve a build the packages were never compiled against, which surfaces as `ERESOLVE` conflicts or runtime type errors instead of a clean install. Install the same exact version in your workspace, as the commands above do. The pin relaxes to a caret range once Effect ships a stable 4.x.
 
 <Aside type="tip">
-If your workspace already depends on Effect for application code, align it to the same version. One `effect` in `node_modules` avoids duplicated `ServiceMap` keys and the type mismatches that come with two copies.
+If your workspace already depends on Effect for application code, align it to the same version. One `effect` in `node_modules` avoids duplicated service keys and the type mismatches that come with two copies.
 </Aside>
 
 ## konfig.json
 
-`konfig build`, `validate`, `diff`, and `set` walk up from the current directory until they find a `konfig.json` (`ConfigNotFound` otherwise). `konfig helm`, `crd`, `docker`, and `graph` do not read it. This is the file from `examples/full-stack`:
+`konfig.json` tells the CLI where your sources live, which environments exist, and where rendered output goes. The commands that render (`konfig build`, `validate`, `diff`, and `set`) walk up from the current directory until they find one, and fail with `ConfigNotFound` otherwise. The tooling commands (`konfig helm`, `crd`, `docker`, and `graph`) do not read it. This is the file from `examples/full-stack`:
 
 <Snippet file="konfig.json" />
 
-The schema (`KonfigConfig` in `@konfig.ts/core`) accepts these fields. Only the first five are read by a command today; the rest are accepted, defaulted, and exported as types but no command consumes them yet.
+Only three fields are required: `root`, `envs`, and `outDir.manifests`. Decoding is strict: unknown keys, missing required keys, and invalid JSON are all reported as `ConfigParseError` with the file path.
+
+The full schema accepts the fields below. Only the first five are read by a command today; the rest are accepted, defaulted, and exported as types, but no command consumes them yet.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -57,11 +61,11 @@ The schema (`KonfigConfig` in `@konfig.ts/core`) accepts these fields. Only the 
 | `helm.cacheDir` | no | String, default `".konfig/helm-cache"`, relative to `konfig.json`'s own directory. Read by `konfig helm fetch`, `konfig crd`, and `Helm.release` during `build`/`validate`/`diff`, beneath `KONFIG_HELM_CACHE`. |
 | `helm.minVersion` | no | String, default `"3.16.0"`. Read by the `konfig helm fetch`/`konfig crd` preflight check, beneath `KONFIG_HELM_MIN_VERSION`; `Helm.release` still takes its own opt-in `minVersion` option and does not read this field. |
 | `services.outFile`, `services.globalPaths` | no | Optional string and string array (default `[]`). Not read by any command. |
-| `clusters` | no | Map of cluster name to `{ registry?, ingressClass?, storageClass?, repositoryUrl? }`. Not read by any command; `--cluster <name>` only sets `RenderContext.cluster` and the output subdirectory. |
+| `clusters` | no | Map of cluster name to `{ registry?, ingressClass?, storageClass?, repositoryUrl? }`. Not read by any command; `--cluster <name>` only sets the cluster name on the render context and the output subdirectory. |
 
-Decoding is strict: unknown keys, missing required keys, and invalid JSON are all reported as `ConfigParseError` with the file path.
+### Environment variable overrides
 
-Four environment variables configure the Helm and CRD tooling, each taking precedence over the matching `konfig.json` field above, which in turn takes precedence over the built-in default. The default in the table below applies either when no `konfig.json` is found or the field is left unset; in that fallback case the value resolves against the current working directory:
+Four environment variables configure the Helm and CRD tooling. Precedence is: environment variable, then the matching `konfig.json` field, then the built-in default. The default applies when no `konfig.json` is found or the field is left unset; in that fallback case the path resolves against the current working directory.
 
 | Variable | Overrides field | Default | Read by |
 | --- | --- | --- | --- |
@@ -91,7 +95,7 @@ infra/
 .konfig/                 # cache/ (build cache, next to konfig.json) and helm-cache/, ignore in git
 ```
 
-Each env file's default export must be an `AppOfApps.entrypoint(...)` program. Each module exports a `Module.fixedNs`/`Module.dynamicNs` definition that the env file instantiates with a name, an Argo CD source, and its options.
+Two conventions matter. Each env file's default export must be an `AppOfApps.entrypoint(...)` program, because that is what the CLI loads and runs. Each module file exports a module definition (`Module.fixedNs` or `Module.dynamicNs`) that the env file instantiates with a name, an Argo CD source, and its options.
 
 ## Runtime requirements
 

@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Tabs, TabItem } from "@/components/docs"
 
-`@konfig.ts/cli` ships the `konfig` binary: the front-end that loads your TypeScript env entries, renders them through `@konfig.ts/core`, and writes, validates, or diffs the resulting YAML. It also hosts the Helm/CRD codegen helpers, the `images.json` updater, and the Dockerfile generator from `@konfig.ts/docker`.
+The `konfig` command line tool is how you turn TypeScript into Kubernetes manifests day to day. It ships in the `@konfig.ts/cli` package. Its core job is to load your TypeScript env entries, render them through `@konfig.ts/core`, and write, validate, or diff the resulting YAML. Around that it hosts a few helpers that belong to the same workflow: generating TypeScript types from Helm chart CRDs, pre-fetching chart tarballs, updating image references in `images.json`, and generating Dockerfiles from a `docker.ts` spec.
 
 ## Installation
 
@@ -32,35 +32,38 @@ pnpm exec konfig --help
 </TabItem>
 </Tabs>
 
-`konfig --help` lists the subcommands, `konfig <command> --help` lists arguments and flags, and `konfig --version` prints the package version. The CLI depends on Effect 4 (release candidate) and `@effect/platform-node`; the package pins the exact build it was compiled against, see the [README requirements](https://github.com/DwieDave/konfig.ts/tree/main/packages/cli#requirements).
+`konfig --help` lists the subcommands, `konfig <command> --help` lists arguments and flags, and `konfig --version` prints the package version. The CLI depends on Effect 4 (release candidate) and `@effect/platform-node`. The package pins the exact build it was compiled against; see the [README requirements](https://github.com/DwieDave/konfig.ts/tree/main/packages/cli#requirements).
 
 ## Runtime requirement
 
-Most commands `import()` your `.ts` sources at runtime: `konfig build prod` loads the env entry, which pulls in your modules, `docker.ts` specs, and chart files. `konfig` therefore needs a TypeScript-capable runtime:
+Most commands import your `.ts` sources at runtime rather than reading compiled output. `konfig build prod`, for example, loads the env entry, which in turn pulls in your modules; other commands import `docker.ts` specs and chart files. `konfig` therefore needs a runtime that can execute TypeScript directly:
 
 - Bun (recommended): runs `.ts` with no flags.
 - Node >= 23.6: native type stripping.
 - Node 22.6 to 23.5: run with `NODE_OPTIONS=--experimental-strip-types` (the `konfig` bin is a Node script, so the flag has to reach the `node` process).
 - `tsx`: `tsx node_modules/.bin/konfig ...`.
 
-Commands that load sources: `build`, `validate`, `diff`, `crd extract`, `crd verify`, `helm fetch` (chart registry files), and `docker` (the `docker.ts` spec). Commands that only touch JSON or `package.json` files and run under plain Node: `set` and `graph`.
+Which commands need this:
+
+- Load TypeScript sources: `build`, `validate`, `diff`, `crd extract`, `crd verify`, `helm fetch` (chart registry files), and `docker` (the `docker.ts` spec).
+- Run under plain Node: `set` and `graph`. They only touch JSON and `package.json` files.
 
 ## Configuration discovery
 
-`build`, `validate`, `diff`, and `set` walk up from the current working directory until they find a `konfig.json`. The directory containing that file becomes `configDir`; every relative path in the config (`root`, `outDir.manifests`, `diff.baseline`, env entries) resolves against it. When no file is found the command fails with `ConfigNotFound`; a file that does not decode against the schema fails with `ConfigParseError`. See [konfig.json](/konfig.ts/docs/cli/configuration/) for every field.
+You can run `konfig` from any directory inside the project. `build`, `validate`, `diff`, and `set` walk up from the current working directory until they find a `konfig.json`. The directory containing that file becomes the config directory, and every relative path in the config (`root`, `outDir.manifests`, `diff.baseline`, env entries) resolves against it. When no file is found the command fails with `ConfigNotFound`; a file that does not match the schema fails with `ConfigParseError`. See [konfig.json](/konfig.ts/docs/cli/configuration/) for every field.
 
 ## Env entry resolution
 
-An env is a named render target (`prod`, `staging`). Its entry module is:
+An env is a named render target such as `prod` or `staging`. Each env has one entry module, the TypeScript file that describes what to render. It is located as follows:
 
 1. `envs.<NAME>.entry` from `konfig.json`, joined onto `<configDir>/<root>`, when the env is declared.
 2. Otherwise `<configDir>/<root>/env/<NAME>.ts`.
 
-The entry's default export must be an Effect program, normally `AppOfApps.entrypoint(AppOfApps.fromModules({ ... }))` from `@konfig.ts/argocd`. A `Bundle` set program is also accepted. A missing file fails with `EnvEntryNotFound`; a module without a default export, or whose default export is not an Effect, fails with `EnvLoadError`.
+The entry's default export must be an Effect program that produces the render. Normally that is `AppOfApps.entrypoint(AppOfApps.fromModules({ ... }))` from `@konfig.ts/argocd`; a `Bundle` set program is also accepted. A missing file fails with `EnvEntryNotFound`. A module without a default export, or whose default export is not an Effect, fails with `EnvLoadError`.
 
 ## Shared render flags
 
-`build`, `validate`, and `diff` accept the same three flags. They are folded into the `RenderContext` your modules receive.
+`build`, `validate`, and `diff` accept the same three flags. Their values are folded into the render context that your modules receive, so a module can change what it emits based on the target cluster, Kubernetes version, or free-form flags.
 
 | Name | Default | Description |
 | --- | --- | --- |

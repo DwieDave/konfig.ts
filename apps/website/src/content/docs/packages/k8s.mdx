@@ -8,7 +8,7 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`@konfig.ts/k8s` builds Kubernetes resources with branded references. Cross-resource links (an env var to a Secret, a volume to a ConfigMap, Ingress TLS to a Secret, `imagePullSecrets`) take a brand rather than a raw string, so a workload pointing at a Secret nobody creates is a compile error instead of a failed `argocd sync`. It also hosts `Environment.bind` and `Secret.bind`, which turn a `@konfig.ts/env` contract into a Deployment env block plus a secret backend's custom resources.
+`@konfig.ts/k8s` builds Kubernetes resources in TypeScript, with one twist: wherever a resource points at another resource, it takes a branded reference instead of a raw string. An env var that reads from a Secret, a volume that mounts a ConfigMap, an Ingress TLS block that names a Secret, an `imagePullSecrets` entry: each of these needs a reference produced by the resource it points at. A workload that references a Secret nobody creates is therefore a compile error, not a failed `argocd sync`. The package also hosts `Environment.bind` and `Secret.bind`, the step that takes an environment contract from `@konfig.ts/env` and turns it into a Deployment env block plus whatever custom resources the chosen secret backend emits.
 
 ## Install
 
@@ -18,11 +18,11 @@ bun add @konfig.ts/k8s
 
 ## Usage
 
-The API module of the full-stack example: bind the env contract, define a container whose env mixes bound vars, a Secret key, and a ConfigMap key, then wrap it in `Workload.web` (Deployment + Service).
+The API module of the full-stack example. It binds the env contract, defines a container whose env mixes the bound vars with a Secret key and a ConfigMap key, and wraps the container in `Workload.web`, which produces a Deployment and a Service.
 
 <Snippet file="infra/modules/api.ts" startAt="const apiContainer = Container.define" endBefore="return [...bound.manifests" title="infra/modules/api.ts" />
 
-`EnvVar.fromSecretForPod` requires `podNamespace` to match the Secret's namespace at the type level, and `Port.ref("http")` only accepts a name declared in `ports`.
+Two of the type-level checks are visible here. `EnvVar.fromSecretForPod` requires `podNamespace` to match the Secret's namespace, so a pod cannot read a Secret from another namespace. `Port.ref("http")` only accepts a name that was declared in `ports`, so a probe or Service cannot point at a port that does not exist.
 
 ## Surface
 
@@ -45,7 +45,7 @@ The API module of the full-stack example: bind the env contract, define a contai
 
 ## Errors
 
-This package exports no tagged error classes of its own. Bind and render failures surface from the backend in use (`@konfig.ts/sops`, `@konfig.ts/sealed-secrets`) or from `@konfig.ts/env` (`SecretSourceError`, `EnvNameCollision`).
+This package exports no tagged error classes of its own. When a bind or render fails, the error comes from one of two places: the secret backend in use (`@konfig.ts/sops`, `@konfig.ts/sealed-secrets`), or `@konfig.ts/env`, which raises `SecretSourceError` when a plaintext source cannot be resolved and `EnvNameCollision` when two entries claim the same env var name.
 
 <Aside type="tip">
 `Selector.make({ app: "api" })` mirrors the `{ app: <name> }` labels `Workload.web` applies, so a `NetworkPolicy` peer and the workload it targets share one definition.

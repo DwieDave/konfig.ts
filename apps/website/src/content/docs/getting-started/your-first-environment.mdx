@@ -7,33 +7,33 @@ sidebar:
 
 import { Aside, Snippet, Steps } from "@/components/docs"
 
-This walkthrough builds one Argo CD `Application` from scratch using the pieces in `examples/full-stack`: a module that emits a `ConfigMap`, an env file that composes it with `AppOfApps`, and the three CLI commands you run against it. It assumes you completed [Installation](/konfig.ts/docs/getting-started/installation/) and have a `konfig.json` with at least one env entry.
+This walkthrough builds one Argo CD `Application` from scratch using the pieces in `examples/full-stack`. You will write a module that emits a ConfigMap, compose it into an env file, and run the three CLI commands against it: build, validate, and diff. It assumes you completed [Installation](/konfig.ts/docs/getting-started/installation/) and have a `konfig.json` with at least one env entry.
 
 <Steps>
 
 1. ### Define a module
 
-   A module is a function from options to manifests, wrapped by `Module.fixedNs` (namespace baked in) or `Module.dynamicNs` (namespace chosen per instance). `target: Application.target` tells the wrapper to produce an Argo CD `Application` handle, so each instance becomes its own Application with its own directory in the output. The smallest module in the example is `feature-flags.ts`:
+   A module is a function from options to manifests. You wrap that function with `Module.fixedNs` when the namespace is baked into the module, or `Module.dynamicNs` when each instance chooses its own. Setting `target: Application.target` tells the wrapper to produce an Argo CD Application, so each instance becomes its own Application with its own directory in the output. The smallest module in the example is `feature-flags.ts`:
 
    <Snippet file="infra/modules/feature-flags.ts" />
 
-   `build` receives a `BuildContext` (`name`, `namespace`) and the instance options, and returns manifests. Here the options type is `Record<never, never>`, so callers pass only `name` and `source`. `annotations: Sync.wave(-1)` puts the Application in an early sync wave so consumers that read the ConfigMap start after it exists.
+   The `build` function receives a build context with the instance's `name` and `namespace`, plus the instance options, and returns manifests. This module has no options of its own, so callers pass only `name` and `source`. The `annotations: Sync.wave(-1)` line puts the Application in an early sync wave, so consumers that read the ConfigMap start after it exists.
 
 2. ### Instantiate it in an env file
 
-   An env file is a plain TypeScript module whose default export is `AppOfApps.entrypoint(...)`. It builds a `source` helper for the Argo CD repo path, instantiates each module with a `name` and that `source`, and lists the instances in `AppOfApps.fromModules`. From `infra/envs/staging.ts`:
+   An env file is a plain TypeScript module whose default export is `AppOfApps.entrypoint(...)`. It does three things: builds a `source` helper for the Argo CD repo path, instantiates each module with a `name` and that `source`, and lists the instances in `AppOfApps.fromModules`. From `infra/envs/staging.ts`:
 
    <Snippet file="infra/envs/staging.ts" startAt="const branch" endBefore="const sopsBase" />
 
    <Snippet file="infra/envs/staging.ts" startAt="const featureFlags = defineFeatureFlags" endBefore="const postgres = definePostgres" />
 
-   `name` is a literal string and becomes both the Application name and the output directory. `source` is the Argo CD `source` block for the child Application; `rootPath` must be the repository path where the rendered tree for this env is committed, because that is where Argo CD will look. In the example it is `./infra/k8s/manifests/staging`, a committed copy of the `.generated/manifests/staging` output.
+   `name` is a literal string and becomes both the Application name and the output directory. `source` is the Argo CD `source` block for the child Application. Its `rootPath` must be the repository path where the rendered tree for this env is committed, because that is where Argo CD will look. In the example it is `./infra/k8s/manifests/staging`, a committed copy of the `.generated/manifests/staging` output.
 
    The entrypoint composes every instance:
 
    <Snippet file="infra/envs/staging.ts" startAt="export default AppOfApps.entrypoint" />
 
-   `target` describes the parent app-of-apps source, `defaults` is merged into every child Application (here the destination cluster), and `modules` is the list of instances. If any instance yields a `Dep.Need` that no other instance provides, this call is a TypeScript error; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/). To start with only the ConfigMap, keep `modules: [featureFlags]` and add the rest as you go.
+   `target` describes the parent app-of-apps source. `defaults` is merged into every child Application (here the destination cluster). `modules` is the list of instances. If any instance needs something that no other instance provides, this call is a TypeScript error; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/). To start with only the ConfigMap, keep `modules: [featureFlags]` and add the rest as you go.
 
 3. ### Register the env
 
@@ -55,7 +55,7 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
    konfig build staging
    ```
 
-   The CLI loads the entry file (`EnvLoadError` if the default export is not an Effect program), renders every Application concurrently (bounded at 4, to keep `helm` and `sops` subprocess counts down), stages all files under `<outDir>.tmp`, then swaps the staging tree into place so an interrupted build never leaves a half-written directory. The output layout is:
+   The CLI loads the entry file and fails with `EnvLoadError` if the default export is not an Effect program. It then renders every Application concurrently, bounded at 4 to keep `helm` and `sops` subprocess counts down. All files are staged under `<outDir>.tmp` first and swapped into place at the end, so an interrupted build never leaves a half-written directory. The output layout is:
 
    ```text
    .generated/manifests/staging/          # <outDir.manifests>/<env>[/<cluster>]
@@ -69,9 +69,9 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
        StatefulSet-postgres-postgresql.yaml   # Helm output is split into one file per document
    ```
 
-   Every file is named `<Kind>-<metadata.name>.yaml` (`Yaml.filenameFor`, with `.` and `/` in kind and name replaced by `-`). Helm releases render through `helm template` and are split on real YAML document boundaries, so each chart resource lands in its own file too. Passing `--cluster <name>` adds a cluster segment after the env directory.
+   Every file is named `<Kind>-<metadata.name>.yaml`, with `.` and `/` in kind and name replaced by `-`. Helm releases render through `helm template` and are split on real YAML document boundaries, so each chart resource lands in its own file too. Passing `--cluster <name>` adds a cluster segment after the env directory.
 
-   Builds are input-hashed over everything under `root`, with the entry stored in `.konfig/cache/` next to `konfig.json`. A second run with unchanged sources and an untouched output tree reports the env as cached with the file count and output directory, and rewrites nothing; `--no-cache` forces a render, `--log json` switches the report to one JSON line. Extra inputs outside `root` can be added to the hash with `cacheInclude` in `konfig.json`.
+   Builds are cached. The cache key is a hash of everything under `root`, stored in `.konfig/cache/` next to `konfig.json`. A second run with unchanged sources and an untouched output tree reports the env as cached, with the file count and output directory, and rewrites nothing. `--no-cache` forces a render, and `--log json` switches the report to one JSON line. Extra inputs outside `root` can be added to the hash with `cacheInclude` in `konfig.json`.
 
 5. ### Validate
 
@@ -80,18 +80,25 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
    konfig validate staging --strict
    ```
 
-   `konfig validate` renders in memory and checks every document's envelope: `apiVersion`, `kind`, a `metadata.name` that follows the RFC 1123 subdomain rule (or the stricter RFC 1123 label rule for `Namespace`/`Service`), and, when present, an RFC 1123 label `metadata.namespace` and string-valued `labels`/`annotations`. Failures are listed per file and the command exits with `StructuralValidationFailed`. With `--strict` it stages a fresh in-memory render into a scratch directory and additionally runs `kubeconform -summary -strict` over it (`KubeconformNotFound` if the binary is missing); running `konfig build` first is not required. `--ignore-missing-schemas` is forwarded to kubeconform for CRDs it does not know, and `--k8s-version` is forwarded as `-kubernetes-version`.
+   `konfig validate` renders in memory and checks every document's envelope. Failures are listed per file and the command exits with `StructuralValidationFailed`. The checks are:
+
+   - `apiVersion` and `kind` are present.
+   - `metadata.name` follows the RFC 1123 subdomain rule, or the stricter RFC 1123 label rule for `Namespace` and `Service`.
+   - `metadata.namespace`, when present, is an RFC 1123 label.
+   - `labels` and `annotations`, when present, have string values.
+
+   With `--strict` it stages a fresh in-memory render into a scratch directory and additionally runs `kubeconform -summary -strict` over it; running `konfig build` first is not required. If the binary is missing the command fails with `KubeconformNotFound`. Two flags are forwarded to kubeconform: `--ignore-missing-schemas` for CRDs it does not know, and `--k8s-version`, passed as `-kubernetes-version`.
 
 6. ### Diff against a baseline
 
-   Point `diff.baseline` in `konfig.json` at a manifest tree relative to `root` (for example the copy committed for Argo CD); the env name is appended, so `staging` reads `<root>/<baseline>/staging`. Then:
+   Point `diff.baseline` in `konfig.json` at a manifest tree relative to `root`, for example the copy committed for Argo CD. The env name is appended, so `staging` reads `<root>/<baseline>/staging`. Then:
 
    ```bash
    konfig diff staging
    konfig diff staging --format detail
    ```
 
-   The diff is structural: it parses both sides as YAML, matches documents by kind and name so key order and multi-document ordering do not matter, redacts `Secret` data, and reports only real changes. `--format` accepts `summary` (default), `detail`, or `json`. A clean run reports that the env matches the baseline; differences exit non-zero with `DiffNonEmpty`, which makes the command usable as a CI gate.
+   The diff is structural. It parses both sides as YAML, matches documents by kind and name so key order and multi-document ordering do not matter, redacts `Secret` data, and reports only real changes. `--format` accepts `summary` (default), `detail`, or `json`. A clean run reports that the env matches the baseline. Differences exit non-zero with `DiffNonEmpty`, which makes the command usable as a CI gate.
 
 </Steps>
 
@@ -101,5 +108,5 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
 
 ## Next
 
-- [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/): how `Dep.Need` and `Dep.Provide` turn a missing Secret into a compile error.
-- The Concepts section covers env contracts (`Environment.define`, `Environment.bind`, `Environment.runtime`), `Module.fixedNs` versus `Module.dynamicNs`, and secret backends.
+- [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/): how declared needs and provides turn a missing Secret into a compile error.
+- The Concepts section covers env contracts (defining, binding, and decoding them at runtime), `Module.fixedNs` versus `Module.dynamicNs`, and secret backends.

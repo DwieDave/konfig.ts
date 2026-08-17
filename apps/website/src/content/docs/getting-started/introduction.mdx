@@ -7,26 +7,26 @@ sidebar:
 
 import { Aside, Diagnostics } from "@/components/docs"
 
-konfig.ts renders Kubernetes manifests and Argo CD `Application` resources from TypeScript. It is a set of `@konfig.ts/*` packages built on [Effect](https://effect.website/), plus a `konfig` CLI that loads your `.ts` sources, renders them, and writes YAML into a directory Argo CD can sync.
+konfig.ts lets you describe a Kubernetes environment in TypeScript and render it to plain YAML that Argo CD can sync. It ships as a set of `@konfig.ts/*` packages built on [Effect](https://effect.website/), plus a `konfig` CLI that loads your `.ts` sources, renders them, and writes the manifests and Argo CD `Application` resources into an output directory.
 
 The point is not YAML generation by itself. konfig.ts wires two layers of an application from one TypeScript source:
 
 - The **manifest layer**: Deployments, Services, Secrets, Helm releases, Argo CD Applications, and the dependency graph between them.
 - The **runtime config layer**: the environment variables your process reads at startup, decoded with Effect `Config`.
 
-Because both layers come from the same declarations, the mistakes you would otherwise discover at `argocd sync` time (a workload referencing a Secret nobody created, an env var read in code but missing from the pod spec, a chart pinned by version but not by digest) become TypeScript errors or fail-closed render errors.
+Because both layers come from the same declarations, mistakes that would otherwise show up during `argocd sync` become TypeScript errors or fail-closed render errors instead. Examples: a workload referencing a Secret nobody created, an env var read in code but missing from the pod spec, or a chart pinned by version but not by digest.
 
 ## What you get
 
-- **A dependency graph checked at the type level.** Modules declare what they need (`Dep.Need<...>`) and what they provide (`Dep.Provide<...>`). `AppOfApps.fromModules` composes them, and `AppOfApps.entrypoint` refuses to compile until every need has a provider. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
-- **One env contract for both sides.** `Secret.define`, `Literal.define`, and `Downward.define` from `@konfig.ts/env` produce atoms that `Environment.bind` turns into a Deployment env block and Secret resources, and that `Environment.runtime` decodes inside the running process. Rename a variable once and both sides move.
-- **Deterministic YAML and structural diffs.** Output uses stable key ordering (`apiVersion`, `kind`, `metadata`, `spec`, `status` first, then alphabetical) and is emitted as YAML 1.1 so kubectl and go-yaml readers do not coerce strings like `yes` or `on`. `konfig diff` compares rendered output against a baseline structurally, so reordered keys and multi-document files do not show up as noise.
-- **Secret backends as typed values.** sops, sealed-secrets, and external-secrets each lower a `Secret.define` to the matching custom resource, with schema validation on the binary's output. Whether a backend requires a source file is encoded in its type, so forgetting the source for a sops backend is a compile error.
-- **Helm with digest verification.** `Helm.release` requires a `digest` and hashes the cached chart tarball on every pull and every cache hit (`HelmDigestMismatch` on mismatch). A chart whose bytes change fails the next render.
+- **A dependency graph checked at the type level.** Each module declares what it needs (a Secret, a Namespace, a database) and what it provides. When you compose modules into an environment, the entrypoint refuses to compile until every need has a provider. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+- **One env contract for both sides.** You declare each environment variable once, as a secret, a literal, or a downward-API value. Binding that contract produces the Deployment env block and the Secret resources; the same contract decodes the variables inside the running process. Rename a variable once and both sides move.
+- **Deterministic YAML and structural diffs.** Output uses stable key ordering (`apiVersion`, `kind`, `metadata`, `spec`, `status` first, then alphabetical) and is emitted as YAML 1.1, so kubectl and go-yaml readers do not coerce strings like `yes` or `on`. `konfig diff` compares rendered output against a baseline structurally, so reordered keys and multi-document files do not show up as noise.
+- **Secret backends as typed values.** sops, sealed-secrets, and external-secrets each turn a declared secret into the matching custom resource, with schema validation on the binary's output. Whether a backend requires a source file is encoded in its type, so forgetting the source for a sops backend is a compile error.
+- **Helm with digest verification.** Every Helm release must name a chart digest. The cached chart tarball is hashed on every pull and every cache hit, so a chart whose bytes change fails the next render with `HelmDigestMismatch`.
 
 ## A compile error instead of a sync failure
 
-The example below is one of the worked-failure files shipped in `examples/full-stack/infra/envs/`. The `api` module does `yield* Dep.Secret("ghcr-pull")`, but no module in the list provides that Secret, so `AppOfApps.entrypoint` rejects the program before anything is rendered.
+The example below is one of the worked-failure files shipped in `examples/full-stack/infra/envs/`. The `api` module asks for a Secret named `ghcr-pull`, but no module in the list provides it. The entrypoint rejects the program at compile time, before anything is rendered.
 
 <Diagnostics case="missing-provider" />
 
@@ -35,7 +35,7 @@ The example below is one of the worked-failure files shipped in `examples/full-s
 - **Not a kustomize replacement.** If you have hand-written YAML and want to overlay it, konfig.ts is the wrong tool. It owns the manifest source.
 - **Not a runtime mutator.** It emits manifests; Argo CD or `kubectl` applies them. There is no admission controller and no operator.
 - **Not a higher-level platform abstraction.** No Crossplane, no OAM, no "Service" model that hides Deployment, Service, and Ingress. `Workload.web` is a helper that emits those resources explicitly.
-- **Not a Helm replacement.** It shells out to `helm template`. Charts you depend on stay charts; each templated document is lifted into the render as a `RawYaml` manifest.
+- **Not a Helm replacement.** It shells out to `helm template`. Charts you depend on stay charts; each templated document is lifted into the render as a raw YAML manifest.
 
 ## Requirements
 

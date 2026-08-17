@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`konfig docker` is the CLI surface of `@konfig.ts/docker`. Each app in the monorepo declares one `docker.ts` spec; the command resolves the app's transitive workspace closure from the root `package.json` workspaces and emits a production multi-stage `Dockerfile` plus, when the spec has a `dev` block, a `Dockerfile.dev`, with no hand-maintained `COPY` lists.
+Hand-written Dockerfiles in a monorepo tend to rot: every new internal package means another `COPY` line, and forgetting one breaks the build. `konfig docker` generates those Dockerfiles instead. Each app declares a small `docker.ts` spec, and the command works out which workspace packages the app depends on (transitively, from the root `package.json` workspaces) and emits a production multi-stage `Dockerfile`. When the spec also has a `dev` block, it emits a `Dockerfile.dev` as well. No `COPY` list is maintained by hand. The command is the CLI surface of the `@konfig.ts/docker` package.
 
 ## Usage
 
@@ -37,17 +37,41 @@ konfig docker diff    <target> [--format summary|detail|json]
 
 <Snippet file="apps/api/docker.ts" lang="ts" title="apps/api/docker.ts" />
 
-`Docker.app({ target, runner, dev?, packageManager?, runtime?, build?, sharedRootFiles? })` is the entrypoint. `runner.copy` takes atoms from `Docker.copy`: `builderArtifact({ src, dst, chown? })`, `workspaceSource(name)`, `workspaceSourceAll()`, `path({ src, dst, from?, chown? })`. `Docker.runtime.bun({ alpine? })` and `Docker.runtime.node({ alpine? })` pick the runtime image family (defaulting from the detected package manager, `alpine` defaults to `true`); `Docker.pm`, `Docker.build`, `Docker.healthcheck`, `Docker.user`, and `Docker.platform` cover the remaining knobs. See the [package README](https://github.com/DwieDave/konfig.ts/tree/main/packages/docker) for the full atom table.
+A spec is built with `Docker.app(...)`. Its two required parts are `target`, the workspace being packaged, and `runner`, which describes the final image: what to copy into it, from where, and how to run it. Optional parts add a `dev` image, override the detected package manager, pick the runtime image, configure the build step, and list shared root files.
 
-The target's `package.json` must set `engines.<pm>` and `engines.<runtime>` (one key, for example `"engines": { "bun": "1.3.5" }`, when bun is both); the runtime version becomes the runner image tag and the package manager version pins the install tooling. A missing key fails with `EngineVersionMissing { target, engineField }`.
+The `runner.copy` list is made of small declarative atoms from `Docker.copy`, so the generator knows the origin of every file:
+
+| Atom | Copies |
+| --- | --- |
+| `builderArtifact({ src, dst, chown? })` | A build output from the builder stage. |
+| `workspaceSource(name)` | The source of one named workspace. |
+| `workspaceSourceAll()` | The source of every workspace in the closure. |
+| `path({ src, dst, from?, chown? })` | An arbitrary path, optionally from another stage. |
+
+The runtime image family is chosen with `Docker.runtime.bun({ alpine? })` or `Docker.runtime.node({ alpine? })`. When you do not pick one, it defaults from the detected package manager; `alpine` defaults to `true`. The remaining knobs (`Docker.pm`, `Docker.build`, `Docker.healthcheck`, `Docker.user`, `Docker.platform`) are listed in the [package README](https://github.com/DwieDave/konfig.ts/tree/main/packages/docker), which also has the full atom table.
+
+Versions come from the target's `package.json`, not from the spec. It must set `engines.<pm>` and `engines.<runtime>`; when bun is both the package manager and the runtime, one key is enough (for example `"engines": { "bun": "1.3.5" }`). The runtime version becomes the runner image tag, and the package manager version pins the install tooling. A missing key fails with `EngineVersionMissing { target, engineField }`.
 
 ## Behaviour
 
-- The monorepo root is found by walking up from the target until a `package.json` with `workspaces` (or a `pnpm-workspace.yaml`) is found; otherwise `MonorepoRootNotFound`. All `COPY` paths are relative to that root, so **the Docker build context must be the monorepo root**: `docker build -f apps/api/Dockerfile .` from the root.
-- Production is a multi-stage build: `base` (runtime image pinned to `engines.<runtime>`), `deps` (installs from the full workspace set), `builder` (copies only the target's closure and runs the build), and `runner` (non-root by default, uid/gid 1001 `app`; copies only what the spec declares). `runner.production: true` inserts a `prod-deps` stage before `runner` that re-installs prod-only deps for the closure. Dev is `base` then `dev`, and only exists when the spec has a `dev` block.
-- Every emitted file starts with a header: `# konfig-managed: @konfig.ts/docker`, `# spec: <path>`, `# hash: sha256:...`. `write` refuses to overwrite a file that lacks the marker unless `--force` is given (`DockerWriteRefused`), skips the write when the managed content is identical (`unchanged <path>`), and writes atomically via a `.tmp.<pid>` rename.
-- `preview` prints the production Dockerfile, then `# ---- Dockerfile.dev ----` and the dev one (when the spec has `dev`), to stdout.
-- `diff` compares on-disk files with what would be emitted. Matching header hashes short-circuit; otherwise a structural diff is printed and the command fails with `DiffDrift { target, kind }`. Success prints an `OK` line: `<target> matches`.
+The monorepo root is found by walking up from the target until a `package.json` with a `workspaces` field (or a `pnpm-workspace.yaml`) appears; if none is found the command fails with `MonorepoRootNotFound`. All `COPY` paths are relative to that root, so **the Docker build context must be the monorepo root**: run `docker build -f apps/api/Dockerfile .` from the root.
+
+The production Dockerfile is a multi-stage build with four stages:
+
+| Stage | Purpose |
+| --- | --- |
+| `base` | The runtime image, pinned to `engines.<runtime>`. |
+| `deps` | Installs dependencies from the full workspace set. |
+| `builder` | Copies only the target's closure and runs the build. |
+| `runner` | The final image. Non-root by default (uid/gid 1001, user `app`); copies only what the spec declares. |
+
+Setting `runner.production: true` inserts a `prod-deps` stage before `runner` that re-installs production-only dependencies for the closure. The dev Dockerfile is `base` followed by a `dev` stage, and only exists when the spec has a `dev` block.
+
+Every emitted file starts with a three-line header: `# konfig-managed: @konfig.ts/docker`, `# spec: <path>`, and `# hash: sha256:...`. That header is how `write` recognises files it owns. `write` refuses to overwrite a file that lacks the marker unless `--force` is given (`DockerWriteRefused`), skips the write when the managed content is identical (printing `unchanged <path>`), and writes atomically through a `.tmp.<pid>` rename.
+
+`preview` prints the production Dockerfile to stdout, followed by a `# ---- Dockerfile.dev ----` separator and the dev Dockerfile when the spec has `dev`.
+
+`diff` compares the files on disk with what would be emitted now. If the header hashes match, the comparison short-circuits. Otherwise a structural diff is printed and the command fails with `DiffDrift { target, kind }`. When nothing differs it prints an `OK` line: `<target> matches`.
 
 <Aside type="note">
 `docker` does not read `konfig.json`. It needs a TypeScript-capable runtime to import `docker.ts`, and it never builds, pushes, or tags images.
@@ -55,7 +79,30 @@ The target's `package.json` must set `engines.<pm>` and `engines.<runtime>` (one
 
 ## Exit codes and errors
 
-`SpecImportError`, `SpecNotADockerApp` (default export is not a `Docker.app` value), `DockerWriteRefused`, `DockerWriteError`, `DiffDrift`, and the `AnyDockerError` union from `@konfig.ts/docker` (`MonorepoRootNotFound`, `EngineVersionMissing`, `CircularWorkspaceDep`, `WorkspaceNotFound`, `UnsupportedPm`, `SpecDecodeError`, `BuildScriptMissing`, `WorkspaceSourceUnknown`, `SharedRootFileMissing`, `PlatformMultiUnsupported`).
+Errors raised by the command itself:
+
+| Error | When |
+| --- | --- |
+| `SpecImportError` | `<target>/docker.ts` could not be imported. |
+| `SpecNotADockerApp` | The default export is not a `Docker.app` value. |
+| `DockerWriteRefused` | The destination file is not konfig-managed and `--force` was not given. |
+| `DockerWriteError` | Writing the file failed. |
+| `DiffDrift` | `diff` found a difference. |
+
+Errors from `@konfig.ts/docker` (the `AnyDockerError` union), raised while resolving the spec:
+
+| Error | When |
+| --- | --- |
+| `MonorepoRootNotFound` | No workspace root above the target. |
+| `EngineVersionMissing` | `engines.<pm>` or `engines.<runtime>` is missing from the target's `package.json`. |
+| `CircularWorkspaceDep` | The workspace graph contains a cycle. |
+| `WorkspaceNotFound` | The spec's `target` is not a workspace of the monorepo. |
+| `UnsupportedPm` | The package manager could not be determined or is not supported. |
+| `SpecDecodeError` | The spec does not match the schema. |
+| `BuildScriptMissing` | The spec's build step names a `package.json` script the target does not have. |
+| `WorkspaceSourceUnknown` | A `workspaceSource(name)` atom names a workspace outside the closure. |
+| `SharedRootFileMissing` | A file listed in `sharedRootFiles` does not exist. |
+| `PlatformMultiUnsupported` | The spec requests several platforms; a single `FROM --platform` line can only express one. |
 
 ## Example
 

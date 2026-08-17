@@ -7,66 +7,72 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-Kubernetes links resources by plain strings: an env var names a Secret, a volume names a ConfigMap, a Service names a container port. `@konfig.ts/k8s` replaces those strings with branded types at every link, so a reference to something nobody created, or created in the wrong namespace, fails to type-check.
+Kubernetes links resources by plain strings: an env var names a Secret, a volume names a ConfigMap, a Service names a container port. Nothing checks those strings until the cluster tries to resolve them. `@konfig.ts/k8s` replaces the strings with **branded refs**: values that are still plain strings at runtime but carry, in their type, which resource they point at. A reference to something nobody created, or created in the wrong namespace, fails to type-check.
 
 ## The ref types
 
-All refs are `string & { [Brand]: ... }`; the runtime value is the plain name and serializes to YAML unchanged.
+Every ref serialises to YAML as the bare name; the brand exists only in the type. You get one either by creating the resource (the builder's `ref` field) or by consuming it through the [dependency graph](/konfig.ts/docs/concepts/dependency-graph/):
 
-| Ref | Type parameters | Produced by |
+| Ref | What the type tracks | Produced by |
 | --- | --- | --- |
-| `SecretRef<N, K, Ns>` | name, key union, namespace | `Secret.make(...).ref`, `Secret.bind(...).ref`, `Environment.bind(...).members.X.ref`, `yield* Dep.Secret(name)` |
-| `ConfigMapRef<N, K>` | name, key union | `ConfigMap.make(...).ref`, `yield* Dep.ConfigMap(name)` |
-| `ServiceAccountRef<N>` | name | `ServiceAccount.make(...).ref`, `yield* Dep.ServiceAccount(name)` |
-| `PvcRef<N>` | name | `yield* Dep.Pvc(name)`, `PvcRef.of(name)` |
-| `BuiltImageRef<App>` | app name | `yield* Dep.Image(app)`, `BuiltImageRef.of({ app, registry, tag })` |
-| `PortName<N>` | port name | `Port.make({ name, ... })`, `Port.ref(name)` |
+| `SecretRef` | name, the keys it holds, its namespace | `Secret.make(...).ref`, `Secret.bind(...).ref`, `Environment.bind(...).members.X.ref`, `yield* Dep.Secret(name)` |
+| `ConfigMapRef` | name, the keys it holds | `ConfigMap.make(...).ref`, `yield* Dep.ConfigMap(name)` |
+| `ServiceAccountRef` | name | `ServiceAccount.make(...).ref`, `yield* Dep.ServiceAccount(name)` |
+| `PvcRef` | name | `yield* Dep.Pvc(name)`, `PvcRef.of(name)` |
+| `BuiltImageRef` | app name | `yield* Dep.Image(app)`, `BuiltImageRef.of({ app, registry, tag })` |
+| `PortName` | port name | `Port.make({ name, ... })`, `Port.ref(name)` |
 
-`Secret.make` infers `K` from the keys of `data` / `stringData` and `ConfigMap.make` from `data` / `binaryData`, so `EnvVar.fromConfigMap({ ref: featureFlags.ref, key: "NEW_UI" })` only accepts keys that exist. Renaming a key in the ConfigMap breaks every consumer at compile time.
+Secret and ConfigMap refs also know their keys. `Secret.make` reads them from `data` / `stringData`, `ConfigMap.make` from `data` / `binaryData`. So `EnvVar.fromConfigMap({ ref: featureFlags.ref, key: "NEW_UI" })` only accepts a key that exists, and renaming a key in the ConfigMap breaks every consumer at compile time.
 
-Escape hatches exist for genuinely external resources: `SecretRef.of(name)`, `ConfigMapRef.of(name)`, `ServiceAccountRef.of(name)`, `PvcRef.of(name)`. They mint a ref without any provider, so use them only for objects managed outside konfig.ts.
+For resources managed outside konfig.ts there are escape hatches: `SecretRef.of(name)`, `ConfigMapRef.of(name)`, `ServiceAccountRef.of(name)`, and `PvcRef.of(name)`. They mint a ref with no provider behind it, so use them only for genuinely external objects.
 
 ## Enforcement points
 
 The following inputs take a branded ref and reject a raw string:
 
-- `EnvVar.fromSecret` / `EnvVar.fromSecretForPod` (`valueFrom.secretKeyRef.name`) and `EnvVar.fromConfigMap` (`configMapKeyRef.name`).
-- `Volume.fromSecret({ ref })`, `Volume.fromConfigMap({ ref })`, `Volume.fromPvc({ claim })`.
-- `imagePullSecrets: [{ name }]` on `Workload.web`, `Workload.cron`, `ServiceAccount.make`, and the pod spec inputs.
-- `Ingress.tls({ secretName })` and the `tls` array of `Ingress.make` / `Workload.web`.
-- `Port.ref` in probes (`httpGet.port`, `tcpSocket.port`, `grpc.port`) and in the `targetPort` of `Workload.web` `service.ports` and `Service.fromContainer`; both accept a number or a `PortName` declared on the containers. Plain `Service.make` takes untyped `ServicePort` objects.
+- Env vars: `EnvVar.fromSecret` and `EnvVar.fromSecretForPod` (the secret name in `secretKeyRef`), `EnvVar.fromConfigMap` (the name in `configMapKeyRef`).
+- Volumes: `Volume.fromSecret({ ref })`, `Volume.fromConfigMap({ ref })`, `Volume.fromPvc({ claim })`.
+- Pull secrets: `imagePullSecrets` on `Workload.web`, `Workload.cron`, `ServiceAccount.make`, and the pod spec inputs.
+- TLS: `Ingress.tls({ secretName })` and the `tls` array of `Ingress.make` / `Workload.web`.
+- Ports: probes (`httpGet.port`, `tcpSocket.port`, `grpc.port`) and the `targetPort` of `Workload.web` service ports and `Service.fromContainer` accept a number or a `Port.ref` of a port declared on the containers. Plain `Service.make` takes untyped port objects.
 
 ### Namespace match
 
-`SecretRef` carries the owning namespace as its third parameter. `EnvVar.fromSecretForPod({ name, ref, key, podNamespace })` requires `ref`'s `Ns` to equal `podNamespace`, because the kube-apiserver only resolves `secretKeyRef` inside the pod's own namespace. Passing a ref bound in `"app"` to a pod in `"batch"` is a compile error. `EnvVar.fromSecret` is the unchecked variant for cases where the namespace is not known at the call site; `SecretRef.unsafeReNamespace` widens the slot when you have to.
+The kube-apiserver only resolves a `secretKeyRef` inside the pod's own namespace, so a secret ref also carries the namespace it was bound in. `EnvVar.fromSecretForPod({ name, ref, key, podNamespace })` requires the two to match: passing a ref bound in `"app"` to a pod in `"batch"` is a compile error. `EnvVar.fromSecret` is the unchecked variant for cases where the namespace is not known at the call site, and `SecretRef.unsafeReNamespace` widens the slot when you have to.
 
 ### Duplicate env names
 
-`Container.define` computes the pairwise intersection of the `name` literals in `env`. Two entries with the same name (for example a manual `EnvVar.value({ name: "DATABASE_URL" })` next to `...bound.envVars`, which already emits `DATABASE_URL`) produce a `_konfig_duplicate_env_names` hint: `Duplicate env name(s): "DATABASE_URL". K8s silently last-wins; rename one of the colliding entries or remove the manual valueEnv that shadows another producer.`
+Kubernetes silently keeps the last env var when two share a name. `Container.define` catches that at compile time by intersecting the names of all entries in `env`. A collision, for example a manual `EnvVar.value({ name: "DATABASE_URL" })` next to `...bound.envVars` (which already emits `DATABASE_URL`), produces a `_konfig_duplicate_env_names` hint: `Duplicate env name(s): "DATABASE_URL". K8s silently last-wins; rename one of the colliding entries or remove the manual valueEnv that shadows another producer.`
 
 ## Container.define and Workload.web
 
-`Container.define` returns a `ContainerSpec<Ports, Mounts>` whose port-name and mount-name unions come from the `ports` and `volumeMounts` tuples. Probes on the same container, and Service ports on the enclosing `Workload.web`, are typed against that union.
+`Container.define` returns a container spec that remembers the port names and mount names you declared. Probes on the same container, and Service ports on the enclosing `Workload.web`, are typed against those names, so a probe cannot point at a port that does not exist.
 
 <Snippet file="infra/modules/api.ts" startAt="      const apiContainer = Container.define({" endBefore="      return [...bound.manifests, workload]" />
 
-`Workload.web` takes:
+`Workload.web` bundles the common web-service shape into one call. It takes:
 
-- `name`, `namespace`, optional `labels`, `annotations`, `reloader`.
-- `deployment: { replicas?, containers, volumes?, imagePullSecrets?, serviceAccountName?, podLabels?, podAnnotations? }`.
-- `service: { ports: ServicePortSpec<PortNames>[], type? }` where `targetPort` is a number or `Port.ref` of a port declared on one of the containers.
-- `ingress?: { ingressClassName?, rules?, tls?, annotations? }`.
+- `name`, `namespace`, and optional `labels`, `annotations`, `reloader`.
+- `deployment`: `containers` plus optional `replicas`, `volumes`, `imagePullSecrets`, `serviceAccountName`, `podLabels`, `podAnnotations`.
+- `service`: `ports` (each `targetPort` is a number or a `Port.ref` of a port on one of the containers) and an optional `type`.
+- `ingress` (optional): `ingressClassName`, `rules`, `tls`, `annotations`.
 
-It renders `[Deployment, Service]` or `[Deployment, Service, Ingress]`, with `selector.matchLabels` fixed to `{ app: name }` and merged last into the pod labels so a colliding `podLabels` entry cannot desync the selector. `Workload.cron` takes `{ name, namespace, schedule, containers, labels?, annotations?, concurrencyPolicy?, successfulJobsHistoryLimit?, failedJobsHistoryLimit?, volumes?, imagePullSecrets?, restartPolicy? }` (`restartPolicy` defaults to `"OnFailure"`) and renders a `ServiceAccount` named after the job plus a `CronJob` that uses it.
+It renders a Deployment and a Service, plus an Ingress when `ingress` is given. The Deployment's selector is fixed to `{ app: name }` and merged last into the pod labels, so a colliding `podLabels` entry cannot desync the selector from the pods.
+
+`Workload.cron` is the equivalent for scheduled jobs. It renders a ServiceAccount named after the job and a CronJob that uses it. It takes:
+
+- `name`, `namespace`, `schedule`, `containers` (required).
+- `labels`, `annotations`, `volumes`, `imagePullSecrets` (optional).
+- `concurrencyPolicy`, `successfulJobsHistoryLimit`, `failedJobsHistoryLimit`, `restartPolicy` (optional; `restartPolicy` defaults to `"OnFailure"`).
 
 For anything outside those two shapes, use `Deployment.make`, `StatefulSet.make`, `Job.make`, `CronJob.make`, `Service.make`, and `Ingress.make` directly, as `infra/modules/worker.ts` does with `Deployment.make`.
 
 ## Rolling on secret change
 
-A Deployment does not restart when a referenced Secret changes. Two options:
+A Deployment does not restart when a Secret it references changes. konfig.ts offers two ways to make it roll:
 
-- `Workload.web({ reloader: "stakater" })` adds `reloader.stakater.com/auto: "true"` to the Deployment; `"stakater-strict"` adds `reloader.stakater.com/match: "true"` as well; `{ secrets: [...], configMaps: [...] }` emits the comma-joined `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` annotations; `"off"` (the default) emits nothing. Requires Stakater Reloader in the cluster and rolls on in-cluster change.
-- `hashSecretValues({ values, salt })` returns a SHA-256 hex digest of a `Record<string, Redacted<string>>` (netstring-framed, prefixed with the version tag `konfig/secret-values-hash/v1` and the salt, keys sorted). Put it in a pod annotation and the pod template changes whenever the values change at render time. Values are captured at build time only; a rotation between builds needs the reloader.
+- **Stakater Reloader annotations.** `Workload.web({ reloader: "stakater" })` adds `reloader.stakater.com/auto: "true"` to the Deployment. `"stakater-strict"` adds `reloader.stakater.com/match: "true"` as well. `{ secrets: [...], configMaps: [...] }` emits the comma-joined `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` annotations. `"off"` (the default) emits nothing. This requires Stakater Reloader in the cluster and rolls on in-cluster change.
+- **A values fingerprint.** `hashSecretValues({ values, salt })` returns a SHA-256 hex digest of the secret's values (netstring-framed, prefixed with the version tag `konfig/secret-values-hash/v1` and the salt, keys sorted). Put it in a pod annotation and the pod template changes whenever the values change at render time. Values are captured at build time only; a rotation between builds needs the reloader.
 
 <Aside type="caution">
 `hashSecretValues` is a change-detection fingerprint, not a cryptographic commitment safe to publish. The salt is non-secret and only stops the digest from being a pure function of the plaintext.

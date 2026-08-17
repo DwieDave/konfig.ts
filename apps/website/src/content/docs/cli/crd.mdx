@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside } from "@/components/docs"
 
-`konfig crd` turns the CRDs bundled with your Helm charts into TypeScript types so custom resources can be authored with editor support. `extract` writes the files; `verify` regenerates them into a temp directory and fails when the committed copies differ.
+Helm charts often ship CustomResourceDefinitions, and writing those custom resources by hand in TypeScript means guessing at field names. `konfig crd` reads the CRDs bundled with your registered charts and generates TypeScript types for them, so custom resources can be authored with editor completion and type checking. `extract` writes the type files; `verify` regenerates them into a temp directory and fails when the committed copies differ, which makes it a CI drift check.
 
 ## Usage
 
@@ -23,13 +23,20 @@ konfig crd verify
 | `--release <id>` | unset | Chart release id to extract. |
 | `--all` | `false` | Extract for every chart in the registry. |
 
-One of `--release` or `--all` is required; passing neither prints `Specify --release <id> or --all` and fails with `MissingCrdFlags`. When both are given, `--release` wins and `--all` is ignored. `--all` with an empty registry prints `No chart definitions found in <dir>` and exits `0`. `verify` has no flags or arguments.
+One of `--release` or `--all` is required. Passing neither prints `Specify --release <id> or --all` and fails with `MissingCrdFlags`. When both are given, `--release` wins and `--all` is ignored. Running `--all` against an empty registry prints `No chart definitions found in <dir>` and exits `0`. `verify` has no flags or arguments.
 
 ## What it reads
 
-Both subcommands resolve their locations through the shared precedence chain (see [konfig.json](/konfig.ts/docs/cli/configuration/) for the table): an environment variable if set, otherwise the matching `konfig.json` field, otherwise a built-in default. The chart registry comes from `KONFIG_CHARTS_DIR` / `charts` (default `infra/k8s-konfig/charts`), the tarball cache from `KONFIG_HELM_CACHE` / `helm.cacheDir` (default `.konfig/helm-cache`), the output directory from `KONFIG_CRD_OUT_DIR` / `crd.outDir` (default `.generated/crd`), and the minimum Helm version from `KONFIG_HELM_MIN_VERSION` / `helm.minVersion` (default `3.16.0`). Outside a konfig project (no `konfig.json` found) only the environment variable and built-in default apply.
+Both subcommands need four locations: the chart registry, the tarball cache, the output directory, and the minimum Helm version. Each is resolved through the shared precedence chain described on the [konfig.json](/konfig.ts/docs/cli/configuration/) page: an environment variable if set, otherwise the matching `konfig.json` field, otherwise a built-in default. Outside a konfig project (no `konfig.json` found) only the environment variable and built-in default apply.
 
-The registry is every `.ts` file in the charts directory whose name does not start with `_`. Each file is imported and scanned for an export carrying the `_konfigHelmRelease: true` marker; that object's `repo`, `chart`, `version`, optional `id` (defaults to the file name without `.ts`), and optional `digest` form one registry entry, decoded against strict patterns for chart names, versions, and `http(s)`/`oci` repo URLs so shell metacharacters never reach `helm`.
+| Setting | Environment variable | `konfig.json` field | Default |
+| --- | --- | --- | --- |
+| Chart registry directory | `KONFIG_CHARTS_DIR` | `charts` | `infra/k8s-konfig/charts` |
+| Tarball cache | `KONFIG_HELM_CACHE` | `helm.cacheDir` | `.konfig/helm-cache` |
+| Output directory | `KONFIG_CRD_OUT_DIR` | `crd.outDir` | `.generated/crd` |
+| Minimum Helm version | `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` |
+
+The chart registry is a directory of TypeScript files, one per chart. Every `.ts` file whose name does not start with `_` is imported and scanned for an export that carries the marker `_konfigHelmRelease: true`. That object becomes one registry entry with a repository URL, chart name, version, an optional id (defaulting to the file name without `.ts`), and an optional digest. Chart names, versions, and repository URLs (`http(s)` or `oci`) are checked against strict patterns so shell metacharacters never reach `helm`.
 
 ```ts title="infra/k8s-konfig/charts/postgres.ts"
 export const chart = {
@@ -44,11 +51,17 @@ export const chart = {
 
 ## Behaviour
 
-- Runs `helm version --short` first and fails with `HelmVersionTooLow` when `helm` is missing or older than the minimum.
-- For each release: `helm pull --repo <repo> <chart> --version <v> --untar` into a scoped temp directory and read `crds/*.yaml` and `crds/*.yml`; then pull the tarball into the cache and run `helm template <chart> <tgz> --include-crds --no-hooks`. When the registry entry has a `digest`, the tarball is cached (and looked up first) under `<cache>/<chart>-<version>-<digest12>.tgz` via `Helm.verifyChartDigest`, the same slot `konfig helm fetch` and render-time `Helm.release({ digest })` use; without a digest it caches under the plain `<cache>/<chart>-<version>.tgz`, skipping the pull when that file already exists. Both CRD sources are parsed and de-duplicated by CRD name.
-- For every `CustomResourceDefinition` the `openAPIV3Schema` of the first version that declares one is compiled with `json-schema-to-typescript` into an exported `<Resource>Input` type (the resource part of the CRD name, split on `-`/`_` and PascalCased), followed by a comment naming the CRD, group, and versions. A CRD with no schema in any version compiles as `{ type: "object", additionalProperties: true }`; a schema that fails to compile falls back to `Record<string, unknown>`.
-- Output is `<outDir>/<id>.ts`, starting with the header line `// Generated by @konfig.ts/cli` (followed by a do-not-edit note on the same line). A chart without CRDs gets a stub file with the header, a `// No CRDs found in chart <chart>@<version>` comment, and `export {};`.
-- `verify` regenerates every registry entry into a temp directory and compares byte-for-byte with `<outDir>/<id>.ts`. A committed file that is missing or lacks the generated header is reported as `<id>.ts (missing generated header)`; a registry with no entries prints a `No chart definitions found` note and exits `0`.
+Both subcommands start by running `helm version --short`. When `helm` is missing or older than the minimum version, the command fails with `HelmVersionTooLow`.
+
+For each release, the command collects CRDs from two sources. First it runs `helm pull --repo <repo> <chart> --version <v> --untar` into a scoped temp directory and reads `crds/*.yaml` and `crds/*.yml` from the unpacked chart. Then it pulls the tarball into the cache and runs `helm template <chart> <tgz> --include-crds --no-hooks`. The two sets are parsed and de-duplicated by CRD name.
+
+How the tarball is cached depends on whether the registry entry records a digest. With a digest, the tarball is verified and stored under `<cache>/<chart>-<version>-<digest12>.tgz`, and that file is looked up first on the next run. This is the same slot that `konfig helm fetch` and render-time `Helm.release({ digest })` use. Without a digest, the tarball is stored under the plain `<cache>/<chart>-<version>.tgz`, and the pull is skipped when that file already exists.
+
+For every CustomResourceDefinition, the command takes the OpenAPI schema of the first version that declares one and compiles it with `json-schema-to-typescript` into an exported type. The type is named `<Resource>Input`, where the resource part of the CRD name is split on `-` and `_` and PascalCased, and it is followed by a comment naming the CRD, its group, and its versions. A CRD with no schema in any version is compiled as an open object (`{ type: "object", additionalProperties: true }`); a schema that fails to compile falls back to `Record<string, unknown>`.
+
+Output goes to `<outDir>/<id>.ts`. Every file starts with the header line `// Generated by @konfig.ts/cli`, followed on the same line by a do-not-edit note. A chart without CRDs still gets a stub file with that header, a `// No CRDs found in chart <chart>@<version>` comment, and `export {};`, so its presence in the registry is visible.
+
+`verify` regenerates every registry entry into a temp directory and compares each result byte-for-byte with the committed `<outDir>/<id>.ts`. A committed file that is missing, or that lacks the generated header, is reported as `<id>.ts (missing generated header)`. A registry with no entries prints a `No chart definitions found` note and exits `0`.
 
 <Aside type="note">
 The generated types are inputs for `Manifest.make` from `@konfig.ts/core`, which produces a `RawYaml` resource at render time. There is no runtime schema validation attached to them.
@@ -56,10 +69,16 @@ The generated types are inputs for `Manifest.make` from `@konfig.ts/core`, which
 
 ## Exit codes and errors
 
-- `ReleaseNotFound { releaseId }` for an unknown `--release`; the message lists available ids.
-- `MissingCrdFlags` when neither flag is given.
-- `CrdDrift { drifted }` from `verify`, after printing `CRD drift detected in: ...` and `Run konfig crd extract --all to regenerate`.
-- `HelmVersionTooLow`, `ChartRegistryError`, `ChartRegistryEntryDecodeError`, `CrdInputDecodeError`, `CrdExtractError { chart, cause }`.
+| Error | When |
+| --- | --- |
+| `ReleaseNotFound { releaseId }` | `--release` names an id that is not in the registry; the message lists the available ids. |
+| `MissingCrdFlags` | Neither `--release` nor `--all` was given. |
+| `CrdDrift { drifted }` | `verify` found differences, after printing `CRD drift detected in: ...` and `Run konfig crd extract --all to regenerate`. |
+| `HelmVersionTooLow` | `helm` is missing or older than the minimum version. |
+| `ChartRegistryError` | Loading the chart registry failed (for example a chart file could not be imported). |
+| `ChartRegistryEntryDecodeError` | A registry entry does not match the expected shape or patterns. |
+| `CrdInputDecodeError` | The extract inputs (repo, chart, version) were rejected by the schema that guards the shell arguments. |
+| `CrdExtractError { chart, cause }` | Any other failure while extracting one chart, such as a failed pull, template, or write. |
 
 ## Example
 

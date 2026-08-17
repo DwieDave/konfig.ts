@@ -8,7 +8,7 @@ sidebar:
 
 import { Aside } from "@/components/docs"
 
-`@konfig.ts/cli` ships the `konfig` binary: the front-end to `@konfig.ts/core`, `@konfig.ts/argocd`, and `@konfig.ts/docker`. It finds your `konfig.json`, imports the env entry file, runs the `AppOfApps` program it exports, and writes YAML into the configured output directory. This package has no library entrypoint; it is a `bin` only.
+`@konfig.ts/cli` ships the `konfig` binary, the command-line front-end to the rest of konfig.ts (`@konfig.ts/core`, `@konfig.ts/argocd`, and `@konfig.ts/docker`). When you run it, it finds your `konfig.json`, imports the entry file for the requested env, runs the app-of-apps program that file exports, and writes the resulting YAML into the configured output directory. The package is a `bin` only; there is no library entrypoint to import.
 
 ## Install
 
@@ -26,7 +26,7 @@ konfig diff prod --format detail
 konfig set prod api ghcr.io/example/api:1.2.3
 ```
 
-Every command walks up from the cwd to find a `konfig.json`. An env is a named render target; its entry file is `envs.<name>.entry`, else `<root>/env/<name>.ts`, and that module's default export must be an `AppOfApps.entrypoint` program.
+Every command starts by walking up from the current directory until it finds a `konfig.json`. An env is a named render target such as `prod` or `staging`. Its entry file is whatever `envs.<name>.entry` points to in `konfig.json`, and defaults to `<root>/env/<name>.ts`. That module's default export must be a program created with `AppOfApps.entrypoint`.
 
 ## Surface
 
@@ -41,14 +41,48 @@ Every command walks up from the cwd to find a `konfig.json`. An env is a named r
 | `konfig docker preview\|write\|diff <target>` | Dockerfile generation via `@konfig.ts/docker`; `--prod-only`, `--dev-only`; `write` adds `--out-dir`, `--force`; `diff` adds `--format` |
 | `konfig graph [target]` | Print the workspace dependency graph; `--with-dev`, `--full`, `--width <n>` |
 
-`build`, `validate`, and `diff` share `--cluster <name>`, `--k8s-version <ver>`, and repeatable `--flag k=v` (exposed as `ctx.flags`, a `Map`), all readable from your program's `RenderContext`.
+The three rendering commands (`build`, `validate`, `diff`) accept a shared set of flags that your program can read from its `RenderContext`:
+
+| Flag | Meaning |
+| --- | --- |
+| `--cluster <name>` | Which cluster the render targets |
+| `--k8s-version <ver>` | The Kubernetes version to render for |
+| `--flag k=v` | Repeatable free-form key/value pairs, exposed as `ctx.flags` (a `Map`) |
 
 ## Errors
 
-Tagged errors raised by the CLI include `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`, `EnvLoadError`, `WriteEnvError`, `StructuralValidationFailed`, `KubeconformNotFound`, `KubeconformReportError`, `DiffBaselineMissing`, `DiffNonEmpty` (non-zero exit on differences), `SetUnknownEnv`, `SetUnknownApp`, `ImagesFileError`, `ReleaseNotFound`, `MissingCrdFlags`, `CrdDrift`, `MissingAllFlag`, `SpecImportError`, `SpecNotADockerApp`, `DiffDrift`, `GraphTargetNotFound`, `BuildCacheError`, `ChartRegistryError`, `ChartRegistryEntryDecodeError`, and `CrdInputDecodeError`. Render-time failures propagate as `AnyRenderError` from `@konfig.ts/core`.
+The CLI raises tagged errors so that each failure mode has a stable name. Render-time failures are not listed here; they propagate as `AnyRenderError` from `@konfig.ts/core`.
+
+| Error | When it is raised |
+| --- | --- |
+| `ConfigNotFound` | No `konfig.json` found walking up from the cwd |
+| `ConfigParseError` | `konfig.json` exists but did not decode |
+| `EnvEntryNotFound` | The env's entry file does not exist |
+| `EnvLoadError` | Importing the env entry file failed |
+| `WriteEnvError` | Writing rendered output for the env failed |
+| `StructuralValidationFailed` | `validate` found structural problems |
+| `KubeconformNotFound` | `validate --strict` could not find `kubeconform` |
+| `KubeconformReportError` | `kubeconform` reported failures |
+| `DiffBaselineMissing` | `diff` has no `diff.baseline` to compare against |
+| `DiffNonEmpty` | `diff` found differences (non-zero exit) |
+| `SetUnknownEnv` | `set` was given an env not present in `images.json` |
+| `SetUnknownApp` | `set` was given an app not present for that env |
+| `ImagesFileError` | `images.json` could not be read, decoded, or written |
+| `ReleaseNotFound` | `crd --release <id>` named an unknown release |
+| `MissingCrdFlags` | `crd` was run without `--release` or `--all` |
+| `CrdDrift` | `crd verify` found generated types out of date |
+| `MissingAllFlag` | `helm fetch` was run without `--all` |
+| `SpecImportError` | A `docker.ts` spec could not be imported |
+| `SpecNotADockerApp` | The imported spec's default export is not a `Docker.app` |
+| `DiffDrift` | `docker diff` found the on-disk Dockerfiles drifted |
+| `GraphTargetNotFound` | `graph` was given an unknown workspace target |
+| `BuildCacheError` | The build's input-hash cache could not be read or written |
+| `ChartRegistryError` | Loading the chart registry under `charts/` failed |
+| `ChartRegistryEntryDecodeError` | A chart registry entry did not decode |
+| `CrdInputDecodeError` | Input for CRD extraction did not decode |
 
 <Aside type="note" title="TypeScript-capable runtime">
-Most commands `import()` your `.ts` sources at runtime. Bun runs them with no flags; Node >= 23.6 strips types natively; Node 22.6 to 23.5 needs `--experimental-strip-types`; `tsx node_modules/.bin/konfig` also works. `konfig diff` also renders the env in memory before comparing against `diff.baseline`, so it needs the same runtime, and `helm fetch` and `crd` import the chart registry modules under `charts/`. Only `konfig set` and `konfig graph` avoid importing TypeScript sources.
+Most commands `import()` your `.ts` sources at runtime, so the runtime must be able to execute TypeScript. Bun runs them with no flags; Node >= 23.6 strips types natively; Node 22.6 to 23.5 needs `--experimental-strip-types`; `tsx node_modules/.bin/konfig` also works. This applies to `konfig diff` too, because it renders the env in memory before comparing against `diff.baseline`, and to `helm fetch` and `crd`, which import the chart registry modules under `charts/`. Only `konfig set` and `konfig graph` avoid importing TypeScript sources.
 </Aside>
 
 ## Requirements

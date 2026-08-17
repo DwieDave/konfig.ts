@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Diagnostics } from "@/components/docs"
 
-The example project ships five files under `examples/full-stack/infra/envs/` that do not compile on purpose. Each demonstrates one class of mistake konfig.ts moves from `argocd sync` time to `tsc` time. They are part of the example's `tsconfig.json` include set and every intended error is marked with `@ts-expect-error`, so CI (`bun run --cwd examples/full-stack check`) fails if any of them ever starts compiling. The errors shown here are guaranteed to stay errors.
+The main promise of konfig.ts is that a whole class of deployment mistakes fails at `tsc` time instead of at `argocd sync` time. The example project proves this with five files under `examples/full-stack/infra/envs/` that do not compile on purpose. Each demonstrates one class of mistake. They are part of the example's `tsconfig.json` include set, and every intended error is marked with `@ts-expect-error`, so CI (`bun run --cwd examples/full-stack check`) fails if any of them ever starts compiling. The errors shown here are guaranteed to stay errors.
 
 Two things to keep in mind when reading them:
 
@@ -16,43 +16,43 @@ Two things to keep in mind when reading them:
 
 ## broken.ts: a module needs a provider nobody listed
 
-`defineApi` runs `yield* Dep.Secret("ghcr-pull")` and `yield* Dep.Image("api")` inside its build, and `defineWorker` needs the same pull secret plus `Image "worker"`. The env lists only `api` and `worker` in `modules`, so `imagePulls`, `apiBuild`, and `workerBuild` are missing.
+A workload declares what it needs from other modules: here the api module asks for the `ghcr-pull` image pull secret and the `api` image inside its build function, and the worker module asks for the same pull secret plus the `worker` image. The environment lists only `api` and `worker` in its modules. The modules that would provide those things (`imagePulls`, `apiBuild`, `workerBuild`) are missing.
 
 <Diagnostics case="missing-provider" />
 
-Why it fails: `AppOfApps.fromModules` folds every module's provided and needed types in list order; whatever is left over becomes the residual `R` channel of the returned Effect (`Need<"Image", "api"> | Need<"Image", "worker"> | Need<"Secret", "ghcr-pull">` here). `AppOfApps.entrypoint` accepts only an Effect whose `R` contains nothing beyond the render services and reports the leftovers through the `_konfig_unsatisfied` hint, one `Missing provider for <Kind> "<name>"` message per leftover.
+Why it fails: `AppOfApps.fromModules` walks the module list in order and keeps a running tally of what has been provided and what is still needed. Whatever is still needed at the end stays in the type of the returned Effect as an unsatisfied requirement; here that is the `api` image, the `worker` image, and the `ghcr-pull` secret. `AppOfApps.entrypoint` accepts only an Effect with nothing left over beyond the render services. It reports each leftover through the `_konfig_unsatisfied` hint as one `Missing provider for <Kind> "<name>"` message.
 
-Fix: add the provider modules to `modules`, before the consumers. `prod.ts` is the working version of this file.
+Fix: add the provider modules to the list, before the consumers. `prod.ts` is the working version of this file.
 
 ## unbound-secret.ts: an env contract with an unbound secret
 
-`apiEnv` declares three secret members (`db`, `s3`, `jwt`). `Environment.bind` derives a required `secrets` record from the contract: one entry per secret member, and for backends whose type says `requiresSource: true`, a `source` next to the `backend`.
+An environment contract can declare secret members; the api contract declares three (`db`, `s3`, `jwt`). When a module binds that contract with `Environment.bind`, the type of the contract dictates a required `secrets` record: one entry per secret member, and for backends that need a source of values, a `source` next to the `backend`.
 
 <Diagnostics case="unbound-secret" />
 
-Why it fails: `BindEnvironmentInput` makes `secrets` mandatory when the environment has any secret member (`HasSecrets<M>`), types each entry as `SecretMemberOptions<N, K>` (a `backend`, a `source`, or both), and the `Sops.backend` return type is `SecretBackend<N, K, true, ...>`, whose `true` forces `source`. `Sops.passthrough` returns `SecretBackend<N, K, false, ...>`, so no `source` is required there.
+Why it fails: the bind input makes `secrets` mandatory as soon as the environment has any secret member, and each entry must be a backend, a source, or both. Whether a source is required is part of the backend's type. `Sops.backend` returns a backend whose type says it requires a source, so leaving the source out is a type error. `Sops.passthrough` returns a backend that does not require one.
 
 Fix: bind every secret member, and pair `Sops.backend` with `Sops.source({ file, keys })`. See [Secrets with sops](/konfig.ts/docs/guides/secrets-with-sops/).
 
 ## widened-name.ts: an Application name that is not a literal
 
-Names are the vertices of the dependency graph, so `Application.define` accepts `name` and `namespace` as `Application.LiteralName<T>` (an alias of `Module.LiteralName<T>`), and the `Module.fixedNs` / `Module.dynamicNs` wrappers do the same for the names they take. A value typed `string`, here read from `Config.string(...)`, is rejected.
+Names are the vertices of the dependency graph, so they have to be known at compile time. `Application.define` therefore accepts `name` and `namespace` only as literal strings, and the `Module.fixedNs` / `Module.dynamicNs` wrappers do the same for the names they take. A value typed as plain `string`, here read from `Config.string(...)`, is rejected.
 
 <Diagnostics case="widened-name" />
 
-Why it fails: with `name: string`, `Dep.Provide<"App", string>` would satisfy any `Dep.Need<"App", X>` and the missing-provider check above would silently pass. `LiteralName<T>` resolves to `T` for a literal and to an object carrying a `_konfig_error` message when `string extends T`, so the widened value no longer matches the parameter.
+Why it fails: if a name could be `string`, a module providing "some app" would satisfy any module needing a specific app, and the missing-provider check above would silently pass. The literal-name type resolves to the literal itself when given one, and to an object carrying a `_konfig_error` message when given a widened `string`, so the widened value no longer matches the parameter.
 
-Fix: keep names literal at the call site and pass them in from the env entry rather than reading them from process configuration. A wrapper that forwards a name must stay generic, `<const Name extends string>` with the parameter typed `Application.LiteralName<Name>`, as `defineApiBuild` in `infra/modules/builds.ts` does; the diagnostic text says exactly that.
+Fix: keep names literal at the call site and pass them in from the env entry rather than reading them from process configuration. A wrapper that forwards a name must stay generic, declared as `<const Name extends string>` with the parameter typed `Application.LiteralName<Name>`, as `defineApiBuild` in `infra/modules/builds.ts` does. The diagnostic text says exactly that.
 
 ## envname-collision.ts: two members claim one env var
 
-`Environment.define` computes the set of `envName`s across its top-level `Secret`, `Literal`, and `Downward` members and rejects a duplicate at the type level. Nested environments are covered by the runtime check in the same call, which throws `EnvNameCollision` when the module is loaded.
+Every member of an environment contract (secret, literal, or downward) ends up as one env var in the pod. `Environment.define` computes the set of env var names across its top-level members and rejects a duplicate at the type level. Nested environments are covered by a runtime check in the same call, which throws `EnvNameCollision` when the module is loaded.
 
 <Diagnostics case="envname-collision" />
 
-Why it fails: two members writing the same variable name would produce two `env` entries with the same `name` in the pod spec, and which value wins is a Kubernetes ordering detail. The check catches literal against literal, secret key against literal, and secret against secret.
+Why it fails: two members writing the same variable name would produce two `env` entries with the same name in the pod spec, and which value wins is a Kubernetes ordering detail. The check catches literal against literal, secret key against literal, and secret against secret.
 
-Fix: rename one of the `envName`s (or one key in a `Secret.define` `env` map). If both members are meant to be the same value, keep one member and reference it from both places.
+Fix: rename one of the env var names (or one key in a `Secret.define` `env` map). If both members are meant to be the same value, keep one member and reference it from both places.
 
 ## app-name-collision.ts: two Applications with the same name
 
@@ -60,12 +60,21 @@ Two `Application.define` calls with `name: "api"` are passed to `AppOfApps.fromM
 
 <Diagnostics case="app-name-collision" />
 
-Why it fails: `fromModules` is typed with `Compose.NoDuplicateProvides<Ms, "AppOfApps.fromModules">`, which folds the provided `App`, `Secret`, `SecretValues`, `ConfigMap`, `ServiceAccount`, `Pvc`, and `Image` names across the tuple. Two modules providing `App "api"` would let the later layer shadow the earlier one at runtime: both entries in `modules` would resolve to the shadowing Application and the first one would be lost silently, with both writing the same `Application-api.yaml`. It is rejected before that can happen with a `_konfig_duplicate` hint (`Namespace` and `Application` are exempt from the check because shared namespaces are normal).
+Why it fails: `fromModules` checks the module list for duplicate provided names. It folds the names of everything modules can provide across the tuple:
 
-Fix: give each Application a distinct name. If you want two instances of one module, call the factory twice with different `name`s (`defineApi({ name: "api", ... })`, `defineApi({ name: "api-canary", ... })`).
+- Applications
+- Secrets and secret values
+- ConfigMaps
+- ServiceAccounts
+- PersistentVolumeClaims
+- Images
+
+Namespaces are exempt because sharing a namespace between modules is normal (the `Application` kind is exempt as well, since it is always emitted alongside `App` and would report every collision twice). If two modules provided the same Application name, the later one would shadow the earlier one at runtime: both entries in the module list would resolve to the shadowing Application, the first would be lost silently, and both would write the same `Application-api.yaml`. The check rejects it before that can happen, with a `_konfig_duplicate` hint.
+
+Fix: give each Application a distinct name. If you want two instances of one module, call the factory twice with different names, for example `defineApi({ name: "api", ... })` and `defineApi({ name: "api-canary", ... })`.
 
 <Aside type="tip" title="Reproduce locally">
 Run `bun run --cwd examples/full-stack check` from the repository root. It passes because every intended error is expected; remove one `@ts-expect-error` line to see the diagnostic in full.
 </Aside>
 
-Next: [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/) explains the `Need` / `Provide` machinery behind the first, third, and fifth case.
+Next: [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/) explains the need / provide machinery behind the first, third, and fifth case.

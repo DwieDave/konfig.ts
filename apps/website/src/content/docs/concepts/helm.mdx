@@ -7,13 +7,13 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-konfig.ts does not replace Helm. `Helm.release` in `@konfig.ts/core` shells out to the `helm` binary, but it pins what gets rendered: an exact chart version, a digest of the tarball, and typed `values`. The templated documents come back as ordinary manifests, so they land in the same per-app directory as everything else and go through the same [stable YAML and diff](/konfig.ts/docs/concepts/rendering/) pipeline.
+konfig.ts does not replace Helm. `Helm.release` in `@konfig.ts/core` shells out to the `helm` binary, but it pins what gets rendered: an exact chart version, a digest of the tarball, and typed values. The templated documents come back as ordinary manifests, so they land in the same per-app directory as everything else and go through the same [stable YAML and diff](/konfig.ts/docs/concepts/rendering/) pipeline.
 
 ## Helm.release
 
 <Snippet file="infra/modules/sops-operator.ts" startAt="export const defineSopsOperator" />
 
-Options (`HelmReleaseOptions`):
+Options:
 
 | Option | Meaning |
 | --- | --- |
@@ -23,19 +23,21 @@ Options (`HelmReleaseOptions`):
 | `digest` | `sha256:<hex>` (the prefix is optional) of the chart tarball. Required. |
 | `releaseName?` | Name given to `helm template`; defaults to `chart`. |
 | `namespace?` | Passed as `--namespace`, and stamped onto every document that arrived without a `metadata.namespace` (missing or empty). Kinds on the built-in cluster-scoped list (`Namespace`, `ClusterRole`, `ClusterRoleBinding`, `CustomResourceDefinition`, `PersistentVolume`, `StorageClass`, `IngressClass`, webhook configurations, and others) are left alone. |
-| `values` | `Record<string, unknown>` written to a temporary `values.yaml`. |
+| `values` | Plain object written to a temporary `values.yaml`. |
 | `extraOpts?` | Extra `helm template` arguments, for example `["--include-crds"]`. |
 | `minVersion?` | When set, runs `helm version --short` first and fails with `HelmVersionTooLow { required, found }` if the binary is older or cannot be run (`found: "not found"`). |
 
-The return type is `Manifest<RawYaml[]>`: one `RawYaml` (`{ _tag: "RawYaml", content, origin: "helm:<chart>@<version>" }`) per document in the template output. The output is split with a real YAML multi-document parser (`parseYamlAll`), so a `---` inside a block scalar does not split a document in two; each document is re-stringified into `content` with a leading `---`. When the CLI writes files, each `RawYaml` document is parsed again, serialised through the stable YAML writer, and named `<Kind>-<name>.yaml` like every other manifest; documents without a string `kind` and `metadata.name` are dropped.
+The result is a manifest producing one raw YAML document per document in the template output; each records its origin as `helm:<chart>@<version>`. The output is split with a real YAML multi-document parser, so a `---` inside a block scalar does not split a document in two; each document is re-stringified with a leading `---`. When the CLI writes files, each document is parsed again, serialised through the stable YAML writer, and named `<Kind>-<name>.yaml` like every other manifest. Documents without a string `kind` and `metadata.name` are dropped.
 
 ## Digest verification
 
-The tarball cache lives at the location resolved from `KONFIG_HELM_CACHE`, then `konfig.json`'s `helm.cacheDir` field, then the built-in default `.konfig/helm-cache` (see [konfig.json](/konfig.ts/docs/cli/configuration/) for the precedence rule). During `build`/`validate`/`diff`, that resolved directory is passed through as `KONFIG_HELM_CACHE` for every `Helm.release()` call the render makes. Each entry is `<chart>-<version>-<first 12 hex chars of digest>.tgz`.
+Chart tarballs are cached on disk so they are pulled once. The cache directory is resolved from `KONFIG_HELM_CACHE`, then the `helm.cacheDir` field in `konfig.json`, then the built-in default `.konfig/helm-cache` (see [konfig.json](/konfig.ts/docs/cli/configuration/) for the precedence rule). During `build`, `validate`, and `diff` the resolved directory is passed through as `KONFIG_HELM_CACHE` to every `Helm.release()` call the render makes. Each entry is named `<chart>-<version>-<first 12 hex chars of digest>.tgz`.
 
-On a cache miss, `helm pull --repo <repo> <chart> --version <version>` runs into a private temporary directory inside the cache dir (prefix `.konfig-helm-pull-`); exactly one `<chart>*.tgz` must appear (otherwise `HelmRenderError`), and it is renamed into place, so concurrent renders of the same chart cannot corrupt each other. The file is then hashed with SHA-256 and compared with `digest`.
+On a cache miss, `helm pull --repo <repo> <chart> --version <version>` runs into a private temporary directory inside the cache dir (prefix `.konfig-helm-pull-`). Exactly one `<chart>*.tgz` must appear there (otherwise `HelmRenderError`), and it is renamed into place, so concurrent renders of the same chart cannot corrupt each other. The file is then hashed with SHA-256 and compared with `digest`.
 
-On a cache hit the file is hashed **again** before use. A mismatch in either path removes the cached file and fails with `HelmDigestMismatch { chart, version, expected, actual }`, whose message reads `Helm chart <chart>@<version> digest mismatch: expected sha256:..., got sha256:...`. Because the tarball is verified every render, a tampered cache directory cannot slip a different chart into your manifests. `Helm.release` reports every failure except `HelmVersionTooLow` as `HelmRenderError { chart, version, cause }`, so the mismatch (like a failed pull or template) arrives as the `cause` of a `HelmRenderError`; both tags are members of `AnyRenderError`.
+On a cache hit the file is hashed **again** before use, so a tampered cache directory cannot slip a different chart into your manifests. A mismatch in either path removes the cached file and fails with `HelmDigestMismatch { chart, version, expected, actual }`, whose message reads `Helm chart <chart>@<version> digest mismatch: expected sha256:..., got sha256:...`.
+
+Every `Helm.release` failure except `HelmVersionTooLow` is reported as `HelmRenderError { chart, version, cause }`. A digest mismatch, a failed pull, or a failed template therefore arrives as the `cause` of a `HelmRenderError`. Both tags are members of the `AnyRenderError` union.
 
 <Aside type="tip" title="Finding the digest">
 Run `helm pull --repo <repo> <chart> --version <version>` once and `shasum -a 256` the tarball, or set `digest` to a placeholder, run `konfig build`, and copy the `actual` value from the `HelmDigestMismatch` error into your module.
@@ -43,17 +45,36 @@ Run `helm pull --repo <repo> <chart> --version <version>` once and `shasum -a 25
 
 ## Cache pre-fetch and version floor
 
-`konfig helm fetch --all` pulls every chart in the chart registry into the cache directory ahead of time. The registry is the set of `.ts` files (not starting with `_`) in the charts directory; from each file the first export carrying `_konfigHelmRelease: true` is decoded for `repo`, `chart`, `version`, optional `digest` (defaults to `""`), and optional `id` (defaults to the file name without `.ts`). The command first checks the `helm` binary against the minimum version and fails with `HelmVersionTooLow` if it is older, then refuses to run without `--all` (`MissingAllFlag`).
+`konfig helm fetch --all` pulls every chart in the chart registry into the cache directory ahead of time, so a later render or CI job never has to pull. The registry is the set of `.ts` files (not starting with `_`) in the charts directory. From each file the first export marked `_konfigHelmRelease: true` is read; it must carry `repo`, `chart`, and `version`, and may carry `digest` (defaults to `""`) and `id` (defaults to the file name without `.ts`). The command first checks the `helm` binary against the minimum version and fails with `HelmVersionTooLow` if it is older, then refuses to run without `--all` (`MissingAllFlag`).
 
-When a registry entry has a recorded `digest`, the pre-fetched file is cached under `<chart>-<version>-<digest12>.tgz`, the same name `Helm.release` and `konfig crd extract` cache under and look for, so a `helm fetch --all` now warms the exact cache slot a later render or `crd extract` reads from. Registry entries with no recorded digest still cache under the plain `<chart>-<version>.tgz`, which `Helm.release`'s digest-suffixed cache cannot reuse (`helm fetch` prints a warning for those).
+When a registry entry has a recorded digest, the pre-fetched file is cached under `<chart>-<version>-<digest12>.tgz`, the same name `Helm.release` and `konfig crd extract` look for. A `helm fetch --all` therefore warms exactly the cache slot a later render or CRD extraction reads from. Entries with no recorded digest still cache under the plain `<chart>-<version>.tgz`, which the digest-suffixed lookup cannot reuse; `helm fetch` prints a warning for those.
 
-Paths for the `helm` and `crd` commands resolve through a shared precedence chain: an environment variable if set, otherwise the matching `konfig.json` field (resolved relative to `konfig.json`'s own directory), otherwise a built-in default (resolved against the working directory). `KONFIG_HELM_CACHE` overrides `helm.cacheDir` (default `.konfig/helm-cache`), `KONFIG_CHARTS_DIR` overrides `charts` (default `infra/k8s-konfig/charts`), `KONFIG_CRD_OUT_DIR` overrides `crd.outDir` (default `.generated/crd`), and `KONFIG_HELM_MIN_VERSION` overrides `helm.minVersion` (default `3.16.0`). See [konfig.json](/konfig.ts/docs/cli/configuration/) for the full table. `Helm.release`'s own `minVersion` option is unaffected by `konfig.json`'s `helm.minVersion`; it stays a plain opt-in per-call option.
+Paths for the `helm` and `crd` commands resolve through a shared precedence chain: an environment variable if set, otherwise the matching `konfig.json` field (resolved relative to `konfig.json`'s own directory), otherwise a built-in default (resolved against the working directory).
+
+| Environment variable | `konfig.json` field | Default |
+| --- | --- | --- |
+| `KONFIG_HELM_CACHE` | `helm.cacheDir` | `.konfig/helm-cache` |
+| `KONFIG_CHARTS_DIR` | `charts` | `infra/k8s-konfig/charts` |
+| `KONFIG_CRD_OUT_DIR` | `crd.outDir` | `.generated/crd` |
+| `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` |
+
+See [konfig.json](/konfig.ts/docs/cli/configuration/) for the full table. `Helm.release`'s own `minVersion` option is unaffected by `helm.minVersion` in `konfig.json`; it stays a plain opt-in per-call option.
 
 ## CRD codegen
 
-Charts that install CRDs (`--include-crds`) often need matching custom resources from your own modules. `konfig crd extract --release <id>` (or `--all`) checks the `helm` version, untars the chart into a temp dir to read its `crds/` directory, templates the cached tarball with `--include-crds --no-hooks`, dedupes the `CustomResourceDefinition` documents by name, and compiles the first version's `openAPIV3Schema` of each CRD into a TypeScript type named `<Resource>Input` (for example `sopssecrets.isindir.github.com` becomes `SopssecretsInput`). Output is one file per release at `$KONFIG_CRD_OUT_DIR/<id>.ts`, starting with a `// Generated by @konfig.ts/cli ...` header line. A chart without CRDs gets a stub that exports nothing.
+Charts that install CRDs (`--include-crds`) often need matching custom resources from your own modules. Rather than writing those by hand against an untyped object, konfig.ts can generate TypeScript types from the chart's CRD schemas.
 
-`konfig crd verify` re-extracts every registered release into a temp dir and reports files that differ from the committed ones (or lack the generated header) as drifted, so a chart bump that changes a CRD schema fails CI until the types are regenerated. Failures in this pipeline are `CrdExtractError { chart, cause }`, except registry entries that fail the input schema (`CrdInputDecodeError`).
+`konfig crd extract --release <id>` (or `--all`) does that in five steps:
+
+1. Checks the `helm` version.
+2. Untars the chart into a temp dir to read its `crds/` directory.
+3. Templates the cached tarball with `--include-crds --no-hooks`.
+4. Dedupes the `CustomResourceDefinition` documents by name.
+5. Compiles the first version's `openAPIV3Schema` of each CRD into a TypeScript type named `<Resource>Input` (for example `sopssecrets.isindir.github.com` becomes `SopssecretsInput`).
+
+Output is one file per release at `$KONFIG_CRD_OUT_DIR/<id>.ts`, starting with a `// Generated by @konfig.ts/cli ...` header line. A chart without CRDs gets a stub that exports nothing.
+
+`konfig crd verify` guards against drift: it re-extracts every registered release into a temp dir and reports files that differ from the committed ones (or lack the generated header). A chart bump that changes a CRD schema therefore fails CI until the types are regenerated. Failures in this pipeline are `CrdExtractError { chart, cause }`, except registry entries that fail the input schema, which are `CrdInputDecodeError`.
 
 Use the generated `Input` type with `Manifest.make` to build a resource for that CRD, then return it from a module like any other manifest.
 

@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-`konfig set <env> <app> <image>` rewrites a single entry in `<root>/images.json`. It exists so a CI pipeline can promote a freshly built image with one command and a follow-up `konfig build` picks it up.
+`konfig set <env> <app> <image>` records which container image an app should run in a given env. It rewrites a single entry in `<root>/images.json` and nothing else. It exists so a CI pipeline can promote a freshly built image with one command; a follow-up `konfig build` then picks the new reference up.
 
 ## Usage
 
@@ -29,19 +29,20 @@ konfig set <env> <app> <image> [--create]
 
 ## Behaviour
 
-- Locates `konfig.json` by walking up from the cwd, then reads `<configDir>/<root>/images.json`.
-- Parses the file as JSON and decodes it with the strict `ImagesConfig` schema (`{ envs: Record<env, Record<app, string>> }`); unknown top-level keys are rejected.
-- Fails when `env` is not present in `envs`; the error lists the known env names. Adding a new env is a deliberate edit, not something `set` does implicitly.
-- `app` must already exist under `env` unless `--create` is passed; an unknown `app` without `--create` fails and leaves `images.json` untouched. Updating an already-known app's image works without `--create`.
-- Builds the new config, decodes it again against the schema, and writes it back with tab indentation and a trailing newline (`JSON.stringify(cfg, null, "\t")`), matching the repo's `images.json` formatting so the diff is one line.
-- Logs `set <env>.<app> = <image>` on success. Nothing is rendered; run `konfig build <env>` afterwards.
+The command locates `konfig.json` by walking up from the current directory, then reads `<configDir>/<root>/images.json`. The file is parsed as JSON and decoded with a strict schema: a top-level `envs` object mapping env names to maps of app name to image string. Unknown top-level keys are rejected.
+
+The command is deliberately conservative about what it will add. The `env` must already exist under `envs`; otherwise the command fails and the error lists the known env names. Adding a new env is a deliberate edit, not something `set` does implicitly. Likewise the `app` must already exist under that env unless `--create` is passed; an unknown app without `--create` fails and leaves `images.json` untouched. Updating an app that is already known works without `--create`.
+
+On success the new config is decoded against the schema once more and written back with tab indentation and a trailing newline (`JSON.stringify(cfg, null, "\t")`). This matches the repo's `images.json` formatting, so the resulting git diff is one line. The command logs `set <env>.<app> = <image>`. Nothing is rendered; run `konfig build <env>` afterwards.
 
 ## Exit codes and errors
 
-- `SetUnknownEnv { env, known }` when the env key is missing (also printed as `unknown env '<env>'. Known: a, b`).
-- `SetUnknownApp { env, app, known }` when the app key is missing and `--create` was not passed (also printed as `unknown app '<app>' in env '<env>'. Known: a, b (pass --create to add it)`).
-- `ImagesFileError { path, cause }` for a missing or unreadable file, invalid JSON, or a schema failure on read or write.
-- `ConfigNotFound` / `ConfigParseError` when `konfig.json` cannot be resolved.
+| Error | When |
+| --- | --- |
+| `SetUnknownEnv { env, known }` | The env key is missing. Printed as `unknown env '<env>'. Known: a, b`. |
+| `SetUnknownApp { env, app, known }` | The app key is missing and `--create` was not passed. Printed as `unknown app '<app>' in env '<env>'. Known: a, b (pass --create to add it)`. |
+| `ImagesFileError { path, cause }` | `images.json` is missing or unreadable, is not valid JSON, or fails the schema on read or write. |
+| `ConfigNotFound`, `ConfigParseError` | `konfig.json` cannot be found or does not match its schema. |
 
 ## Example
 
@@ -54,4 +55,4 @@ git add infra/images.json .generated/manifests/prod
 git commit -m "promote api to ${GITHUB_SHA::7}"
 ```
 
-See [konfig.json](/konfig.ts/docs/cli/configuration/) for the `images.json` shape and the `imagesFor` / `requireImage` helpers that read it inside modules.
+See [konfig.json](/konfig.ts/docs/cli/configuration/) for the `images.json` shape and for the `imagesFor` and `requireImage` helpers that read it inside modules.

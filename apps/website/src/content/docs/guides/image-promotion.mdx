@@ -7,11 +7,11 @@ sidebar:
 
 import { Aside, Steps, Snippet } from "@/components/docs"
 
-Workloads in konfig.ts never hard-code an image string. A workload module asks for `Dep.Image("api")`; a build module provides it. Promotion then means changing one value in `images.json`, re-rendering, and committing, without touching a module.
+Promoting an image means changing which tag an environment runs, without editing the workload that runs it. In konfig.ts a workload never hard-codes an image string. It asks the dependency graph for the image of a named app, and a separate build module provides it. Promotion then comes down to changing one value in `images.json`, re-rendering, and committing.
 
 ## The images.json contract
 
-`@konfig.ts/core` defines the file shape as an Effect Schema and decodes it strictly (unknown keys fail):
+`images.json` maps each environment to a record of app name to image value. `@konfig.ts/core` defines the shape as an Effect Schema and decodes it strictly, so an unknown key is an error rather than a silently ignored field:
 
 ```ts
 // packages/core/src/images.ts
@@ -21,7 +21,9 @@ export const ImagesConfig = Schema.Struct({
 })
 ```
 
-`konfig set` reads and writes the file at `<konfig.json dir>/<root>/images.json`; `konfig build` itself never reads it, your env entry does (see below). Values are opaque strings: the schema does not parse them, so a project picks a convention. The `konfig set` help text suggests full refs (`ghcr.io/<org>/<app>:<sha>`); the example's build modules take `registry` and `tag` separately, so the convention shown here is tag-only with the registry passed alongside. The example project itself ships no `images.json` and passes literal tags.
+The file lives at `<konfig.json dir>/<root>/images.json`. Only `konfig set` reads and writes it. `konfig build` never opens the file; your environment entry reads it, as shown further down.
+
+The values are opaque strings. The schema does not parse them, so each project picks a convention. The `konfig set` help text suggests full references such as `ghcr.io/<org>/<app>:<sha>`. The example's build modules take the registry and the tag separately, so the convention shown here is tag-only, with the registry passed alongside. The example project itself ships no `images.json` and passes literal tags.
 
 ```json title="images.json"
 {
@@ -32,7 +34,7 @@ export const ImagesConfig = Schema.Struct({
 }
 ```
 
-Helpers, all exported from `@konfig.ts/core`:
+To read the file yourself, `@konfig.ts/core` exports these helpers:
 
 | Helper | Behaviour |
 | --- | --- |
@@ -43,23 +45,23 @@ Helpers, all exported from `@konfig.ts/core`:
 | `requireImageEffect(...)` | Same, as an Effect failing with `ImagesAppMissing` |
 | `lookupEnv({ cfg, env })` | Env record or `undefined` |
 
-`ImagesEnvMissing` carries `{ env }`, `ImagesAppMissing` carries `{ env, app }`. Both are `Data.TaggedError`s, so an env entry that reads the file fails with a named error rather than rendering a workload with `image: undefined`.
+The two errors are named, so a missing environment or app fails the build with a clear message instead of rendering a workload with `image: undefined`. `ImagesEnvMissing` carries the environment name; `ImagesAppMissing` carries the environment and the app name.
 
 ## How images reach a workload
 
-A build module is a dependency-graph anchor: it emits no manifests and provides `Dep.Image` for one app via `Dep.provideImage({ app, registry, tag })`, which brands `${registry}/${app}:${tag}` as `BuiltImageRef<"api">`.
+A build module is an anchor in the dependency graph. It emits no manifests; its only job is to provide the image for one app. It does that with `Dep.provideImage({ app, registry, tag })`, which assembles `${registry}/${app}:${tag}` and brands the string as the image of that app, so the type checker can tell the api image apart from the worker image.
 
 <Snippet file="infra/modules/builds.ts" startAt="export const defineApiBuild" endBefore="export const defineWorkerBuild" title="infra/modules/builds.ts" />
 
-The consuming module does `yield* Dep.Image("api")` inside its build and passes the branded string to `Container.define`.
+The workload module asks for the image with `yield* Dep.Image("api")` inside its build function and passes the result to `Container.define`.
 
 <Snippet file="infra/modules/api.ts" startAt="export const defineApi" endBefore="      const bound" title="infra/modules/api.ts" />
 
-If no module in `AppOfApps.fromModules({ modules })` provides `Image "api"`, `AppOfApps.entrypoint` fails to compile with `_konfig_unsatisfied`; see [Worked failures](/konfig.ts/docs/guides/worked-failures/).
+If no module in the list you pass to `AppOfApps.fromModules` provides the image for `api`, the environment fails to compile. The type error is reported through the `_konfig_unsatisfied` hint; see [Worked failures](/konfig.ts/docs/guides/worked-failures/).
 
 ## Reading images.json in the env entry
 
-The example passes literal tags to `defineApiBuild` for offline reproducibility. To drive them from `images.json`, read the file in the env entry and hand the value to the build module. The env entry is imported once by `konfig build`, so a synchronous read at module top level is fine here.
+The example passes literal tags to `defineApiBuild` so it renders offline. To drive the tags from `images.json`, read the file in the environment entry and hand the value to the build module. The entry is imported once by `konfig build`, so a synchronous read at module top level is fine here.
 
 ```ts title="infra/envs/prod.ts"
 import { decodeImagesSync, imagesFor, requireImage } from "@konfig.ts/core"
@@ -79,11 +81,15 @@ const apiBuild = defineApiBuild({
 })
 ```
 
-A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `ImagesAppMissing`. Both are thrown while `konfig build` imports the entry, so they surface as an `EnvLoadError` whose `cause` is the tagged error, and no manifest is written.
+A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `ImagesAppMissing`. Both are thrown while `konfig build` imports the entry. The CLI reports them as an `EnvLoadError` whose cause is the named error, and no manifest is written.
 
 ## Promoting from CI
 
-`konfig set <env> <app> <image>` performs a schema-validated read, replaces one existing app key under an existing env, and writes the file back tab-indented. It refuses an env that is not already present (`SetUnknownEnv`) and never creates the file (a missing file is an `ImagesFileError`), so a typo in the env name cannot silently add a new environment. A typo'd or genuinely new `app` key is refused the same way (`SetUnknownApp`) unless you pass `--create`, so a typo in the app name cannot silently add a stray key either.
+`konfig set <env> <app> <image>` updates one value in `images.json`. It reads the file, validates it against the schema, replaces one existing app key under one existing environment, and writes the file back tab-indented. It is deliberately strict, so a typo cannot silently create a new environment or a stray key:
+
+- An environment that is not already in the file is refused with `SetUnknownEnv`.
+- A missing file is refused with `ImagesFileError`; the command never creates it.
+- An app key that is not already under that environment is refused with `SetUnknownApp`, unless you pass `--create` to add it on purpose.
 
 <Steps>
 
@@ -96,7 +102,7 @@ A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `Im
    konfig build staging
    ```
 
-3. Commit both `images.json` and the rendered manifests (the example's `outDir.manifests` is `.generated/manifests`; use whatever directory your `konfig.json` and `rootPath` point at), then push. Argo CD picks up the change on its next refresh.
+3. Commit both `images.json` and the rendered manifests, then push. Argo CD picks up the change on its next refresh. The example's output directory is `.generated/manifests`; use whatever directory your `konfig.json` and Argo CD root path point at.
 
    ```bash
    git add images.json .generated/manifests/staging
@@ -109,7 +115,7 @@ A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `Im
 </Steps>
 
 <Aside type="tip" title="One diff to review">
-When `Dep.Image` is the only path from `images.json` to a pod spec, the rendered diff of a promotion is exactly the `image:` lines of the affected workloads. `konfig diff staging` renders the env in memory and compares it structurally against `<root>/<diff.baseline>/staging` from `konfig.json`, so with the baseline pointed at your committed manifests you see the promotion before you commit (without a `diff` entry the command fails with `DiffBaselineMissing`).
+When the dependency graph is the only path from `images.json` to a pod spec, the rendered diff of a promotion is exactly the `image:` lines of the affected workloads. You can see that diff before committing: `konfig diff staging` renders the environment in memory and compares it structurally against the baseline directory configured under `diff.baseline` in `konfig.json`. Point the baseline at your committed manifests to review the promotion first. Without a `diff` entry the command fails with `DiffBaselineMissing`.
 </Aside>
 
 Next: [Dockerfiles](/konfig.ts/docs/guides/dockerfiles/) covers producing the images that end up in `images.json`.

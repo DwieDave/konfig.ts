@@ -8,7 +8,16 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`@konfig.ts/core` holds the primitives the rest of konfig.ts is built on: the `Manifest<A>` carrier, the `Dep.*` kinds that drive compile-time dependency tracking, the `Module` factories, `Helm.release` with digest verification, deterministic YAML serialization, structural diff, and the `render` entrypoint the CLI calls. Most projects reach for the higher-level packages (`@konfig.ts/k8s`, `@konfig.ts/env`, `@konfig.ts/argocd`) and touch core directly only for `Module.*`, `Dep.*`, and `Helm.release`.
+`@konfig.ts/core` is the foundation the other konfig.ts packages are built on. It knows nothing about Kubernetes resource shapes; it provides the machinery that every package shares:
+
+- the manifest carrier that wraps a value to be rendered (`Manifest`),
+- the typed needs and provides that drive compile-time dependency tracking (`Dep`),
+- the module factories that give a build a namespace and a target (`Module`),
+- Helm chart rendering with digest verification (`Helm.release`),
+- deterministic YAML serialization and a structural diff,
+- and the `render` entrypoint the CLI calls.
+
+Most projects work with the higher-level packages (`@konfig.ts/k8s`, `@konfig.ts/env`, `@konfig.ts/argocd`) and reach into core directly only for `Module.*`, `Dep.*`, and `Helm.release`.
 
 ## Install
 
@@ -18,11 +27,11 @@ bun add @konfig.ts/core
 
 ## Usage
 
-A reusable module that creates a namespace and pulls a digest-verified Helm chart. `Module.fixedNs` pins the namespace; `Application.target` (from `@konfig.ts/argocd`) turns the module into an Argo CD `Application` handle.
+A reusable module that creates a namespace and pulls a digest-verified Helm chart. `Module.fixedNs` pins the module to one namespace. `Application.target` (from `@konfig.ts/argocd`) turns the module into an Argo CD Application handle.
 
 <Snippet file="infra/modules/postgres.ts" startAt="export const definePostgres" title="infra/modules/postgres.ts" />
 
-Inside a build, `yield* Dep.Secret("ghcr-pull")` records a typed need that another module must satisfy with `Dep.provideSecret("ghcr-pull")`. The graph is checked when you compose modules at `AppOfApps.entrypoint`; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+Dependencies between modules are declared inside the build. Writing `yield* Dep.Secret("ghcr-pull")` records a typed need for that secret; some other module must satisfy it with `Dep.provideSecret("ghcr-pull")`. Nothing is checked at that point. The check happens when you compose modules at `AppOfApps.entrypoint`; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
 
 ## Surface
 
@@ -44,7 +53,20 @@ Inside a build, `yield* Dep.Secret("ghcr-pull")` records a typed need that anoth
 
 ## Errors
 
-Tagged errors exported from `src/index.ts`: `RenderError`, `BoundaryDecodeError`, `EmbedYamlReadError`, `HelmVersionTooLow`, `HelmRenderError`, `HelmDigestMismatch`, `CrdExtractError`, `ProcessError`, `ImagesEnvMissing`, `ImagesAppMissing`. `AnyRenderError` is the union of the render-time ones.
+Core exports tagged error classes from `src/index.ts`. The render-time ones are grouped in the `AnyRenderError` union, which is the error type you see on every manifest's render and on the entrypoints built on top of core.
+
+| Error | Meaning | In `AnyRenderError` |
+| --- | --- | --- |
+| `RenderError` | A render step failed; carries a message and an optional cause | yes |
+| `EmbedYamlReadError` | `Manifest.embedYaml` could not read the file at `path` | yes |
+| `BoundaryDecodeError` | Data at a boundary did not match the named schema | yes |
+| `HelmVersionTooLow` | The installed `helm` is older than the required version | yes |
+| `HelmRenderError` | `helm template` failed for the chart and version | yes |
+| `HelmDigestMismatch` | The pulled chart's SHA-256 digest did not match the expected one | yes |
+| `CrdExtractError` | Extracting CRDs from a chart failed | yes |
+| `ProcessError` | A subprocess exited non-zero; carries the command, exit code, and stderr tail | no |
+| `ImagesEnvMissing` | `images.json` has no entry for the requested env | no |
+| `ImagesAppMissing` | `images.json` has no image for the requested app in that env | no |
 
 <Aside type="note">
 `Manifest<A>` does not carry dependencies in its own type. Per-kind tracking lives one level up, in the Effect `Layer`s that `Module` and `Application.define` compose.

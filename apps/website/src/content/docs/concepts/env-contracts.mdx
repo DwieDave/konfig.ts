@@ -7,21 +7,21 @@ sidebar:
 
 import { Aside, Diagnostics, Snippet } from "@/components/docs"
 
-An env contract is a TypeScript value that describes every environment variable a process reads: which ones come from Secrets, which are literals, which come from the Kubernetes downward API. The same value drives two things: `Environment.bind` in the infra module (producing the pod's `env` block and the secret manifests) and `Environment.runtime` in the application (decoding `process.env` into typed values). Rename a variable in one place and both sides move together.
+An env contract is a TypeScript value that describes every environment variable a process reads: which ones come from Secrets, which are literals, which come from the Kubernetes downward API. The same value drives two things. In the infra module, `Environment.bind` turns it into the pod's `env` block and the secret manifests. In the application, `Environment.runtime` decodes `process.env` into typed values. Rename a variable in one place and both sides move together.
 
 ## Declaring members
 
-`@konfig.ts/env` has three leaf constructors and one composite. Each returns an Effect `Config` (so it can be decoded) plus metadata that `bind` reads.
+`@konfig.ts/env` has three leaf constructors and one composite. Each returns an Effect `Config` (so the runtime can decode it) plus the metadata that `bind` reads to build manifests.
 
-`Secret.define({ name, namespace, env })` declares a Kubernetes Secret and maps each key to the env var it feeds:
+**Secrets.** `Secret.define({ name, namespace, env })` declares a Kubernetes Secret and maps each key to the env var it feeds:
 
 <Snippet file="shared/env-contracts/src/secrets.ts" startAt="export const dbCreds" endBefore="export const s3Creds" />
 
-`Literal.define({ envName, value, schema?, serialize? })` declares a constant. Without `schema`, `runtime` returns `value` as declared; with `schema: Config.Config<T>` (for example `Config.number("HTTP_PORT").pipe(Config.withDefault(8080))`) it reads and parses the variable. `serialize` is optional for primitives (`String(value)`) and required for objects.
+**Literals.** `Literal.define({ envName, value, schema?, serialize? })` declares a constant. Without a schema, `runtime` returns the value as declared. With one (for example `Config.number("HTTP_PORT").pipe(Config.withDefault(8080))`) it reads and parses the variable instead. `serialize` controls how the value is written into the pod; it is optional for primitives (`String(value)`) and required for objects.
 
-`Downward.define({ envName, fieldPath })` declares a downward-API field such as `metadata.name`; runtime reads it as a string.
+**Downward API.** `Downward.define({ envName, fieldPath })` declares a downward-API field such as `metadata.name`; the runtime reads it as a string.
 
-`Environment.define({ ... })` groups members and is itself a member, so contracts nest:
+**Groups.** `Environment.define({ ... })` groups members and is itself a member, so contracts nest:
 
 <Snippet file="shared/env-contracts/src/bundles.ts" startAt="export const apiEnv" endBefore="// Strict subset of apiEnv" />
 
@@ -29,13 +29,13 @@ An env contract is a TypeScript value that describes every environment variable 
 
 ### Env name collisions
 
-Two members claiming the same variable would let one silently overwrite the other in the pod. `Environment.define` rejects that at the type level for direct leaf members (a `_konfig_error: 'Environment: envName "X" is claimed by multiple members'` hint) and, as the authoritative check including nested environments, throws `EnvNameCollision { envName, claims }` when the defining module is evaluated.
+Two members claiming the same variable would let one silently overwrite the other in the pod. `Environment.define` rejects that at two levels. For direct leaf members it is a type error (a `_konfig_error: 'Environment: envName "X" is claimed by multiple members'` hint). The authoritative check, which also covers nested environments, throws `EnvNameCollision { envName, claims }` when the defining module is evaluated.
 
 <Diagnostics case="envname-collision" />
 
 ## Binding in a module
 
-`Environment.bind` (exported from `@konfig.ts/k8s`, which merges the contract API with `bind` and `runtime`) takes:
+Binding is where the contract meets Kubernetes. `Environment.bind` (exported from `@konfig.ts/k8s`, which merges the contract API with `bind` and `runtime`) takes the contract plus the information only the infra side knows:
 
 ```ts
 Environment.bind({
@@ -46,26 +46,28 @@ Environment.bind({
 })
 ```
 
-`secrets` is keyed by member name (nested environments nest the record) and is required as soon as any member, nested or not, is a Secret. Each entry is `{ backend, source?, labels?, annotations? }`, and its shape depends on the backend's `RequiresSource` parameter (see [Secret backends](/konfig.ts/docs/concepts/secret-backends/)): a backend typed `SecretBackend<N, K, true>` makes `source` mandatory, `false` makes it optional, and `{ source }` alone is allowed for members that only need render-time values without a manifest. `literals` is keyed the same way and overrides a `Literal` member's `value` (re-serialised with its `serialize`).
+`secrets` says how each secret member becomes a manifest. It is keyed by member name (nested environments nest the record) and becomes required as soon as any member, nested or not, is a Secret. Each entry is `{ backend, source?, labels?, annotations? }`. Whether `source` is required depends on the backend (see [Secret backends](/konfig.ts/docs/concepts/secret-backends/)): a backend whose type says `requiresSource: true` makes `source` mandatory, one that says `false` makes it optional. An entry with only `{ source }` is also allowed, for members that need render-time values but no manifest. `literals` is keyed the same way and overrides a Literal member's value, re-serialised with that member's `serialize`.
 
 <Snippet file="infra/modules/api.ts" startAt="      const bound = Environment.bind({" endBefore="      const apiContainer = Container.define({" />
 
-Leaving a secret member out, or giving a `requiresSource` backend no source, fails to compile:
+Leaving a secret member out, or giving a source-requiring backend no source, fails to compile:
 
 <Diagnostics case="unbound-secret" />
 
-The result is a `DeclaredEnvironment`:
+The result is a declared environment with four parts:
 
-- `bound.envVars`: one `EnvVar` per leaf, in declaration order. Secret keys become `valueFrom.secretKeyRef`, literals become `value`, downward entries become `valueFrom.fieldRef`. Spread it into `Container.define({ env: [...] })`.
-- `bound.manifests`: whatever each backend emitted (a `SopsSecret`, `SealedSecret`, `ExternalSecret`, or native `Secret` per member). Return them from `build` alongside the workload.
-- `bound.members.<name>`: per member, the declared shape. For a secret that is `{ ref, name, namespace, keys, envVars, manifest?, refLayer, values?, layer? }`; `ref` is a `SecretRef<N, K, Ns>` usable anywhere a ref is required, as `api.ts` does with `bound.members.db.ref` for an extra `DATABASE_URL_PRIMARY` variable. Nested environments give nested records.
-- `bound.valuesLayer`: merged `Layer` providing `Dep.SecretValues` for every member that had a `source`, in case a manifest needs the plaintext at render time (for example to feed `hashSecretValues`).
+| Field | What it holds |
+| --- | --- |
+| `bound.envVars` | One env var per leaf, in declaration order: secret keys become `valueFrom.secretKeyRef`, literals become `value`, downward entries become `valueFrom.fieldRef`. Spread it into `Container.define({ env: [...] })`. |
+| `bound.manifests` | Whatever each backend emitted (a `SopsSecret`, `SealedSecret`, `ExternalSecret`, or native `Secret` per member). Return them from `build` alongside the workload. |
+| `bound.members.<name>` | The declared shape of each member; nested environments give nested records. For a secret it holds `ref`, `name`, `namespace`, `keys`, `envVars`, and optionally `manifest`, `refLayer`, `values`, `layer`. The `ref` is a branded secret reference usable anywhere a ref is required; `api.ts` uses `bound.members.db.ref` for an extra `DATABASE_URL_PRIMARY` variable. |
+| `bound.valuesLayer` | One merged layer providing the decrypted values (`Dep.SecretValues`) for every member that had a `source`, in case a manifest needs the plaintext at render time (for example to feed `hashSecretValues`). |
 
-`Secret.bind({ secret, backend?, source?, namespace?, labels?, annotations? })` is the single-member version used by `infra/modules/image-pulls.ts` for the pull credential that never becomes an env var; it returns the `DeclaredSecret` shape described above (`manifest` is `undefined` when no `backend` is given, and `namespace` falls back to the contract's own).
+`Secret.bind({ secret, backend?, source?, namespace?, labels?, annotations? })` is the single-member version. `infra/modules/image-pulls.ts` uses it for the pull credential that never becomes an env var. It returns the same per-member shape described above; `manifest` is `undefined` when no `backend` is given, and `namespace` falls back to the contract's own.
 
 ## Decoding at runtime
 
-In the application, `Environment.runtime(env)` returns `Effect<EnvironmentShape<M>, ConfigError>`: the same nested record, with `Redacted<string>` for every secret key and the schema's output type for literals.
+In the application, `Environment.runtime(env)` returns an Effect that reads `process.env` and produces the same nested record as the contract, or fails with a `ConfigError`. Every secret key comes back as a `Redacted<string>`; literals come back as their schema's output type.
 
 <Snippet file="apps/api/src/main.ts" startAt="const config = await Effect.runPromise(" endBefore="Bun.serve({" />
 

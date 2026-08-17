@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`konfig.json` is the project file the CLI discovers by walking up from the current directory. It is decoded with the strict `KonfigConfig` schema from `@konfig.ts/core` (`decodeKonfigConfigEffect`): unknown keys are an error, so a typo in a field name fails the command instead of being ignored. All relative paths resolve against the directory that contains the file (`configDir`).
+`konfig.json` is the project file that tells the CLI where your sources live and where output goes. Commands find it by walking up from the current directory. The file is decoded with a strict schema: unknown keys are an error, so a typo in a field name fails the command instead of being ignored. Every relative path in the file resolves against the directory that contains it, referred to below as the config directory.
 
 ## Fields
 
@@ -28,7 +28,15 @@ import { Aside, Snippet } from "@/components/docs"
 | `services.globalPaths` | `string[]` | `[]` | Reserved for the services layer; validated only. |
 | `clusters.<name>` | `{ registry?, ingressClass?, storageClass?, repositoryUrl? }` | unset | Per-cluster values, all optional strings. |
 
-The CLI commands read `root`, `envs`, `outDir.manifests`, `diff.baseline`, and `cacheInclude` directly. `charts`, `crd.outDir`, `helm.cacheDir`, and `helm.minVersion` feed `crd extract`, `crd verify`, and `helm fetch` through a shared precedence chain: an environment variable wins if set, otherwise the matching `konfig.json` field is used (resolved relative to the directory that contains `konfig.json`), otherwise a built-in default (resolved relative to the current working directory) applies. This lets a project set these paths once in `konfig.json` without exporting environment variables, while CI or a shell override still takes priority when needed. Outside a konfig project (no `konfig.json` found), only the environment variable and built-in default apply.
+The render commands (`build`, `validate`, `diff`) and `set` read `root`, `envs`, `outDir.manifests`, `diff.baseline`, and `cacheInclude` directly from the file.
+
+The Helm-related fields (`charts`, `crd.outDir`, `helm.cacheDir`, `helm.minVersion`) work differently. They feed `crd extract`, `crd verify`, and `helm fetch`, and each one can also be set from an environment variable. The value is resolved in this order:
+
+1. The environment variable, if set.
+2. Otherwise the matching `konfig.json` field, resolved relative to the config directory.
+3. Otherwise a built-in default, resolved relative to the current working directory.
+
+This lets a project set these paths once in `konfig.json` without exporting environment variables, while CI or a shell override still takes priority when needed. Outside a konfig project (no `konfig.json` found), only the environment variable and the built-in default apply.
 
 | Variable | Overrides field | Default | Used by |
 | --- | --- | --- | --- |
@@ -37,10 +45,10 @@ The CLI commands read `root`, `envs`, `outDir.manifests`, `diff.baseline`, and `
 | `KONFIG_CRD_OUT_DIR` | `crd.outDir` | `.generated/crd` | `crd`: output directory for generated `.ts` files |
 | `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` | `crd`, `helm fetch`: preflight `helm version` check |
 
-`build`, `validate`, and `diff` also honor `helm.cacheDir` (env var or `konfig.json` field) for every `Helm.release()` call a chart definition makes during rendering, so a cache location set once in `konfig.json` is used consistently between `helm fetch`, `crd extract`, and rendering.
+The tarball cache location is also honored at render time. When a chart definition calls `Helm.release()` during `build`, `validate`, or `diff`, the chart is cached in the directory given by `helm.cacheDir` (or its environment variable). A cache location set once in `konfig.json` is therefore used consistently by `helm fetch`, `crd extract`, and rendering.
 
 <Aside type="caution">
-`clusters.<name>` in `konfig.json` is not what `--cluster` reads. `--cluster` only sets `ctx.cluster` on the `RenderContext` and changes the output directory; your env entry decides what to do with it (the full-stack example keeps its per-cluster overlays in `infra/cluster.ts`).
+The `clusters.<name>` section is not what `--cluster` reads. `--cluster` only puts the cluster name on the render context (as `ctx.cluster`) and changes the output directory. Your env entry decides what to do with that name; the full-stack example keeps its per-cluster overlays in `infra/cluster.ts`.
 </Aside>
 
 ## Example
@@ -49,11 +57,11 @@ The full-stack example keeps `konfig.json` at the workspace root with `root: "."
 
 <Snippet file="konfig.json" lang="json" title="konfig.json" />
 
-`prod` and `staging` are declared explicitly because their entries live under `infra/envs/`, not the default `<root>/env/` location. `cluster` and `modules` describe the layout for readers and tooling; the CLI does not load them.
+The `prod` and `staging` envs are declared explicitly because their entries live under `infra/envs/` rather than the default `<root>/env/` location. The `cluster` and `modules` fields describe the layout for readers and tooling; the CLI does not load them.
 
 ## images.json
 
-`konfig set` maintains a second file, `<root>/images.json`, decoded with the strict `ImagesConfig` schema (`packages/core/src/images.ts`):
+`konfig set` maintains a second file, `<root>/images.json`, which maps each env and app to the container image it should run. It is decoded with a strict schema (defined in `packages/core/src/images.ts`) and has this shape:
 
 ```ts
 interface ImagesConfig {
@@ -76,4 +84,4 @@ interface ImagesConfig {
 }
 ```
 
-Your modules read it with `imagesFor({ cfg, env })` and `requireImage({ e, app, envName })` from `@konfig.ts/core` (or the `*Effect` variants for a typed error channel: `ImagesEnvMissing`, `ImagesAppMissing`). The full-stack example does not ship an `images.json`; it derives image references from its build modules instead. See [konfig set](/konfig.ts/docs/cli/set/) for the write path.
+Your modules read this file through two helpers from `@konfig.ts/core`: `imagesFor({ cfg, env })` selects the map for one env, and `requireImage({ e, app, envName })` picks one app's image out of it and fails when the app is missing. Both throw on a missing key; the Effect variants (`lookupEnvEffect` and `requireImageEffect`) instead report the typed errors `ImagesEnvMissing` and `ImagesAppMissing`. The full-stack example does not ship an `images.json`; it derives image references from its build modules instead. See [konfig set](/konfig.ts/docs/cli/set/) for the write path.

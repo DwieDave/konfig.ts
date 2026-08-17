@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-`konfig validate <env>` renders the env exactly like `build` but keeps the result in memory. It then checks every YAML document structurally and, with `--strict`, hands the rendered tree to `kubeconform` for schema validation.
+`konfig validate <env>` checks that an env renders to well-formed Kubernetes documents, without writing anything. It renders the env exactly like `build` but keeps the result in memory, then checks every YAML document structurally. With `--strict` it also hands the rendered tree to `kubeconform` for full schema validation.
 
 ## Usage
 
@@ -30,18 +30,32 @@ konfig validate <env> [--strict] [--ignore-missing-schemas]
 
 ## Behaviour
 
-- Structural validation parses each rendered file with the YAML parser and decodes every non-null document against a Kubernetes envelope schema: `apiVersion: string`, `kind: string`, optional string maps for `labels` and `annotations`, and DNS-pattern checks on names. `metadata.name` follows the RFC 1123 *subdomain* rule (lowercase alphanumerics, `-`, `.`, must start and end alphanumeric, max 253 chars) for every kind except `Namespace` and `Service`, which use the stricter RFC 1123 *label* rule (no dots, max 63 chars); `metadata.namespace`, when present, always uses the label rule regardless of kind. A `CustomResourceDefinition` named `sopssecrets.isindir.github.com` is valid under the subdomain rule; a `Service` or `Namespace` named with a dot is not. Deeper fields are left to kubeconform.
-- Every issue is printed to stderr as `<file> (doc <n>) <path>: <message>`, naming the specific rule violated (e.g. `metadata.name '...' is not a valid RFC 1123 subdomain — ...` or `metadata.namespace '...' is not a valid RFC 1123 label — ...`); a YAML parse failure is reported as one issue for `doc 0`.
-- On success it prints an `OK` line: `env '<env>': <n> file(s) pass structural validation`.
-- `--strict` renders fresh in memory and stages the result into a scoped scratch temporary directory (cleaned up automatically when the command exits), then runs kubeconform against that directory. It no longer depends on a prior `konfig build` and never reads stale output from a previous build's output directory. `--k8s-version`, when set, both shapes your render (`ctx.k8sVersion`) and is forwarded to kubeconform as `-kubernetes-version <ver>`.
-- Nothing is written to disk outside the `--strict` scratch directory, and the build cache is not consulted or updated.
+Structural validation catches the mistakes that make a manifest unusable before it reaches a cluster: a missing `kind`, a label map with a non-string value, or a resource name Kubernetes will reject. Each rendered file is parsed as YAML, and every non-null document is checked against a Kubernetes envelope schema:
+
+| Field | Rule |
+| --- | --- |
+| `apiVersion` | Required string. |
+| `kind` | Required string. |
+| `metadata.labels`, `metadata.annotations` | Optional maps of string to string. |
+| `metadata.name` | RFC 1123 *subdomain* (lowercase alphanumerics, `-`, `.`; must start and end alphanumeric; max 253 chars) for every kind except `Namespace` and `Service`, which use the stricter RFC 1123 *label* rule (no dots, max 63 chars). |
+| `metadata.namespace` | When present, always the RFC 1123 *label* rule regardless of kind. |
+
+So a `CustomResourceDefinition` named `sopssecrets.isindir.github.com` passes under the subdomain rule, while a `Service` or `Namespace` whose name contains a dot does not. Deeper fields are left to kubeconform.
+
+Every issue is printed to stderr as `<file> (doc <n>) <path>: <message>`, naming the specific rule that was violated (for example `metadata.name '...' is not a valid RFC 1123 subdomain — ...` or `metadata.namespace '...' is not a valid RFC 1123 label — ...`). A YAML parse failure is reported as one issue for `doc 0`. On success the command prints an `OK` line: `env '<env>': <n> file(s) pass structural validation`.
+
+With `--strict`, the command renders fresh in memory, stages the result into a scoped scratch directory that is cleaned up when the command exits, and runs kubeconform against that directory. It does not depend on a prior `konfig build` and never reads stale output from a previous build's output directory. When `--k8s-version` is set it both shapes your render (as `ctx.k8sVersion`) and is forwarded to kubeconform as `-kubernetes-version <ver>`.
+
+Nothing is written to disk outside the `--strict` scratch directory, and the build cache is neither consulted nor updated.
 
 ## Exit codes and errors
 
-- `StructuralValidationFailed { env, issueCount }` after any envelope issue; the issues are already on stderr.
-- `KubeconformNotFound` when the binary cannot be spawned. The message reads `kubeconform binary not found`, asks you to install it for `--strict` validation, and includes the attempted command line (`kubeconform -summary -strict <dir> ...`).
-- `KubeconformReportError { stdout, stderr }` when kubeconform exits non-zero; its output is included in the message.
-- The same config, entry, and render errors as [konfig build](/konfig.ts/docs/cli/build/).
+| Error | When |
+| --- | --- |
+| `StructuralValidationFailed { env, issueCount }` | At least one envelope issue was found; the issues are already on stderr. |
+| `KubeconformNotFound` | The `kubeconform` binary cannot be spawned. The message reads `kubeconform binary not found`, asks you to install it for `--strict` validation, and includes the attempted command line (`kubeconform -summary -strict <dir> ...`). |
+| `KubeconformReportError { stdout, stderr }` | kubeconform exited non-zero; its output is included in the message. |
+| config, entry, and render errors | The same errors as [konfig build](/konfig.ts/docs/cli/build/). |
 
 ## Example
 

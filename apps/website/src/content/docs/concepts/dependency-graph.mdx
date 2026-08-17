@@ -7,59 +7,61 @@ sidebar:
 
 import { Aside, Diagnostics, Snippet } from "@/components/docs"
 
-Modules rarely stand alone: a workload needs an image somebody built and a pull secret somebody emitted. konfig.ts records those edges in the type system as `Dep.*` needs and provides, then checks at the entrypoint that every need has a provider. A missing edge is a compile error, not a `secret "ghcr-pull" not found` event in the cluster.
+Modules rarely stand alone. A workload needs an image somebody built and a pull secret somebody emitted. konfig.ts records those edges in the type system: a module declares what it **needs** and what it **provides**, and the entrypoint checks that every need has a provider. A missing edge is a compile error, not a `secret "ghcr-pull" not found` event in the cluster.
 
 ## Needs and provides
 
-`Dep.Need<K, N>` is a phantom brand keyed by a kind `K` and a literal name `N`. `Dep.Provide<K, N>` is the same type; the direction comes from which side of an Effect `Layer` it sits on. Every kind has a service constructor (used with `yield*` inside a module's `build`) and most have a `provide*` helper that returns a `Layer`.
+A need is identified by a kind (Secret, Image, Namespace, and so on) and a literal name. A provide is the same identifier seen from the other side; the direction comes from which side of an Effect layer it sits on. For each kind there is a constructor you `yield*` inside a module's `build` to consume, and for most kinds a `provide*` helper that returns a layer:
 
-| Kind | Consume | Provide | Value the consumer receives |
+| Kind | Consume | Provide | What the consumer receives |
 | --- | --- | --- | --- |
-| `Secret` | `Dep.Secret(name)` | `Dep.provideSecret(name)` | `SecretRef<N, K, Ns>` |
-| `SecretValues` | `Dep.SecretValues(name)` | via `Secret.bind` / `Environment.bind` (`layer`) | `Record<K, Redacted<string>>` |
-| `ConfigMap` | `Dep.ConfigMap(name)` | `Dep.provideConfigMap(name)` | `ConfigMapRef<N, K>` |
-| `Namespace` | `Dep.Namespace(name)` | `Dep.provideNamespace(name)` | the name |
-| `ServiceAccount` | `Dep.ServiceAccount(name)` | `Dep.provideServiceAccount(name)` | `ServiceAccountRef<N>` |
-| `Pvc` | `Dep.Pvc(name)` | `Dep.providePvc(name)` | `PvcRef<N>` |
-| `Image` | `Dep.Image(name)` | `Dep.provideImage({ app, registry, tag })` | `BuiltImageRef<App>` (the full `registry/app:tag` string) |
-| `Application` | `Dep.Application(name)` | `Dep.provideApplication(name)` | the name |
-| `App` | `Dep.App(name)` | emitted by every `Application.define` | the built `Application` |
+| Secret | `Dep.Secret(name)` | `Dep.provideSecret(name)` | a branded secret reference |
+| SecretValues | `Dep.SecretValues(name)` | the values layer from `Secret.bind` / `Environment.bind` | the decrypted values, one `Redacted<string>` per key |
+| ConfigMap | `Dep.ConfigMap(name)` | `Dep.provideConfigMap(name)` | a branded ConfigMap reference |
+| Namespace | `Dep.Namespace(name)` | `Dep.provideNamespace(name)` | the name |
+| ServiceAccount | `Dep.ServiceAccount(name)` | `Dep.provideServiceAccount(name)` | a branded ServiceAccount reference |
+| Pvc | `Dep.Pvc(name)` | `Dep.providePvc(name)` | a branded PVC reference |
+| Image | `Dep.Image(name)` | `Dep.provideImage({ app, registry, tag })` | the full `registry/app:tag` image string |
+| Application | `Dep.Application(name)` | `Dep.provideApplication(name)` | the name |
+| App | `Dep.App(name)` | emitted by every `Application.define` | the built Argo CD Application |
 
-`Application.define` (and therefore `Module.fixedNs` / `Module.dynamicNs` with `Application.target`) provides `App`, `Application`, and `Namespace` for its own name and namespace, and removes those same needs from its `In` channel. That is why a module can `yield* Dep.Namespace("app")` for a namespace it creates itself without declaring anything.
+Every module built with the Argo CD target automatically provides App, Application, and Namespace for its own name and namespace, and those same needs are removed from its input. That is why a module can `yield* Dep.Namespace("app")` for a namespace it creates itself without declaring anything.
 
 ## Providing
 
-A provider attaches a `Layer` through the wrapper's `provides` field. `image-pulls.ts` emits the GHCR pull credential and provides `Secret "ghcr-pull"`:
+A provider attaches a layer through the wrapper's `provides` field. `image-pulls.ts` emits the GHCR pull credential and provides the Secret named `ghcr-pull`:
 
 <Snippet file="infra/modules/image-pulls.ts" startAt="export const defineImagePulls" />
 
-The provided value is a branded ref (`SecretRef<"ghcr-pull">`), not a manifest. Nothing checks that the module also emitted a Secret named `ghcr-pull`; the provide is a promise you make. Keep provider and manifest in the same module so they cannot drift.
+What the provider hands out is a branded reference to the secret, not the manifest itself. Nothing checks that the module also emitted a Secret named `ghcr-pull`; the provide is a promise you make. Keep provider and manifest in the same module so they cannot drift.
 
-`Secret.bind` returns a `DeclaredSecret` carrying `refLayer` (a `Provide<"Secret", N>` layer) and, when a `source` was given, `values` / `layer` (a `Provide<"SecretValues", N>` layer); `Environment.bind` exposes the same per member under `members` plus a merged `valuesLayer`. They can stand in for `Dep.provideSecret` when you call `Application.define` directly and build the secret before passing `provides`; the `provides` slot of `Module.fixedNs` / `Module.dynamicNs` is fixed at wrapper level and cannot see values computed inside `build`.
+Binding a secret also produces the layers that satisfy the graph. `Secret.bind` returns a declared secret whose `refLayer` provides the Secret need for that name; if you passed a `source`, it also carries a `values` layer for the decrypted values. `Environment.bind` does the same for every member (under `members`) and merges the value layers into one `valuesLayer`.
+
+You only need these layers when you build a secret *inside* a `build` function and want the same module to provide it. Because `provides` on `Module.fixedNs` / `Module.dynamicNs` is declared at wrapper level, it cannot see values computed inside `build`; in that case use `Application.define` directly and pass the layers there.
 
 ## Consuming
 
-A consumer returns an `Effect` from `build` and yields the service:
+A consumer returns an Effect from `build` and yields what it needs:
 
 <Snippet file="infra/modules/api.ts" startAt="build: ({ name, namespace }, opts: ApiOpts)" endBefore="const bound = Environment.bind" />
 
-Each `yield*` adds a `Need` to the Effect's requirement channel `R`. `Module.fixedNs` carries `R` into the handle's `In` type, minus what the module provides itself. Nothing is resolved yet; the handle only records what it wants.
+Each `yield*` adds one need to the Effect's requirements. The wrapper carries those requirements into the module handle as its declared input, minus whatever the module provides itself. Nothing is resolved at this point; the handle only records what it wants.
 
 ## Resolution at the entrypoint
 
-`AppOfApps.fromModules({ target, defaults, modules })` folds the handles left to right with `Layer.provideMerge`. At the type level `Compose.ResidualIn<Ms>` mirrors that fold: each module's `In` is filtered against the union of every earlier module's `Out`. Whatever survives is the residual requirement of the returned Effect.
+`AppOfApps.fromModules({ target, defaults, modules })` folds the module handles left to right, letting each module's provides satisfy the needs of the modules after it. The type level mirrors that fold: each module's input is filtered against everything earlier modules provide, and whatever survives is the residual requirement of the returned Effect.
 
-`AppOfApps.entrypoint(program)` accepts the Effect only when the residual (minus `RenderServices`) is `never`. Otherwise the parameter type gains a `_konfig_unsatisfied` property carrying a hint such as `Missing provider for Secret "ghcr-pull". Add a module that provides it to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list.` The default export of an env file must be that entrypoint, so an unresolved graph never reaches `konfig build`.
+`AppOfApps.entrypoint(program)` accepts that Effect only when nothing is left unresolved. Otherwise the parameter type gains a `_konfig_unsatisfied` property with a hint such as `Missing provider for Secret "ghcr-pull". Add a module that provides it to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list.` The default export of an env file must be that entrypoint, so an unresolved graph never reaches `konfig build`.
 
 <Diagnostics case="missing-provider" />
 
 ### Ordering
 
-The fold is a left fold, so **providers must come before consumers** in `modules`. Listing `api` before `apiBuild` leaks `Need<"Image", "api">` even though a provider exists later in the array. `infra/envs/prod.ts` lists the sops operator, image pulls, feature flags, postgres, the build anchors, and the redis cache before `api` and `worker` for this reason. Sync ordering inside the cluster is a separate concern, handled with `Sync.wave` annotations.
+The fold is a left fold, so **providers must come before consumers** in `modules`. Listing `api` before `apiBuild` leaves the Image need for `api` unsatisfied even though a provider exists later in the array. `infra/envs/prod.ts` lists the sops operator, image pulls, feature flags, postgres, the build anchors, and the redis cache before `api` and `worker` for this reason. Sync ordering inside the cluster is a separate concern, handled with `Sync.wave` annotations.
 
 ### Duplicates
 
-`Compose.NoDuplicateProvides` folds the tuple a second time and collects any `App`, `Secret`, `SecretValues`, `ConfigMap`, `ServiceAccount`, `Pvc`, or `Image` provided twice. A hit adds a `_konfig_duplicate` property with the message `Duplicate <Kind> "<name>": two modules in AppOfApps.fromModules({ modules }) provide the same name; the later one silently shadows the earlier. Rename one of them.` `Namespace` and `Application` are excluded: shared namespaces are normal, and `Application` is always emitted alongside `App`.
+Two modules providing the same name would silently shadow each other, so the entrypoint folds the list a second time and rejects duplicates for App, Secret, SecretValues, ConfigMap, ServiceAccount, Pvc, and Image. A hit adds a `_konfig_duplicate` property with the message `Duplicate <Kind> "<name>": two modules in AppOfApps.fromModules({ modules }) provide the same name; the later one silently shadows the earlier. Rename one of them.` Namespace and Application are exempt: shared namespaces are normal, and Application is always emitted alongside App.
 
 <Diagnostics case="app-name-collision" />
 
@@ -69,6 +71,18 @@ The graph keys providers by literal name. If a wrapper forwards `name` typed as 
 
 ## Runtime behaviour
 
-Every check above is erased. At runtime `Compose.composeLayers` reduces the handles with `Layer.provideMerge` into one `Layer`, `Effect.forEach(modules, mod => mod)` yields each `Application`, and `AppOfApps.make` packages them with `name` (default `"apps"`), `target`, and `defaults`. Effect's own layer machinery would surface a missing service as a defect if it ever got that far; the type-level fold exists so it does not.
+Every check above is erased at compile time. At runtime the handles are merged into one Effect layer, each module's Application is collected, and `AppOfApps.make` packages them with a `name` (default `"apps"`), the target, and the defaults. Effect's own layer machinery would surface a missing service as a defect if it ever got that far; the type-level fold exists so it does not.
+
+## Reference
+
+The names behind the checks above, for when you read the types or a compiler message:
+
+| Name | Role |
+| --- | --- |
+| `Dep.Need<K, N>` / `Dep.Provide<K, N>` | The phantom brand for a need or provide of kind `K` and literal name `N`. Both are the same type. |
+| `Compose.ResidualIn<Ms>` | The type-level left fold that filters each module's input against every earlier module's output. |
+| `Compose.NoDuplicateProvides` | The second fold that collects names provided twice. |
+| `Compose.composeLayers` | The runtime fold: reduces the handles with `Layer.provideMerge` into one layer. |
+| `Layer.provideMerge` | The Effect combinator both folds are built on. |
 
 Next: [Branded refs](/konfig.ts/docs/concepts/branded-refs/).

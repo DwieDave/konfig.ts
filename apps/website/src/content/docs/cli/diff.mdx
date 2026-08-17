@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside } from "@/components/docs"
 
-`konfig diff <env>` renders the env in memory and compares it, file by file and document by document, against the YAML tree at `<root>/<diff.baseline>/<env>`. Comparison is structural: it parses YAML on both sides and compares values, so key order, quoting style, and whitespace never show up as changes.
+`konfig diff <env>` shows what a render would change compared to a committed baseline, without writing anything. It renders the env in memory and compares it, file by file and document by document, against the YAML tree at `<root>/<diff.baseline>/<env>`. The comparison is structural: both sides are parsed as YAML and compared as values, so key order, quoting style, and whitespace never show up as changes.
 
 ## Usage
 
@@ -31,20 +31,33 @@ konfig diff <env> [--format summary|detail|json]
 
 ## Behaviour
 
-- Requires `diff.baseline` in `konfig.json`; otherwise the command fails with `DiffBaselineMissing` before rendering.
-- The left side is every `.yaml` file under the baseline directory (recursively, keyed by relative path). The right side is the in-memory render keyed by its path relative to the output directory. Files present on only one side are reported as `+ <file>` (new in render) or `- <file>` (only in baseline).
-- Multi-document files are matched by identity, `kind|namespace|name`, not by position, so reordering documents is not a change. Single-document files are compared as one value.
-- Both sides are normalised before comparison: `null` and `undefined` object values are dropped, the `helm.sh/chart` label and `app.kubernetes.io/managed-by: Helm` label are removed, and the `meta.helm.sh/release-name` / `meta.helm.sh/release-namespace` annotations are removed. This keeps a Helm-managed baseline comparable to a konfig render.
-- For `kind: Secret`, every value under `data` and `stringData` is replaced with `<redacted>` on both sides before comparing and printing. Changed keys are still detected (a key added or removed changes the map); changed values are not, and secret material never reaches the terminal.
+The command needs a baseline to compare against. `diff.baseline` must be set in `konfig.json`; otherwise the command fails with `DiffBaselineMissing` before rendering anything.
+
+The left side of the comparison is every `.yaml` file under the baseline directory, found recursively and keyed by its relative path. The right side is the in-memory render, keyed by its path relative to the output directory. A file that exists on only one side is reported as `+ <file>` when it is new in the render, or `- <file>` when it only exists in the baseline.
+
+Files that hold several YAML documents are matched document by document using each document's identity (`kind|namespace|name`), not its position in the file, so reordering documents is not a change. Single-document files are compared as one value.
+
+Both sides are normalised before comparison so that a Helm-managed baseline stays comparable to a konfig render. The normalisation drops the following:
+
+- object values that are `null` or `undefined`
+- the `helm.sh/chart` label
+- the `app.kubernetes.io/managed-by: Helm` label
+- the `meta.helm.sh/release-name` and `meta.helm.sh/release-namespace` annotations
+
+Secrets are redacted. For every document with `kind: Secret`, each value under `data` and `stringData` is replaced with `<redacted>` on both sides before comparing and printing. A key that was added or removed still shows up as a change, because it changes the map; a value that changed does not, and secret material never reaches the terminal.
 
 ## Exit codes and errors
 
-- Exit `0` and an `OK` line (`env '<env>' matches baseline`) when nothing differs.
-- Non-zero with `DiffNonEmpty` after printing the diff when anything differs, so the command works as a CI gate.
-- `DiffBaselineMissing` when `diff` is not configured; config and render errors as in [konfig build](/konfig.ts/docs/cli/build/).
+When nothing differs the command exits `0` and prints an `OK` line: `env '<env>' matches baseline`. When anything differs it prints the diff and exits non-zero, so it works as a CI gate.
+
+| Error | When |
+| --- | --- |
+| `DiffNonEmpty` | The render differs from the baseline (printed after the diff). |
+| `DiffBaselineMissing` | `diff.baseline` is not set in `konfig.json`. |
+| config and render errors | The same errors as [konfig build](/konfig.ts/docs/cli/build/). |
 
 <Aside type="note">
-`konfig diff` compares against a committed baseline tree, not against a live cluster. To compare against what `build` last wrote, point `diff.baseline` at your `outDir.manifests` directory.
+`konfig diff` compares against a committed baseline tree, not against a live cluster. To see what changed since the last `build`, point `diff.baseline` at your `outDir.manifests` directory.
 </Aside>
 
 ## Example

@@ -8,7 +8,13 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`@konfig.ts/sops` is the [SOPS](https://github.com/getsops/sops) backend. Keep encrypted secrets in git and turn them into `SopsSecret` custom resources at render time for the in-cluster [sops-secrets-operator](https://github.com/isindir/sops-secrets-operator) to reconcile. Two modes: `Sops.passthrough` emits an already-encrypted file verbatim (offline, no decrypt), and `Sops.backend` re-encrypts resolved values to your recipients. `Sops.source` decrypts a file into a `SecretSource` you can feed to any backend.
+`@konfig.ts/sops` is the secret backend for [SOPS](https://github.com/getsops/sops). You keep encrypted secret files in git, and at render time the package turns them into `SopsSecret` custom resources for the in-cluster [sops-secrets-operator](https://github.com/isindir/sops-secrets-operator) to reconcile. It offers two ways to get there and one helper:
+
+| Export | What it does |
+| --- | --- |
+| `Sops.passthrough` | Emits an already-encrypted `SopsSecret` file verbatim. Works offline; nothing is decrypted |
+| `Sops.backend` | Takes resolved plaintext values and re-encrypts them to the recipients you name |
+| `Sops.source` | Decrypts a SOPS file into a plaintext source you can feed to any backend, not only this one |
 
 ## Install
 
@@ -16,15 +22,15 @@ import { Aside, Snippet } from "@/components/docs"
 bun add @konfig.ts/sops
 ```
 
-`Sops.backend` and `Sops.source` shell out to the `sops` CLI on the machine that runs `konfig build`: `Sops.backend` encrypts to the `recipients` you pass, and `Sops.source` decrypts with whatever key material `sops` finds for the file's own `sops:` metadata. `Sops.passthrough` needs no CLI.
+Two of the three need the `sops` CLI on the machine that runs `konfig build`. `Sops.backend` uses it to encrypt to the `recipients` you pass. `Sops.source` uses it to decrypt, with whatever key material `sops` finds for the file's own `sops:` metadata. `Sops.passthrough` copies the file as-is and needs no CLI.
 
 ## Usage
 
-The full-stack example ships the GHCR pull secret as an encrypted `SopsSecret` file and provides it as `Dep.Secret("ghcr-pull")`.
+Passthrough mode: the full-stack example ships the GHCR pull secret as an encrypted `SopsSecret` file and provides it to other modules as `Dep.Secret("ghcr-pull")`.
 
 <Snippet file="infra/modules/image-pulls.ts" startAt="export const defineImagePulls" title="infra/modules/image-pulls.ts" />
 
-Re-encrypting mode, when the plaintext should flow through konfig:
+Re-encrypting mode, for when the plaintext should flow through konfig. Here the values are decrypted from one SOPS file with `Sops.source` and re-encrypted to your recipients with `Sops.backend`:
 
 ```ts title="infra/modules/db.ts"
 import { dbCreds } from "@example/env-contracts"
@@ -50,8 +56,10 @@ const bound = Secret.bind({
 
 ## Errors
 
-- `SopsInvocationError` (`{ op: "decrypt" | "encrypt", cause }`): the `sops` process failed or was not found. Inside `Sops.backend` and `Sops.passthrough` it is wrapped in a `RenderError`; inside `Sops.source` it is wrapped in a `SecretSourceError`.
-- Every emitted value is checked for the `ENC[` marker (honouring `sops.encrypted_regex`); a plaintext value fails the render with a `RenderError` whose cause is an internal `SopsUnencryptedValueError`, rather than emitting plaintext dressed as a secret.
+| Error | When it is raised |
+| --- | --- |
+| `SopsInvocationError` | The `sops` process failed or was not found. Carries `op` (`"decrypt"` or `"encrypt"`) and the `cause`. How you see it depends on where it happened: inside `Sops.backend` and `Sops.passthrough` it is wrapped in a `RenderError`; inside `Sops.source` it is wrapped in a `SecretSourceError` |
+| `RenderError` (cause: `SopsUnencryptedValueError`) | A value about to be emitted was still plaintext. Every emitted value is checked for the `ENC[` marker (honouring `sops.encrypted_regex`); rather than emit plaintext dressed as a secret, the render fails with a `RenderError` whose cause is the internal `SopsUnencryptedValueError` |
 
 <Aside type="note">
 `Sops.source` composes with other backends: decrypt with SOPS, then seal with `SealedSecrets.backend` or emit a plain `NativeSecret`.
