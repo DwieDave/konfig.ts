@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
+import { Helm } from "@konfig.ts/core"
 import { ConfigProvider, Effect, Exit, Layer, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -13,8 +14,11 @@ import {
   makeHandle,
   ProcessId
 } from "effect/unstable/process/ChildProcessSpawner"
+import * as crypto from "node:crypto"
 import { ChartRegistryEntryDecodeError } from "../chartRegistry"
 import { _fetchOne, helmFetchEffect, MissingAllFlag } from "./helmFetch"
+
+const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
 interface FakeProc {
   readonly stdout?: string
@@ -61,6 +65,37 @@ const _recordingSpawner = (
         calls.push([command.command, ...command.args])
       }
       return Effect.succeed(_handle(proc))
+    })
+  )
+
+/**
+ * A `pull` here writes `tarball`'s bytes to `<destination>/<chart>-<version>.tgz`
+ * (matching real `helm pull` output), so the digest-verification path in
+ * `_fetchOne` has a real file to hash and rename.
+ */
+const _pullingSpawner = (tarball: Buffer): Layer.Layer<ChildProcessSpawner, never, FileSystem | Path> =>
+  Layer.effect(
+    ChildProcessSpawner,
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      return makeSpawner(
+        ((command: Command) =>
+          Effect.gen(function*() {
+            if (!ChildProcess.isStandardCommand(command)) return _handle({ exitCode: 0 })
+            const args = command.args
+            if (args.includes("version")) return _handle({ stdout: "v3.99.0\n", exitCode: 0 })
+            if (args[0] === "pull") {
+              const destIdx = args.indexOf("--destination")
+              const dest = args[destIdx + 1] ?? ""
+              const chart = args[3] ?? "chart"
+              const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
+              yield* fs.writeFile(path.join(dest, `${chart}-${version}.tgz`), tarball)
+              return _handle({ exitCode: 0 })
+            }
+            return _handle({ exitCode: 0 })
+          })) as unknown as Parameters<typeof makeSpawner>[0]
+      )
     })
   )
 
@@ -117,6 +152,75 @@ describe("_fetchOne", () => {
       const exists = yield* fs.exists(cacheDir)
       expect(exists).toBe(true)
       expect(calls.length).toBe(1)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("with a digest, caches the pulled tarball under the digest-suffixed name", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helmfetch-digest-" })
+
+      const tarball = Buffer.from("fake-postgresql-tarball")
+      const digest = `sha256:${_sha256Hex(tarball)}`
+
+      yield* _fetchOne({
+        repo: "https://charts.bitnami.com/bitnami",
+        chart: "postgresql",
+        version: "16.0.0",
+        cacheDir,
+        digest
+      }).pipe(Effect.provide(_pullingSpawner(tarball)))
+
+      const files = yield* fs.readDirectory(cacheDir)
+      // No leftover plain-named file and no leftover pull scratch dir — only
+      // the digest-suffixed name `Helm.release` also caches under.
+      expect(files).toEqual([Helm.cacheFileName({ chart: "postgresql", version: "16.0.0", digest })])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("with a digest, skips the pull when the digest-suffixed tarball is already cached", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helmfetch-digest-cached-" })
+      const digest = `sha256:${_sha256Hex(Buffer.from("already-cached"))}`
+      yield* fs.writeFileString(
+        path.join(cacheDir, Helm.cacheFileName({ chart: "postgresql", version: "16.0.0", digest })),
+        "already-cached"
+      )
+
+      const calls: Array<ReadonlyArray<string>> = []
+      yield* _fetchOne({
+        repo: "https://charts.bitnami.com/bitnami",
+        chart: "postgresql",
+        version: "16.0.0",
+        cacheDir,
+        digest
+      }).pipe(Effect.provide(_recordingSpawner({ exitCode: 0 }, calls)))
+
+      expect(calls).toEqual([])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("with a digest, fails and cleans up when the pulled tarball's digest doesn't match", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helmfetch-digest-mismatch-" })
+
+      const tarball = Buffer.from("real-tarball-bytes")
+      const wrongDigest = `sha256:${_sha256Hex(Buffer.from("not-the-tarball"))}`
+
+      const exit = yield* Effect.exit(
+        _fetchOne({
+          repo: "https://charts.bitnami.com/bitnami",
+          chart: "postgresql",
+          version: "16.0.0",
+          cacheDir,
+          digest: wrongDigest
+        }).pipe(Effect.provide(_pullingSpawner(tarball)))
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      // The digest-suffixed slot was never populated with the wrong bytes.
+      const files = yield* fs.readDirectory(cacheDir)
+      expect(files).toEqual([])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 

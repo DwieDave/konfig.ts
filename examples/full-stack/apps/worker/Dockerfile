@@ -1,6 +1,6 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/worker/docker.ts
-# hash: sha256:f474a906a37296cd9d7031254043ea15fb578dc9a6b266b1c24e5681c1114a4f
+# hash: sha256:ad4f1cc51127709af51f7a03c0994f59ae3f13a9af3f79b2f7eff3483a43b163
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -21,6 +21,7 @@ COPY packages/k8s/package.json ./packages/k8s/
 COPY packages/oxc/package.json ./packages/oxc/
 COPY packages/sealed-secrets/package.json ./packages/sealed-secrets/
 COPY packages/sops/package.json ./packages/sops/
+COPY apps/website/package.json ./apps/website/
 RUN bun install --ignore-scripts
 
 FROM base AS builder
@@ -46,7 +47,7 @@ COPY packages/env/package.json ./packages/env/
 COPY examples/full-stack/shared/env-contracts/package.json ./examples/full-stack/shared/env-contracts/
 COPY examples/full-stack/apps/worker/package.json ./examples/full-stack/apps/worker/
 RUN bun install --ignore-scripts --production
-RUN rm -rf /app/node_modules/typescript
+RUN rm -rf '/app/node_modules/typescript'
 
 FROM base AS runner
 WORKDIR /app/apps/worker
@@ -56,5 +57,10 @@ COPY --from=prod-deps --chown=app:app /app/node_modules /app/node_modules
 COPY --from=builder --chown=app:app /app/packages/core /app/packages/core
 COPY --from=builder --chown=app:app /app/packages/env /app/packages/env
 COPY --from=builder --chown=app:app /app/examples/full-stack/shared/env-contracts /app/examples/full-stack/shared/env-contracts
+COPY --from=builder --chown=app:app /app/examples/full-stack/apps/worker /app/examples/full-stack/apps/worker
+COPY --from=prod-deps --chown=app:app /app/packages/core/node_modules /app/packages/core/node_modules
+COPY --from=prod-deps --chown=app:app /app/packages/env/node_modules /app/packages/env/node_modules
+COPY --from=prod-deps --chown=app:app /app/examples/full-stack/shared/env-contracts/node_modules /app/examples/full-stack/shared/env-contracts/node_modules
+COPY --from=prod-deps --chown=app:app /app/examples/full-stack/apps/worker/node_modules /app/examples/full-stack/apps/worker/node_modules
 USER app
 CMD ["bun","run","src/main.ts"]

@@ -31,7 +31,7 @@ The return type is `Manifest<RawYaml[]>`: one `RawYaml` (`{ _tag: "RawYaml", con
 
 ## Digest verification
 
-The tarball cache lives at `$KONFIG_HELM_CACHE`, defaulting to `.konfig/helm-cache` under the working directory. Each entry is `<chart>-<version>-<first 12 hex chars of digest>.tgz`.
+The tarball cache lives at the location resolved from `KONFIG_HELM_CACHE`, then `konfig.json`'s `helm.cacheDir` field, then the built-in default `.konfig/helm-cache` (see [konfig.json](/konfig.ts/docs/cli/configuration/) for the precedence rule). During `build`/`validate`/`diff`, that resolved directory is passed through as `KONFIG_HELM_CACHE` for every `Helm.release()` call the render makes. Each entry is `<chart>-<version>-<first 12 hex chars of digest>.tgz`.
 
 On a cache miss, `helm pull --repo <repo> <chart> --version <version>` runs into a private temporary directory inside the cache dir (prefix `.konfig-helm-pull-`); exactly one `<chart>*.tgz` must appear (otherwise `HelmRenderError`), and it is renamed into place, so concurrent renders of the same chart cannot corrupt each other. The file is then hashed with SHA-256 and compared with `digest`.
 
@@ -45,9 +45,9 @@ Run `helm pull --repo <repo> <chart> --version <version>` once and `shasum -a 25
 
 `konfig helm fetch --all` pulls every chart in the chart registry into the cache directory ahead of time. The registry is the set of `.ts` files (not starting with `_`) in the charts directory; from each file the first export carrying `_konfigHelmRelease: true` is decoded for `repo`, `chart`, `version`, optional `digest` (defaults to `""`), and optional `id` (defaults to the file name without `.ts`). The command first checks the `helm` binary against the minimum version and fails with `HelmVersionTooLow` if it is older, then refuses to run without `--all` (`MissingAllFlag`).
 
-The pre-fetched file is named `<chart>-<version>.tgz`, which is the name `konfig crd extract` looks for. `Helm.release` keys its cache entry by digest (`<chart>-<version>-<digest12>.tgz`), so it pulls its own copy on first render regardless of a prior `helm fetch`.
+When a registry entry has a recorded `digest`, the pre-fetched file is cached under `<chart>-<version>-<digest12>.tgz`, the same name `Helm.release` and `konfig crd extract` cache under and look for, so a `helm fetch --all` now warms the exact cache slot a later render or `crd extract` reads from. Registry entries with no recorded digest still cache under the plain `<chart>-<version>.tgz`, which `Helm.release`'s digest-suffixed cache cannot reuse (`helm fetch` prints a warning for those).
 
-Paths for the `helm` and `crd` commands come from environment variables with defaults: `KONFIG_HELM_CACHE` (`.konfig/helm-cache`), `KONFIG_CHARTS_DIR` (`infra/k8s-konfig/charts`), `KONFIG_CRD_OUT_DIR` (`.generated/crd`), `KONFIG_HELM_MIN_VERSION` (`3.16.0`), all resolved against the working directory. `konfig.json` has `helm: { cacheDir, minVersion }`, `charts` (default `"charts"`), and `crd.outDir` fields in its schema, but the `helm` and `crd` commands read the environment variables, not those fields.
+Paths for the `helm` and `crd` commands resolve through a shared precedence chain: an environment variable if set, otherwise the matching `konfig.json` field (resolved relative to `konfig.json`'s own directory), otherwise a built-in default (resolved against the working directory). `KONFIG_HELM_CACHE` overrides `helm.cacheDir` (default `.konfig/helm-cache`), `KONFIG_CHARTS_DIR` overrides `charts` (default `infra/k8s-konfig/charts`), `KONFIG_CRD_OUT_DIR` overrides `crd.outDir` (default `.generated/crd`), and `KONFIG_HELM_MIN_VERSION` overrides `helm.minVersion` (default `3.16.0`). See [konfig.json](/konfig.ts/docs/cli/configuration/) for the full table. `Helm.release`'s own `minVersion` option is unaffected by `konfig.json`'s `helm.minVersion`; it stays a plain opt-in per-call option.
 
 ## CRD codegen
 

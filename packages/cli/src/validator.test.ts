@@ -42,6 +42,34 @@ const _spawnerFor = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
     )
   )
 
+// Captures the args each spawned `Command` carried, so tests can assert on
+// what `runKubeconform` actually forwards (e.g. `-kubernetes-version`).
+const _spawnerCapturing = (
+  proc: FakeProc,
+  captured: { args: ReadonlyArray<string> | undefined }
+): Layer.Layer<ChildProcessSpawner> =>
+  Layer.succeed(
+    ChildProcessSpawner,
+    makeSpawner((command: Command) => {
+      captured.args = command._tag === "StandardCommand" ? command.args : []
+      return Effect.succeed(
+        makeHandle({
+          pid: ProcessId(1),
+          exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: _bytes(proc.stdout ?? ""),
+          stderr: _bytes(proc.stderr ?? ""),
+          all: _bytes(""),
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void)
+        }) as ChildProcessHandle
+      )
+    })
+  )
+
 const _spawnFails = (): Layer.Layer<ChildProcessSpawner> =>
   Layer.succeed(
     ChildProcessSpawner,
@@ -90,7 +118,7 @@ metadata:
 `
       const issues = yield* validateManifestFile({ file: "x.yaml", content })
       expect(issues).toHaveLength(1)
-      expect(issues[0]?.message).toContain("envelope")
+      expect(issues[0]?.message).toContain("metadata.name")
     }))
 
   it.effect("walks multi-doc YAML with per-doc indexing", () =>
@@ -136,6 +164,57 @@ metadata:
       const issues = yield* validateManifestFile({ file: "ns.yaml", content })
       expect(issues).toEqual([])
     }))
+
+  it.effect("accepts a dotted metadata.name on a CustomResourceDefinition (DNS-1123 subdomain, not a label)", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: sopssecrets.isindir.github.com
+`
+      const issues = yield* validateManifestFile({ file: "crd.yaml", content })
+      expect(issues).toEqual([])
+    }))
+
+  it.effect("flags an uppercase, underscore-containing metadata.name as an invalid DNS-1123 subdomain", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: Invalid_Name
+`
+      const issues = yield* validateManifestFile({ file: "cm.yaml", content })
+      expect(issues).toHaveLength(1)
+      expect(issues[0]?.message).toContain("metadata.name")
+      expect(issues[0]?.message).toContain("RFC 1123 subdomain")
+    }))
+
+  it.effect("rejects a dotted Service name — Service requires the stricter RFC 1123 label rule", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: v1
+kind: Service
+metadata:
+  name: my.service
+`
+      const issues = yield* validateManifestFile({ file: "svc.yaml", content })
+      expect(issues).toHaveLength(1)
+      expect(issues[0]?.message).toContain("metadata.name")
+      expect(issues[0]?.message).toContain("RFC 1123 label")
+    }))
+
+  it.effect("rejects a dotted metadata.namespace — namespaces always use the RFC 1123 label rule", () =>
+    Effect.gen(function*() {
+      const content = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm
+  namespace: my.app
+`
+      const issues = yield* validateManifestFile({ file: "cm.yaml", content })
+      expect(issues).toHaveLength(1)
+      expect(issues[0]?.message).toContain("metadata.namespace")
+      expect(issues[0]?.message).toContain("RFC 1123 label")
+    }))
 })
 
 describe("runKubeconform", () => {
@@ -170,6 +249,25 @@ describe("runKubeconform", () => {
           expect(err.stderr).toContain("could not resolve schema")
         }
       }
+    }))
+
+  it.effect("forwards extraArgs, appending -kubernetes-version after the built-in flags", () =>
+    Effect.gen(function*() {
+      const captured: { args: ReadonlyArray<string> | undefined } = { args: undefined }
+      yield* runKubeconform({
+        dir: "/rendered",
+        extraArgs: ["-ignore-missing-schemas", "-kubernetes-version", "1.29.0"]
+      }).pipe(
+        Effect.provide(_spawnerCapturing({ exitCode: 0 }, captured))
+      )
+      expect(captured.args).toEqual([
+        "-summary",
+        "-strict",
+        "/rendered",
+        "-ignore-missing-schemas",
+        "-kubernetes-version",
+        "1.29.0"
+      ])
     }))
 
   it.effect("a spawn failure (binary missing) fails with KubeconformNotFound", () =>

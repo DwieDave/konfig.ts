@@ -52,23 +52,23 @@ The schema (`KonfigConfig` in `@konfig.ts/core`) accepts these fields. Only the 
 | `cacheInclude` | no | Extra files, directories, or glob patterns hashed into the build cache on top of everything under `root`, relative to `konfig.json` (absolute paths allowed). Use it for inputs outside `root` that affect a render. Default `[]`. |
 | `cluster` | no | String, default `"cluster.ts"`. Not read by any command. |
 | `modules` | no | String, default `"modules"`. Not read by any command. |
-| `charts` | no | String, default `"charts"`. Not read by any command; `konfig helm fetch` and `konfig crd` locate charts through `KONFIG_CHARTS_DIR` instead. |
-| `crd.outDir` | no | String, default `".generated/crd"`. Not read by any command; `konfig crd extract` uses `KONFIG_CRD_OUT_DIR`. |
-| `helm.cacheDir` | no | String, default `".konfig/helm-cache"`. Not read by any command; the Helm cache location comes from `KONFIG_HELM_CACHE`. |
-| `helm.minVersion` | no | String, default `"3.16.0"`. Not read by any command; see `KONFIG_HELM_MIN_VERSION`. |
+| `charts` | no | String, default `"infra/k8s-konfig/charts"`, relative to `konfig.json`'s own directory. Read by `konfig helm fetch` and `konfig crd`, beneath `KONFIG_CHARTS_DIR`. |
+| `crd.outDir` | no | String, default `".generated/crd"`, relative to `konfig.json`'s own directory. Read by `konfig crd extract`, beneath `KONFIG_CRD_OUT_DIR`. |
+| `helm.cacheDir` | no | String, default `".konfig/helm-cache"`, relative to `konfig.json`'s own directory. Read by `konfig helm fetch`, `konfig crd`, and `Helm.release` during `build`/`validate`/`diff`, beneath `KONFIG_HELM_CACHE`. |
+| `helm.minVersion` | no | String, default `"3.16.0"`. Read by the `konfig helm fetch`/`konfig crd` preflight check, beneath `KONFIG_HELM_MIN_VERSION`; `Helm.release` still takes its own opt-in `minVersion` option and does not read this field. |
 | `services.outFile`, `services.globalPaths` | no | Optional string and string array (default `[]`). Not read by any command. |
 | `clusters` | no | Map of cluster name to `{ registry?, ingressClass?, storageClass?, repositoryUrl? }`. Not read by any command; `--cluster <name>` only sets `RenderContext.cluster` and the output subdirectory. |
 
 Decoding is strict: unknown keys, missing required keys, and invalid JSON are all reported as `ConfigParseError` with the file path.
 
-Four environment variables configure the Helm and CRD tooling. Relative values resolve against the current working directory, not `konfig.json`:
+Four environment variables configure the Helm and CRD tooling, each taking precedence over the matching `konfig.json` field above, which in turn takes precedence over the built-in default. The default in the table below applies either when no `konfig.json` is found or the field is left unset; in that fallback case the value resolves against the current working directory:
 
-| Variable | Default | Read by |
-| --- | --- | --- |
-| `KONFIG_HELM_CACHE` | `.konfig/helm-cache` | `Helm.release` during `build`/`validate`/`diff`, `konfig helm fetch`, `konfig crd` |
-| `KONFIG_CRD_OUT_DIR` | `.generated/crd` | `konfig crd extract` |
-| `KONFIG_CHARTS_DIR` | `infra/k8s-konfig/charts` | `konfig helm fetch`, `konfig crd` (chart registry directory) |
-| `KONFIG_HELM_MIN_VERSION` | `3.16.0` | `konfig helm fetch`, `konfig crd`. `Helm.release` checks the binary version only when you pass `minVersion` in its options. |
+| Variable | Overrides field | Default | Read by |
+| --- | --- | --- | --- |
+| `KONFIG_HELM_CACHE` | `helm.cacheDir` | `.konfig/helm-cache` | `Helm.release` during `build`/`validate`/`diff`, `konfig helm fetch`, `konfig crd` |
+| `KONFIG_CRD_OUT_DIR` | `crd.outDir` | `.generated/crd` | `konfig crd extract` |
+| `KONFIG_CHARTS_DIR` | `charts` | `infra/k8s-konfig/charts` | `konfig helm fetch`, `konfig crd` (chart registry directory) |
+| `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` | `konfig helm fetch`, `konfig crd`. `Helm.release` checks the binary version only when you pass `minVersion` in its options. |
 
 ## Project layout
 

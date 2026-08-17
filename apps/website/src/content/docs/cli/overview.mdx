@@ -83,7 +83,7 @@ The cluster, version, and flags are part of the build cache key, so `konfig buil
 | [`konfig build <env>`](/konfig.ts/docs/cli/build/) | Render an env to `outDir.manifests`, skipping the write when inputs are unchanged. |
 | [`konfig validate <env>`](/konfig.ts/docs/cli/validate/) | Render in memory and run structural checks; `--strict` adds kubeconform. |
 | [`konfig diff <env>`](/konfig.ts/docs/cli/diff/) | Structural diff of the render against `diff.baseline`. |
-| [`konfig set <env> <app> <image>`](/konfig.ts/docs/cli/set/) | Update one image reference in `images.json`. |
+| [`konfig set <env> <app> <image>`](/konfig.ts/docs/cli/set/) | Update one image reference in `images.json` (fails on an unknown app unless `--create` is passed). |
 | [`konfig crd extract \| verify`](/konfig.ts/docs/cli/crd/) | Generate TypeScript types from chart CRDs and check them for drift. |
 | [`konfig helm fetch --all`](/konfig.ts/docs/cli/helm/) | Pre-fetch chart tarballs into the local cache. |
 | [`konfig docker preview \| write \| diff <target>`](/konfig.ts/docs/cli/docker/) | Generate Dockerfiles from a `docker.ts` spec. |

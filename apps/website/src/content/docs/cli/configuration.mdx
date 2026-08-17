@@ -20,22 +20,24 @@ import { Aside, Snippet } from "@/components/docs"
 | `cacheInclude` | `string[]` | `[]` | Extra files, directories, or glob patterns (relative to `konfig.json`) hashed into the build cache on top of `root`, for inputs that live outside the konfig root. |
 | `cluster` | `string` | `"cluster.ts"` | Path of the cluster module, relative to `root`. |
 | `modules` | `string` | `"modules"` | Path of the modules directory, relative to `root`. |
-| `charts` | `string` | `"charts"` | Path of the chart definitions directory, relative to `root`. |
-| `crd.outDir` | `string` | `".generated/crd"` | Destination for generated CRD types (declarative; the CLI reads `KONFIG_CRD_OUT_DIR`, see below). |
-| `helm.cacheDir` | `string` | `".konfig/helm-cache"` | Helm tarball cache directory (declarative; the CLI reads `KONFIG_HELM_CACHE`). |
-| `helm.minVersion` | `string` | `"3.16.0"` | Minimum `helm` version (declarative; the CLI reads `KONFIG_HELM_MIN_VERSION`, and `Helm.release` takes its own `minVersion` option). |
+| `charts` | `string` | `"infra/k8s-konfig/charts"` | Path of the chart definitions directory, relative to `konfig.json`'s own directory. Read by `crd` and `helm fetch` (see below). |
+| `crd.outDir` | `string` | `".generated/crd"` | Destination for generated CRD types, relative to `konfig.json`'s own directory. Read by `crd extract` (see below). |
+| `helm.cacheDir` | `string` | `".konfig/helm-cache"` | Helm tarball cache directory, relative to `konfig.json`'s own directory. Read by `crd`, `helm fetch`, and `Helm.release` at render time (see below). |
+| `helm.minVersion` | `string` | `"3.16.0"` | Minimum `helm` version. Read by the `crd` and `helm fetch` preflight check (see below); `Helm.release` still takes its own opt-in `minVersion` option and does not read this field. |
 | `services.outFile` | `string` | unset | Reserved for the services layer; validated only. |
 | `services.globalPaths` | `string[]` | `[]` | Reserved for the services layer; validated only. |
 | `clusters.<name>` | `{ registry?, ingressClass?, storageClass?, repositoryUrl? }` | unset | Per-cluster values, all optional strings. |
 
-The CLI commands read `root`, `envs`, `outDir.manifests`, `diff.baseline`, and `cacheInclude`. The remaining fields are validated so a project can declare them in one place, but no `konfig` command reads them today. In particular `crd extract`, `crd verify`, and `helm fetch` take their paths from environment variables, not from `konfig.json`:
+The CLI commands read `root`, `envs`, `outDir.manifests`, `diff.baseline`, and `cacheInclude` directly. `charts`, `crd.outDir`, `helm.cacheDir`, and `helm.minVersion` feed `crd extract`, `crd verify`, and `helm fetch` through a shared precedence chain: an environment variable wins if set, otherwise the matching `konfig.json` field is used (resolved relative to the directory that contains `konfig.json`), otherwise a built-in default (resolved relative to the current working directory) applies. This lets a project set these paths once in `konfig.json` without exporting environment variables, while CI or a shell override still takes priority when needed. Outside a konfig project (no `konfig.json` found), only the environment variable and built-in default apply.
 
-| Variable | Default | Used by |
-| --- | --- | --- |
-| `KONFIG_CHARTS_DIR` | `infra/k8s-konfig/charts` (resolved from cwd) | `crd`, `helm fetch`: directory of chart registry modules |
-| `KONFIG_HELM_CACHE` | `.konfig/helm-cache` (resolved from cwd) | `crd`, `helm fetch`, and `Helm.release` at render time |
-| `KONFIG_CRD_OUT_DIR` | `.generated/crd` (resolved from cwd) | `crd`: output directory for generated `.ts` files |
-| `KONFIG_HELM_MIN_VERSION` | `3.16.0` | `crd`, `helm fetch`: preflight `helm version` check |
+| Variable | Overrides field | Default | Used by |
+| --- | --- | --- | --- |
+| `KONFIG_CHARTS_DIR` | `charts` | `infra/k8s-konfig/charts` | `crd`, `helm fetch`: directory of chart registry modules |
+| `KONFIG_HELM_CACHE` | `helm.cacheDir` | `.konfig/helm-cache` | `crd`, `helm fetch`, and `Helm.release` at render time |
+| `KONFIG_CRD_OUT_DIR` | `crd.outDir` | `.generated/crd` | `crd`: output directory for generated `.ts` files |
+| `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` | `crd`, `helm fetch`: preflight `helm version` check |
+
+`build`, `validate`, and `diff` also honor `helm.cacheDir` (env var or `konfig.json` field) for every `Helm.release()` call a chart definition makes during rendering, so a cache location set once in `konfig.json` is used consistently between `helm fetch`, `crd extract`, and rendering.
 
 <Aside type="caution">
 `clusters.<name>` in `konfig.json` is not what `--cluster` reads. `--cluster` only sets `ctx.cluster` on the `RenderContext` and changes the output directory; your env entry decides what to do with it (the full-stack example keeps its per-cluster overlays in `infra/cluster.ts`).

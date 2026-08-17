@@ -2,6 +2,7 @@ import { applicationCRFilename, type AppOfAppsResult, serializeApplicationCR } f
 import {
   type AnyRenderError,
   type Bundle,
+  KONFIG_HELM_CACHE_ENV,
   type Manifest as M,
   parseYamlAll,
   type RenderContext,
@@ -10,9 +11,10 @@ import {
   unsafeCoerce,
   Yaml
 } from "@konfig.ts/core"
-import { Data, Effect } from "effect"
+import { ConfigProvider, Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import { resolveCliPaths } from "./cliConfig"
 
 export interface EnvOutDirInput {
   readonly cfg: ResolvedKonfigConfig
@@ -243,7 +245,7 @@ export interface RenderEnvInput {
   readonly envName: string
   readonly ctx: RenderContext
 }
-export const renderEnv = (input: RenderEnvInput) =>
+const _renderEnvBody = (input: RenderEnvInput) =>
   Effect.gen(function*() {
     const { cfg, envName, ctx } = input
     const path = yield* Path
@@ -268,10 +270,66 @@ export const renderEnv = (input: RenderEnvInput) =>
     )
   }).pipe(Effect.scoped)
 
+export const renderEnv = (input: RenderEnvInput) =>
+  Effect.gen(function*() {
+    // Chart definitions call `Helm.release` without a `cacheDir` option — it
+    // reads `Config(KONFIG_HELM_CACHE)` itself (see core's Helm.ts) at
+    // manifest-render time, inside `_renderChild`/`renderManifest` below.
+    // Resolving konfig.json's `helm.cacheDir` once here (same env var >
+    // config > default precedence as `resolveCliPaths`, used by `crd
+    // extract`/`helm fetch`) and installing it as a ConfigProvider around
+    // the whole render is how that value reaches every `Helm.release()`
+    // call a chart makes, without threading `cacheDir` through
+    // `_loadEnv`/`_renderChild`. `ConfigProvider.orElse` keeps a real env
+    // var override on top: it's tried first, only falling back to the
+    // resolved value for the one KONFIG_HELM_CACHE key.
+    const { cacheDir } = yield* resolveCliPaths(input.cfg)
+    const helmConfigProvider = ConfigProvider.orElse(
+      ConfigProvider.fromEnv(),
+      ConfigProvider.fromUnknown({ [KONFIG_HELM_CACHE_ENV]: cacheDir })
+    )
+    return yield* _renderEnvBody(input).pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, helmConfigProvider)
+    )
+  })
+
 export class WriteEnvError extends Data.TaggedError("WriteEnvError")<{
   readonly path: string
   readonly cause: unknown
 }> {}
+
+export interface WriteFilesToDirInput {
+  readonly rendered: RenderedEnv
+  readonly targetDir: string
+}
+
+// Re-homes `rendered.files` (keyed off `rendered.outDirAbs`) under an
+// arbitrary `targetDir`, preserving the per-app layout/naming that
+// `_renderChild`/`_collectOutputs` computed. Shared by `writeFiles` (staging
+// dir for `konfig build`) and `konfig validate --strict` (a scratch temp dir
+// so kubeconform sees the *current* render, not the last `build`'s output).
+export const writeFilesToDir = (
+  input: WriteFilesToDirInput
+): Effect.Effect<ReadonlyArray<string>, WriteEnvError, FileSystem | Path> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const { rendered, targetDir } = input
+
+    const written: string[] = []
+    for (const file of rendered.files) {
+      const rel = path.relative(rendered.outDirAbs, file.path)
+      const targetPath = path.join(targetDir, rel)
+      yield* fs
+        .makeDirectory(path.dirname(targetPath), { recursive: true })
+        .pipe(Effect.mapError((cause) => new WriteEnvError({ path: targetPath, cause })))
+      yield* fs
+        .writeFileString(targetPath, file.content, { mode: 0o600 })
+        .pipe(Effect.mapError((cause) => new WriteEnvError({ path: targetPath, cause })))
+      written.push(targetPath)
+    }
+    return written
+  })
 
 // Atomic write: stage all files under `<outDir>.tmp`, then remove the live
 // `<outDir>` and rename `.tmp` into place — a kill mid-write never leaves a
@@ -292,18 +350,8 @@ export const writeFiles = (
         .pipe(Effect.mapError((cause) => new WriteEnvError({ path: stagingDir, cause })))
     }
 
-    const written: string[] = []
-    for (const file of rendered.files) {
-      const rel = path.relative(rendered.outDirAbs, file.path)
-      const stagedPath = path.join(stagingDir, rel)
-      yield* fs
-        .makeDirectory(path.dirname(stagedPath), { recursive: true })
-        .pipe(Effect.mapError((cause) => new WriteEnvError({ path: stagedPath, cause })))
-      yield* fs
-        .writeFileString(stagedPath, file.content, { mode: 0o600 })
-        .pipe(Effect.mapError((cause) => new WriteEnvError({ path: stagedPath, cause })))
-      written.push(file.path)
-    }
+    yield* writeFilesToDir({ rendered, targetDir: stagingDir })
+    const written = rendered.files.map((file) => file.path)
 
     const liveExists = yield* fs.exists(rendered.outDirAbs).pipe(Effect.orElseSucceed(() => false))
     if (liveExists) {

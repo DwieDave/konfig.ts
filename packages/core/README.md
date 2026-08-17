@@ -45,18 +45,32 @@ Inside a build, `yield* Dep.Secret("ghcr-pull")` records a typed dependency that
 another module must provide — the graph is checked when you compose everything
 at `AppOfApps.entrypoint` (see [`@konfig.ts/argocd`](../argocd)).
 
+`Helm.release` caches the pulled tarball under
+`<cacheDir>/<chart>-<version>-<digest12>.tgz`. `Helm.cacheFileName({ chart,
+version, digest })` computes that name, and is the single naming rule
+`@konfig.ts/cli`'s `konfig helm fetch` and `konfig crd extract` also use, so
+a `helm fetch --all` actually warms the cache a render reads from.
+`cacheDir` itself comes from `Config(KONFIG_HELM_CACHE)`, not a
+`HelmReleaseOptions` field: `@konfig.ts/cli`'s `build`/`validate`/`diff`
+commands install a `ConfigProvider` around the whole render (env var >
+`konfig.json`'s `helm.cacheDir` > `.konfig/helm-cache`), so every
+`Helm.release()` call across a project's chart definitions shares one
+resolved cache directory. Outside the CLI (a bare Effect program calling
+`render`/`renderManifest` directly), it falls back to the environment /
+`.konfig/helm-cache` default like any other `Effect.Config` read.
+
 ## Surface
 
-| Area        | Exports                                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Manifest    | `Manifest` (`.make` / `.combine` / `.concat` / `.whenever` / `.embedYaml`), `render`, `renderManifest`, `RenderContext`         |
-| Deps        | `Dep.*` kinds + `Dep.provide*` helpers; branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `ServiceAccountRef` / `BuiltImageRef` |
-| Modules     | `Module.fixedNs`, `Module.dynamicNs`                                                                                            |
-| Helm        | `Helm.release` — chart pull + SHA-256 digest verification                                                                       |
-| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYaml`, `redact`                                         |
-| Config      | `KonfigConfig`, `ImagesConfig`, and their decoders                                                                              |
-| Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `brand` / `unsafeCoerce` escape hatches                                     |
-| Errors      | the tagged union `AnyRenderError` (`HelmDigestMismatch`, `BoundaryDecodeError`, …)                                              |
+| Area        | Exports                                                                                                                                                                       |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manifest    | `Manifest` (`.make` / `.combine` / `.concat` / `.whenever` / `.embedYaml`), `render`, `renderManifest`, `RenderContext`                                                       |
+| Deps        | `Dep.*` kinds + `Dep.provide*` helpers; branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `ServiceAccountRef` / `BuiltImageRef`                                               |
+| Modules     | `Module.fixedNs`, `Module.dynamicNs`                                                                                                                                          |
+| Helm        | `Helm.release` — chart pull + SHA-256 digest verification; `Helm.cacheFileName`, `Helm.verifyChartDigest`, the shared cache-naming/verification building blocks it's built on |
+| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYaml`, `redact`                                                                                       |
+| Config      | `KonfigConfig`, `ImagesConfig`, and their decoders; `konfigDefaults.ts`'s `DEFAULT_*`/`KONFIG_*_ENV` constants                                                                |
+| Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `brand` / `unsafeCoerce` escape hatches                                                                                   |
+| Errors      | the tagged union `AnyRenderError` (`HelmDigestMismatch`, `BoundaryDecodeError`, …)                                                                                            |
 
 ## Internals
 

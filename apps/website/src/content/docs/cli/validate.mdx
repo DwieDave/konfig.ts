@@ -30,11 +30,11 @@ konfig validate <env> [--strict] [--ignore-missing-schemas]
 
 ## Behaviour
 
-- Structural validation parses each rendered file with the YAML parser and decodes every non-null document against a Kubernetes envelope schema: `apiVersion: string`, `kind: string`, `metadata.name` matching the RFC 1123 label pattern, optional `metadata.namespace` with the same pattern, optional string maps for `labels` and `annotations`. Deeper fields are left to kubeconform.
-- Every issue is printed to stderr as `<file> (doc <n>) <path>: <message>`; a YAML parse failure is reported as one issue for `doc 0`.
+- Structural validation parses each rendered file with the YAML parser and decodes every non-null document against a Kubernetes envelope schema: `apiVersion: string`, `kind: string`, optional string maps for `labels` and `annotations`, and DNS-pattern checks on names. `metadata.name` follows the RFC 1123 *subdomain* rule (lowercase alphanumerics, `-`, `.`, must start and end alphanumeric, max 253 chars) for every kind except `Namespace` and `Service`, which use the stricter RFC 1123 *label* rule (no dots, max 63 chars); `metadata.namespace`, when present, always uses the label rule regardless of kind. A `CustomResourceDefinition` named `sopssecrets.isindir.github.com` is valid under the subdomain rule; a `Service` or `Namespace` named with a dot is not. Deeper fields are left to kubeconform.
+- Every issue is printed to stderr as `<file> (doc <n>) <path>: <message>`, naming the specific rule violated (e.g. `metadata.name '...' is not a valid RFC 1123 subdomain — ...` or `metadata.namespace '...' is not a valid RFC 1123 label — ...`); a YAML parse failure is reported as one issue for `doc 0`.
 - On success it prints an `OK` line: `env '<env>': <n> file(s) pass structural validation`.
-- `--strict` runs kubeconform against the directory `build` would write to. Pass/fail is decided by the exit code, not by scraping stdout. `--k8s-version` only affects your render (`ctx.k8sVersion`); it is not forwarded to kubeconform.
-- Nothing is written to disk and the build cache is not consulted or updated.
+- `--strict` renders fresh in memory and stages the result into a scoped scratch temporary directory (cleaned up automatically when the command exits), then runs kubeconform against that directory. It no longer depends on a prior `konfig build` and never reads stale output from a previous build's output directory. `--k8s-version`, when set, both shapes your render (`ctx.k8sVersion`) and is forwarded to kubeconform as `-kubernetes-version <ver>`.
+- Nothing is written to disk outside the `--strict` scratch directory, and the build cache is not consulted or updated.
 
 ## Exit codes and errors
 

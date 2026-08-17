@@ -32,19 +32,36 @@ baseline directory) run under plain Node.
 
 Every command walks up from the cwd to find a `konfig.json`. Key fields:
 
-| Field                               | Meaning                                                                                                            |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `root`                              | directory (relative to `konfig.json`) holding your `env/`, `modules/`, and charts                                  |
-| `envs`                              | optional `<env> → { entry }` map overriding the default env-file path                                              |
-| `outDir.manifests`                  | where rendered manifests are written                                                                               |
-| `helm.cacheDir` / `helm.minVersion` | accepted by the schema, but not read yet: `helm fetch`, `crd` and `Helm.release` use the `KONFIG_*` env vars below |
-| `diff.baseline`                     | baseline manifest tree for `konfig diff`                                                                           |
-| `clusters`                          | per-cluster registry / ingressClass / storageClass / repositoryUrl                                                 |
+| Field                               | Meaning                                                                           |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| `root`                              | directory (relative to `konfig.json`) holding your `env/`, `modules/`, and charts |
+| `envs`                              | optional `<env> → { entry }` map overriding the default env-file path             |
+| `outDir.manifests`                  | where rendered manifests are written                                              |
+| `charts`                            | directory (relative to `konfig.json`) holding chart registry definitions          |
+| `helm.cacheDir` / `helm.minVersion` | Helm tarball cache dir and minimum `helm` version (see precedence below)          |
+| `crd.outDir`                        | where `konfig crd extract` writes generated CRD TypeScript                        |
+| `diff.baseline`                     | baseline manifest tree for `konfig diff`                                          |
+| `clusters`                          | per-cluster registry / ingressClass / storageClass / repositoryUrl                |
 
-Paths for the Helm cache, chart registry and CRD codegen come from environment
-variables (defaults in parentheses): `KONFIG_HELM_CACHE` (`.konfig/helm-cache`),
-`KONFIG_CHARTS_DIR` (`infra/k8s-konfig/charts`), `KONFIG_CRD_OUT_DIR`
-(`.generated/crd`), `KONFIG_HELM_MIN_VERSION` (`3.16.0`).
+`konfig.json` is the source of truth for the Helm cache dir, the chart
+registry dir, and the CRD codegen out dir. Each resolves with precedence
+**env var > matching `konfig.json` field > built-in default** (defaults in
+parentheses, all `konfig.json` fields resolved relative to the config file's
+own directory, same as `root`/`outDir`):
+
+- `KONFIG_HELM_CACHE` > `helm.cacheDir` > `.konfig/helm-cache`
+- `KONFIG_CHARTS_DIR` > `charts` > `infra/k8s-konfig/charts`
+- `KONFIG_CRD_OUT_DIR` > `crd.outDir` > `.generated/crd`
+- `KONFIG_HELM_MIN_VERSION` > `helm.minVersion` > `3.16.0`
+
+`konfig crd extract`/`konfig crd verify`/`konfig helm fetch` also work
+outside a konfig project (no `konfig.json` found); every path then falls
+back to the built-in default, resolved relative to `process.cwd()`, same as
+before this precedence existed. `konfig build`/`validate`/`diff` always
+require a `konfig.json` (to find the env entry file) and pass its resolved
+`helm.cacheDir` through to every `Helm.release()` call a chart definition
+makes, via a `ConfigProvider` installed around the render (see
+[`@konfig.ts/core`](../core)'s README for how `Helm.release` reads it).
 
 An **env** is a named render target (`prod`, `staging`). Its entry file is
 `envs.NAME.entry`, else `<root>/env/NAME.ts`; that module's **default export**
@@ -56,7 +73,7 @@ must be an `AppOfApps` program (see [`@konfig.ts/argocd`](../argocd)).
 konfig build <env>       # render manifests to outDir (input-hashed; a no-op build rewrites nothing)
 konfig validate <env>    # render in-memory + structural checks; --strict adds kubeconform
 konfig diff <env>        # structural diff vs. the configured baseline (ignores key reordering)
-konfig set <env> <app> <imageRef>   # update one image tag in images.json
+konfig set <env> <app> <imageRef> [--create]   # update one image tag in images.json; --create adds a new app key
 konfig crd extract|verify           # CRD TypeScript codegen from Helm charts
 konfig helm fetch --all             # pre-fetch chart tarballs into the cache
 konfig docker preview|write|diff <app>   # Dockerfile generation (@konfig.ts/docker)
@@ -65,6 +82,18 @@ konfig graph [target] [--with-dev] [--full] [--width <n>]   # print the workspac
 
 `build` / `validate` / `diff` share `--cluster <name>`, `--k8s-version <ver>`,
 and repeatable `--flag k=v`, all readable from your program's `RenderContext`.
+
+`konfig helm fetch --all` and `konfig crd extract` cache tarballs under the
+_same_ filename `Helm.release` uses at render time: `<chart>-<version>.tgz`
+for a chart registry entry with no recorded digest, or
+`<chart>-<version>-<digest12>.tgz` once a digest is known (verified against
+the pulled bytes before the file is cached under that name). A chart with a
+digest that `helm fetch`d without one (before the digest was recorded)
+prints a warning that the plain-named tarball won't be reused by a render;
+re-run `konfig helm fetch --all` after adding the digest to warm the correct
+cache slot. `konfig crd extract` looks for the digest-suffixed tarball first
+when a digest is known, so a prior `helm fetch` (or a prior render) already
+warms its cache too.
 
 ## Requirements
 

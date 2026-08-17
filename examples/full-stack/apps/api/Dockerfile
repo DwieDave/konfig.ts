@@ -1,6 +1,6 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/api/docker.ts
-# hash: sha256:3d0284bd27ce458e6b21e768d5370c37e4dbb1e9a14fda70047aaf4e98f3c5d3
+# hash: sha256:f6d37b751e152776f7c55e068c2cf5cb4cfc2e074051f31b8223237129a1ae0f
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -21,6 +21,7 @@ COPY packages/k8s/package.json ./packages/k8s/
 COPY packages/oxc/package.json ./packages/oxc/
 COPY packages/sealed-secrets/package.json ./packages/sealed-secrets/
 COPY packages/sops/package.json ./packages/sops/
+COPY apps/website/package.json ./apps/website/
 RUN bun install --ignore-scripts
 
 FROM base AS builder
@@ -56,6 +57,11 @@ COPY --from=prod-deps --chown=app:app /app/node_modules /app/node_modules
 COPY --from=builder --chown=app:app /app/packages/core /app/packages/core
 COPY --from=builder --chown=app:app /app/packages/env /app/packages/env
 COPY --from=builder --chown=app:app /app/examples/full-stack/shared/env-contracts /app/examples/full-stack/shared/env-contracts
+COPY --from=builder --chown=app:app /app/examples/full-stack/apps/api /app/examples/full-stack/apps/api
+COPY --from=prod-deps --chown=app:app /app/packages/core/node_modules /app/packages/core/node_modules
+COPY --from=prod-deps --chown=app:app /app/packages/env/node_modules /app/packages/env/node_modules
+COPY --from=prod-deps --chown=app:app /app/examples/full-stack/shared/env-contracts/node_modules /app/examples/full-stack/shared/env-contracts/node_modules
+COPY --from=prod-deps --chown=app:app /app/examples/full-stack/apps/api/node_modules /app/examples/full-stack/apps/api/node_modules
 HEALTHCHECK --interval=15s --timeout=3s --retries=3 CMD ["wget","--spider","-q","http://localhost:8080/healthz"]
 USER app
 CMD ["bun","run","src/main.ts"]

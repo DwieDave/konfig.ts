@@ -5,6 +5,7 @@ import * as YAML from "yaml"
 import { unsafeCoerce } from "./_cast"
 import { ChildProcess, ChildProcessSpawner } from "./_unstable"
 import { parseYamlAll } from "./diff"
+import { DEFAULT_HELM_CACHE_DIR, KONFIG_HELM_CACHE_ENV } from "./konfigDefaults"
 import { make, type Manifest, type RawYaml } from "./Manifest"
 import { HelmDigestMismatch, HelmRenderError, HelmVersionTooLow } from "./RenderError"
 import { runProcessExit, runProcessString } from "./subprocess"
@@ -129,6 +130,26 @@ const _assertHelmMinVersion = (
     }
   })
 
+export interface CacheFileNameInput {
+  readonly chart: string
+  readonly version: string
+  // Omit when the chart registry entry has no recorded digest yet — the
+  // filename falls back to the plain `<chart>-<version>.tgz` form. This is
+  // the single naming rule shared by `Helm.release`'s own cache, `konfig
+  // helm fetch`, and `konfig crd extract`, so a `helm fetch --all` actually
+  // warms the cache `Helm.release` reads from during a render.
+  readonly digest?: string
+}
+
+// Truncated to 12 hex chars: long enough to make an accidental collision
+// between two chart versions astronomically unlikely, short enough to keep
+// cache filenames readable.
+export const cacheFileName = (input: CacheFileNameInput): string => {
+  if (input.digest === undefined) return `${input.chart}-${input.version}.tgz`
+  const digestSuffix = input.digest.replace(/^sha256:/, "").slice(0, 12)
+  return `${input.chart}-${input.version}-${digestSuffix}.tgz`
+}
+
 const _normalizeDigest = (digest: string): string => digest.startsWith("sha256:") ? digest : `sha256:${digest}`
 
 const _toHex = (buf: ArrayBuffer): string => {
@@ -161,21 +182,27 @@ const _hashFile = (filePath: string) =>
     return `sha256:${_toHex(digest)}`
   })
 
-interface _VerifyDigestInput {
-  readonly opts: HelmReleaseOptions
+export interface VerifyChartDigestInput {
+  readonly chart: string
+  readonly version: string
+  readonly digest: string
   readonly cachedTgz: string
 }
 
-const _verifyDigest = (input: _VerifyDigestInput) =>
+// Shared by `Helm.release`'s own cache (verified on every hit, not just
+// after a fresh pull) and by CLI callers (`konfig helm fetch`, `konfig crd
+// extract`) that want the same guarantee before they hand a tarball off to
+// `helm template`.
+export const verifyChartDigest = (input: VerifyChartDigestInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
-    const expected = _normalizeDigest(input.opts.digest)
+    const expected = _normalizeDigest(input.digest)
     const actual = yield* _hashFile(input.cachedTgz)
     if (expected !== actual) {
       yield* fs.remove(input.cachedTgz).pipe(Effect.ignore)
       return yield* new HelmDigestMismatch({
-        chart: input.opts.chart,
-        version: input.opts.version,
+        chart: input.chart,
+        version: input.version,
         expected,
         actual
       })
@@ -195,7 +222,7 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
 
     const cacheExists = yield* fs.exists(cachedTgz)
     if (cacheExists) {
-      yield* _verifyDigest({ opts, cachedTgz })
+      yield* verifyChartDigest({ chart: opts.chart, version: opts.version, digest: opts.digest, cachedTgz })
       return
     }
 
@@ -239,7 +266,7 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
       Effect.ensuring(fs.remove(pullDir, { recursive: true, force: true }).pipe(Effect.ignore))
     )
 
-    yield* _verifyDigest({ opts, cachedTgz })
+    yield* verifyChartDigest({ chart: opts.chart, version: opts.version, digest: opts.digest, cachedTgz })
   })
 
 export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {
@@ -254,13 +281,27 @@ export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {
         yield* _assertHelmMinVersion(opts.minVersion)
       }
 
-      const cacheDir = yield* Config.string("KONFIG_HELM_CACHE").pipe(
-        Config.withDefault(path.resolve(".konfig", "helm-cache"))
+      // cacheDir is read from Config (KONFIG_HELM_CACHE) rather than accepted
+      // as a HelmReleaseOptions field: the CLI's build/validate/diff
+      // commands install a ConfigProvider around the whole render — env var
+      // > konfig.json's `helm.cacheDir` > this default, resolved once in
+      // cliConfig.ts#resolveCliPaths — so every Helm.release() call across a
+      // project's chart definitions shares one resolved cache directory
+      // without threading it through every call site. `minVersion` stays a
+      // plain, opt-in HelmReleaseOptions field instead of following the same
+      // Config indirection: it's a per-chart floor a chart author chooses,
+      // not a shared filesystem path, and the project-wide default the CLI
+      // resolves the same way is enforced at the CLI boundary instead (the
+      // `helm version` preflight in `crd extract`/`crd verify`/`helm fetch`).
+      const cacheDir = yield* Config.string(KONFIG_HELM_CACHE_ENV).pipe(
+        Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR))
       )
       yield* fs.makeDirectory(cacheDir, { recursive: true })
 
-      const digestSuffix = opts.digest.replace(/^sha256:/, "").slice(0, 12)
-      const cachedTgz = path.join(cacheDir, `${opts.chart}-${opts.version}-${digestSuffix}.tgz`)
+      const cachedTgz = path.join(
+        cacheDir,
+        cacheFileName({ chart: opts.chart, version: opts.version, digest: opts.digest })
+      )
       yield* _ensureCachedTarball({ opts, cacheDir, cachedTgz })
 
       const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-" })

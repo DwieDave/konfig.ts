@@ -1,7 +1,8 @@
 import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
+import { FileSystem } from "effect/FileSystem"
 import { Argument, Command, Flag } from "../_unstable"
-import { renderEnv } from "../buildEnv"
+import { renderEnv, writeFilesToDir } from "../buildEnv"
 import { resolveConfig } from "../configResolver"
 import { renderContextFlags, renderContextFromFlags } from "../renderContextFlags"
 import { runKubeconform, validateManifestFile } from "../validator"
@@ -46,10 +47,24 @@ export const runValidate = (input: RunValidateInput) =>
     )
 
     if (strict) {
-      yield* Console.log(`Running kubeconform -strict against ${rendered.outDirAbs}...`)
-      const extraArgs = ignoreMissingSchemas ? (["-ignore-missing-schemas"] as const) : []
-      yield* runKubeconform({ dir: rendered.outDirAbs, extraArgs })
-      yield* Console.log(`kubeconform: OK`)
+      yield* Effect.scoped(
+        Effect.gen(function*() {
+          const fs = yield* FileSystem
+          // kubeconform must see the render this invocation just produced,
+          // not the on-disk output of a previous `konfig build` — so stage
+          // it into a scratch temp dir instead of pointing at rendered.outDirAbs.
+          const scratchDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-validate-" })
+          yield* writeFilesToDir({ rendered, targetDir: scratchDir })
+
+          yield* Console.log(`Running kubeconform -strict against ${scratchDir}...`)
+          const extraArgs = [
+            ...(ignoreMissingSchemas ? ["-ignore-missing-schemas"] : []),
+            ...(ctx.k8sVersion !== undefined ? ["-kubernetes-version", ctx.k8sVersion] : [])
+          ]
+          yield* runKubeconform({ dir: scratchDir, extraArgs })
+          yield* Console.log(`kubeconform: OK`)
+        })
+      )
     }
   })
 

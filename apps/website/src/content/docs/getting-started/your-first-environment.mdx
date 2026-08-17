@@ -80,7 +80,7 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
    konfig validate staging --strict
    ```
 
-   `konfig validate` renders in memory and checks every document's envelope: `apiVersion`, `kind`, a DNS-label `metadata.name`, and, when present, a DNS-label `metadata.namespace` and string-valued `labels`/`annotations`. Failures are listed per file and the command exits with `StructuralValidationFailed`. With `--strict` it additionally runs `kubeconform -summary -strict` over the on-disk output directory (`KubeconformNotFound` if the binary is missing), so run `konfig build` first; `--ignore-missing-schemas` is forwarded to kubeconform for CRDs it does not know.
+   `konfig validate` renders in memory and checks every document's envelope: `apiVersion`, `kind`, a `metadata.name` that follows the RFC 1123 subdomain rule (or the stricter RFC 1123 label rule for `Namespace`/`Service`), and, when present, an RFC 1123 label `metadata.namespace` and string-valued `labels`/`annotations`. Failures are listed per file and the command exits with `StructuralValidationFailed`. With `--strict` it stages a fresh in-memory render into a scratch directory and additionally runs `kubeconform -summary -strict` over it (`KubeconformNotFound` if the binary is missing); running `konfig build` first is not required. `--ignore-missing-schemas` is forwarded to kubeconform for CRDs it does not know, and `--k8s-version` is forwarded as `-kubernetes-version`.
 
 6. ### Diff against a baseline
 

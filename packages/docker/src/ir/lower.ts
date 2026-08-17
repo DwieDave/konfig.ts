@@ -179,16 +179,21 @@ const _exposeToInstructions = (
   return ports.map((port): Instruction => ({ _tag: "Expose", port }))
 }
 
+// `WorkspaceSourceAll` expands to one `WorkspaceSource` per closure
+// workspace, including the target itself: the target's own source is what
+// makes `cmd`/`entrypoint` runnable in the runner stage (e.g. `bun run
+// src/main.ts`), so a spec relying on this atom must not have to also spell
+// out `Docker.copy.targetSource()`. Specs that build to a bundled artifact
+// instead should skip this atom and copy that artifact explicitly via
+// `Docker.copy.builderArtifact()`.
 const _expandWorkspaceSourceAll = (
   copy: ReadonlyArray<CopyAtom>,
-  closure: ReadonlyArray<Workspace>,
-  target: Workspace
+  closure: ReadonlyArray<Workspace>
 ): ReadonlyArray<CopyAtom> => {
   const out: CopyAtom[] = []
   for (const c of copy) {
     if (c._tag === "WorkspaceSourceAll") {
       for (const w of closure) {
-        if (w.name === target.name) continue
         out.push({ _tag: "WorkspaceSource", name: w.name })
       }
     } else {
@@ -560,7 +565,7 @@ const _runnerStage = (
 ): Stage => {
   const runner: RunnerSpec = spec.runner
   const user = _userInstructions(runner.user)
-  const expandedCopy = _expandWorkspaceSourceAll(runner.copy, ctx.closure, ctx.target)
+  const expandedCopy = _expandWorkspaceSourceAll(runner.copy, ctx.closure)
   const usesWorkspaceSource = expandedCopy.some((c) => c._tag === "WorkspaceSource")
   const chown = user.chown ? { chown: user.chown } : {}
   const healthcheck = _runnerHealthcheckInstruction(runner.healthcheck)

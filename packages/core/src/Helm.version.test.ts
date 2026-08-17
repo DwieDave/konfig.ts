@@ -1,6 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Cause, ConfigProvider, Effect, Exit, Layer, Sink, Stream } from "effect"
+import { FileSystem } from "effect/FileSystem"
 import type { Command } from "effect/unstable/process/ChildProcess"
 import {
   type ChildProcessHandle,
@@ -82,4 +83,36 @@ describe("Helm.release helm-version preflight", () => {
         expect(pretty).toContain("not found")
       }
     }))
+
+  // Proves the two config sources `Helm.release` honors — a ConfigProvider
+  // for `cacheDir` (KONFIG_HELM_CACHE) and an explicit `minVersion` field —
+  // are both respected together: a too-old helm fails the preflight before
+  // the ConfigProvider-resolved cacheDir is ever touched.
+  it.effect(
+    "uses the ConfigProvider-resolved cacheDir and the caller's minVersion together",
+    () =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem
+        const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-combined-" })
+        const configProvider = ConfigProvider.fromUnknown({ KONFIG_HELM_CACHE: cacheDir })
+
+        const exit = yield* _release("999.0.0")
+          .render(RenderContext.make("test"))
+          .pipe(
+            Effect.provide(Layer.mergeAll(NodeServices.layer, _spawnerFor({ stdout: "v3.10.0\n", exitCode: 0 }))),
+            Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+            Effect.scoped,
+            Effect.exit
+          )
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.pretty(exit.cause)).toContain("HelmVersionTooLow")
+        }
+        // The preflight failed before any pull, so the resolved cacheDir was
+        // created (Helm.ts creates it up front) but never populated.
+        const files = yield* fs.readDirectory(cacheDir)
+        expect(files).toEqual([])
+      }).pipe(Effect.provide(NodeServices.layer))
+  )
 })

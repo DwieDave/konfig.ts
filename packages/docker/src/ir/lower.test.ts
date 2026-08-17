@@ -121,7 +121,7 @@ describe("lower (bun fixture)", () => {
       expect(sharedCopies.length).toBe(1)
     }).pipe(Effect.provide(NodeServices.layer)))
 
-  it.effect("workspaceSourceAll expands to per-workspace COPYs (excluding target)", () =>
+  it.effect("workspaceSourceAll expands to per-workspace COPYs (including target)", () =>
     Effect.gen(function*() {
       const spec: DockerSpec = {
         ...minimalSpec(`${FIXTURES}bun/packages/app`),
@@ -139,8 +139,30 @@ describe("lower (bun fixture)", () => {
           (i as { src: ReadonlyArray<string> }).src.some(
             (s) => s.startsWith("/app/packages/") && !s.endsWith("/node_modules")
           )
+      ) as ReadonlyArray<{ src: ReadonlyArray<string> }>
+      expect(wsCopies.length).toBe(3)
+      expect(wsCopies.some((c) => c.src.includes("/app/packages/app"))).toBe(true)
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("workspaceSourceAll copies the target's own source into the runner so its cmd can run", () =>
+    Effect.gen(function*() {
+      const spec: DockerSpec = {
+        ...minimalSpec(`${FIXTURES}bun/packages/app`),
+        runner: {
+          workdir: "/app/packages/app",
+          copy: [{ _tag: "WorkspaceSourceAll" }],
+          cmd: ["bun", "run", "main.ts"]
+        }
+      }
+      const bundle = yield* lower(spec)
+      const runner = bundle.prod.stages.find((s) => s.name === "runner")!
+      const targetSourceCopy = runner.instructions.find(
+        (i) =>
+          i._tag === "Copy" &&
+          (i as { src: ReadonlyArray<string>; dst: string }).dst === "/app/packages/app" &&
+          (i as { src: ReadonlyArray<string> }).src.includes("/app/packages/app")
       )
-      expect(wsCopies.length).toBe(2)
+      expect(targetSourceCopy).toBeDefined()
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("isolated linker copies each closure workspace's node_modules (incl. target) from the deps stage", () =>

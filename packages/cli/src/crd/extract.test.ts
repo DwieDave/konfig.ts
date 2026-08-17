@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
+import { Helm } from "@konfig.ts/core"
 import { Effect, Exit, Layer, Schema, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -12,6 +13,7 @@ import {
   makeHandle,
   ProcessId
 } from "effect/unstable/process/ChildProcessSpawner"
+import * as crypto from "node:crypto"
 import {
   _crdNameToIdentifier,
   _dedupeCrdDocuments,
@@ -92,6 +94,39 @@ spec:
 
 const _testLayer = (templateStdout: string) => Layer.merge(NodeServices.layer, _helmSpawner(templateStdout))
 
+const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
+
+/**
+ * Like `_helmSpawner`, but a non-`--untar` `pull` writes `tarball`'s bytes to
+ * `<--destination>/<chart>-<version>.tgz` (matching real `helm pull`
+ * output), so the digest-verify-then-rename path in `_pullChart` has a real
+ * file to hash.
+ */
+const _pullingHelmSpawner = (
+  tarball: Buffer,
+  templateStdout: string
+): Layer.Layer<ChildProcessSpawner, never, FileSystem | Path> =>
+  Layer.effect(
+    ChildProcessSpawner,
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      return makeSpawner((command: Command) =>
+        Effect.gen(function*() {
+          const args = isStandardCommand(command) ? command.args : []
+          if (args.includes("template")) return _handle({ stdout: templateStdout, exitCode: 0 })
+          if (args[0] === "pull" && !args.includes("--untar")) {
+            const dest = args[args.indexOf("--destination") + 1] ?? ""
+            const chart = args[3] ?? "chart"
+            const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
+            yield* fs.writeFile(path.join(dest, `${chart}-${version}.tgz`), tarball)
+          }
+          return _handle({ stdout: "", exitCode: 0 })
+        })
+      )
+    })
+  )
+
 layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
   it.effect("rejects shell-metachar chart name before any process is spawned", () =>
     Effect.gen(function*() {
@@ -167,6 +202,48 @@ describe("extractCrdsEffect end-to-end", () => {
       expect(content).toContain("CRD: widgets.example.com (group: example.com, versions: v1)")
       expect(content).toContain("size")
     }).pipe(Effect.scoped, Effect.provide(_testLayer(_validCrdYaml))))
+
+  it.effect("with a digest, caches the pulled tarball under Helm.cacheFileName's digest-suffixed slot", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-out-" })
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-cache-" })
+      const tarball = Buffer.from("fake-postgresql-tarball")
+      const digest = `sha256:${_sha256Hex(tarball)}`
+
+      yield* extractCrdsEffect({ ...validOpts, outDir, cacheDir, digest }).pipe(
+        Effect.provide(_pullingHelmSpawner(tarball, _validCrdYaml))
+      )
+
+      // Only the digest-suffixed slot `Helm.release`/`konfig helm fetch` also
+      // use — no plain-named tarball and no leftover pull scratch dir.
+      const files = yield* fs.readDirectory(cacheDir)
+      expect(files).toEqual([
+        Helm.cacheFileName({ chart: validOpts.chart, version: validOpts.version, digest })
+      ])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("with a digest, fails with HelmDigestMismatch and leaves the cache slot empty when the bytes differ", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-out-" })
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-cache-" })
+      const tarball = Buffer.from("real-tarball-bytes")
+      const wrongDigest = `sha256:${_sha256Hex(Buffer.from("not-the-tarball"))}`
+
+      const exit = yield* Effect.exit(
+        extractCrdsEffect({ ...validOpts, outDir, cacheDir, digest: wrongDigest }).pipe(
+          Effect.provide(_pullingHelmSpawner(tarball, _validCrdYaml))
+        )
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const fails = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
+        expect(fails).toContain("HelmDigestMismatch")
+      }
+      expect(yield* fs.readDirectory(cacheDir)).toEqual([])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("writes a stub file when the chart has no CRDs", () =>
     Effect.gen(function*() {

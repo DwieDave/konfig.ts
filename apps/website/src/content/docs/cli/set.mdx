@@ -10,7 +10,7 @@ sidebar:
 ## Usage
 
 ```bash
-konfig set <env> <app> <image>
+konfig set <env> <app> <image> [--create]
 ```
 
 ## Arguments
@@ -21,20 +21,25 @@ konfig set <env> <app> <image>
 | `app` | required | App key under `envs.<env>`. |
 | `image` | required | Full image reference (for example `ghcr.io/<org>/<app>:<sha>`). |
 
-There are no flags.
+## Flags
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `--create` | `false` | Allow adding a new app key under an existing env. Without it, an unknown `app` fails the command instead of being added implicitly. |
 
 ## Behaviour
 
 - Locates `konfig.json` by walking up from the cwd, then reads `<configDir>/<root>/images.json`.
 - Parses the file as JSON and decodes it with the strict `ImagesConfig` schema (`{ envs: Record<env, Record<app, string>> }`); unknown top-level keys are rejected.
 - Fails when `env` is not present in `envs`; the error lists the known env names. Adding a new env is a deliberate edit, not something `set` does implicitly.
-- `app` does not have to exist yet: an unknown app key is added under the env. There is no separate error for unknown apps.
+- `app` must already exist under `env` unless `--create` is passed; an unknown `app` without `--create` fails and leaves `images.json` untouched. Updating an already-known app's image works without `--create`.
 - Builds the new config, decodes it again against the schema, and writes it back with tab indentation and a trailing newline (`JSON.stringify(cfg, null, "\t")`), matching the repo's `images.json` formatting so the diff is one line.
 - Logs `set <env>.<app> = <image>` on success. Nothing is rendered; run `konfig build <env>` afterwards.
 
 ## Exit codes and errors
 
 - `SetUnknownEnv { env, known }` when the env key is missing (also printed as `unknown env '<env>'. Known: a, b`).
+- `SetUnknownApp { env, app, known }` when the app key is missing and `--create` was not passed (also printed as `unknown app '<app>' in env '<env>'. Known: a, b (pass --create to add it)`).
 - `ImagesFileError { path, cause }` for a missing or unreadable file, invalid JSON, or a schema failure on read or write.
 - `ConfigNotFound` / `ConfigParseError` when `konfig.json` cannot be resolved.
 

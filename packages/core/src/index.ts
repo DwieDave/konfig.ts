@@ -1,9 +1,9 @@
 export { brand, unsafeCoerce } from "./_cast"
 export { boundary } from "./boundary"
-export { makeStrictDecoder } from "./decode"
 export type { BundleHandle, BundleSetResult } from "./Bundle"
 export * as Bundle from "./Bundle"
 export * as Compose from "./Compose"
+export { makeStrictDecoder } from "./decode"
 export type {
   BuiltImageRefApp,
   ConfigMapRef,
@@ -62,6 +62,16 @@ export {
   type ResolvedKonfigConfig,
   ServicesConfig
 } from "./konfigConfig"
+export {
+  DEFAULT_CHARTS_DIR,
+  DEFAULT_CRD_OUT_DIR,
+  DEFAULT_HELM_CACHE_DIR,
+  DEFAULT_HELM_MIN_VERSION,
+  KONFIG_CHARTS_DIR_ENV,
+  KONFIG_CRD_OUT_DIR_ENV,
+  KONFIG_HELM_CACHE_ENV,
+  KONFIG_HELM_MIN_VERSION_ENV
+} from "./konfigDefaults"
 export type { EmbedYamlSource, RawYaml } from "./Manifest"
 export * as Manifest from "./Manifest"
 export * as Module from "./Module"
@@ -78,5 +88,5 @@ export {
   RenderError
 } from "./RenderError"
 export { renderManifest } from "./renderManifest"
-export { ProcessError, processDetail, runProcessExit, runProcessString } from "./subprocess"
+export { processDetail, ProcessError, runProcessExit, runProcessString } from "./subprocess"
 export * as Yaml from "./yaml"

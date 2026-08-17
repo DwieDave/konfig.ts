@@ -1,10 +1,65 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Effect } from "effect"
+import { Effect, Layer, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import type { Command } from "effect/unstable/process/ChildProcess"
+import {
+  type ChildProcessHandle,
+  ChildProcessSpawner,
+  ExitCode,
+  make as makeSpawner,
+  makeHandle,
+  ProcessId
+} from "effect/unstable/process/ChildProcessSpawner"
 import { runValidate, StructuralValidationFailed } from "./validate"
+
+const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
+
+interface _CapturedKubeconform {
+  args: ReadonlyArray<string> | undefined
+  // Files present under the directory kubeconform was pointed at, listed
+  // while the process "runs" — i.e. before the scoped scratch dir is removed.
+  filesInDir: ReadonlyArray<string> | undefined
+}
+
+// A fake `kubeconform` that exits 0 and records the args it was spawned
+// with plus the contents of the directory it was pointed at.
+const _kubeconformSpawner = (
+  captured: _CapturedKubeconform
+): Layer.Layer<ChildProcessSpawner, never, FileSystem> =>
+  Layer.effect(
+    ChildProcessSpawner,
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      return makeSpawner((command: Command) =>
+        Effect.gen(function*() {
+          const args = command._tag === "StandardCommand" ? command.args : []
+          captured.args = args
+          const dir = args[2]
+          if (dir !== undefined) {
+            captured.filesInDir = yield* fs.readDirectory(dir, { recursive: true }).pipe(
+              Effect.orElseSucceed(() => [])
+            )
+          }
+          return makeHandle({
+            pid: ProcessId(1),
+            exitCode: Effect.succeed(ExitCode(0)),
+            isRunning: Effect.succeed(false),
+            kill: () => Effect.void,
+            stdin: Sink.drain,
+            stdout: _bytes(""),
+            stderr: _bytes(""),
+            all: _bytes(""),
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void)
+          }) as ChildProcessHandle
+        })
+      )
+    })
+  )
 
 const _cfgFor = (configDir: string): ResolvedKonfigConfig => ({
   configDir,
@@ -103,4 +158,40 @@ describe("runValidate", () => {
       expect(failure.env).toBe("prod")
       expect(failure.issueCount).toBe(1)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect(
+    "--strict stages the fresh render into a scratch temp dir (not outDir) and forwards -kubernetes-version",
+    () =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem
+        const path = yield* Path
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-validate-" })
+        yield* _writeEnv(root, "prod", _validBundleEnvBody)
+        const cfg = _cfgFor(root)
+        const ctx = RenderContext.makeFull({ env: "prod", k8sVersion: "1.29.0" })
+        const captured: _CapturedKubeconform = { args: undefined, filesInDir: undefined }
+
+        yield* runValidate({
+          cfg,
+          envName: "prod",
+          ctx,
+          strict: true,
+          ignoreMissingSchemas: true
+        }).pipe(Effect.provide(_kubeconformSpawner(captured)))
+
+        const args = captured.args ?? []
+        expect(args.slice(0, 2)).toEqual(["-summary", "-strict"])
+        const scratchDir = args[2] ?? ""
+        expect(path.basename(scratchDir).startsWith("konfig-validate-")).toBe(true)
+        expect(scratchDir.startsWith(root)).toBe(false)
+        expect(args.slice(3)).toEqual(["-ignore-missing-schemas", "-kubernetes-version", "1.29.0"])
+
+        // The render was staged into the scratch dir while kubeconform ran...
+        expect((captured.filesInDir ?? []).some((f) => f.endsWith(".yaml"))).toBe(true)
+        // ...and cleaned up once the command finished.
+        expect(yield* fs.exists(scratchDir)).toBe(false)
+        // Nothing was written to the configured manifests outDir.
+        expect(yield* fs.exists(path.join(root, "infra", "rendered"))).toBe(false)
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+  )
 })

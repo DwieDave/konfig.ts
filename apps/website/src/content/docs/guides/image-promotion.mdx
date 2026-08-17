@@ -83,7 +83,7 @@ A missing `prod` block throws `ImagesEnvMissing`; a missing `api` key throws `Im
 
 ## Promoting from CI
 
-`konfig set <env> <app> <image>` performs a schema-validated read, replaces (or adds) one app key under an existing env, and writes the file back tab-indented. It refuses an env that is not already present (`SetUnknownEnv`) and never creates the file (a missing file is an `ImagesFileError`), so a typo in the env name cannot silently add a new environment.
+`konfig set <env> <app> <image>` performs a schema-validated read, replaces one existing app key under an existing env, and writes the file back tab-indented. It refuses an env that is not already present (`SetUnknownEnv`) and never creates the file (a missing file is an `ImagesFileError`), so a typo in the env name cannot silently add a new environment. A typo'd or genuinely new `app` key is refused the same way (`SetUnknownApp`) unless you pass `--create`, so a typo in the app name cannot silently add a stray key either.
 
 <Steps>
 

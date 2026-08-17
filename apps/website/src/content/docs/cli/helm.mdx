@@ -23,13 +23,13 @@ konfig helm fetch --all
 
 ## Behaviour
 
-- Reads the same environment-variable configuration as `konfig crd`: registry directory `KONFIG_CHARTS_DIR` (default `infra/k8s-konfig/charts`), cache `KONFIG_HELM_CACHE` (default `.konfig/helm-cache`), minimum version `KONFIG_HELM_MIN_VERSION` (default `3.16.0`). See [konfig crd](/konfig.ts/docs/cli/crd/) for the registry file format.
+- Reads the same configuration as `konfig crd`: registry directory (`KONFIG_CHARTS_DIR` / `charts`, default `infra/k8s-konfig/charts`), cache (`KONFIG_HELM_CACHE` / `helm.cacheDir`, default `.konfig/helm-cache`), minimum version (`KONFIG_HELM_MIN_VERSION` / `helm.minVersion`, default `3.16.0`), each falling back through env var, then the matching `konfig.json` field, then the built-in default. See [konfig.json](/konfig.ts/docs/cli/configuration/) for the precedence rule and [konfig crd](/konfig.ts/docs/cli/crd/) for the registry file format.
 - Runs `helm version --short` and fails with `HelmVersionTooLow` when `helm` is absent or too old.
-- For every registry entry prints `Fetching <chart>@<version>...` and runs `helm pull --repo <repo> <chart> --version <version> --destination <cache>`, unless `<cache>/<chart>-<version>.tgz` already exists.
+- For every registry entry prints `Fetching <chart>@<version>...`. When the registry entry has a `digest`, it pulls into a private temp directory, verifies the pulled tarball's digest with `Helm.verifyChartDigest`, and renames it into the cache under `<chart>-<version>-<digest12>.tgz`, skipping the pull entirely if that file already exists. When the entry has no digest, it runs `helm pull --repo <repo> <chart> --version <version> --destination <cache>` unless `<cache>/<chart>-<version>.tgz` already exists, and prints a warning that the render-time cache cannot reuse a plain-named entry.
 - Ends with `Done. Cache at <cache>`.
 
 <Aside type="caution">
-`helm fetch` does not verify digests. Digest verification happens at render time: `Helm.release({ digest })` in `@konfig.ts/core` hashes the cached tarball on every pull and every cache hit and fails with `HelmDigestMismatch` when the bytes changed. Render-time cache entries are keyed as `<chart>-<version>-<digest12>.tgz` inside the same `KONFIG_HELM_CACHE` directory, so a tarball fetched here (`<chart>-<version>.tgz`) is not reused by `Helm.release`; only `konfig crd` reads that filename.
+Digest-suffixed cache entries (`<chart>-<version>-<digest12>.tgz`) are shared between `helm fetch` and render-time `Helm.release({ digest })`: fetching here with `--all` now warms the same cache slot a later `konfig build` reads from, so a build for a chart with a recorded digest does not re-pull it. `Helm.release` still hashes the cached tarball on every pull and every cache hit and fails with `HelmDigestMismatch` when the bytes changed. Charts with no recorded digest still cache under the plain `<chart>-<version>.tgz` name, which `Helm.release`'s digest-suffixed cache cannot reuse.
 </Aside>
 
 ## Exit codes and errors

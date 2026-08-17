@@ -1,5 +1,11 @@
 import { Effect, Schema } from "effect"
 import { makeStrictDecoder } from "./decode"
+import {
+  DEFAULT_CHARTS_DIR,
+  DEFAULT_CRD_OUT_DIR,
+  DEFAULT_HELM_CACHE_DIR,
+  DEFAULT_HELM_MIN_VERSION
+} from "./konfigDefaults"
 
 const _stringWithKeyDefault = (def: string) =>
   Schema.String.pipe(Schema.optionalKey, Schema.withDecodingDefaultKey(Effect.succeed(def)))
@@ -21,13 +27,13 @@ export const OutDir = Schema.Struct({
 export type OutDir = typeof OutDir.Type
 
 export const CrdConfig = Schema.Struct({
-  outDir: _stringWithKeyDefault(".generated/crd")
+  outDir: _stringWithKeyDefault(DEFAULT_CRD_OUT_DIR)
 })
 export type CrdConfig = typeof CrdConfig.Type
 
 export const HelmConfig = Schema.Struct({
-  cacheDir: _stringWithKeyDefault(".konfig/helm-cache"),
-  minVersion: _stringWithKeyDefault("3.16.0")
+  cacheDir: _stringWithKeyDefault(DEFAULT_HELM_CACHE_DIR),
+  minVersion: _stringWithKeyDefault(DEFAULT_HELM_MIN_VERSION)
 })
 export type HelmConfig = typeof HelmConfig.Type
 
@@ -54,15 +60,15 @@ export const KonfigConfig = Schema.Struct({
   root: Schema.String,
   cluster: _stringWithKeyDefault("cluster.ts"),
   modules: _stringWithKeyDefault("modules"),
-  charts: _stringWithKeyDefault("charts"),
+  charts: _stringWithKeyDefault(DEFAULT_CHARTS_DIR),
   envs: Schema.Record(Schema.String, EnvEntry),
   outDir: OutDir,
   crd: Schema.optionalKey(CrdConfig).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed({ outDir: ".generated/crd" }))
+    Schema.withDecodingDefaultKey(Effect.succeed({ outDir: DEFAULT_CRD_OUT_DIR }))
   ),
   helm: Schema.optionalKey(HelmConfig).pipe(
     Schema.withDecodingDefaultKey(
-      Effect.succeed({ cacheDir: ".konfig/helm-cache", minVersion: "3.16.0" })
+      Effect.succeed({ cacheDir: DEFAULT_HELM_CACHE_DIR, minVersion: DEFAULT_HELM_MIN_VERSION })
     )
   ),
   // Extra files/directories/glob patterns (relative to konfig.json)

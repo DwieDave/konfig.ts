@@ -1,6 +1,6 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/worker/docker.ts
-# hash: sha256:cc49f2623836ce506b5e03f7688df6c8a4cf843cbaffdae6d618d4d6ff63a626
+# hash: sha256:7aa762a9bf49124bbe9080dc7cd1a97605d6339dbbab48804f93874bed7ce95a
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS dev
@@ -21,6 +21,7 @@ COPY packages/k8s/package.json ./packages/k8s/
 COPY packages/oxc/package.json ./packages/oxc/
 COPY packages/sealed-secrets/package.json ./packages/sealed-secrets/
 COPY packages/sops/package.json ./packages/sops/
+COPY apps/website/package.json ./apps/website/
 RUN bun install
 COPY packages/core ./packages/core
 COPY packages/env ./packages/env

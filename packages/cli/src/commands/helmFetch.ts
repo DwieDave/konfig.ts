@@ -1,10 +1,11 @@
-import { runProcessExit } from "@konfig.ts/core"
+import { Helm, runProcessExit } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Command, Flag } from "../_unstable"
 import { loadChartRegistryEffect } from "../chartRegistry"
 import { resolveCliPaths } from "../cliConfig"
+import { resolveConfig } from "../configResolver"
 import { helmPullCommand } from "../helmPull"
 import { assertHelmVersion } from "../helmVersion"
 
@@ -15,6 +16,10 @@ interface FetchOneInput {
   readonly chart: string
   readonly version: string
   readonly cacheDir: string
+  // Chart registry entries without a recorded digest fetch under the plain
+  // `<chart>-<version>.tgz` name, which `Helm.release`'s digest-suffixed
+  // cache (Helm.cacheFileName) can't reuse — see the warning below.
+  readonly digest?: string
 }
 
 export const _fetchOne = (input: FetchOneInput) =>
@@ -23,12 +28,45 @@ export const _fetchOne = (input: FetchOneInput) =>
     const path = yield* Path
 
     yield* fs.makeDirectory(input.cacheDir, { recursive: true })
-    const cachedTgz = path.join(input.cacheDir, `${input.chart}-${input.version}.tgz`)
-    const exists = yield* fs.exists(cachedTgz)
-    if (exists) return
 
-    const cmd = helmPullCommand({ chart: input, options: { destination: input.cacheDir } })
-    yield* runProcessExit(cmd)
+    if (input.digest === undefined) {
+      const cachedTgz = path.join(input.cacheDir, Helm.cacheFileName({ chart: input.chart, version: input.version }))
+      const exists = yield* fs.exists(cachedTgz)
+      if (!exists) {
+        const cmd = helmPullCommand({ chart: input, options: { destination: input.cacheDir } })
+        yield* runProcessExit(cmd)
+      }
+      yield* Console.log(
+        `  warning: ${input.chart}@${input.version} has no recorded digest — cached under a plain name that Helm.release's digest-suffixed cache won't reuse`
+      )
+      return
+    }
+
+    const digest = input.digest
+    const digestTgz = path.join(
+      input.cacheDir,
+      Helm.cacheFileName({ chart: input.chart, version: input.version, digest })
+    )
+    const digestExists = yield* fs.exists(digestTgz)
+    if (digestExists) return
+
+    // `helm pull` always writes the plain `<chart>-<version>.tgz` name;
+    // pull into a private temp dir, verify against the recorded digest,
+    // then rename into the digest-suffixed slot `Helm.release` also caches
+    // under, so a later render reuses this fetch instead of re-pulling.
+    const pullDir = yield* fs.makeTempDirectory({ directory: input.cacheDir, prefix: ".konfig-helm-fetch-" })
+    yield* Effect.gen(function*() {
+      const cmd = helmPullCommand({ chart: input, options: { destination: pullDir } })
+      yield* runProcessExit(cmd)
+      const pulled = path.join(pullDir, Helm.cacheFileName({ chart: input.chart, version: input.version }))
+      yield* Helm.verifyChartDigest({
+        chart: input.chart,
+        version: input.version,
+        digest,
+        cachedTgz: pulled
+      })
+      yield* fs.rename(pulled, digestTgz)
+    }).pipe(Effect.ensuring(fs.remove(pullDir, { recursive: true, force: true }).pipe(Effect.ignore)))
   })
 
 interface HelmFetchFlags {
@@ -37,7 +75,11 @@ interface HelmFetchFlags {
 
 export const helmFetchEffect = (flags: HelmFetchFlags) =>
   Effect.gen(function*() {
-    const { cacheDir, chartsDir, minVersion } = yield* resolveCliPaths
+    // Not Effect.void: resolveCliPaths needs an actual `undefined` value here
+    // (ResolvedKonfigConfig | undefined), not `void`.
+    // oxlint-disable-next-line effecttsgo/effect-succeed-with-void
+    const cfg = yield* resolveConfig().pipe(Effect.catchTag("ConfigNotFound", () => Effect.succeed(undefined)))
+    const { cacheDir, chartsDir, minVersion } = yield* resolveCliPaths(cfg)
 
     yield* assertHelmVersion(minVersion)
 
@@ -54,7 +96,8 @@ export const helmFetchEffect = (flags: HelmFetchFlags) =>
         repo: def.repo,
         chart: def.chart,
         version: def.version,
-        cacheDir
+        cacheDir,
+        digest: def.digest === "" ? undefined : def.digest
       })
     }
 

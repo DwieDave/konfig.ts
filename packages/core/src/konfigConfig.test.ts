@@ -13,7 +13,7 @@ describe("konfig.json schema (T4.1)", () => {
     expect(cfg.root).toBe("infra/k8s-konfig")
     expect(cfg.cluster).toBe("cluster.ts")
     expect(cfg.modules).toBe("modules")
-    expect(cfg.charts).toBe("charts")
+    expect(cfg.charts).toBe("infra/k8s-konfig/charts")
     expect(cfg.crd?.outDir).toBe(".generated/crd")
     expect(cfg.helm?.cacheDir).toBe(".konfig/helm-cache")
     expect(cfg.helm?.minVersion).toBe("3.16.0")

@@ -3,7 +3,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { ImagesFileError, SetUnknownEnv, setImageEffect } from "./set"
+import { ImagesFileError, setImageEffect, SetUnknownApp, SetUnknownEnv } from "./set"
 
 const _konfigJson = JSON.stringify({
   root: "infra",
@@ -39,12 +39,12 @@ describe("setImageEffect", () => {
       const written = yield* fs.readFileString(imagesPath)
       const expected = [
         "{",
-        '\t"envs": {',
-        '\t\t"prod": {',
-        '\t\t\t"api": "ghcr.io/acme/api:new-sha",',
-        '\t\t\t"web": "ghcr.io/acme/web:v1"',
+        "\t\"envs\": {",
+        "\t\t\"prod\": {",
+        "\t\t\t\"api\": \"ghcr.io/acme/api:new-sha\",",
+        "\t\t\t\"web\": \"ghcr.io/acme/web:v1\"",
         "\t\t},",
-        '\t\t"staging": {}',
+        "\t\t\"staging\": {}",
         "\t}",
         "}",
         ""
@@ -52,23 +52,29 @@ describe("setImageEffect", () => {
       expect(written).toBe(expected)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("adds a new app key under an existing env without disturbing siblings", () =>
+  it.effect("adds a new app key under an existing env with --create, without disturbing siblings", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const { root, imagesPath } = yield* _setupConfigDir
 
-      yield* setImageEffect({ env: "staging", app: "worker", image: "ghcr.io/acme/worker:v3", from: root })
+      yield* setImageEffect({
+        env: "staging",
+        app: "worker",
+        image: "ghcr.io/acme/worker:v3",
+        create: true,
+        from: root
+      })
 
       const written = yield* fs.readFileString(imagesPath)
       const expected = [
         "{",
-        '\t"envs": {',
-        '\t\t"prod": {',
-        '\t\t\t"api": "ghcr.io/acme/api:old-sha",',
-        '\t\t\t"web": "ghcr.io/acme/web:v1"',
+        "\t\"envs\": {",
+        "\t\t\"prod\": {",
+        "\t\t\t\"api\": \"ghcr.io/acme/api:old-sha\",",
+        "\t\t\t\"web\": \"ghcr.io/acme/web:v1\"",
         "\t\t},",
-        '\t\t"staging": {',
-        '\t\t\t"worker": "ghcr.io/acme/worker:v3"',
+        "\t\t\"staging\": {",
+        "\t\t\t\"worker\": \"ghcr.io/acme/worker:v3\"",
         "\t\t}",
         "\t}",
         "}",
@@ -96,6 +102,75 @@ describe("setImageEffect", () => {
 
       const after = yield* fs.readFileString(imagesPath)
       expect(after).toBe(before)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect(
+    "fails with SetUnknownApp (and leaves the file untouched) for an app absent from the env, without --create",
+    () =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem
+        const { root, imagesPath } = yield* _setupConfigDir
+        const before = yield* fs.readFileString(imagesPath)
+
+        const failure = yield* Effect.flip(
+          setImageEffect({ env: "staging", app: "worker", image: "ghcr.io/acme/worker:v3", from: root })
+        )
+
+        expect(failure).toBeInstanceOf(SetUnknownApp)
+        if (failure instanceof SetUnknownApp) {
+          expect(failure._tag).toBe("SetUnknownApp")
+          expect(failure.env).toBe("staging")
+          expect(failure.app).toBe("worker")
+          expect(failure.known).toEqual([])
+        }
+
+        const after = yield* fs.readFileString(imagesPath)
+        expect(after).toBe(before)
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+  )
+
+  it.effect("fails with SetUnknownApp listing known apps when the env already has entries", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const { root, imagesPath } = yield* _setupConfigDir
+      const before = yield* fs.readFileString(imagesPath)
+
+      const failure = yield* Effect.flip(
+        setImageEffect({ env: "prod", app: "worker", image: "ghcr.io/acme/worker:v3", from: root })
+      )
+
+      expect(failure).toBeInstanceOf(SetUnknownApp)
+      if (failure instanceof SetUnknownApp) {
+        expect(failure.env).toBe("prod")
+        expect(failure.app).toBe("worker")
+        expect([...failure.known].sort()).toEqual(["api", "web"])
+      }
+
+      const after = yield* fs.readFileString(imagesPath)
+      expect(after).toBe(before)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("updates an existing app entry as before, without needing --create", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const { root, imagesPath } = yield* _setupConfigDir
+
+      yield* setImageEffect({ env: "prod", app: "web", image: "ghcr.io/acme/web:v2", from: root })
+
+      const written = yield* fs.readFileString(imagesPath)
+      const expected = [
+        "{",
+        "\t\"envs\": {",
+        "\t\t\"prod\": {",
+        "\t\t\t\"api\": \"ghcr.io/acme/api:old-sha\",",
+        "\t\t\t\"web\": \"ghcr.io/acme/web:v2\"",
+        "\t\t},",
+        "\t\t\"staging\": {}",
+        "\t}",
+        "}",
+        ""
+      ].join("\n")
+      expect(written).toBe(expected)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("fails with ImagesFileError when images.json is missing", () =>

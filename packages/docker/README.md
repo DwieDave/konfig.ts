@@ -27,7 +27,7 @@ export default Docker.app({
   runner: {
     production: true, // re-install prod-only deps for the closure
     workdir: "/app/apps/api",
-    copy: [Docker.copy.workspaceSourceAll()], // keep workspace source for bun's export conditions
+    copy: [Docker.copy.workspaceSourceAll()], // target + workspace deps' source, for bun's export conditions
     expose: 8080,
     cmd: ["bun", "run", "src/main.ts"]
   },
@@ -65,6 +65,14 @@ spec declares. Dev is a single `base → dev` stage.
 | `Docker.healthcheck` | `httpGet({ path, port, … })`, `command(argv, opts?)`                                                               |
 | `Docker.user`        | `nonRoot({ uid?, gid?, name? })`, `root()` — a non-root user is injected if you omit one                           |
 | `Docker.platform`    | `linuxAmd64()`, `linuxArm64()`, `multi(values)`                                                                    |
+
+`workspaceSourceAll()` expands to one workspace-source `COPY` per workspace in
+the target's closure, **including the target itself** — its own source is
+what makes a `cmd`/`entrypoint` that runs from source (e.g.
+`bun run src/main.ts`) actually work in the runner. If your build instead
+produces a bundled artifact, skip `workspaceSourceAll()`/`workspaceSource()`
+for the target and copy the artifact explicitly with
+`Docker.copy.builderArtifact()` instead.
 
 ## Scope
 
