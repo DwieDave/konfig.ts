@@ -1,8 +1,10 @@
 ---
 /**
  * Interactive grid layer (sits above GridBackground, below content): cells under the cursor light up with a faint fill and a tiny
- * mono `Kind/name` label — a nod to konfig rendering one YAML file per resource.
- * Aligns with GridBackground (cell = 73.75rem/6 × 194px, origin x at 50%, y at section top).
+ * mono `Kind/name` label — a nod to konfig rendering one YAML document per resource. Roughly one cell in six is a
+ * diagnostic: red stroke, wavy underline and an error badge + `TSxxxx` code above the label — the ones tsc would have caught.
+ * Typing `tsc` anywhere on the page runs a sweep: every visible cell is checked, staggered left-to-right, top-to-bottom.
+ * Aligns with GridBackground (cell = 73.75rem/6 × 97px, origin x at 50%, y at section top).
  * Static (empty) on touch, prefers-reduced-motion, and while the section is off-screen.
  */
 ---
@@ -13,7 +15,10 @@
 
 <script>
   const CELL_W_REM = 73.75 / 6
-  const CELL_H = 194
+  const CELL_H = 97
+  const FAIL_RATE = 1 / 6
+  const SWEEP_STEP_MS = 28
+  const SWEEP_HOLD_MS = 900
   const HOLD_MS = 350
   const FADE_MS = 1100
   const GLOW_MS = 320
@@ -29,14 +34,19 @@
     { kinds: ["Service", "Ingress", "HTTPRoute"], names: ["api", "web", "grafana", "public", "internal"], rgb: [56, 189, 248] }, // sky-400
     { kinds: ["Secret", "SopsSecret", "ExternalSecret", "SealedSecret"], names: ["db-creds", "ghcr-pull", "stripe", "smtp", "jwt-key"], rgb: [251, 191, 36] }, // amber-400
     { kinds: ["Application", "AppProject", "HelmRelease"], names: ["postgres", "redis", "cert-manager", "traefik", "monitoring"], rgb: [167, 139, 250] }, // violet-400
-    { kinds: ["Namespace", "ConfigMap", "ServiceAccount", "Role"], names: ["prod", "staging", "env", "ci", "argocd"], rgb: [251, 113, 133] } // rose-400
+    { kinds: ["Namespace", "ConfigMap", "ServiceAccount", "Role"], names: ["prod", "staging", "env", "ci", "argocd"], rgb: [232, 121, 249] } // fuchsia-400 (rose reads as the failure red)
   ]
+
+  const RED: readonly [number, number, number] = [248, 113, 113] // red-400
+  const DIAG_CODES = ["TS2322", "TS2345", "TS2741", "TS2339"] as const
 
   interface Cell {
     readonly col: number
     readonly row: number
     readonly label: string
     readonly rgb: readonly [number, number, number]
+    /** Diagnostic code when this cell "fails at tsc"; undefined for passing cells. */
+    readonly diag: string | undefined
     /** Timestamp at which the fade-out started; undefined while still hovered. */
     leftAt: number | undefined
     /** Timestamp of activation; drives the brief entry glow. */
@@ -46,7 +56,8 @@
   const pickRandom = <T,>(xs: ReadonlyArray<T>): T | undefined => xs[Math.floor(Math.random() * xs.length)]
   /** Random `Kind/name` pair per activation, never repeating the label just shown. */
   let lastLabel = ""
-  const nextLabel = (): { label: string; rgb: readonly [number, number, number] } => {
+  const nextLabel = (failRate = FAIL_RATE): Pick<Cell, "label" | "rgb" | "diag"> => {
+    const diag = Math.random() < failRate ? (pickRandom(DIAG_CODES) ?? "TS2322") : undefined
     for (let i = 0; i < 8; i++) {
       const cat = pickRandom(CATEGORIES)
       const kind = cat === undefined ? undefined : pickRandom(cat.kinds)
@@ -55,9 +66,25 @@
       const label = `${kind}/${name}`
       if (label === lastLabel) continue
       lastLabel = label
-      return { label, rgb: cat.rgb }
+      return { label, rgb: diag === undefined ? cat.rgb : RED, diag }
     }
-    return { label: "Deployment/api", rgb: [52, 211, 153] }
+    return { label: "Deployment/api", rgb: [52, 211, 153], diag }
+  }
+
+  /** Easter egg: typing `tsc` (outside form fields) asks every grid on the page to run a sweep. */
+  const TSC_EVENT = "konfig:tsc"
+  const listenForTsc = () => {
+    let buffer = ""
+    document.addEventListener("keydown", (e) => {
+      const t = e.target
+      if (t instanceof HTMLElement && (t.isContentEditable || t.closest("input, textarea, select, [contenteditable]"))) return
+      if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return
+      buffer = (buffer + e.key.toLowerCase()).slice(-3)
+      if (buffer === "tsc") {
+        buffer = ""
+        window.dispatchEvent(new CustomEvent(TSC_EVENT))
+      }
+    })
   }
 
   class KonfigGridInteractive extends HTMLElement {
@@ -98,13 +125,16 @@
         this.#release(performance.now())
         this.#schedule()
       }
+      const onTsc = () => this.#sweep(performance.now())
       window.addEventListener("pointermove", onMove, { passive: true })
       document.addEventListener("pointerleave", onLeave)
+      window.addEventListener(TSC_EVENT, onTsc)
       this.#cleanup.push(
         () => ro.disconnect(),
         () => io.disconnect(),
         () => window.removeEventListener("pointermove", onMove),
-        () => document.removeEventListener("pointerleave", onLeave)
+        () => document.removeEventListener("pointerleave", onLeave),
+        () => window.removeEventListener(TSC_EVENT, onTsc)
       )
       resize()
     }
@@ -124,6 +154,31 @@
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      this.#schedule()
+    }
+
+    /** Check every visible cell, staggered by row then column; roughly a quarter fail. Cells are pre-scheduled via enteredAt. */
+    #sweep(now: number) {
+      if (!this.#visible) return
+      const rect = this.getBoundingClientRect()
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+      const cw = CELL_W_REM * rem
+      const cols = Math.ceil(rect.width / 2 / cw)
+      const rows = Math.ceil(rect.height / CELL_H)
+      const top = Math.max(0, -rect.top)
+      const bottom = Math.min(rect.height, window.innerHeight - rect.top)
+      const rowStart = Math.floor(top / CELL_H)
+      const rowEnd = Math.ceil(bottom / CELL_H)
+      const next: Cell[] = []
+      let i = 0
+      for (let row = Math.max(0, rowStart); row < Math.min(rows, rowEnd); row++) {
+        for (let col = -cols; col < cols; col++) {
+          const enteredAt = now + i * SWEEP_STEP_MS
+          next.push({ col, row, ...nextLabel(1 / 4), enteredAt, leftAt: enteredAt + SWEEP_HOLD_MS })
+          i++
+        }
+      }
+      this.#cells = next
       this.#schedule()
     }
 
@@ -165,26 +220,15 @@
         }
       }
 
-      // Labels stay clear of the section copy: measure tight text bounds of each content block.
+      // Labels stay clear of the section copy: the four centre columns are wordless (stroke/fill only) for every row the
+      // content block spans. Coordinates, not text bounds — a wide headline spilling a few px past those columns must not
+      // silence its neighbours.
       const content = this.parentElement?.querySelector("[data-grid-content]")
-      const copyRects: DOMRect[] = []
+      let quietRows: { top: number; bottom: number } | undefined
       if (content instanceof HTMLElement) {
-        for (const child of content.children) {
-          const range = document.createRange()
-          range.selectNodeContents(child)
-          // Per-line boxes, not the union: a short centred line must not block the cells beside it.
-          for (const r of range.getClientRects()) copyRects.push(r)
-        }
+        const cr = content.getBoundingClientRect()
+        quietRows = { top: cr.top - rect.top, bottom: cr.bottom - rect.top }
       }
-      const PAD = 6
-      const collides = (lx: number, ly: number, lw: number, lh: number) =>
-        copyRects.some(
-          (r) =>
-            lx < r.right - rect.left + PAD &&
-            lx + lw > r.left - rect.left - PAD &&
-            ly < r.bottom - rect.top + PAD &&
-            ly + lh > r.top - rect.top - PAD
-        )
 
       // Draw.
       ctx.clearRect(0, 0, rect.width, rect.height)
@@ -194,6 +238,10 @@
       for (const c of this.#cells) {
         const elapsed = c.leftAt === undefined ? 0 : now - c.leftAt
         if (elapsed >= HOLD_MS + FADE_MS) continue
+        if (now < c.enteredAt) {
+          alive.push(c) // scheduled by a sweep, not yet reached
+          continue
+        }
         const k = Math.max(0, elapsed - HOLD_MS) / FADE_MS
         const a = 1 - k * k * (3 - 2 * k) // smoothstep ease-out
         // Entry glow: flash to zinc-400 and settle back to the resting tones.
@@ -207,11 +255,16 @@
         const y = c.row * CELL_H
         ctx.fillStyle = `rgba(39, 39, 42, ${0.4 * a})` // zinc-800/40
         ctx.fillRect(x + 1, y + 1, cw - 1, CELL_H - 1)
-        ctx.strokeStyle = `rgba(${mix(63, 113)}, ${mix(63, 113)}, ${mix(70, 122)}, ${0.9 * a})` // zinc-700 <- zinc-500
+        ctx.strokeStyle =
+          c.diag === undefined
+            ? `rgba(${mix(63, 113)}, ${mix(63, 113)}, ${mix(70, 122)}, ${0.9 * a})` // zinc-700 <- zinc-500
+            : `rgba(248, 113, 113, ${(0.35 + 0.4 * glow) * a})` // red-400, dimmed
         ctx.lineWidth = 1
         ctx.strokeRect(x + 0.5, y + 0.5, cw, CELL_H)
         const lw = ctx.measureText(c.label).width
-        if (collides(x + 10, y + CELL_H - 20, lw, 12)) continue
+        const inQuietBlock =
+          quietRows !== undefined && c.col >= -2 && c.col <= 1 && y + CELL_H / 2 > quietRows.top && y + CELL_H / 2 < quietRows.bottom
+        if (inQuietBlock) continue
         // Neon label: category hue at full brightness + soft bloom on entry, settling to a dimmed rest.
         const [r, gc, bl] = c.rgb
         ctx.fillStyle = `rgba(${r}, ${gc}, ${bl}, ${(0.45 + 0.55 * labelGlow) * a})`
@@ -220,11 +273,40 @@
         ctx.fillText(c.label, x + 10, y + CELL_H - 8)
         ctx.shadowBlur = 0
         ctx.shadowColor = "transparent"
+        if (c.diag !== undefined) {
+          // Wavy underline under the label (the docs' `.diag` treatment); error badge + code on the line above.
+          const ux = x + 10
+          const uy = y + CELL_H - 5
+          ctx.strokeStyle = `rgba(248, 113, 113, ${0.9 * a})`
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          for (let px = 0; px <= lw; px += 1) ctx.lineTo(ux + px, uy + Math.sin(px * 1.6) * 1.2)
+          ctx.stroke()
+          const by = y + CELL_H - 8 - 17 // baseline of the code line
+          const cx = ux + 5
+          const cy = by - 4.5
+          ctx.strokeStyle = `rgba(248, 113, 113, ${0.9 * a})`
+          ctx.lineWidth = 1.25
+          ctx.beginPath()
+          ctx.arc(cx, cy, 4.5, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.moveTo(cx - 2, cy - 2)
+          ctx.lineTo(cx + 2, cy + 2)
+          ctx.moveTo(cx + 2, cy - 2)
+          ctx.lineTo(cx - 2, cy + 2)
+          ctx.stroke()
+          ctx.fillStyle = `rgba(161, 161, 170, ${0.75 * a})` // zinc-400
+          ctx.fillText(c.diag, ux + 15, by)
+        }
       }
       this.#cells = alive
-      const animating = alive.some((c) => c.leftAt !== undefined || now - c.enteredAt < LABEL_GLOW_MS)
+      const animating = alive.some((c) => c.leftAt !== undefined || now - c.enteredAt < LABEL_GLOW_MS || now < c.enteredAt)
       if (animating && this.#visible) this.#schedule()
     }
   }
-  if (!customElements.get("konfig-grid-interactive")) customElements.define("konfig-grid-interactive", KonfigGridInteractive)
+  if (!customElements.get("konfig-grid-interactive")) {
+    customElements.define("konfig-grid-interactive", KonfigGridInteractive)
+    listenForTsc()
+  }
 </script>
