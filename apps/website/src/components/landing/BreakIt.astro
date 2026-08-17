@@ -2,10 +2,14 @@
 import { ArrowUpRight } from "@lucide/astro"
 import CodeBlock from "@/components/ui/CodeBlock.astro"
 import Eyebrow from "@/components/ui/Eyebrow.astro"
-import { FAILURE_CASES, load } from "@/lib/catalog"
+import { FAILURE_CASES, LANDING_CASE_IDS, load } from "@/lib/catalog"
 import { SITE } from "@/lib/site"
 
-const cases = FAILURE_CASES.map((c) => ({ ...c, snippet: load(c.spec) }))
+const cases = LANDING_CASE_IDS.map((id) => {
+  const c = FAILURE_CASES.find((x) => x.id === id)
+  if (c === undefined) throw new Error(`landing case ${id} missing from catalog`)
+  return { ...c, snippet: load(c.spec) }
+})
 ---
 
 <section id="break-it" class="relative w-full py-24 md:pt-40 md:pb-24">

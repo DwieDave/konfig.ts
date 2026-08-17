@@ -5,9 +5,20 @@ import { loadSnippet, type Snippet, type SnippetSpec } from "./snippets"
 export type FailureCaseId =
   | "missing-provider"
   | "unbound-secret"
-  | "widened-name"
+  | "port-mismatch"
+  | "volume-mismatch"
   | "envname-collision"
+  | "widened-name"
   | "app-name-collision"
+
+/** The cases shown in the landing page tabs, in order. The rest are used by the docs. */
+export const LANDING_CASE_IDS: ReadonlyArray<FailureCaseId> = [
+  "missing-provider",
+  "unbound-secret",
+  "port-mismatch",
+  "volume-mismatch",
+  "envname-collision"
+]
 
 export interface FailureCase {
   readonly id: FailureCaseId
@@ -76,6 +87,61 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
       ]
     },
     tsc: `infra/envs/unbound-secret.ts(39,3): error TS2741: Property 'jwt' is missing in type '{ db: …; s3: … }' but required in type 'SecretMembersOpts<…>'.`
+  },
+  {
+    id: "port-mismatch",
+    tab: "port-mismatch.ts",
+    title: "A probe or Service pointing at a port that does not exist",
+    summary:
+      "`Port.make` declares the container's port names; `Port.ref` is only accepted for one of them. A typo in a readiness probe or a Service `targetPort` is a compile error, not a pod that never becomes ready.",
+    spec: {
+      file: "infra/envs/port-mismatch.ts",
+      stripMeta: true,
+      between: { startAt: "const api = Container.define({", endBefore: "const _ok = Workload.web({" },
+      diagnostics: [
+        {
+          find: 'Port.ref("htp")',
+          code: "2322",
+          message: `Type 'PortName<"htp">' is not assignable to type 'number | PortName<"http">'.
+The container declares only the port "http".`
+        },
+        {
+          find: 'Port.ref("metrics")',
+          code: "2322",
+          message: `Type 'PortName<"metrics">' is not assignable to type 'number | PortName<"http">'.
+No container in this workload declares a port named "metrics".`
+        }
+      ]
+    },
+    tsc: `infra/envs/port-mismatch.ts(10,34): error TS2322: Type 'PortName<"htp">' is not assignable to type 'number | PortName<"http">'.`
+  },
+  {
+    id: "volume-mismatch",
+    tab: "volume-mismatch.ts",
+    title: "A mount or PVC claim that does not match a declared volume",
+    summary:
+      "Volume mounts must name a volume the pod declares, and a PVC claim must be a branded reference, not a string. Both are checked when the pod is defined.",
+    spec: {
+      file: "infra/envs/volume-mismatch.ts",
+      stripMeta: true,
+      between: { startAt: "const data = Volume.fromPvc", endBefore: "const _ok = Pod.define({" },
+      diagnostics: [
+        {
+          find: "Container.define({",
+          on: "    Container.define({",
+          code: "2322",
+          message: `Type 'ContainerSpec<"pg", "dat">' is not assignable to type 'ContainerSpec<string, "data">'.
+The pod declares only the volume "data"; the mount names "dat".`
+        },
+        {
+          find: 'claim: "postgres-data"',
+          code: "2322",
+          message: `Type 'string' is not assignable to type 'PvcRef<string>'.
+Use PvcRef.of("postgres-data") or a Dep.Pvc provider so the claim is tracked.`
+        }
+      ]
+    },
+    tsc: `infra/envs/volume-mismatch.ts(10,5): error TS2322: Type 'ContainerSpec<"pg", "dat">' is not assignable to type 'ContainerSpec<string, "data">'.`
   },
   {
     id: "widened-name",

@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Diagnostics } from "@/components/docs"
 
-The main promise of konfig.ts is that a whole class of deployment mistakes fails at `tsc` time instead of at `argocd sync` time. The example project proves this with five files under `examples/full-stack/infra/envs/` that do not compile on purpose. Each demonstrates one class of mistake. They are part of the example's `tsconfig.json` include set, and every intended error is marked with `@ts-expect-error`, so CI (`bun run --cwd examples/full-stack check`) fails if any of them ever starts compiling. The errors shown here are guaranteed to stay errors.
+The main promise of konfig.ts is that a whole class of deployment mistakes fails at `tsc` time instead of at `argocd sync` time. The example project proves this with seven files under `examples/full-stack/infra/envs/` that do not compile on purpose. Each demonstrates one class of mistake. They are part of the example's `tsconfig.json` include set, and every intended error is marked with `@ts-expect-error`, so CI (`bun run --cwd examples/full-stack check`) fails if any of them ever starts compiling. The errors shown here are guaranteed to stay errors.
 
 Two things to keep in mind when reading them:
 
@@ -33,6 +33,26 @@ An environment contract can declare secret members; the api contract declares th
 Why it fails: the bind input makes `secrets` mandatory as soon as the environment has any secret member, and each entry must be a backend, a source, or both. Whether a source is required is part of the backend's type. `Sops.backend` returns a backend whose type says it requires a source, so leaving the source out is a type error. `Sops.passthrough` returns a backend that does not require one.
 
 Fix: bind every secret member, and pair `Sops.backend` with `Sops.source({ file, keys })`. See [Secrets with sops](/konfig.ts/docs/guides/secrets-with-sops/).
+
+## port-mismatch.ts: a probe or Service names a port that does not exist
+
+A container declares its ports with `Port.make`. Everything that later refers to a port by name, a readiness probe, a liveness probe, a Service `targetPort`, has to use `Port.ref` with one of those declared names. Here the container declares only `http`, the readiness probe asks for `htp`, and a second workload's Service asks for `metrics`.
+
+<Diagnostics case="port-mismatch" />
+
+Why it fails: `Container.define` records the declared port names in the container's type. Probe targets accept a number or a port name from that set, and `Workload.web` builds its Service port type from the names of all containers it receives. A name outside that set is a type error at the call site, so a typo cannot reach the cluster as a pod that never becomes ready or a Service with no endpoints.
+
+Fix: use the declared name (`Port.ref("http")`), or declare the missing port with `Port.make` on the container.
+
+## volume-mismatch.ts: a mount or PVC claim that does not match a declared volume
+
+A pod declares its volumes once; each container mounts them by name. A PersistentVolumeClaim is referenced through a branded reference rather than a plain string. Here one container mounts `dat` while the pod declares `data`, and a second volume passes the claim name as a raw string.
+
+<Diagnostics case="volume-mismatch" />
+
+Why it fails: `Pod.define` compares the mount names of every container against the pod's declared volume names, and `Volume.fromPvc` only accepts a `PvcRef`. A branded reference comes from `PvcRef.of(name)` when the claim is managed elsewhere, or from a `Dep.Pvc` provider when another module creates it, so the graph knows the claim exists.
+
+Fix: mount `Volume.mountRef("data")`, and pass `PvcRef.of("postgres-data")` (or a provided reference) as the claim.
 
 ## widened-name.ts: an Application name that is not a literal
 
