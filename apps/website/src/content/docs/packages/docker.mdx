@@ -45,7 +45,7 @@ docker build -f apps/api/Dockerfile .
 | `Docker.healthcheck`, `Docker.user`, `Docker.platform` | `httpGet({ path, port, ... })` / `command({ argv, ... })`; `nonRoot({ uid?, gid?, name? })` / `root()`; `linuxAmd64()` / `linuxArm64()` / `multi([...])` |
 | `DockerSpec`, `RunnerSpec`, `DevSpec`, `decodeDockerSpec`, `decodeDockerSpecSync` | Schemas and decoders for the spec; the atom schemas (`CopyAtom`, `RuntimeAtom`, `PackageManagerAtom`, `BuildAtom`, `HealthcheckAtom`, `UserAtom`, `PlatformAtom`) are exported too |
 | `findRoot`, `allWorkspaces`, `closureOf`, `detectPm` | Workspace graph services |
-| `buildIR`, `lower`, `prepareContext`, `validateSpec`, `emit`, `render`, `renderFile`, `renderHeader`, `extractHeader`, `HEADER_MARKER`, `sha256Hex` | IR lowering and Dockerfile rendering with a hashed header |
+| `buildIR`, `lower`, `prepareContext`, `validateSpec`, `emit`, `render`, `renderFile`, `renderHeader`, `extractHeader`, `HEADER_MARKER`, `sha256Hex` | Building the intermediate representation and Dockerfile rendering with a hashed header |
 | `bunPm`, `npmPm`, `pnpmPm`, `bunRuntime`, `nodeRuntime` | Package manager and runtime implementations |
 | `isDockerApp`, `makeDockerApp`, `DockerAppTypeId`, `PACKAGE_NAME` | Spec identification helpers |
 

@@ -42,7 +42,7 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 | `Dep` | Needs (`Secret`, `SecretValues`, `ConfigMap`, `Namespace`, `ServiceAccount`, `Pvc`, `Image`, `Application`, `App`) and `provide*` layers |
 | `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef`, `BuiltImageRef` | Branded reference types carried by the needs (`BuiltImageRef` is also a value with `of`); `*RefName`, `*RefKeys` helpers extract the brand parameters |
 | `Module` | `fixedNs`, `dynamicNs` factories; `Target`, `BuildContext`, `LiteralName` types |
-| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`, `Bundle.entrypoint`) and the residual-need machinery behind every entrypoint (`Compose.makeResidualEntrypoint`, `Compose.NoDuplicateProvides`) |
+| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`, `Bundle.entrypoint`) and the type-level tracking of unmet needs behind every entrypoint (`Compose.makeResidualEntrypoint`, `Compose.NoDuplicateProvides`) |
 | `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template` |
 | `Yaml` | `serialize` (stable key order) and `filenameFor` |
 | `diffFiles`, `formatDiff`, `hasDifferences`, `parseYaml`, `parseYamlAll`, `deepEqual`, `redact` | Structural YAML diff with `Secret` data redaction |

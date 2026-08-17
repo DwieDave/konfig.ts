@@ -148,7 +148,7 @@ exact pre-release it is developed against:
   subprocess services), so it is installed automatically with core.
 
 The pin is exact on purpose: Effect's pre-release line makes breaking changes
-between builds, so a looser range would surface as `ERESOLVE` install
+between builds, so a looser range would end in `ERESOLVE` install
 conflicts rather than a working install. It relaxes to a caret range once
 Effect reaches a stable 4.x.
 

@@ -40,7 +40,7 @@ The example below is one of the worked-failure files shipped in `examples/full-s
 ## Requirements
 
 <Aside type="caution" title="Exact Effect pin">
-Every `@konfig.ts/*` package is built against Effect 4 (release candidate) and declares an exact peer version, currently `effect@4.0.0-rc.109`. The pin is exact on purpose: the release-candidate line makes breaking changes between builds, and a caret range would surface as `ERESOLVE` conflicts instead of a working install. Install exactly the version the packages declare. The pin relaxes once Effect ships a stable 4.x.
+Every `@konfig.ts/*` package is built against Effect 4 (release candidate) and declares an exact peer version, currently `effect@4.0.0-rc.109`. The pin is exact on purpose: the release-candidate line makes breaking changes between builds, and a caret range would end in `ERESOLVE` conflicts instead of a working install. Install exactly the version the packages declare. The pin relaxes once Effect ships a stable 4.x.
 </Aside>
 
 The `konfig` CLI imports your `.ts` sources at runtime, so it needs a TypeScript-capable runtime:

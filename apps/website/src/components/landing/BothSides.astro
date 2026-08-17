@@ -15,7 +15,7 @@ const runtime = {
     'import { Effect } from "effect"',
     "",
     "const config = await Effect.runPromise(",
-    "  Environment.runtime(apiEnv) // … error handling elided …",
+    "  Environment.runtime(apiEnv)",
     ")",
     "",
     runtimeUse.code

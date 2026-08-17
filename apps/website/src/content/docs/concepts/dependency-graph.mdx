@@ -49,7 +49,7 @@ Each `yield*` adds one need to the Effect's requirements. The wrapper carries th
 
 ## Resolution at the entrypoint
 
-`AppOfApps.fromModules({ target, defaults, modules })` folds the module handles left to right, letting each module's provides satisfy the needs of the modules after it. The type level mirrors that fold: each module's input is filtered against everything earlier modules provide, and whatever survives is the residual requirement of the returned Effect.
+`AppOfApps.fromModules({ target, defaults, modules })` walks the module handles in order, letting each module's provides satisfy the needs of the modules after it. The types follow the same walk: each module's needs are checked against everything earlier modules provide, and whatever is left over stays as an unmet requirement on the returned Effect.
 
 `AppOfApps.entrypoint(program)` accepts that Effect only when nothing is left unresolved. Otherwise the parameter type gains a `_konfig_unsatisfied` property with a hint such as `Missing provider for Secret "ghcr-pull". Add a module that provides it to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list.` The default export of an env file must be that entrypoint, so an unresolved graph never reaches `konfig build`.
 
@@ -71,7 +71,7 @@ The graph keys providers by literal name. If a wrapper forwards `name` typed as 
 
 ## Runtime behaviour
 
-Every check above is erased at compile time. At runtime the handles are merged into one Effect layer, each module's Application is collected, and `AppOfApps.make` packages them with a `name` (default `"apps"`), the target, and the defaults. Effect's own layer machinery would surface a missing service as a defect if it ever got that far; the type-level fold exists so it does not.
+Every check above is erased at compile time. At runtime the handles are merged into one Effect layer, each module's Application is collected, and `AppOfApps.make` packages them with a `name` (default `"apps"`), the target, and the defaults. Without the compile-time check, a missing service would only show up as a runtime defect from Effect's layer system; the type-level walk exists so it never gets that far.
 
 ## Reference
 
@@ -79,8 +79,8 @@ The names behind the checks above, for when you read the types or a compiler mes
 
 | Name | Role |
 | --- | --- |
-| `Dep.Need<K, N>` / `Dep.Provide<K, N>` | The phantom brand for a need or provide of kind `K` and literal name `N`. Both are the same type. |
-| `Compose.ResidualIn<Ms>` | The type-level left fold that filters each module's input against every earlier module's output. |
+| `Dep.Need<K, N>` / `Dep.Provide<K, N>` | The type-only marker for a need or provide of kind `K` and literal name `N`. Both are the same type. |
+| `Compose.ResidualIn<Ms>` | The type-level walk that filters each module's input against every earlier module's output. |
 | `Compose.NoDuplicateProvides` | The second fold that collects names provided twice. |
 | `Compose.composeLayers` | The runtime fold: reduces the handles with `Layer.provideMerge` into one layer. |
 | `Layer.provideMerge` | The Effect combinator both folds are built on. |
