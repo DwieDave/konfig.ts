@@ -26,10 +26,26 @@ const STEPS = [
 ] as const
 
 const OTHERS = [
-  { cmd: "konfig docker write apps/api", what: "workspace-graph-aware multi-stage Dockerfile" },
-  { cmd: "konfig crd extract | verify", what: "TypeScript types from the CRDs in your Helm charts, drift-checked" },
-  { cmd: "konfig helm fetch --all", what: "warm the chart cache; digests verified" },
-  { cmd: "konfig graph --with-dev", what: "ASCII workspace dependency graph" }
+  {
+    cmd: "konfig docker write apps/api",
+    out: "apps/api/Dockerfile",
+    what: "Multi-stage Dockerfile derived from the workspace graph: only the packages apps/api actually imports make it into the build context."
+  },
+  {
+    cmd: "konfig crd extract | verify",
+    out: "types/crds.d.ts",
+    what: "TypeScript types generated from the CRDs in your Helm charts; verify fails the build when the chart's CRDs drift from the committed types."
+  },
+  {
+    cmd: "konfig helm fetch --all",
+    out: ".helm-cache/",
+    what: "Warms the chart cache for every pinned chart and checks each archive against its recorded digest before anything renders."
+  },
+  {
+    cmd: "konfig graph --with-dev",
+    out: "stdout",
+    what: "ASCII workspace dependency graph, dev dependencies included — the same graph build and docker write use."
+  }
 ] as const
 
 const SHELL = STEPS.map((s) => `$ ${s.cmd}`).join("\n")
@@ -66,14 +82,24 @@ const SHELL = STEPS.map((s) => `$ ${s.cmd}`).join("\n")
         }
       </ol>
 
-      <div class="mt-12 border-t border-dashed border-zinc-800 pt-6">
-        <p class="mb-3 font-mono text-xs tracking-wider text-zinc-500 uppercase">Also in the box</p>
-        <ul class="m-0 grid list-none grid-cols-1 gap-x-8 gap-y-2 p-0 md:grid-cols-2">
+      <div class="mt-16 border-t border-dashed border-zinc-800 pt-8">
+        <div class="mb-6 flex items-baseline justify-between gap-4">
+          <p class="font-mono text-xs tracking-wider text-zinc-500 uppercase">Also in the box</p>
+          <p class="hidden font-mono text-xs text-zinc-600 md:block">$ konfig --help</p>
+        </div>
+        <ul class="m-0 grid list-none grid-cols-1 gap-4 p-0 md:grid-cols-2 xl:grid-cols-4">
           {
             OTHERS.map((o) => (
-              <li class="flex flex-wrap items-baseline gap-x-3 text-sm">
-                <code class="font-mono text-zinc-200">{o.cmd}</code>
-                <span class="text-zinc-500">{o.what}</span>
+              <li class="also-card group relative flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 transition-colors hover:border-zinc-600">
+                <p class="m-0 font-mono text-sm leading-snug">
+                  <span class="text-emerald-400 select-none">$ </span>
+                  <span class="text-white">{o.cmd}</span>
+                  <span class="also-caret ml-0.5 inline-block h-[1em] w-[0.5em] translate-y-[0.15em] bg-zinc-500 opacity-0" aria-hidden="true" />
+                </p>
+                <p class="m-0 font-mono text-xs text-zinc-500">
+                  <span class="text-zinc-600 select-none">→ </span>{o.out}
+                </p>
+                <p class="m-0 mt-auto text-sm leading-relaxed text-zinc-400">{o.what}</p>
               </li>
             ))
           }
@@ -82,3 +108,22 @@ const SHELL = STEPS.map((s) => `$ ${s.cmd}`).join("\n")
     </div>
   </div>
 </section>
+
+<style>
+  /* Blinking caret only while the card is hovered: it reads as "your turn". */
+  @keyframes also-blink {
+    0%,
+    49% {
+      opacity: 1;
+    }
+    50%,
+    100% {
+      opacity: 0;
+    }
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .also-card:hover .also-caret {
+      animation: also-blink 1s steps(1) infinite;
+    }
+  }
+</style>
