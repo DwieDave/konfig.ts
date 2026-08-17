@@ -1,5 +1,5 @@
 ---
-import { Check } from "@lucide/astro"
+import { ArrowDown, Check } from "@lucide/astro"
 import CodeBlock from "@/components/ui/CodeBlock.astro"
 import Eyebrow from "@/components/ui/Eyebrow.astro"
 import { SNIPPETS, load } from "@/lib/catalog"
@@ -8,55 +8,177 @@ const contract = load(SNIPPETS.envContract)
 const secrets = load(SNIPPETS.envSecrets)
 const bind = load(SNIPPETS.envBind)
 const runtime = load(SNIPPETS.envRuntime)
+
+const STEPS = [
+  {
+    id: "declare",
+    title: "Declare the contract once",
+    body: "Secrets, literals and downward-API fields become one typed value that both sides import.",
+    reveal: "Bind it in a module"
+  },
+  {
+    id: "bind",
+    title: "Bind it in the infra module",
+    body: "Environment.bind emits the Deployment env block plus the secret backend's CRs. A member without a backend does not compile.",
+    reveal: "Decode it at runtime"
+  },
+  {
+    id: "runtime",
+    title: "Decode it in the process",
+    body: "Environment.runtime reads the same variables at startup into a typed record. Secrets arrive Redacted.",
+    reveal: undefined
+  }
+] as const
 ---
 
 <section id="both-sides" class="relative w-full py-24 md:pt-40 md:pb-24">
-  <div class="mx-auto w-full max-w-295 px-4">
-    <div class="grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-12">
+  <konfig-steps class="mx-auto block w-full max-w-295 px-4">
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-12">
       <div>
         <Eyebrow>One source, both sides of the wire</Eyebrow>
         <h2 class="max-w-lg text-2xl leading-tighter font-semibold text-white md:text-3xl">
           Declare the env contract once. The pod spec and the process both import it.
         </h2>
         <p class="mt-4 max-w-lg text-lg text-zinc-400">
-          <code class="font-mono text-base text-zinc-200">apiEnv</code> is a value. <code class="font-mono text-base text-zinc-200">Environment.bind</code>
-          turns it into the Deployment env block plus the secret backend's CRs; <code class="font-mono text-base text-zinc-200">Environment.runtime</code>
-          decodes the same variables at startup into a typed record.
+          Rename <code class="font-mono text-base text-zinc-200">DATABASE_URL</code> in one place and the typechecker flags every consumer.
         </p>
-        <ul class="m-0 mt-5 list-none space-y-2 p-0">
+
+        <ol class="m-0 mt-8 flex list-none flex-col gap-3 p-0">
+          {
+            STEPS.map((s, i) => (
+              <li
+                data-step-item={s.id}
+                class:list={[
+                  "step-item rounded-md border p-4 transition-all",
+                  i === 0 ? "border-zinc-700 bg-zinc-900/40" : "step-item--pending border-zinc-800 bg-transparent"
+                ]}
+              >
+                <div class="flex items-start gap-3">
+                  <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-800 font-mono text-xs font-semibold text-zinc-200">
+                    0{i + 1}
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <h3 class="text-base font-semibold text-white">{s.title}</h3>
+                    <p class="mt-1 text-sm leading-relaxed text-zinc-400">{s.body}</p>
+                    {
+                      s.reveal !== undefined && (
+                        <button
+                          type="button"
+                          data-reveal={STEPS[i + 1]?.id}
+                          aria-controls={`step-${STEPS[i + 1]?.id}`}
+                          aria-expanded="false"
+                          class:list={[
+                            i === 0 ? "" : "step-button--pending",
+                            "mt-3 inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:border-zinc-500 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-300"
+                          ]}
+                        >
+                          <ArrowDown size={14} aria-hidden="true" />
+                          Next: {s.reveal}
+                        </button>
+                      )
+                    }
+                  </div>
+                </div>
+              </li>
+            ))
+          }
+        </ol>
+
+        <ul class="m-0 mt-6 list-none space-y-2 p-0">
           <li class="flex items-center gap-2 text-sm text-zinc-400">
             <Check class="h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
-            <span>Rename <code class="font-mono text-zinc-200">DATABASE_URL</code> in one place: the typechecker flags every consumer</span>
+            <span>Missing secret binding: compile error</span>
           </li>
           <li class="flex items-center gap-2 text-sm text-zinc-400">
             <Check class="h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
-            <span>Secret members are <code class="font-mono text-zinc-200">Redacted</code> at runtime; literals carry an Effect <code class="font-mono text-zinc-200">Config</code> schema</span>
-          </li>
-          <li class="flex items-center gap-2 text-sm text-zinc-400">
-            <Check class="h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
-            <span>Downward API fields (<code class="font-mono text-zinc-200">metadata.name</code>) are part of the same contract</span>
+            <span>Env-name collision between members: compile error</span>
           </li>
         </ul>
       </div>
-      <div class="flex flex-col gap-3">
-        <CodeBlock code={secrets.code} lang="ts" title="shared/env-contracts/src/secrets.ts" />
-        <CodeBlock code={contract.code} lang="ts" title="shared/env-contracts/src/bundles.ts" />
-      </div>
-    </div>
 
-    <div class="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <div>
-        <p class="mb-3 font-mono text-xs tracking-wider text-zinc-500 uppercase">
-          <span class="text-zinc-600">←</span> manifest side · <span class="text-zinc-300">Environment.bind</span>
-        </p>
-        <CodeBlock code={bind.code} lang="ts" title="infra/modules/api.ts" />
-      </div>
-      <div>
-        <p class="mb-3 font-mono text-xs tracking-wider text-zinc-500 uppercase">
-          process side · <span class="text-zinc-300">Environment.runtime</span> <span class="text-zinc-600">→</span>
-        </p>
-        <CodeBlock code={runtime.code} lang="ts" title="apps/api/src/main.ts" />
+      <div class="flex min-w-0 flex-col gap-3">
+        <div id="step-declare" data-step="declare" class="step-panel flex flex-col gap-3">
+          <p class="font-mono text-xs tracking-wider text-zinc-500 uppercase"><span class="text-zinc-300">01</span> · shared/env-contracts</p>
+          <CodeBlock code={secrets.code} lang="ts" title="shared/env-contracts/src/secrets.ts" />
+          <CodeBlock code={contract.code} lang="ts" title="shared/env-contracts/src/bundles.ts" />
+        </div>
+        <div id="step-bind" data-step="bind" class="step-panel flex flex-col gap-3">
+          <p class="mt-2 font-mono text-xs tracking-wider text-zinc-500 uppercase"><span class="text-zinc-300">02</span> · manifest side · <span class="text-zinc-300">Environment.bind</span></p>
+          <CodeBlock code={bind.code} lang="ts" title="infra/modules/api.ts" />
+        </div>
+        <div id="step-runtime" data-step="runtime" class="step-panel flex flex-col gap-3">
+          <p class="mt-2 font-mono text-xs tracking-wider text-zinc-500 uppercase"><span class="text-zinc-300">03</span> · process side · <span class="text-zinc-300">Environment.runtime</span></p>
+          <CodeBlock code={runtime.code} lang="ts" title="apps/api/src/main.ts" />
+        </div>
       </div>
     </div>
-  </div>
+  </konfig-steps>
 </section>
+
+<style>
+  konfig-steps[data-js] .step-item--pending {
+    opacity: 0.55;
+  }
+  konfig-steps[data-js] .step-button--pending {
+    display: none;
+  }
+  .step-panel[hidden] {
+    display: none;
+  }
+  .step-panel[data-entering] {
+    animation: step-in 320ms ease-out;
+  }
+  @keyframes step-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .step-panel[data-entering] {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  // Progressive reveal: without JS every step is visible; with JS steps 2 and 3
+  // start collapsed and open one at a time.
+  class KonfigSteps extends HTMLElement {
+    connectedCallback() {
+      const panels = Array.from(this.querySelectorAll("[data-step]")).filter((el): el is HTMLElement => el instanceof HTMLElement)
+      const items = Array.from(this.querySelectorAll("[data-step-item]")).filter((el): el is HTMLElement => el instanceof HTMLElement)
+      const buttons = Array.from(this.querySelectorAll("[data-reveal]")).filter((el): el is HTMLButtonElement => el instanceof HTMLButtonElement)
+      panels.slice(1).forEach((p) => {
+        p.hidden = true
+      })
+      this.setAttribute("data-js", "")
+      const activate = (item: HTMLElement) => {
+        item.classList.remove("border-zinc-800", "bg-transparent", "step-item--pending")
+        item.classList.add("border-zinc-700", "bg-zinc-900/40")
+        item.querySelector(".step-button--pending")?.classList.remove("step-button--pending")
+      }
+      for (const button of buttons) {
+        button.addEventListener("click", () => {
+          const id = button.dataset["reveal"]
+          const panel = panels.find((p) => p.dataset["step"] === id)
+          const item = items.find((i) => i.dataset["stepItem"] === id)
+          if (panel === undefined) return
+          panel.hidden = false
+          panel.setAttribute("data-entering", "")
+          setTimeout(() => panel.removeAttribute("data-entering"), 400)
+          if (item !== undefined) activate(item)
+          button.setAttribute("aria-expanded", "true")
+          button.disabled = true
+          button.classList.add("opacity-50", "cursor-default")
+          panel.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })
+        })
+      }
+    }
+  }
+  if (!customElements.get("konfig-steps")) customElements.define("konfig-steps", KonfigSteps)
+</script>
