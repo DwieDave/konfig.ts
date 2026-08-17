@@ -1,0 +1,117 @@
+---
+import CodeBlock from "@/components/ui/CodeBlock.astro"
+import type { Lang } from "@/lib/highlight"
+
+/** Tabbed code blocks. Panels share one grid cell so switching never changes height. */
+export interface CodeTab {
+  readonly id: string
+  readonly label: string
+  readonly title: string
+  readonly code: string
+  readonly lang?: Lang | undefined
+}
+
+interface Props {
+  readonly tabs: ReadonlyArray<CodeTab>
+  readonly class?: string | undefined
+}
+
+const { tabs, class: className } = Astro.props
+const uid = tabs.map((t) => t.id).join("-")
+---
+
+<konfig-code-tabs class:list={["block min-w-0", className]}>
+  <div role="tablist" aria-label="Code files" class="-mb-px flex flex-wrap gap-1 overflow-x-auto border-b border-zinc-800 font-mono text-xs">
+    {
+      tabs.map((t, i) => (
+        <button
+          type="button"
+          role="tab"
+          id={`ctab-${uid}-${t.id}`}
+          aria-controls={`cpanel-${uid}-${t.id}`}
+          aria-selected={i === 0 ? "true" : "false"}
+          tabindex={i === 0 ? 0 : -1}
+          class="-mb-px cursor-pointer border-b-2 border-transparent px-3 py-2.5 text-zinc-400 transition-colors hover:text-white aria-selected:border-white aria-selected:text-white focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-zinc-300"
+        >
+          {t.label}
+        </button>
+      ))
+    }
+  </div>
+  <div class="code-tabs-stage grid pt-4">
+    {
+      tabs.map((t, i) => (
+        <div
+          role="tabpanel"
+          id={`cpanel-${uid}-${t.id}`}
+          aria-labelledby={`ctab-${uid}-${t.id}`}
+          data-active={i === 0 ? "" : undefined}
+          class="code-tabs-panel min-w-0"
+        >
+          <CodeBlock code={t.code} lang={t.lang ?? "ts"} title={t.title} />
+        </div>
+      ))
+    }
+  </div>
+</konfig-code-tabs>
+
+<style>
+  .code-tabs-stage {
+    grid-template-areas: "panel";
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .code-tabs-panel {
+    grid-area: panel;
+    width: 100%;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 200ms ease,
+      visibility 0s linear 200ms;
+  }
+  .code-tabs-panel[data-active] {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity 200ms ease,
+      visibility 0s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .code-tabs-panel {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  class KonfigCodeTabs extends HTMLElement {
+    connectedCallback() {
+      const tabs = Array.from(this.querySelectorAll("[role='tab']")).filter((el): el is HTMLButtonElement => el instanceof HTMLButtonElement)
+      const panels = Array.from(this.querySelectorAll("[role='tabpanel']")).filter((el): el is HTMLElement => el instanceof HTMLElement)
+      const activate = (index: number, focus: boolean) => {
+        tabs.forEach((tab, i) => {
+          const selected = i === index
+          tab.setAttribute("aria-selected", String(selected))
+          tab.tabIndex = selected ? 0 : -1
+          if (selected && focus) tab.focus()
+        })
+        panels.forEach((panel, i) => {
+          if (i === index) panel.setAttribute("data-active", "")
+          else panel.removeAttribute("data-active")
+        })
+      }
+      tabs.forEach((tab, i) => {
+        tab.addEventListener("click", () => activate(i, false))
+        tab.addEventListener("keydown", (e) => {
+          const last = tabs.length - 1
+          if (e.key === "ArrowRight") activate(i === last ? 0 : i + 1, true)
+          else if (e.key === "ArrowLeft") activate(i === 0 ? last : i - 1, true)
+          else return
+          e.preventDefault()
+        })
+      })
+    }
+  }
+  if (!customElements.get("konfig-code-tabs")) customElements.define("konfig-code-tabs", KonfigCodeTabs)
+</script>

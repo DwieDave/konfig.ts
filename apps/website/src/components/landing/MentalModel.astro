@@ -1,6 +1,6 @@
 ---
 import { Check } from "@lucide/astro"
-import CodeBlock from "@/components/ui/CodeBlock.astro"
+import CodeTabs from "@/components/ui/CodeTabs.astro"
 import Eyebrow from "@/components/ui/Eyebrow.astro"
 import { SNIPPETS, load } from "@/lib/catalog"
 
@@ -72,9 +72,13 @@ const prod = load(SNIPPETS.prodEnv)
         </konfig-type-diagram>
       </div>
 
-      <div class="flex min-w-0 flex-col gap-3">
-        <CodeBlock code={api.code} lang="ts" title="infra/modules/api.ts" />
-        <CodeBlock code={prod.code} lang="ts" title="infra/envs/prod.ts" />
+      <div class="min-w-0 self-start md:sticky md:top-24">
+        <CodeTabs
+          tabs={[
+            { id: "module", label: "infra/modules/api.ts", title: "infra/modules/api.ts", code: api.code },
+            { id: "env", label: "infra/envs/prod.ts", title: "infra/envs/prod.ts", code: prod.code }
+          ]}
+        />
       </div>
     </div>
   </div>
