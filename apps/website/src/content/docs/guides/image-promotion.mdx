@@ -57,7 +57,7 @@ The workload module asks for the image with `yield* Dep.Image("api")` inside its
 
 <Snippet file="infra/modules/api.ts" startAt="export const defineApi" endBefore="      const bound" title="infra/modules/api.ts" />
 
-If no module in the list you pass to `AppOfApps.fromModules` provides the image for `api`, the environment fails to compile. The type error is reported through the `_konfig_unsatisfied` hint; see [Worked failures](/konfig.ts/docs/guides/worked-failures/).
+If no module in the list you pass to `AppOfApps.fromModules` provides the image for `api`, the environment fails to compile. The type error is reported through the `_konfig_unsatisfied` hint; see [Compile-time catches](/konfig.ts/docs/guides/compile-time-catches/).
 
 ## Reading images.json in the env entry
 

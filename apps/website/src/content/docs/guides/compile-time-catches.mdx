@@ -1,13 +1,13 @@
 ---
-title: Worked failures
-description: The five intentionally broken files in examples/full-stack/infra/envs, what each one gets wrong, why the type checker rejects it, and how to fix it.
+title: Compile-time catches
+description: The seven intentionally broken files in examples/full-stack/infra/envs, what each one gets wrong, why the type checker rejects it, and how to fix it.
 sidebar:
   order: 3
 ---
 
 import { Aside, Diagnostics } from "@/components/docs"
 
-The main promise of konfig.ts is that a whole class of deployment mistakes fails at `tsc` time instead of at `argocd sync` time. The example project proves this with seven files under `examples/full-stack/infra/envs/` that do not compile on purpose. Each demonstrates one class of mistake. They are part of the example's `tsconfig.json` include set, and every intended error is marked with `@ts-expect-error`, so CI (`bun run --cwd examples/full-stack check`) fails if any of them ever starts compiling. The errors shown here are guaranteed to stay errors.
+The main promise of konfig.ts is that a whole class of deployment mistakes fails at `tsc` time instead of at `argocd sync` time. The example project proves this with seven files under `examples/full-stack/infra/envs/` that are broken on purpose. Each makes one deployment mistake, and this page walks through what the file gets wrong, why the type checker rejects it, and how to fix it. They are part of the example's `tsconfig.json` include set, and every intended error is marked with `@ts-expect-error`, so CI (`bun run --cwd examples/full-stack check`) fails if any of them ever starts compiling. The errors shown here are guaranteed to stay errors.
 
 Two things to keep in mind when reading them:
 

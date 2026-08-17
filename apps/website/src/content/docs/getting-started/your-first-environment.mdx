@@ -103,7 +103,7 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
 </Steps>
 
 <Aside type="note" title="Type-check before you render">
-`tsc --noEmit` over your infra directory catches missing providers, widened Application names, and unbound secrets without calling `helm` or writing a file. The worked-failure files under `examples/full-stack/infra/envs/` (`broken.ts`, `unbound-secret.ts`, `widened-name.ts`, and others) show each error the type system produces.
+`tsc --noEmit` over your infra directory catches missing providers, widened Application names, and unbound secrets without calling `helm` or writing a file. The compile-time-catch files under `examples/full-stack/infra/envs/` (`broken.ts`, `unbound-secret.ts`, `widened-name.ts`, and others) show each error the type system produces.
 </Aside>
 
 ## Next

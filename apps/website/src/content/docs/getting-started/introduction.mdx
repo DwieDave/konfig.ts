@@ -26,7 +26,7 @@ Because both layers come from the same declarations, mistakes that would otherwi
 
 ## A compile error instead of a sync failure
 
-The example below is one of the worked-failure files shipped in `examples/full-stack/infra/envs/`. The `api` module asks for a Secret named `ghcr-pull`, but no module in the list provides it. The entrypoint rejects the program at compile time, before anything is rendered.
+The example below is one of the compile-time-catch files shipped in `examples/full-stack/infra/envs/`. The `api` module asks for a Secret named `ghcr-pull`, but no module in the list provides it. The entrypoint rejects the program at compile time, before anything is rendered.
 
 <Diagnostics case="missing-provider" />
 
