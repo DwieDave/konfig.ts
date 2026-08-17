@@ -13,11 +13,11 @@ const STATS = [
 ] as const
 ---
 
-<section id="top" class="hero-section relative w-full">
+<section id="top" class="hero-section relative flex w-full flex-col justify-center" style="min-height: calc(194px * 4)">
   <GridBackground />
   <GridInteractive />
   <div aria-hidden="true" class="hero-glow pointer-events-none absolute inset-x-0 top-0 h-150"></div>
-  <div class="relative mx-auto w-full max-w-295 px-4 pt-20 pb-24">
+  <div class="relative mx-auto w-full max-w-295 px-4 py-16 md:py-20">
     <div data-grid-content class="max-w-4xl text-left md:mx-auto md:text-center">
       <a
         href={SITE.releases}
