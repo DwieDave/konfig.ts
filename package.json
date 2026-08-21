@@ -3,7 +3,7 @@
   "version": "0.0.11",
   "private": true,
   "description": "Typesafe Kubernetes + ArgoCD configuration in TypeScript, powered by Effect.",
-  "packageManager": "bun@1.3.5",
+  "packageManager": "bun@1.4.0",
   "workspaces": [
     "packages/*",
     "apps/*",
