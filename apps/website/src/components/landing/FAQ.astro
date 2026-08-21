@@ -15,8 +15,8 @@ const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }
     answer: `<p>The CLI ${code("import()")}s your ${code(".ts")} sources at runtime, so it needs a TypeScript-capable runtime. Bun is the smoothest path; Node ≥ 23.6 (native type stripping) and Node 22.6+ with ${code("--experimental-strip-types")} work too, as does ${code("tsx")}. Pure-YAML commands like ${code("konfig diff")} run under plain Node.</p>`
   },
   {
-    question: "Why the exact Effect version pin?",
-    answer: `<p>Effect 4 is still in release-candidate. Its pre-release line makes breaking changes between builds, so a caret range would show up as ${code("ERESOLVE")} conflicts instead of a working install. Every ${code("@konfig.ts/*")} package pins the exact build it is developed against; the pin relaxes once Effect ships a stable 4.x.</p>`
+    question: "Which Effect builds are supported?",
+    answer: `<p>Effect 4 is still in release-candidate. Its pre-release line makes breaking changes between builds, so the range is deliberately narrow: every ${code("@konfig.ts/*")} package accepts any rc build from ${code("4.0.0-rc.111")} on, and never crosses into another prerelease line or a stable major. The range widens once Effect ships a stable 4.x.</p>`
   },
   {
     question: "Can I keep my Helm charts?",

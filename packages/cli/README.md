@@ -98,13 +98,14 @@ warms its cache too.
 ## Requirements
 
 konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
-Until Effect ships a stable 4.x, the CLI pins the exact pre-release it is built against
-and installs them as direct dependencies:
+Until Effect ships a stable 4.x, the CLI accepts any build from the rc line it is
+built against and installs them as direct dependencies:
 
-- **`effect@4.0.0-rc.109`**
-- **`@effect/platform-node@4.0.0-rc.109`** — the CLI uses `render()` and the
+- **`effect@^4.0.0-rc.111`**
+- **`@effect/platform-node@^4.0.0-rc.111`** — the CLI uses `render()` and the
   Node filesystem/subprocess services.
 
-The pin is exact on purpose: Effect's pre-release line makes breaking changes between
-builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
-to a caret range once Effect reaches a stable 4.x.
+The range floats within the rc line on purpose: Effect's pre-release line makes breaking
+changes between builds, so it never crosses into another prerelease line or a stable
+major — but every rc from rc.111 on is supported. It widens to `^4.x` once Effect
+reaches a stable 4.x.

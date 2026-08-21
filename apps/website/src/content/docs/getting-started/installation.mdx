@@ -23,15 +23,15 @@ Install `@konfig.ts/cli` as a dev dependency and the library packages as regular
 
 <Install packages="@konfig.ts/cli" dev />
 
-<Install packages="@konfig.ts/core @konfig.ts/k8s @konfig.ts/env @konfig.ts/argocd @konfig.ts/sops effect@4.0.0-rc.109" />
+<Install packages="@konfig.ts/core @konfig.ts/k8s @konfig.ts/env @konfig.ts/argocd @konfig.ts/sops effect@^4.0.0-rc.111" />
 
 The binary is exposed as `konfig`. Run `bunx konfig --help` (or `npx konfig --help`) to confirm the install.
 
-## The Effect peer pin
+## The Effect peer range
 
-Every `@konfig.ts/*` library declares `effect` as a peer dependency at an exact version, currently `4.0.0-rc.109`. `@konfig.ts/core` and the CLI additionally depend on `@effect/platform-node` at the same version, as a regular dependency rather than a peer, because they use the Node filesystem and subprocess services to write files and call `helm`. All packages declare `engines.node >= 22`.
+Every `@konfig.ts/*` library declares `effect` as a peer dependency with a caret range over the release-candidate line, currently `^4.0.0-rc.111`: any rc build from rc.111 on satisfies it. `@konfig.ts/core` and the CLI additionally depend on `@effect/platform-node` at the same range, as a regular dependency rather than a peer, because they use the Node filesystem and subprocess services to write files and call `helm`. All packages declare `engines.node >= 22`.
 
-The pin is exact on purpose. Effect 4 is still a release candidate and makes breaking changes between builds. A caret range would let your package manager resolve a build the packages were never compiled against, which surfaces as `ERESOLVE` conflicts or runtime type errors instead of a clean install. Install the same exact version in your workspace, as the commands above do. The pin relaxes to a caret range once Effect ships a stable 4.x.
+The range is deliberately narrow: it floats across rc builds of 4.0.0 but never crosses into another prerelease line or a stable major. When Effect ships a stable 4.x, the range widens to `^4.x`.
 
 <Aside type="tip">
 If your workspace already depends on Effect for application code, align it to the same version. One `effect` in `node_modules` avoids duplicated service keys and the type mismatches that come with two copies.

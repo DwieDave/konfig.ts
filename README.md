@@ -139,17 +139,17 @@ console.log(`api listening on :${config.port}`)
 ## Requirements
 
 konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
-Until Effect ships a stable 4.x, every `@konfig.ts/*` package requires the
-exact pre-release it is developed against:
+Until Effect ships a stable 4.x, every `@konfig.ts/*` package requires a
+caret range over the release-candidate line it is developed against:
 
-- **`effect@4.0.0-rc.109`** — required by every package.
-- **`@effect/platform-node@4.0.0-rc.109`** — a regular dependency of
+- **`effect@^4.0.0-rc.111`** — required by every package.
+- **`@effect/platform-node@^4.0.0-rc.111`** — a regular dependency of
   `@konfig.ts/core` (its `render()` entrypoint needs the Node filesystem and
   subprocess services), so it is installed automatically with core.
 
-The pin is exact on purpose: Effect's pre-release line makes breaking changes
-between builds, so a looser range would end in `ERESOLVE` install
-conflicts rather than a working install. It relaxes to a caret range once
+The range floats within the rc line on purpose: Effect's pre-release line makes
+breaking changes between builds, so a looser range would end in `ERESOLVE`
+install conflicts rather than a working install. It widens to `^4.x` once
 Effect reaches a stable 4.x.
 
 ## Quickstart

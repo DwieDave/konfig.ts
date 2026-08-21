@@ -39,8 +39,8 @@ The example below is one of the compile-time-catch files shipped in `examples/fu
 
 ## Requirements
 
-<Aside type="caution" title="Exact Effect pin">
-Every `@konfig.ts/*` package is built against Effect 4 (release candidate) and declares an exact peer version, currently `effect@4.0.0-rc.109`. The pin is exact on purpose: the release-candidate line makes breaking changes between builds, and a caret range would end in `ERESOLVE` conflicts instead of a working install. Install exactly the version the packages declare. The pin relaxes once Effect ships a stable 4.x.
+<Aside type="caution" title="Effect rc range">
+Every `@konfig.ts/*` package is built against Effect 4 (release candidate) and declares a caret peer range, currently `effect@^4.0.0-rc.111`: any rc build from rc.111 on resolves, older builds fail. The range stays inside the 4.0.0 rc line until Effect ships stable.
 </Aside>
 
 The `konfig` CLI imports your `.ts` sources at runtime, so it needs a TypeScript-capable runtime:

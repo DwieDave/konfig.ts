@@ -1,6 +1,6 @@
 {
   "name": "konfig.ts",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "private": true,
   "description": "Typesafe Kubernetes + ArgoCD configuration in TypeScript, powered by Effect.",
   "packageManager": "bun@1.3.5",
@@ -13,11 +13,11 @@
     "examples/full-stack/shared/*"
   ],
   "catalog": {
-    "@effect/platform-node": "4.0.0-rc.109",
-    "@effect/vitest": "4.0.0-rc.109",
+    "@effect/platform-node": "4.0.0-rc.111",
+    "@effect/vitest": "4.0.0-rc.111",
     "@types/bun": "^1.3.14",
     "@vitest/coverage-v8": "^4.1.10",
-    "effect": "4.0.0-rc.109",
+    "effect": "4.0.0-rc.111",
     "fast-check": "^4.9.0",
     "vitest": "^4.1.10",
     "yaml": "^2.9.0"
@@ -36,10 +36,10 @@
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
-    "@effect/tsgo": "^0.36.0",
+    "@effect/tsgo": "0.36.0",
     "effect": "catalog:",
     "knip": "^6.32.0",
-    "oxlint": "^1.77.0",
+    "oxlint": "1.77.0",
     "oxlint-tsgolint": "^7.0.2001",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2",

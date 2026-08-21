@@ -73,14 +73,14 @@ See [`.docs/architecture.md`](../../.docs/architecture.md).
 ## Requirements
 
 konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
-Until Effect ships a stable 4.x, install the exact pre-release konfig.ts is built
-against:
+Until Effect ships a stable 4.x, install a build from the rc line konfig.ts is
+built against:
 
-- **`effect@4.0.0-rc.109`** — required by every package.
-- **`@effect/platform-node@4.0.0-rc.109`** — required only when you call
+- **`effect@^4.0.0-rc.111`** — required by every package.
+- **`@effect/platform-node@^4.0.0-rc.111`** — required only when you call
   `render()` (the Node filesystem/subprocess entrypoint); manifest-only
   consumers can omit it (it is declared as an optional peer).
 
-The pin is exact on purpose: Effect's pre-release line makes breaking changes between
-builds, so a looser range surfaces as `ERESOLVE` install conflicts. It relaxes
-to a caret range once Effect reaches a stable 4.x.
+The range floats within the rc line on purpose: Effect's pre-release line makes breaking
+changes between builds, so a looser range surfaces as `ERESOLVE` install conflicts. It
+widens to `^4.x` once Effect reaches a stable 4.x.
