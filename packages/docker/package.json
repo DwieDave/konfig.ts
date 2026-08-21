@@ -4,7 +4,7 @@
 	"description": "Workspace-graph-aware Dockerfile generator for konfig.ts monorepos.",
 	"license": "MIT",
 	"author": "David Stahl-Gruber",
-	"homepage": "https://github.com/DwieDave/konfig.ts#readme",
+	"homepage": "https://dwiedave.github.io/konfig.ts/",
 	"bugs": "https://github.com/DwieDave/konfig.ts/issues",
 	"repository": {
 		"type": "git",

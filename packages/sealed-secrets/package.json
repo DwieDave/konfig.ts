@@ -4,7 +4,7 @@
 	"description": "SealedSecret CR backend for konfig.ts — shells out to kubeseal at render time and emits bitnami.com/v1alpha1 manifests.",
 	"license": "MIT",
 	"author": "David Stahl-Gruber",
-	"homepage": "https://github.com/DwieDave/konfig.ts#readme",
+	"homepage": "https://dwiedave.github.io/konfig.ts/",
 	"bugs": "https://github.com/DwieDave/konfig.ts/issues",
 	"repository": {
 		"type": "git",

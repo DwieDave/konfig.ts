@@ -4,7 +4,7 @@
 	"description": "ExternalSecret CR backend for konfig.ts — emits external-secrets.io/v1 manifests bound to atoms from @konfig.ts/env.",
 	"license": "MIT",
 	"author": "David Stahl-Gruber",
-	"homepage": "https://github.com/DwieDave/konfig.ts#readme",
+	"homepage": "https://dwiedave.github.io/konfig.ts/",
 	"bugs": "https://github.com/DwieDave/konfig.ts/issues",
 	"repository": {
 		"type": "git",
