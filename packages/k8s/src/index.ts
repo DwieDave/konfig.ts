@@ -79,6 +79,8 @@ export type {
   DeclaredLiteral,
   DeclaredMember,
   HasSecrets,
+  SecretMemberInput,
+  SecretMemberInputFor,
   SecretMemberOptions,
   SecretMemberOptionsFor,
   SecretMembersOpts

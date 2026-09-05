@@ -1,4 +1,11 @@
-import type { ConfigMapRef, SecretRef } from "@konfig.ts/core"
+import {
+  type ConfigMapRef,
+  type ConfigMapRefKeys,
+  type SecretRef,
+  type SecretRefKeys,
+  type SecretRefNamespace,
+  unsafeCoerce
+} from "@konfig.ts/core"
 
 export interface EnvVarSource {
   readonly secretKeyRef?: {
@@ -53,6 +60,20 @@ export interface ConfigMapEnvInput<EnvName extends string, N extends string, K e
   readonly optional?: boolean
 }
 
+export interface SecretEnvOptions<R> {
+  // kube-apiserver only resolves secretKeyRef within the pod's own namespace; when given, must match the ref's brand.
+  readonly podNamespace?: SecretRefNamespace<R>
+  readonly optional?: boolean
+}
+
+export interface ConfigMapEnvOptions {
+  readonly optional?: boolean
+}
+
+// Env-var name → key in the referenced Secret/ConfigMap. Names are the object keys so they stay literal for
+// Container.define's duplicate-name check.
+export type EnvKeyMap<K extends string> = Readonly<Record<string, K>>
+
 export interface RawEnvInput<N extends string> {
   readonly name: N
   readonly value?: string
@@ -86,6 +107,33 @@ export const EnvVar = {
       secretKeyRef: { name: input.ref, key: input.key, optional: input.optional }
     }
   }),
+  // Batch form: many env vars from one secret ref; podNamespace folds in the fromSecretForPod check.
+  // oxlint-disable-next-line app/no-multiple-function-params -- (ref, map, opts?) reads as a call, not a config
+  secretEnv: <
+    R extends SecretRef<string, string, string>,
+    const Map extends EnvKeyMap<SecretRefKeys<R>>
+  >(
+    ref: R,
+    map: Map,
+    opts?: SecretEnvOptions<R>
+  ): ReadonlyArray<EnvVar<keyof Map & string>> =>
+    Object.entries(map).map(([name, key]) => ({
+      name: unsafeCoerce<keyof Map & string>(name, "Object.entries of Map yields its own keys"),
+      valueFrom: { secretKeyRef: { name: ref, key, optional: opts?.optional } }
+    })),
+  // oxlint-disable-next-line app/no-multiple-function-params -- same shape as secretEnv
+  configMapEnv: <
+    R extends ConfigMapRef<string, string>,
+    const Map extends EnvKeyMap<ConfigMapRefKeys<R>>
+  >(
+    ref: R,
+    map: Map,
+    opts?: ConfigMapEnvOptions
+  ): ReadonlyArray<EnvVar<keyof Map & string>> =>
+    Object.entries(map).map(([name, key]) => ({
+      name: unsafeCoerce<keyof Map & string>(name, "Object.entries of Map yields its own keys"),
+      valueFrom: { configMapKeyRef: { name: ref, key, optional: opts?.optional } }
+    })),
   fromConfigMap: <const EnvName extends string, N extends string, K extends string = string>(
     input: ConfigMapEnvInput<EnvName, N, K>
   ): EnvVar<EnvName> => ({

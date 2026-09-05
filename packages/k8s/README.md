@@ -52,7 +52,7 @@ Identity constructors (`Secret.make`, `ConfigMap.make`, …) expose a typed
 `.ref`; the enforcement points (env `secretKeyRef`, volumes, `imagePullSecrets`,
 Ingress TLS) take the brand and reject raw strings.
 
-**Env vars** — `EnvVar.value`, `EnvVar.fromSecretForPod`, `EnvVar.fromConfigMap`.
+**Env vars** — `EnvVar.value`, `EnvVar.secretEnv` / `EnvVar.configMapEnv` (many vars from one ref), `EnvVar.fromSecretForPod`, `EnvVar.fromConfigMap`.
 Duplicate names in one container's `env` are caught at compile time.
 
 **Ports** — `Port.make({ name, containerPort })` and `Port.ref(name)` brand the

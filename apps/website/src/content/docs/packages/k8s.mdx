@@ -30,7 +30,7 @@ Two of the type-level checks are visible here. `EnvVar.fromSecretForPod` require
 | --- | --- |
 | `Container`, `Pod`, `PodSet` | `Container.define`, pod specs, and shared pod-set inputs for workloads |
 | `Port` | `Port.make({ name, containerPort })`, `Port.ref(name)` for probes and Services |
-| `EnvVar` | `value`, `fromSecret`, `fromSecretForPod`, `fromConfigMap`, `raw`; duplicate names in one container are a compile error at `Container.define` |
+| `EnvVar` | `value`, `secretEnv`, `configMapEnv`, `fromSecret`, `fromSecretForPod`, `fromConfigMap`, `raw`; duplicate names in one container are a compile error at `Container.define` |
 | `Secret`, `ConfigMap`, `Namespace`, `ServiceAccount` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind` |
 | `Environment` | `Environment.define` re-exported with `bind` (manifest side) and `runtime` (process side) |
 | `NativeSecret` | `NativeSecret.backend({ type?, immutable?, silenceWarning? })`: built-in backend that emits a plain `Secret` from a source |

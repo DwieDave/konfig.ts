@@ -77,6 +77,23 @@ export type SecretMemberOptionsFor<A> = A extends SecretEntry<infer N, infer K, 
   : never
   : never
 
+/**
+ * What a secret member accepts in `Environment.bind({ secrets })`: the
+ * `{ backend?, source?, labels?, annotations? }` object, or — as a shorthand —
+ * a bare backend or source. A bare backend is only accepted when it does not
+ * require a source (`SecretBackend<N, K, false>`), so `NativeSecret.backend()`
+ * still has to be paired with a `source` via the object form.
+ */
+export type SecretMemberInput<N extends string, K extends string> =
+  | SecretMemberOptions<N, K>
+  | SecretBackend<N, K, false>
+  | SecretSource<K, Manifest.RenderServices>
+
+export type SecretMemberInputFor<A> = A extends SecretEntry<infer N, infer K, infer _E>
+  ? [N, K] extends [string, string] ? SecretMemberInput<N, K>
+  : never
+  : never
+
 export type HasSecrets<M extends Readonly<Record<string, EnvMember>>> = true extends {
   readonly [K in keyof M]: M[K] extends SecretEntry<infer _N, infer _K, infer _E> ? true
     : M[K] extends Environment<infer Sub> ? HasSecrets<Sub>
@@ -90,7 +107,7 @@ export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
       : M[K] extends Environment<infer SubM> ? HasSecrets<SubM> extends true ? K
         : never
       : never
-  ]: M[K] extends SecretEntry<infer _N, infer _K, infer _E> ? SecretMemberOptionsFor<M[K]>
+  ]: M[K] extends SecretEntry<infer _N, infer _K, infer _E> ? SecretMemberInputFor<M[K]>
     : M[K] extends Environment<infer SubM> ? SecretMembersOpts<SubM>
     : never
 }
@@ -169,10 +186,21 @@ interface _DispatchInput {
   readonly acc: _BindAcc
 }
 
+// The object form has no `_tag`; both `SecretSource` and `SecretBackend` carry one,
+// so a tagged value is the bare shorthand and gets wrapped into the object form.
+const _normalizeSecretMember = (
+  raw: SecretMemberInput<string, string> | undefined
+): SecretMemberOptions<string, string> | undefined => {
+  if (raw === undefined || !("_tag" in raw)) return raw
+  return raw._tag === "SecretSource" ? { source: raw } : { backend: raw }
+}
+
 const _handleSecret = (input: _DispatchInput): void => {
-  const memberOpts = unsafeCoerce<SecretMemberOptions<string, string> | undefined>(
-    input.secretsOpts?.[input.memberKey],
-    "SecretMembersOpts<M> shape — runtime key lookup against the typed input"
+  const memberOpts = _normalizeSecretMember(
+    unsafeCoerce<SecretMemberInput<string, string> | undefined>(
+      input.secretsOpts?.[input.memberKey],
+      "SecretMembersOpts<M> shape — runtime key lookup against the typed input"
+    )
   )
   const secret = unsafeCoerce<SecretEntry<string, string, Readonly<Record<string, string>>>>(
     input.entry,

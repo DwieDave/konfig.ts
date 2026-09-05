@@ -1,6 +1,8 @@
+import { Manifest } from "@konfig.ts/core"
 import { Downward, Literal, SecretSource } from "@konfig.ts/env"
+import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import { Environment, Secret } from "./index"
+import { Environment, NativeSecret, Secret, type SecretBackend } from "./index"
 
 const dbCreds = Secret.define({
   name: "db-creds",
@@ -239,5 +241,56 @@ describe("Environment.bind literal value overrides", () => {
     const bound = Environment.bind({ env: e, literals: { lit: ["a", "b", "c"] } })
     const entry = bound.envVars.find((v) => v.name === "LIST")
     expect(entry?.value).toBe("a,b,c")
+  })
+})
+
+describe("Environment.bind secret shorthand", () => {
+  const apiEnv = Environment.define({ db: dbCreds, session: sessionKey, port })
+
+  const stubBackend = <N extends string, K extends string>(): SecretBackend<N, K, false> => ({
+    _tag: "Sops.passthrough",
+    requiresSource: false,
+    emit: (input) => Manifest.make((_ctx) => Effect.succeed({ kind: "Stub", name: input.name }))
+  })
+
+  it("a bare source is treated as { source }", () => {
+    const bound = Environment.bind({
+      env: apiEnv,
+      secrets: {
+        db: SecretSource.literal({ data: { url: "u", password: "p" } }),
+        session: SecretSource.literal({ data: { value: "s" } })
+      }
+    })
+    expect(bound.members.db.ref).toBe("db-creds")
+    expect(bound.members.db.manifest).toBeUndefined()
+    expect(bound.members.db.layer).toBeDefined()
+    expect(bound.members.port.value).toBe(8080)
+    const _ref: string = bound.members.db.ref
+    const _port: number = bound.members.port.value
+    void _ref
+    void _port
+  })
+
+  it("a bare no-source backend is treated as { backend }", () => {
+    const bound = Environment.bind({
+      env: apiEnv,
+      secrets: { db: stubBackend(), session: sessionKeyOpts }
+    })
+    expect(bound.members.db.manifest).toBeDefined()
+    expect(bound.members.db.layer).toBeUndefined()
+    expect(bound.manifests).toHaveLength(1)
+  })
+
+  it("shorthand and object forms mix, including inside nested groups", () => {
+    const nested = Environment.define({ inner: Environment.define({ db: dbCreds }), session: sessionKey })
+    const bound = Environment.bind({
+      env: nested,
+      secrets: {
+        inner: { db: stubBackend() },
+        session: { backend: NativeSecret.backend({ silenceWarning: true }), source: sessionKeyOpts.source }
+      }
+    })
+    expect(bound.members.inner.db.ref).toBe("db-creds")
+    expect(bound.manifests).toHaveLength(2)
   })
 })
