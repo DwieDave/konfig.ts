@@ -98,6 +98,16 @@ spec: {}
       expect(issues).toEqual([])
     }))
 
+  it.effect("reports unparseable YAML as a single doc-0 issue", () =>
+    Effect.gen(function*() {
+      // an unresolved alias is one of the few inputs parseYamlAll actually throws on
+      const content = "apiVersion: v1\nkind: *missing\n"
+      const issues = yield* validateManifestFile({ file: "broken.yaml", content })
+      expect(issues).toHaveLength(1)
+      expect(issues[0]?.doc).toBe(0)
+      expect(issues[0]?.message).toContain("YAML parse error")
+    }))
+
   it.effect("flags a missing kind", () =>
     Effect.gen(function*() {
       const content = `apiVersion: apps/v1
@@ -247,6 +257,7 @@ describe("runKubeconform", () => {
         if (err instanceof KubeconformReportError) {
           expect(err.stdout).toContain("missing required field")
           expect(err.stderr).toContain("could not resolve schema")
+          expect(err.message).toContain("kubeconform reported errors")
         }
       }
     }))
@@ -277,7 +288,11 @@ describe("runKubeconform", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBeInstanceOf(KubeconformNotFound)
+        const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+        expect(err).toBeInstanceOf(KubeconformNotFound)
+        if (err instanceof KubeconformNotFound) {
+          expect(err.message).toContain("kubeconform binary not found")
+        }
       }
     }))
 })

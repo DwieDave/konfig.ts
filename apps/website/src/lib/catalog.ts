@@ -208,7 +208,7 @@ Use PvcRef.of("postgres-data") or a Dep.Pvc provider so the claim is tracked.`
 export const SNIPPETS = {
   apiModuleHead: {
     file: "infra/modules/api.ts",
-    between: { startAt: "export const defineApi = Module.fixedNs({", endBefore: "const bound = Environment.bind({" }
+    between: { startAt: "export const defineApi = Application.module({", endBefore: "const bound = Environment.bind({" }
   },
   apiModuleTail: {
     file: "infra/modules/api.ts",

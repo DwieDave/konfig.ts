@@ -110,18 +110,18 @@
       "name": "@konfig.ts/argocd",
       "version": "0.1.0",
       "dependencies": {
-        "@konfig.ts/core": "0.0.11",
+        "@konfig.ts/core": "workspace:*",
       },
       "devDependencies": {
-        "@effect/platform-node": "^4.0.0-rc.111",
-        "@effect/vitest": "^4.0.0-rc.111",
-        "@types/bun": "^1.3.14",
-        "@vitest/coverage-v8": "^4.1.10",
-        "effect": "^4.0.0-rc.111",
-        "vitest": "^4.1.10",
+        "@effect/platform-node": "catalog:",
+        "@effect/vitest": "catalog:",
+        "@types/bun": "catalog:",
+        "@vitest/coverage-v8": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0-rc.111",
+        "effect": "catalog:",
       },
     },
     "packages/cli": {
@@ -131,22 +131,22 @@
         "konfig": "./dist/main.mjs",
       },
       "dependencies": {
-        "@effect/platform-node": "^4.0.0-rc.111",
-        "@konfig.ts/argocd": "0.0.11",
-        "@konfig.ts/core": "0.0.11",
-        "@konfig.ts/docker": "0.0.11",
-        "effect": "^4.0.0-rc.111",
+        "@effect/platform-node": "catalog:",
+        "@konfig.ts/argocd": "workspace:*",
+        "@konfig.ts/core": "workspace:*",
+        "@konfig.ts/docker": "workspace:*",
+        "effect": "catalog:",
         "json-schema-to-typescript": "^15.0.4",
         "semver": "^7.7.2",
       },
       "devDependencies": {
-        "@effect/vitest": "^4.0.0-rc.111",
-        "@konfig.ts/k8s": "0.0.11",
-        "@types/bun": "^1.3.14",
+        "@effect/vitest": "catalog:",
+        "@konfig.ts/k8s": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/semver": "^7.5.8",
-        "@vitest/coverage-v8": "^4.1.10",
-        "fast-check": "^4.9.0",
-        "vitest": "^4.1.10",
+        "@vitest/coverage-v8": "catalog:",
+        "fast-check": "catalog:",
+        "vitest": "catalog:",
       },
     },
     "packages/core": {
@@ -172,77 +172,77 @@
       "name": "@konfig.ts/docker",
       "version": "0.1.0",
       "dependencies": {
-        "@konfig.ts/core": "0.0.11",
-        "yaml": "^2.9.0",
+        "@konfig.ts/core": "workspace:*",
+        "yaml": "catalog:",
       },
       "devDependencies": {
-        "@effect/platform-node": "^4.0.0-rc.111",
-        "@effect/vitest": "^4.0.0-rc.111",
-        "@types/bun": "^1.3.14",
-        "@vitest/coverage-v8": "^4.1.10",
-        "effect": "^4.0.0-rc.111",
-        "fast-check": "^4.9.0",
-        "vitest": "^4.1.10",
+        "@effect/platform-node": "catalog:",
+        "@effect/vitest": "catalog:",
+        "@types/bun": "catalog:",
+        "@vitest/coverage-v8": "catalog:",
+        "effect": "catalog:",
+        "fast-check": "catalog:",
+        "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0-rc.111",
+        "effect": "catalog:",
       },
     },
     "packages/env": {
       "name": "@konfig.ts/env",
       "version": "0.1.0",
       "dependencies": {
-        "@konfig.ts/core": "0.0.11",
+        "@konfig.ts/core": "workspace:*",
       },
       "devDependencies": {
-        "@effect/vitest": "^4.0.0-rc.111",
-        "@types/bun": "^1.3.14",
-        "@vitest/coverage-v8": "^4.1.10",
-        "effect": "^4.0.0-rc.111",
-        "fast-check": "^4.9.0",
-        "vitest": "^4.1.10",
+        "@effect/vitest": "catalog:",
+        "@types/bun": "catalog:",
+        "@vitest/coverage-v8": "catalog:",
+        "effect": "catalog:",
+        "fast-check": "catalog:",
+        "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0-rc.111",
+        "effect": "catalog:",
       },
     },
     "packages/external-secrets": {
       "name": "@konfig.ts/external-secrets",
       "version": "0.1.0",
       "dependencies": {
-        "@konfig.ts/core": "0.0.11",
-        "@konfig.ts/k8s": "0.0.11",
+        "@konfig.ts/core": "workspace:*",
+        "@konfig.ts/k8s": "workspace:*",
       },
       "devDependencies": {
-        "@effect/platform-node": "^4.0.0-rc.111",
-        "@effect/vitest": "^4.0.0-rc.111",
-        "@types/bun": "^1.3.14",
-        "@vitest/coverage-v8": "^4.1.10",
-        "effect": "^4.0.0-rc.111",
-        "vitest": "^4.1.10",
+        "@effect/platform-node": "catalog:",
+        "@effect/vitest": "catalog:",
+        "@types/bun": "catalog:",
+        "@vitest/coverage-v8": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0-rc.111",
+        "effect": "catalog:",
       },
     },
     "packages/k8s": {
       "name": "@konfig.ts/k8s",
       "version": "0.1.0",
       "dependencies": {
-        "@konfig.ts/core": "0.0.11",
-        "@konfig.ts/env": "0.0.11",
+        "@konfig.ts/core": "workspace:*",
+        "@konfig.ts/env": "workspace:*",
         "kubernetes-types": "~1.30.0",
       },
       "devDependencies": {
-        "@effect/platform-node": "^4.0.0-rc.111",
-        "@effect/vitest": "^4.0.0-rc.111",
-        "@types/bun": "^1.3.14",
-        "@vitest/coverage-v8": "^4.1.10",
-        "effect": "^4.0.0-rc.111",
-        "vitest": "^4.1.10",
+        "@effect/platform-node": "catalog:",
+        "@effect/vitest": "catalog:",
+        "@types/bun": "catalog:",
+        "@vitest/coverage-v8": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0-rc.111",
+        "effect": "catalog:",
       },
     },
     "packages/oxc": {
@@ -257,43 +257,43 @@
       "name": "@konfig.ts/sealed-secrets",
       "version": "0.1.0",
       "dependencies": {
-        "@konfig.ts/core": "0.0.11",
-        "@konfig.ts/k8s": "0.0.11",
-        "yaml": "^2.9.0",
+        "@konfig.ts/core": "workspace:*",
+        "@konfig.ts/k8s": "workspace:*",
+        "yaml": "catalog:",
       },
       "devDependencies": {
-        "@effect/platform-node": "^4.0.0-rc.111",
-        "@effect/vitest": "^4.0.0-rc.111",
-        "@konfig.ts/env": "0.0.11",
-        "@types/bun": "^1.3.14",
-        "@vitest/coverage-v8": "^4.1.10",
-        "effect": "^4.0.0-rc.111",
-        "vitest": "^4.1.10",
+        "@effect/platform-node": "catalog:",
+        "@effect/vitest": "catalog:",
+        "@konfig.ts/env": "workspace:*",
+        "@types/bun": "catalog:",
+        "@vitest/coverage-v8": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0-rc.111",
+        "effect": "catalog:",
       },
     },
     "packages/sops": {
       "name": "@konfig.ts/sops",
       "version": "0.1.0",
       "dependencies": {
-        "@konfig.ts/core": "0.0.11",
-        "@konfig.ts/env": "0.0.11",
-        "@konfig.ts/k8s": "0.0.11",
-        "yaml": "^2.9.0",
+        "@konfig.ts/core": "workspace:*",
+        "@konfig.ts/env": "workspace:*",
+        "@konfig.ts/k8s": "workspace:*",
+        "yaml": "catalog:",
       },
       "devDependencies": {
-        "@effect/platform-node": "^4.0.0-rc.111",
-        "@effect/vitest": "^4.0.0-rc.111",
-        "@konfig.ts/sealed-secrets": "0.0.11",
-        "@types/bun": "^1.3.14",
-        "@vitest/coverage-v8": "^4.1.10",
-        "effect": "^4.0.0-rc.111",
-        "vitest": "^4.1.10",
+        "@effect/platform-node": "catalog:",
+        "@effect/vitest": "catalog:",
+        "@konfig.ts/sealed-secrets": "workspace:*",
+        "@types/bun": "catalog:",
+        "@vitest/coverage-v8": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0-rc.111",
+        "effect": "catalog:",
       },
     },
   },
@@ -408,7 +408,7 @@
 
     "@effect/tsgo-win32-x64": ["@effect/tsgo-win32-x64@0.36.0", "", { "os": "win32", "cpu": "x64" }, "sha512-sGOmWH2M53CN11uGHiW/slwET1KTp2UePKDOMGEIREO3ntfAfoI6w+w8KTjU8EVeaGcNJsDYLqjrCSDkuvSqJA=="],
 
-    "@effect/vitest": ["@effect/vitest@4.0.0-rc.112", "", { "peerDependencies": { "effect": "^4.0.0-rc.112", "vitest": ">=4.1.0 <5.0.0" } }, "sha512-mEKh/FI64mt8JK1/v9mpOrJYdnp+UFZdRUBMEdZMiKz7klg6NPqVgg/oeAGH6wOOQc2iAPcfc2H9BbAv1KyzMQ=="],
+    "@effect/vitest": ["@effect/vitest@4.0.0-rc.111", "", { "peerDependencies": { "effect": "^4.0.0-rc.111", "vitest": ">=4.1.0 <5.0.0" } }, "sha512-YDaEVT+grREBVMzykRNFtJwGxy02achzT0WXZYwMJA4ukzuB9krkgQ5roc3N6zhC3NQq/j4IyM32/Pcov7AhHw=="],
 
     "@emmetio/abbreviation": ["@emmetio/abbreviation@2.3.3", "", { "dependencies": { "@emmetio/scanner": "^1.0.4" } }, "sha512-mgv58UrU3rh4YgbE/TzgLQwJ3pFsHHhCLqY20aJq+9comytTXUDNGG/SMtSeMJdkpxgXSXunBGLD8Boka3JyVA=="],
 
@@ -1832,44 +1832,6 @@
 
     "@img/sharp-wasm32/@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
 
-    "@konfig.ts/argocd/@konfig.ts/core": ["@konfig.ts/core@0.0.11", "", { "dependencies": { "@effect/platform-node": "^4.0.0-rc.111", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-BszyNMK+2RVTCaZRF3JvB16EIeaZlTv84RFkvQ6NLoraJSmFnJO9+JDykFTAXkT4xGa8zS0yl+dtdlX0ywVk/w=="],
-
-    "@konfig.ts/cli/@konfig.ts/argocd": ["@konfig.ts/argocd@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-IOLx8y+BC865fLiqAwYoc/sBr2g0AT6itKgYNCnrfGV7B5Wiu+/YTggtnMU+2wGso1vwE1ehBB7iHTADiwlPmw=="],
-
-    "@konfig.ts/cli/@konfig.ts/core": ["@konfig.ts/core@0.0.11", "", { "dependencies": { "@effect/platform-node": "^4.0.0-rc.111", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-BszyNMK+2RVTCaZRF3JvB16EIeaZlTv84RFkvQ6NLoraJSmFnJO9+JDykFTAXkT4xGa8zS0yl+dtdlX0ywVk/w=="],
-
-    "@konfig.ts/cli/@konfig.ts/docker": ["@konfig.ts/docker@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-/IjMqqsfglVSAuDuqI8Y7EIBEuNs4PWFjFYoWBMqqrqa7w8Nq3JWnlSWbf/QwgCY78zbfsCT9/ghDPYk1Pi0Vw=="],
-
-    "@konfig.ts/cli/@konfig.ts/k8s": ["@konfig.ts/k8s@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11", "@konfig.ts/env": "0.0.11", "kubernetes-types": "~1.30.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-X1GpvirlbqWdv5nXwqJZ1B4+TTdmcO0gd2VGDbDeejEG0j/J0qCsJNy3ALg4HjgdKyWhIn1bY+HXQiW2eud4Vg=="],
-
-    "@konfig.ts/core/@effect/vitest": ["@effect/vitest@4.0.0-rc.111", "", { "peerDependencies": { "effect": "^4.0.0-rc.111", "vitest": ">=4.1.0 <5.0.0" } }, "sha512-YDaEVT+grREBVMzykRNFtJwGxy02achzT0WXZYwMJA4ukzuB9krkgQ5roc3N6zhC3NQq/j4IyM32/Pcov7AhHw=="],
-
-    "@konfig.ts/docker/@konfig.ts/core": ["@konfig.ts/core@0.0.11", "", { "dependencies": { "@effect/platform-node": "^4.0.0-rc.111", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-BszyNMK+2RVTCaZRF3JvB16EIeaZlTv84RFkvQ6NLoraJSmFnJO9+JDykFTAXkT4xGa8zS0yl+dtdlX0ywVk/w=="],
-
-    "@konfig.ts/env/@konfig.ts/core": ["@konfig.ts/core@0.0.11", "", { "dependencies": { "@effect/platform-node": "^4.0.0-rc.111", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-BszyNMK+2RVTCaZRF3JvB16EIeaZlTv84RFkvQ6NLoraJSmFnJO9+JDykFTAXkT4xGa8zS0yl+dtdlX0ywVk/w=="],
-
-    "@konfig.ts/external-secrets/@konfig.ts/core": ["@konfig.ts/core@0.0.11", "", { "dependencies": { "@effect/platform-node": "^4.0.0-rc.111", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-BszyNMK+2RVTCaZRF3JvB16EIeaZlTv84RFkvQ6NLoraJSmFnJO9+JDykFTAXkT4xGa8zS0yl+dtdlX0ywVk/w=="],
-
-    "@konfig.ts/external-secrets/@konfig.ts/k8s": ["@konfig.ts/k8s@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11", "@konfig.ts/env": "0.0.11", "kubernetes-types": "~1.30.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-X1GpvirlbqWdv5nXwqJZ1B4+TTdmcO0gd2VGDbDeejEG0j/J0qCsJNy3ALg4HjgdKyWhIn1bY+HXQiW2eud4Vg=="],
-
-    "@konfig.ts/k8s/@konfig.ts/core": ["@konfig.ts/core@0.0.11", "", { "dependencies": { "@effect/platform-node": "^4.0.0-rc.111", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-BszyNMK+2RVTCaZRF3JvB16EIeaZlTv84RFkvQ6NLoraJSmFnJO9+JDykFTAXkT4xGa8zS0yl+dtdlX0ywVk/w=="],
-
-    "@konfig.ts/k8s/@konfig.ts/env": ["@konfig.ts/env@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-+XzmhSasQ0KsGiHpChAOScrbtc2UcjglgAlOaBPRVBIR15cjFqtrSG1NuPgnO1drTIkQ2j8gYaDlDHuFCljKsQ=="],
-
-    "@konfig.ts/sealed-secrets/@konfig.ts/core": ["@konfig.ts/core@0.0.11", "", { "dependencies": { "@effect/platform-node": "^4.0.0-rc.111", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-BszyNMK+2RVTCaZRF3JvB16EIeaZlTv84RFkvQ6NLoraJSmFnJO9+JDykFTAXkT4xGa8zS0yl+dtdlX0ywVk/w=="],
-
-    "@konfig.ts/sealed-secrets/@konfig.ts/env": ["@konfig.ts/env@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-+XzmhSasQ0KsGiHpChAOScrbtc2UcjglgAlOaBPRVBIR15cjFqtrSG1NuPgnO1drTIkQ2j8gYaDlDHuFCljKsQ=="],
-
-    "@konfig.ts/sealed-secrets/@konfig.ts/k8s": ["@konfig.ts/k8s@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11", "@konfig.ts/env": "0.0.11", "kubernetes-types": "~1.30.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-X1GpvirlbqWdv5nXwqJZ1B4+TTdmcO0gd2VGDbDeejEG0j/J0qCsJNy3ALg4HjgdKyWhIn1bY+HXQiW2eud4Vg=="],
-
-    "@konfig.ts/sops/@konfig.ts/core": ["@konfig.ts/core@0.0.11", "", { "dependencies": { "@effect/platform-node": "^4.0.0-rc.111", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-BszyNMK+2RVTCaZRF3JvB16EIeaZlTv84RFkvQ6NLoraJSmFnJO9+JDykFTAXkT4xGa8zS0yl+dtdlX0ywVk/w=="],
-
-    "@konfig.ts/sops/@konfig.ts/env": ["@konfig.ts/env@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-+XzmhSasQ0KsGiHpChAOScrbtc2UcjglgAlOaBPRVBIR15cjFqtrSG1NuPgnO1drTIkQ2j8gYaDlDHuFCljKsQ=="],
-
-    "@konfig.ts/sops/@konfig.ts/k8s": ["@konfig.ts/k8s@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11", "@konfig.ts/env": "0.0.11", "kubernetes-types": "~1.30.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-X1GpvirlbqWdv5nXwqJZ1B4+TTdmcO0gd2VGDbDeejEG0j/J0qCsJNy3ALg4HjgdKyWhIn1bY+HXQiW2eud4Vg=="],
-
-    "@konfig.ts/sops/@konfig.ts/sealed-secrets": ["@konfig.ts/sealed-secrets@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11", "@konfig.ts/k8s": "0.0.11", "yaml": "^2.9.0" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-76sFVXICHYf/RuxvHjvUl8tCBRpMCnBzpOf/5V3keTxDJrTuMSsGNWXyQO0/FNGZl2HNXcqWAHjnTUUEN3GwTQ=="],
-
     "@konfig.ts/website/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@tailwindcss/node/lightningcss": ["lightningcss@1.32.0", "", { "dependencies": { "detect-libc": "^2.0.3" }, "optionalDependencies": { "lightningcss-android-arm64": "1.32.0", "lightningcss-darwin-arm64": "1.32.0", "lightningcss-darwin-x64": "1.32.0", "lightningcss-freebsd-x64": "1.32.0", "lightningcss-linux-arm-gnueabihf": "1.32.0", "lightningcss-linux-arm64-gnu": "1.32.0", "lightningcss-linux-arm64-musl": "1.32.0", "lightningcss-linux-x64-gnu": "1.32.0", "lightningcss-linux-x64-musl": "1.32.0", "lightningcss-win32-arm64-msvc": "1.32.0", "lightningcss-win32-x64-msvc": "1.32.0" } }, "sha512-NXYBzinNrblfraPGyrbPoD19C1h9lfI/1mzgWYvXUTe414Gz/X1FD2XBZSZM7rRTrMA8JL3OtAaGifrIKhQ5yQ=="],
@@ -1923,10 +1885,6 @@
     "yaml-language-server/request-light": ["request-light@0.5.8", "", {}, "sha512-3Zjgh+8b5fhRJBQZoy+zbVKpAQGLyka0MPgW3zruTF4dFFJ8Fqcfu9YsAvi/rvdcaTeWG3MkbZv4WKxAn/84Lg=="],
 
     "yaml-language-server/yaml": ["yaml@2.8.3", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg=="],
-
-    "@konfig.ts/cli/@konfig.ts/k8s/@konfig.ts/env": ["@konfig.ts/env@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-+XzmhSasQ0KsGiHpChAOScrbtc2UcjglgAlOaBPRVBIR15cjFqtrSG1NuPgnO1drTIkQ2j8gYaDlDHuFCljKsQ=="],
-
-    "@konfig.ts/external-secrets/@konfig.ts/k8s/@konfig.ts/env": ["@konfig.ts/env@0.0.11", "", { "dependencies": { "@konfig.ts/core": "0.0.11" }, "peerDependencies": { "effect": "^4.0.0-rc.111" } }, "sha512-+XzmhSasQ0KsGiHpChAOScrbtc2UcjglgAlOaBPRVBIR15cjFqtrSG1NuPgnO1drTIkQ2j8gYaDlDHuFCljKsQ=="],
 
     "@tailwindcss/node/lightningcss/lightningcss-android-arm64": ["lightningcss-android-arm64@1.32.0", "", { "os": "android", "cpu": "arm64" }, "sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg=="],
 

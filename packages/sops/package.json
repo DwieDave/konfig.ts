@@ -60,21 +60,21 @@
 		"test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
 	},
 	"dependencies": {
-		"@konfig.ts/core": "0.0.11",
-		"@konfig.ts/env": "0.0.11",
-		"@konfig.ts/k8s": "0.0.11",
-		"yaml": "^2.9.0"
+		"@konfig.ts/core": "workspace:*",
+		"@konfig.ts/env": "workspace:*",
+		"@konfig.ts/k8s": "workspace:*",
+		"yaml": "catalog:"
 	},
 	"peerDependencies": {
-		"effect": "^4.0.0-rc.111"
+		"effect": "catalog:"
 	},
 	"devDependencies": {
-		"@effect/platform-node": "^4.0.0-rc.111",
-		"@effect/vitest": "^4.0.0-rc.111",
-		"@konfig.ts/sealed-secrets": "0.0.11",
-		"@types/bun": "^1.3.14",
-		"@vitest/coverage-v8": "^4.1.10",
-		"effect": "^4.0.0-rc.111",
-		"vitest": "^4.1.10"
+		"@effect/platform-node": "catalog:",
+		"@effect/vitest": "catalog:",
+		"@konfig.ts/sealed-secrets": "workspace:*",
+		"@types/bun": "catalog:",
+		"@vitest/coverage-v8": "catalog:",
+		"effect": "catalog:",
+		"vitest": "catalog:"
 	}
 }
