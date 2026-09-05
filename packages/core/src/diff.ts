@@ -106,19 +106,121 @@ export const deepEqual = (input: DeepEqualInput): boolean => {
     return true
   }
   if (typeof a === "object" && typeof b === "object") {
-    const ka = Object.keys(unsafeCoerce<object>(a, "typeof === object branch")).sort()
-    const kb = Object.keys(unsafeCoerce<object>(b, "typeof === object branch")).sort()
-    if (ka.length !== kb.length) return false
-    for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return false
+    if (Array.isArray(b)) return false
+    const oa = unsafeCoerce<Record<string, unknown>>(a, "typeof === object branch")
+    const ob = unsafeCoerce<Record<string, unknown>>(b, "typeof === object branch")
+    const ka = Object.keys(oa)
+    if (ka.length !== Object.keys(ob).length) return false
     for (const k of ka) {
-      const av = unsafeCoerce<Record<string, unknown>>(a, "typeof === object branch")[k]
-      const bv = unsafeCoerce<Record<string, unknown>>(b, "typeof === object branch")[k]
-      if (!deepEqual({ a: av, b: bv })) return false
+      if (!Object.hasOwn(ob, k)) return false
+      if (!deepEqual({ a: oa[k], b: ob[k] })) return false
     }
     return true
   }
   return false
 }
+
+// Equality of two raw values as if both had been passed through `redact` first, without
+// allocating the redacted copies. Must stay in lockstep with `redact`; the property test
+// in diff.property.test.ts checks it against `deepEqual(redact(a), redact(b))`.
+const _isPresent = (v: unknown): boolean => v !== null && v !== undefined
+
+const _isObjectLike = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object"
+
+const _labelKept = (k: string, v: unknown): boolean =>
+  !IGNORED_LABEL_KEYS.has(k) && !(k === MANAGED_BY_HELM_LABEL && v === "Helm")
+
+const _annotationKept = (k: string): boolean => !IGNORED_ANNOTATION_KEYS.has(k)
+
+// Mirrors deepEqual(_redactLabelMap(a), _redactLabelMap(b)) / the annotation variant.
+const _filteredMapEqual = (
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+  keep: (k: string, v: unknown) => boolean
+): boolean => {
+  let countA = 0
+  for (const [k, v] of Object.entries(a)) {
+    if (!keep(k, v)) continue
+    countA++
+    if (!Object.hasOwn(b, k)) return false
+    const bv = b[k]
+    if (!keep(k, bv)) return false
+    if (!deepEqual({ a: v, b: bv })) return false
+  }
+  let countB = 0
+  for (const [k, v] of Object.entries(b)) if (keep(k, v)) countB++
+  return countA === countB
+}
+
+// Mirrors deepEqual(_redactSecretDataMap(a), _redactSecretDataMap(b)): same key set.
+const _sameKeySet = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => {
+  const ka = Object.keys(a)
+  if (ka.length !== Object.keys(b).length) return false
+  for (const k of ka) if (!Object.hasOwn(b, k)) return false
+  return true
+}
+
+const _redactedLeafEqual = (a: unknown, b: unknown, options: RedactOptions): boolean => {
+  if (options.normalizeNumerics === true) {
+    const na = typeof a === "string" && _isNumericString(a) ? Number(a) : a
+    const nb = typeof b === "string" && _isNumericString(b) ? Number(b) : b
+    return deepEqual({ a: na, b: nb })
+  }
+  return deepEqual({ a, b })
+}
+
+const _redactedEqual = (a: unknown, b: unknown, parentKey: string | null, options: RedactOptions): boolean => {
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (!_redactedEqual(a[i], b[i], null, options)) return false
+    }
+    return true
+  }
+  if (Array.isArray(b)) return false
+  if (_isObjectLike(a)) {
+    if (!_isObjectLike(b)) return false
+    const aSecret = a.kind === "Secret"
+    const bSecret = b.kind === "Secret"
+    // Differing Secret-ness implies differing `kind` values, which is a difference on its own.
+    if (aSecret !== bSecret) return false
+    let countA = 0
+    for (const [k, v] of Object.entries(a)) {
+      if (!_isPresent(v)) continue
+      countA++
+      if (!Object.hasOwn(b, k)) return false
+      const bv = b[k]
+      if (!_isPresent(bv)) return false
+      if (k === "labels" && parentKey === "metadata" && _isObjectLike(v)) {
+        if (!_isObjectLike(bv) || !_filteredMapEqual(v, bv, _labelKept)) return false
+        continue
+      }
+      if (k === "annotations" && parentKey === "metadata" && _isObjectLike(v)) {
+        if (!_isObjectLike(bv) || !_filteredMapEqual(v, bv, _annotationKept)) return false
+        continue
+      }
+      if ((k === "data" || k === "stringData") && aSecret && _isObjectLike(v)) {
+        if (!_isObjectLike(bv) || !_sameKeySet(v, bv)) return false
+        continue
+      }
+      if (!_redactedEqual(v, bv, k, options)) return false
+    }
+    let countB = 0
+    for (const v of Object.values(b)) if (_isPresent(v)) countB++
+    return countA === countB
+  }
+  if (_isObjectLike(b)) return false
+  return _redactedLeafEqual(a, b, options)
+}
+
+export interface RedactedEqualInput {
+  readonly a: unknown
+  readonly b: unknown
+  readonly options?: RedactOptions
+}
+/** Equivalent to `deepEqual({ a: redact({ value: a, options }), b: redact({ value: b, options }) })` without cloning. */
+export const redactedEqual = (input: RedactedEqualInput): boolean =>
+  _redactedEqual(input.a, input.b, null, input.options ?? {})
 
 export const parseYaml = (text: string): unknown => YAML.parse(text)
 
@@ -189,14 +291,18 @@ const _diffOne = (
   rightText: string,
   options: RedactOptions
 ): FileDiff => {
-  const lDocs = parseYamlAll(leftText).map((v, i) => [_docKey(v, i), redact({ value: v, options })] as const)
-  const rDocs = parseYamlAll(rightText).map((v, i) => [_docKey(v, i), redact({ value: v, options })] as const)
+  // Docs are compared raw under redaction semantics; `redact` only runs once the file is
+  // known to differ, so a Same file never clones its documents.
+  const lDocs = parseYamlAll(leftText).map((v, i) => [_docKey(v, i), v] as const)
+  const rDocs = parseYamlAll(rightText).map((v, i) => [_docKey(v, i), v] as const)
+  const equal = (a: unknown, b: unknown): boolean => _redactedEqual(a, b, null, options)
+  const clean = (value: unknown): unknown => redact({ value, options })
 
   if (lDocs.length <= 1 && rDocs.length <= 1) {
     const l = lDocs[0]?.[1]
     const r = rDocs[0]?.[1]
-    if (deepEqual({ a: l, b: r })) return { _tag: "Same", file }
-    return { _tag: "Changed", file, left: l, right: r }
+    if (equal(l, r)) return { _tag: "Same", file }
+    return { _tag: "Changed", file, left: clean(l), right: clean(r) }
   }
 
   const lByKey = new Map(lDocs)
@@ -209,15 +315,15 @@ const _diffOne = (
     const l = lByKey.get(key)
     const r = rByKey.get(key)
     if (l === undefined) {
-      docs.push({ _tag: "MissingLeft", key, right: r })
+      docs.push({ _tag: "MissingLeft", key, right: clean(r) })
       anyChange = true
     } else if (r === undefined) {
-      docs.push({ _tag: "MissingRight", key, left: l })
+      docs.push({ _tag: "MissingRight", key, left: clean(l) })
       anyChange = true
-    } else if (deepEqual({ a: l, b: r })) {
+    } else if (equal(l, r)) {
       docs.push({ _tag: "Same", key })
     } else {
-      docs.push({ _tag: "Changed", key, left: l, right: r })
+      docs.push({ _tag: "Changed", key, left: clean(l), right: clean(r) })
       anyChange = true
     }
   }
@@ -226,8 +332,8 @@ const _diffOne = (
   return {
     _tag: "Changed",
     file,
-    left: lDocs.map((d) => d[1]),
-    right: rDocs.map((d) => d[1]),
+    left: lDocs.map((d) => clean(d[1])),
+    right: rDocs.map((d) => clean(d[1])),
     docs
   }
 }
