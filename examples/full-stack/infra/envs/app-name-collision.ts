@@ -29,4 +29,4 @@ const collision = AppOfApps.fromModules({
   modules: [apiV1, apiV2] as const
 })
 
-export default AppOfApps.entrypoint(collision)
+export default collision

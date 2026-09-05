@@ -47,11 +47,11 @@ const svc = Application.define({
 	source: { repoURL: "https://example.com/repo", targetRevision: "main", path: "envs/test/svc" },
 	build: () => [ConfigMap.make({ name: "svc-conf", namespace: "app", data: { K: "v" } })],
 });
-export default AppOfApps.entrypoint(AppOfApps.fromModules({
+export default AppOfApps.fromModules({
 	target: { repoURL: "https://example.com/repo", branch: "main", rootPath: "envs/test" },
 	defaults: { destination: { server: "https://kubernetes.default.svc" } },
 	modules: [svc] as const,
-}));
+});
 `
       yield* _writeEnvFile(root, "infra/env/test.ts", envBody)
 
@@ -83,7 +83,7 @@ const raw = Bundle.define({
 		literal: "kind: ConfigMap\\nmetadata:\\n  name: one\\n---\\nkind: ConfigMap\\nmetadata:\\n  name: two\\n"
 	})],
 });
-export default Bundle.entrypoint(Bundle.fromModules({ modules: [raw] as const }));
+export default Bundle.fromModules({ modules: [raw] as const });
 `
       yield* _writeEnvFile(root, "infra/env/test.ts", envBody)
 
@@ -114,7 +114,7 @@ const raw = Bundle.define({
 		literal: "justAString: true\\n---\\nkind: ConfigMap\\nmetadata:\\n  name: kept\\n"
 	})],
 });
-export default Bundle.entrypoint(Bundle.fromModules({ modules: [raw] as const }));
+export default Bundle.fromModules({ modules: [raw] as const });
 `
       yield* _writeEnvFile(root, "infra/env/test.ts", envBody)
 

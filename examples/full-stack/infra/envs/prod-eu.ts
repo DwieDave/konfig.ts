@@ -44,20 +44,18 @@ const api = defineApi({ name: "api", source: src("api"), replicas: 2, sopsBase }
 const worker = defineWorker({ name: "worker", source: src("worker"), replicas: 1, sopsBase })
 const redisCache = defineRedisCache({ name: "redis-cache", source: src("redis-cache") })
 
-export default AppOfApps.entrypoint(
-  AppOfApps.fromModules({
-    target: { repoURL: cluster.repositoryUrl, branch, rootPath },
-    defaults: { destination: { server: "https://kubernetes.default.svc" } },
-    modules: [
-      sopsOperator,
-      imagePulls,
-      featureFlags,
-      postgres,
-      apiBuild,
-      workerBuild,
-      redisCache,
-      api,
-      worker
-    ]
-  })
-)
+export default AppOfApps.fromModules({
+  target: { repoURL: cluster.repositoryUrl, branch, rootPath },
+  defaults: { destination: { server: "https://kubernetes.default.svc" } },
+  modules: [
+    sopsOperator,
+    imagePulls,
+    featureFlags,
+    postgres,
+    apiBuild,
+    workerBuild,
+    redisCache,
+    api,
+    worker
+  ]
+})

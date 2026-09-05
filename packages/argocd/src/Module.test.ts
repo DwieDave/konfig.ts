@@ -178,13 +178,11 @@ describe("Application.module({ ... })", () => {
 
     const api = defineApi({ name: "api", source })
     const pulls = definePulls({ name: "pulls", source })
-    void AppOfApps.entrypoint(AppOfApps.fromModules({ target, defaults: {}, modules: [pulls, api] as const }))
+    void AppOfApps.fromModules({ target, defaults: {}, modules: [pulls, api] as const })
 
     const apiAlone = defineApi({ name: "api-alone", source })
-    void AppOfApps.entrypoint(
-      // @ts-expect-error Secret "ghcr-pull" is unsatisfied (_konfig_unsatisfied)
-      AppOfApps.fromModules({ target, defaults: {}, modules: [apiAlone] as const })
-    )
+    // @ts-expect-error Secret "ghcr-pull" is unsatisfied (_konfig_unsatisfied)
+    void AppOfApps.fromModules({ target, defaults: {}, modules: [apiAlone] as const })
   })
 
   it("rejects bare `string` for name at the call site", () => {

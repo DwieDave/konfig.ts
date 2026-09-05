@@ -25,11 +25,9 @@ const worker = defineWorker({
   sopsBase: "infra/secrets"
 })
 
-export default AppOfApps.entrypoint(
-  // @ts-expect-error - _konfig_unsatisfied hint: missing providers for Secret "ghcr-pull" and Image "api" / "worker".
-  AppOfApps.fromModules({
-    target: { repoURL: cluster.repositoryUrl, branch, rootPath },
-    defaults: {},
-    modules: [api, worker]
-  })
-)
+// @ts-expect-error - _konfig_unsatisfied hint: missing providers for Secret "ghcr-pull" and Image "api" / "worker".
+export default AppOfApps.fromModules({
+  target: { repoURL: cluster.repositoryUrl, branch, rootPath },
+  defaults: {},
+  modules: [api, worker]
+})

@@ -2,7 +2,7 @@
 
 Typed ArgoCD `Application` aggregation with a compile-time dependency graph.
 Each module declares what it provides and what it needs; compose them into an
-app-of-apps and a missing provider becomes a TypeScript error at `entrypoint` —
+app-of-apps and a missing provider becomes a TypeScript error at `fromModules` —
 not a sync failure at 2am.
 
 ## Install
@@ -36,38 +36,36 @@ export const definePostgres = Module.fixedNs({
 const postgres = definePostgres({ name: "postgres", source: src("postgres"), storageGi: 20 })
 const api = defineApi({ name: "api", source: src("api"), replicas: 2 })
 
-export default AppOfApps.entrypoint(
-  AppOfApps.fromModules({
-    target: { repoURL, branch: "main", rootPath: "./manifests/prod" },
-    defaults: { destination: { server: "https://kubernetes.default.svc" } },
-    modules: [postgres, api] // providers first; the order documents intent
-  })
-)
+export default AppOfApps.fromModules({
+  target: { repoURL, branch: "main", rootPath: "./manifests/prod" },
+  defaults: { destination: { server: "https://kubernetes.default.svc" } },
+  modules: [postgres, api] // providers first; the order documents intent
+})
 ```
 
 If `api`'s build does `yield* Dep.Secret("ghcr-pull")` and no module in the list
-provides it, `entrypoint` refuses to compile:
+provides it, `fromModules` refuses to compile:
 `_konfig_unsatisfied: Missing provider for Secret "ghcr-pull"…`.
 
 ## Surface
 
-| Export                                                                   | Purpose                                                                                                     |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `Application.define`                                                     | build an `ApplicationHandle<Name, Out, In>` — an Effect Context tag that also carries a `Layer<Out, _, In>` |
-| `Application.make`                                                       | plain `Application` value constructor (no dep graph)                                                        |
-| `Application.target`                                                     | adapter passed to `Module.fixedNs` / `Module.dynamicNs`                                                     |
-| `Application.LiteralName<T>`                                             | rejects a `string`-widened `name` at the call site                                                          |
-| `AppOfApps.fromModules`                                                  | compose module handles into a renderable app-of-apps (unmet needs surface in its `R`)                       |
-| `AppOfApps.entrypoint`                                                   | wrap a program as the env's default export; the compile-time dep check fires here                           |
-| `AppOfApps.make`                                                         | plain `AppOfAppsResult` constructor from already-built `Application`s                                       |
-| `Sync.wave` / `Sync.hook` / `Sync.options`                               | ArgoCD annotation helpers — spread into `annotations`                                                       |
-| `serializeApplicationCR` / `applicationCRFilename` / `emitApplicationCR` | emit an Application CR as a YAML string, a filename, or a `Manifest<string>`                                |
+| Export                                                                   | Purpose                                                                                                                                                    |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Application.define`                                                     | build an `ApplicationHandle<Name, Out, In>` — an Effect Context tag that also carries a `Layer<Out, _, In>`                                                |
+| `Application.make`                                                       | plain `Application` value constructor (no dep graph)                                                                                                       |
+| `Application.target`                                                     | adapter passed to `Module.fixedNs` / `Module.dynamicNs`                                                                                                    |
+| `Application.LiteralName<T>`                                             | rejects a `string`-widened `name` at the call site                                                                                                         |
+| `AppOfApps.fromModules`                                                  | compose module handles into a sealed, renderable app-of-apps; the compile-time dep check fires here (group-level `provides?: Layer` fills remaining needs) |
+| `AppOfApps.entrypoint`                                                   | deprecated no-op wrapper, kept for one release; export `fromModules` directly instead                                                                      |
+| `AppOfApps.make`                                                         | plain `AppOfAppsResult` constructor from already-built `Application`s                                                                                      |
+| `Sync.wave` / `Sync.hook` / `Sync.options`                               | ArgoCD annotation helpers — spread into `annotations`                                                                                                      |
+| `serializeApplicationCR` / `applicationCRFilename` / `emitApplicationCR` | emit an Application CR as a YAML string, a filename, or a `Manifest<string>`                                                                               |
 
 ## Internals
 
 `Application.define`'s return type is the algebra: the `Out` channel lists every
 `Dep.Provide` the Application emits, the `In` channel every unmet `Dep.Need`.
-Composing modules shrinks `In`; `entrypoint` requires it to reduce to `never`.
+Composing modules shrinks `In`; `fromModules` requires it to reduce to the render services.
 See [`.docs/architecture.md`](../../.docs/architecture.md).
 
 ## Requirements

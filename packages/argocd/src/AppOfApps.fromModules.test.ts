@@ -94,7 +94,7 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
       })
     }))
 
-  it.effect("passes through entrypoint when every Need is met (type-level check is the test)", () =>
+  it.effect("returns a sealed program; the deprecated entrypoint still passes it through", () =>
     Effect.gen(function*() {
       const m = define({
         name: "m",

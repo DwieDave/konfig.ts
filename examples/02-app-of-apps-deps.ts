@@ -1,6 +1,7 @@
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Application, AppOfApps } from "@konfig.ts/argocd"
 import { Dep } from "@konfig.ts/core"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 
 const infra = Application.define({
   name: "infra",
@@ -29,38 +30,26 @@ const web = Application.define({
   })
 })
 
-const program = Effect.gen(function*() {
-  const infraApp = yield* infra
-  const webApp = yield* web
-  return AppOfApps.make({
-    target: {
-      repoURL: "ssh://git@github.com/example/infra.git",
-      branch: "main",
-      rootPath: "./apps"
-    },
-    defaults: { destination: { server: "https://kubernetes.default.svc" } },
-    apps: [infraApp, webApp]
-  })
-}).pipe(Effect.provide(web.layer.pipe(Layer.provideMerge(infra.layer))))
+const target = {
+  repoURL: "ssh://git@github.com/example/infra.git",
+  branch: "main",
+  rootPath: "./apps"
+}
 
-const checked = AppOfApps.entrypoint(program)
+// (A) Happy path — `infra` precedes `web`, so its Provide<Secret, "ghcr-pull">
+// supplies `web`'s Need. The residual-dep check fires right here in
+// fromModules; no entrypoint wrapper needed.
+const checked = AppOfApps.fromModules({
+  target,
+  defaults: { destination: { server: "https://kubernetes.default.svc" } },
+  modules: [infra, web] as const
+})
 
-const broken = Effect.gen(function*() {
-  const webApp = yield* web
-  return AppOfApps.make({
-    target: {
-      repoURL: "ssh://git@github.com/example/infra.git",
-      branch: "main",
-      rootPath: "./apps"
-    },
-    defaults: {},
-    apps: [webApp]
-  })
-}).pipe(Effect.provide(web.layer))
-
-// @ts-expect-error  Need<"Secret", "ghcr-pull"> is not assignable to never
+// (B) Broken — `infra` omitted. web's Need<Secret, "ghcr-pull"> survives the
+// fold and fromModules rejects with the `_konfig_unsatisfied` hint.
+// @ts-expect-error - Missing provider for Secret "ghcr-pull".
 // @effect-diagnostics-next-line floatingEffect:off — deliberately-broken demo call, never executed
-AppOfApps.entrypoint(broken)
+AppOfApps.fromModules({ target, defaults: {}, modules: [web] as const })
 
 const report = Effect.gen(function*() {
   const result = yield* checked
@@ -70,4 +59,4 @@ const report = Effect.gen(function*() {
   }
 })
 
-await Effect.runPromise(report)
+NodeRuntime.runMain(report.pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
