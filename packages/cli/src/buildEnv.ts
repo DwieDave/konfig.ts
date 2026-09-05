@@ -3,7 +3,7 @@ import {
   type AnyRenderError,
   type Bundle,
   KONFIG_HELM_CACHE_ENV,
-  type Manifest as M,
+  Manifest as M,
   type ParsedDoc,
   parseYamlAll,
   type RawYaml,
@@ -37,6 +37,10 @@ export const envOutDir = (input: EnvOutDirInput): string =>
 class EnvEntryNotFound extends Data.TaggedError("EnvEntryNotFound")<{
   readonly env: string
   readonly entry: string
+}> {}
+
+class NonManifestChild extends Data.TaggedError("NonManifestChild")<{
+  readonly child: string
 }> {}
 
 class EnvLoadError extends Data.TaggedError("EnvLoadError")<{
@@ -183,8 +187,6 @@ export interface RenderedEnv {
   readonly files: ReadonlyArray<OutputFile>
 }
 
-type AnyManifest = M.Manifest<unknown>
-
 interface EnvChildArgo {
   readonly app: AppOfAppsResult["apps"][number]
   readonly target: AppOfAppsResult["target"]
@@ -224,13 +226,9 @@ const _renderChild = (input: RenderChildInput) =>
     const appDir = path.join(outDirAbs, child.name)
     const rendered = yield* Effect.all(
       child.manifests.map((m) =>
-        renderManifest({
-          manifest: unsafeCoerce<AnyManifest>(
-            m,
-            "child.manifests holds Manifest<unknown> by Bundle/Application contract"
-          ),
-          ctx
-        })
+        M.isManifest(m)
+          ? renderManifest({ manifest: m, ctx })
+          : Effect.die(new NonManifestChild({ child: child.name }))
       ),
       { concurrency: "unbounded" }
     )

@@ -1,9 +1,8 @@
 import type { BuiltImageRef, SecretRef, ServiceAccountRef } from "@konfig.ts/core"
-import { unsafeCoerce } from "@konfig.ts/core"
 import type { Container as K8sContainer, PodSpec as K8sPodSpec } from "./.generated/k8s-types"
 import type { EnvVar } from "./env"
-import type { ContainerPort, NamesOf, ProbeTarget } from "./ports"
-import type { Volume, VolumeMount, VolumeNamesOf } from "./volume"
+import type { ContainerPort, ProbeTarget } from "./ports"
+import type { Volume, VolumeMount } from "./volume"
 
 export interface ContainerInput extends
   Omit<
@@ -51,9 +50,12 @@ export interface ContainerSpec<Ports extends string = string, Mounts extends str
   readonly __mountNames?: Mounts
 }
 
+// P and M are the port/mount name unions, inferred directly from the `ports` and
+// `volumeMounts` elements. Probe targets are NoInfer<P> so a typo'd probe port
+// reference errors instead of widening the inferred union.
 export interface DefineContainerInput<
-  Ports extends ReadonlyArray<ContainerPort<string>>,
-  Mounts extends ReadonlyArray<VolumeMount<string>>,
+  P extends string,
+  M extends string,
   Envs extends ReadonlyArray<EnvVar<string>>
 > extends
   Omit<
@@ -63,17 +65,13 @@ export interface DefineContainerInput<
 {
   readonly name: string
   readonly image: string
-  readonly ports: Ports
-  readonly readinessProbe?: ProbeTarget<NamesOf<Ports>>
-  readonly livenessProbe?: ProbeTarget<NamesOf<Ports>>
-  readonly startupProbe?: ProbeTarget<NamesOf<Ports>>
-  readonly volumeMounts?: Mounts
+  readonly ports: ReadonlyArray<ContainerPort<P>>
+  readonly readinessProbe?: ProbeTarget<NoInfer<P>>
+  readonly livenessProbe?: ProbeTarget<NoInfer<P>>
+  readonly startupProbe?: ProbeTarget<NoInfer<P>>
+  readonly volumeMounts?: ReadonlyArray<VolumeMount<M>>
   readonly env?: Envs & EnvDupCheck<Envs>
 }
-
-type MountNamesOf<M extends ReadonlyArray<VolumeMount<string>>> = {
-  readonly [I in keyof M]: M[I] extends VolumeMount<infer N> ? N : never
-}[number]
 
 type _EnvNameOf<X> = X extends EnvVar<infer N> ? N : never
 
@@ -94,40 +92,21 @@ type EnvDupCheck<Envs extends ReadonlyArray<EnvVar<string>>> = [DuplicateEnvName
 
 export const Container = {
   define: <
-    const Ports extends ReadonlyArray<ContainerPort<string>>,
-    const Mounts extends ReadonlyArray<VolumeMount<string>> = readonly [],
+    const P extends string,
+    const M extends string = never,
     const Envs extends ReadonlyArray<EnvVar<string>> = readonly []
   >(
-    input: DefineContainerInput<Ports, Mounts, Envs>
-  ): ContainerSpec<NamesOf<Ports>, MountNamesOf<Mounts>> => {
-    type P = NamesOf<Ports>
-    type M = MountNamesOf<Mounts>
-    const out: ContainerSpec<P, M> = {
-      ...input,
-      ports: unsafeCoerce<ReadonlyArray<ContainerPort<P>>>(
-        input.ports,
-        "Ports tuple's element brands are the same PortName<N>; widening Ports → readonly ContainerPort<P>[] only changes the static shape, not the runtime values"
-      ),
-      readinessProbe: input.readinessProbe,
-      livenessProbe: input.livenessProbe,
-      startupProbe: input.startupProbe,
-      volumeMounts: unsafeCoerce<ReadonlyArray<VolumeMount<M>> | undefined>(
-        input.volumeMounts,
-        "Mounts tuple's element brands are the same VolumeMount<N>; widening Mounts → readonly VolumeMount<M>[] preserves runtime shape"
-      ),
-      env: unsafeCoerce<ReadonlyArray<EnvVar<string>> | undefined>(
-        input.env,
-        "EnvDupCheck<Envs> intersection vanishes at runtime; the runtime value is the original EnvVar[]"
-      )
-    }
-    return out
-  }
+    input: DefineContainerInput<P, M, Envs>
+  ): ContainerSpec<P, M> => ({
+    ...input,
+    env: input.env
+  })
 }
 
-export interface DefinePodInput<V extends ReadonlyArray<Volume<string>>> {
-  readonly volumes: V
-  readonly containers: ReadonlyArray<ContainerSpec<string, NoInfer<VolumeNamesOf<V>>>>
-  readonly initContainers?: ReadonlyArray<ContainerSpec<string, NoInfer<VolumeNamesOf<V>>>>
+export interface DefinePodInput<N extends string> {
+  readonly volumes: ReadonlyArray<Volume<N>>
+  readonly containers: ReadonlyArray<ContainerSpec<string, NoInfer<N>>>
+  readonly initContainers?: ReadonlyArray<ContainerSpec<string, NoInfer<N>>>
 }
 
 export interface DefinedPod<MountNames extends string> {
@@ -154,13 +133,10 @@ export interface PodSpecInput extends
 }
 
 export const Pod = {
-  define: <const V extends ReadonlyArray<Volume<string>>>(
-    input: DefinePodInput<V>
-  ): DefinedPod<VolumeNamesOf<V>> => ({
-    volumes: unsafeCoerce<ReadonlyArray<Volume<VolumeNamesOf<V>>>>(
-      input.volumes,
-      "V tuple's elements are Volume<N>; widening V → readonly Volume<VolumeNamesOf<V>>[] is a structural relaxation, runtime value unchanged"
-    ),
+  define: <const N extends string>(
+    input: DefinePodInput<N>
+  ): DefinedPod<N> => ({
+    volumes: input.volumes,
     containers: input.containers,
     initContainers: input.initContainers
   }),

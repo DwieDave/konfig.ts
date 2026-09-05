@@ -37,14 +37,8 @@ const _lowerProbe = (probe: ProbeInput): K8sContainer["readinessProbe"] => {
         : [...probe.httpGet.httpHeaders]
     },
     tcpSocket: probe.tcpSocket === undefined ? undefined : { ...probe.tcpSocket },
-    // K8s GRPCAction.port is `number` only; konfig's GrpcAction also admits a named-port brand
-    // (a string at runtime). kube-apiserver rejects a non-numeric grpc port, so this preserves
-    // the pre-existing behavior of emitting whatever the caller wrote.
     grpc: probe.grpc === undefined ? undefined : {
-      port: unsafeCoerce<number>(
-        probe.grpc.port,
-        "GrpcAction.port admits PortName; K8s GRPCAction.port is number-only — emitted as-is, matching prior behavior"
-      ),
+      port: probe.grpc.port,
       service: probe.grpc.service
     },
     exec: probe.exec === undefined ? undefined : {

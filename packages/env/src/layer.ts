@@ -1,6 +1,5 @@
-import { unsafeCoerce } from "@konfig.ts/core"
-import type { Context, Effect } from "effect"
-import { Layer } from "effect"
+import type { Context } from "effect"
+import { Effect, Layer } from "effect"
 import type { Environment, EnvironmentShape, EnvMember } from "./environment"
 import { runtime } from "./runtime"
 
@@ -18,8 +17,7 @@ export const environmentLayer = <Self, M extends Readonly<Record<string, EnvMemb
 ): Layer.Layer<Self> =>
   Layer.effect(
     input.tag,
-    unsafeCoerce<Effect.Effect<EnvironmentShape<M>>>(
-      runtime(input.env),
-      "drops the ConfigError channel so environmentLayer keeps its Layer<Self> signature; a missing env var still fails the layer at build time, just untyped"
-    )
+    // A missing env var fails the layer at build time either way; orDie keeps
+    // the public Layer<Self> signature without erasing the ConfigError channel.
+    Effect.orDie(runtime(input.env))
   )

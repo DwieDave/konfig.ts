@@ -54,8 +54,9 @@ export interface TcpSocketAction<Ports extends string> {
   readonly host?: string
 }
 
-export interface GrpcAction<Ports extends string> {
-  readonly port: number | PortName<Ports>
+// kube-apiserver rejects non-numeric gRPC probe ports, so no named-port option here.
+export interface GrpcAction<_Ports extends string> {
+  readonly port: number
   readonly service?: string
 }
 

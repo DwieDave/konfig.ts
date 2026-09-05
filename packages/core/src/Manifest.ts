@@ -3,6 +3,7 @@ import { FileSystem } from "effect/FileSystem"
 import type { Path } from "effect/Path"
 import type * as Scope from "effect/Scope"
 import { unsafeCoerce } from "./_cast"
+import { isRecord } from "./guards"
 import type { ChildProcessSpawner } from "./_unstable"
 import type { RenderContext } from "./RenderContext"
 import { type AnyRenderError, EmbedYamlReadError } from "./RenderError"
@@ -20,6 +21,8 @@ export interface Manifest<out A> {
   readonly [ManifestTypeId]: Variance<A>
   readonly render: (ctx: RenderContext) => Effect.Effect<A, AnyRenderError, RenderServices>
 }
+
+export const isManifest = (u: unknown): u is Manifest<unknown> => isRecord(u) && ManifestTypeId in u
 
 const variance: Variance<never> = {
   _A: (_: never) => _
@@ -63,11 +66,7 @@ export const concat = <A>(
       { concurrency: "unbounded" }
     ).pipe(
       Effect.map((results) =>
-        results.flatMap((r) =>
-          Array.isArray(r)
-            ? unsafeCoerce<A[]>(r, "Array.isArray narrowed; element type is A by render contract")
-            : [unsafeCoerce<A>(r, "non-array branch carries a single A")]
-        )
+        results.flatMap((r) => (Array.isArray(r) ? r : [r]))
       )
     )
   )
