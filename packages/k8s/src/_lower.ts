@@ -66,7 +66,7 @@ const _lowerContainer = (container: ContainerInput): K8sContainer => ({
   volumeMounts: container.volumeMounts === undefined ? undefined : [...container.volumeMounts]
 })
 
-export const _lowerPodSpec = (spec: PodSpecInput): K8sPodSpec => ({
+const _lowerPodSpec = (spec: PodSpecInput): K8sPodSpec => ({
   ...spec,
   containers: spec.containers.map(_lowerContainer),
   initContainers: spec.initContainers?.map(_lowerContainer),
