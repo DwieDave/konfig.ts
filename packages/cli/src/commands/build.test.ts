@@ -36,7 +36,7 @@ const api = Bundle.define({
 	namespace: "app",
 	build: () => [ConfigMap.make({ name: "api-conf", namespace: "app", data: { K: "v" } })],
 });
-export default Bundle.entrypoint(Bundle.fromModules({ modules: [api] as const }));
+export default Bundle.fromModules({ modules: [api] as const });
 `
 
 const _writeBundleEnv = (root: string) =>
@@ -129,7 +129,10 @@ describe("runBuild", () => {
       yield* fs.makeDirectory(path.join(root, "shared"), { recursive: true })
       yield* fs.writeFileString(sharedFile, "a: 1\n")
 
-      const cfg: ResolvedKonfigConfig = { ..._cfgFor(root), config: { ..._cfgFor(root).config, cacheInclude: ["shared"] } }
+      const cfg: ResolvedKonfigConfig = {
+        ..._cfgFor(root),
+        config: { ..._cfgFor(root).config, cacheInclude: ["shared"] }
+      }
       const ctx = RenderContext.make("prod")
 
       yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", verbose: false, noCache: false })

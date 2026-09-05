@@ -55,11 +55,12 @@ const api = Bundle.define({
 		ConfigMap.make({ name: "web-conf", namespace: "app", data: { K: "render-value" } }),
 	],
 });
-export default Bundle.entrypoint(Bundle.fromModules({ modules: [api] as const }));
+export default Bundle.fromModules({ modules: [api] as const });
 `
 
 /** Rendered content the probe bundle above produces for the "api-conf" ConfigMap. */
-const _apiConfYaml = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-conf\n  namespace: app\ndata:\n  K: match\n"
+const _apiConfYaml =
+  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-conf\n  namespace: app\ndata:\n  K: match\n"
 
 const _konfigJsonWithDiff = (baselineDirName: string) =>
   JSON.stringify({

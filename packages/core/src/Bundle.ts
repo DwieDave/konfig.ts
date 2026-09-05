@@ -163,6 +163,12 @@ export const makeSet = (opts: BundleSetMakeOptions): BundleSetResult => ({
   bundles: opts.bundles
 })
 
+/**
+ * @deprecated `Bundle.fromModules` now performs the residual-dependency check
+ * itself and returns a directly renderable Effect — wrapping it in
+ * `Bundle.entrypoint` is no longer needed. Export the `fromModules` result
+ * directly. This wrapper will be removed in a future release.
+ */
 export const entrypoint = Compose.makeResidualEntrypoint("Bundle.fromModules")
 
 // `any` (not `unknown`) needed: Layer is contravariant here, invariant at the inference site.
@@ -171,20 +177,23 @@ type AnyHandle = BundleHandle<any, any, any>
 
 export type ResidualIn<T extends ReadonlyArray<AnyHandle>> = Compose.ResidualIn<T>
 
-export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>> {
+export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>, Extra = never> {
   readonly name?: string
   readonly modules: Ms
+  readonly provides?: Layer.Layer<Extra>
 }
 
-// Order matters: list providers before consumers, or the residual leaves an unmet Need.
-// Names must be unique or this fails with a `_konfig_duplicate` hint.
-export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>>(
-  opts: FromModulesOptions<Ms> & Compose.NoDuplicateProvides<Ms, "Bundle.fromModules">
-): Effect.Effect<
-  BundleSetResult,
-  AnyRenderError,
-  ResidualIn<Ms> | CoreManifest.RenderServices
-> => {
+// Order matters: list providers before consumers, or the consumer's Need
+// fails right here as _konfig_unsatisfied. Names must be unique or this fails
+// with a `_konfig_duplicate` hint. A group-level `provides` layer can satisfy
+// needs no module provides. The result is sealed: R is exactly
+// RenderServices, no entrypoint wrapper needed.
+export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = never>(
+  opts:
+    & FromModulesOptions<Ms, Extra>
+    & Compose.NoDuplicateProvides<Ms, "Bundle.fromModules">
+    & Compose.ResidualCheck<Exclude<ResidualIn<Ms>, Extra>, "Bundle.fromModules">
+): Effect.Effect<BundleSetResult, AnyRenderError, CoreManifest.RenderServices> => {
   const program = Effect.gen(function*() {
     const bundles: Bundle[] = []
     for (const mod of opts.modules) {
@@ -194,16 +203,21 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>>(
     return makeSet({ name: opts.name, bundles })
   })
 
-  const wired = Compose.composeLayers(opts.modules)
+  const composed = Compose.composeLayers(opts.modules)
+  const wired = opts.provides !== undefined
+    ? Layer.provideMerge(
+      composed,
+      unsafeCoerce<Layer.Layer<never>>(
+        opts.provides,
+        "group-level provides layer participates only via the type-level residual check; the fold collapses to AnyLayer"
+      )
+    )
+    : composed
 
   return unsafeCoerce<
-    Effect.Effect<
-      BundleSetResult,
-      AnyRenderError,
-      ResidualIn<Ms> | CoreManifest.RenderServices
-    >
+    Effect.Effect<BundleSetResult, AnyRenderError, CoreManifest.RenderServices>
   >(
     Effect.provide(program, wired),
-    "the runtime Effect is the same; only the static R channel is narrowed to ResidualIn<Ms> by the fold-as-type"
+    "the ResidualCheck phantom intersection proved the residual empty, so R narrows to RenderServices"
   )
 }

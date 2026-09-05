@@ -20,18 +20,16 @@ const web = Bundle.define({
 })
 
 // (A) Happy path — `infra` precedes `web`, so its Provide<Secret, "ghcr-pull">
-// supplies `web`'s Need. Residual is empty; entrypoint accepts.
-const checked = Bundle.entrypoint(
-  Bundle.fromModules({ modules: [infra, web] as const })
-)
+// supplies `web`'s Need. The residual-dep check fires right here in
+// fromModules; no entrypoint wrapper needed.
+const checked = Bundle.fromModules({ modules: [infra, web] as const })
 
 // (B) Broken — `infra` omitted. The Need<Secret, "ghcr-pull"> on `web`'s
-// environment slot survives the fold. entrypoint rejects with the
+// environment slot survives the fold; fromModules rejects with the
 // `_konfig_unsatisfied` hint.
-const broken = Bundle.fromModules({ modules: [web] as const })
-// @ts-expect-error - Need<"Secret", "ghcr-pull"> is not assignable to RenderServices.
+// @ts-expect-error - Missing provider for Secret "ghcr-pull".
 // @effect-diagnostics-next-line floatingEffect:off — deliberately-broken demo call, never executed
-Bundle.entrypoint(broken)
+Bundle.fromModules({ modules: [web] as const })
 
 const report = Effect.gen(function*() {
   const result = yield* checked

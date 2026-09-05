@@ -90,10 +90,10 @@ export const composeLayers = (
 }
 
 type UnsatisfiedHint<R, Api extends string> = R extends Need<infer K, infer V>
-  ? `Missing provider for ${K} "${V}". Add a module that provides it to ${Api}({ modules }), or check that providers come before consumers in the list.`
+  ? `Missing provider for ${K} "${V}". Add a module that provides it to ${Api}({ modules }), pass it via provides:, or check that providers come before consumers in the list.`
   : "Unsatisfied dep — see the Effect Layer error above."
 
-type ResidualHintCheck<R, Api extends string> = [Exclude<R, RenderServices>] extends [never] ? unknown
+export type ResidualCheck<R, Api extends string> = [Exclude<R, RenderServices>] extends [never] ? unknown
   : {
     readonly _konfig_unsatisfied: UnsatisfiedHint<
       Exclude<R, RenderServices>,
@@ -103,7 +103,7 @@ type ResidualHintCheck<R, Api extends string> = [Exclude<R, RenderServices>] ext
 
 export const makeResidualEntrypoint = <const Api extends string>(_api: Api) =>
 <A, E, R>(
-  program: Effect.Effect<A, E, R> & ResidualHintCheck<R, Api>
+  program: Effect.Effect<A, E, R> & ResidualCheck<R, Api>
 ): Effect.Effect<A, E, R & RenderServices> =>
   unsafeCoerce<Effect.Effect<A, E, R & RenderServices>>(
     program,

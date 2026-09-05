@@ -84,7 +84,7 @@ const api = Bundle.define({
 	namespace: "app",
 	build: () => [ConfigMap.make({ name: "api-conf", namespace: "app", data: { K: "v" } })],
 });
-export default Bundle.entrypoint(Bundle.fromModules({ modules: [api] as const }));
+export default Bundle.fromModules({ modules: [api] as const });
 `
 
 /**
@@ -106,7 +106,7 @@ data:
   K: v
 \` })],
 });
-export default Bundle.entrypoint(Bundle.fromModules({ modules: [api] as const }));
+export default Bundle.fromModules({ modules: [api] as const });
 `
 
 const _writeEnv = (root: string, envName: string, body: string) =>
