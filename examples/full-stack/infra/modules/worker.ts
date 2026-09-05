@@ -1,6 +1,6 @@
 import { workerEnv } from "@example/env-contracts"
 import { Application } from "@konfig.ts/argocd"
-import { Dep, type Manifest, Module } from "@konfig.ts/core"
+import { Dep, type Manifest } from "@konfig.ts/core"
 import { Container, Deployment, Environment } from "@konfig.ts/k8s"
 import { Sops } from "@konfig.ts/sops"
 import { Effect } from "effect"
@@ -11,8 +11,7 @@ export interface WorkerOpts {
 }
 
 // konfig: WHY reuses the db-creds contract; api and worker each emit an identical SopsSecret into their own Application directory (konfig does not dedupe across Applications)
-export const defineWorker = Module.fixedNs({
-  target: Application.target,
+export const defineWorker = Application.module({
   namespace: "app",
   build: ({ name, namespace }, opts: WorkerOpts) =>
     Effect.gen(function*() {
@@ -23,11 +22,7 @@ export const defineWorker = Module.fixedNs({
         env: workerEnv,
         namespace,
         secrets: {
-          db: {
-            backend: Sops.passthrough({
-              file: `${opts.sopsBase}/SopsSecret-db-creds.yaml`
-            })
-          }
+          db: Sops.passthrough({ file: `${opts.sopsBase}/SopsSecret-db-creds.yaml` })
         }
       })
 

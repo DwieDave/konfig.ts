@@ -1,10 +1,9 @@
 import { Application, Sync } from "@konfig.ts/argocd"
-import { Helm, Module } from "@konfig.ts/core"
+import { Helm } from "@konfig.ts/core"
 import { Namespace } from "@konfig.ts/k8s"
 
 // isindir/sops-secrets-operator — reconciles SopsSecret CRs into native Secrets. Sync-wave -2 so it lands before secrets (-1) and workloads (0).
-export const defineSopsOperator = Module.fixedNs({
-  target: Application.target,
+export const defineSopsOperator = Application.module({
   namespace: "sops",
   annotations: Sync.wave(-2),
   build: ({ namespace }, _opts: Record<never, never>) => {

@@ -1,5 +1,5 @@
 import { Application, Sync } from "@konfig.ts/argocd"
-import { Helm, Module } from "@konfig.ts/core"
+import { Helm } from "@konfig.ts/core"
 import { Namespace } from "@konfig.ts/k8s"
 
 export interface PostgresOpts {
@@ -7,8 +7,7 @@ export interface PostgresOpts {
 }
 
 // Bitnami Postgres via Helm. The `app` namespace it creates is implicitly provided, so consumers declaring `namespace: "app"` won't double-create it.
-export const definePostgres = Module.fixedNs({
-  target: Application.target,
+export const definePostgres = Application.module({
   namespace: "app",
   annotations: Sync.wave(-1),
   build: ({ name, namespace }, opts: PostgresOpts) => {

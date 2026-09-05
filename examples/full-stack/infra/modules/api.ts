@@ -1,6 +1,6 @@
 import { apiEnv } from "@example/env-contracts"
 import { Application } from "@konfig.ts/argocd"
-import { Dep, Module } from "@konfig.ts/core"
+import { Dep } from "@konfig.ts/core"
 import { Container, Environment, EnvVar, Port, Workload } from "@konfig.ts/k8s"
 import { Sops } from "@konfig.ts/sops"
 import { Effect } from "effect"
@@ -11,9 +11,9 @@ export interface ApiOpts {
   readonly sopsBase: string
 }
 
-// `apps/api` workload. `Dep.Image("api")` resolves via `defineApiBuild`; `EnvVar.fromSecretForPod` enforces namespace match at type-check time.
-export const defineApi = Module.fixedNs({
-  target: Application.target,
+// `apps/api` workload. `Dep.Image("api")` resolves via `defineApiBuild`;
+// `EnvVar.secretEnv` with `podNamespace` enforces the namespace match at type-check time.
+export const defineApi = Application.module({
   namespace: "app",
   build: ({ name, namespace }, opts: ApiOpts) =>
     Effect.gen(function*() {
@@ -24,21 +24,9 @@ export const defineApi = Module.fixedNs({
         env: apiEnv,
         namespace,
         secrets: {
-          db: {
-            backend: Sops.passthrough({
-              file: `${opts.sopsBase}/SopsSecret-db-creds.yaml`
-            })
-          },
-          s3: {
-            backend: Sops.passthrough({
-              file: `${opts.sopsBase}/SopsSecret-s3-creds.yaml`
-            })
-          },
-          jwt: {
-            backend: Sops.passthrough({
-              file: `${opts.sopsBase}/SopsSecret-jwt-signing-key.yaml`
-            })
-          }
+          db: Sops.passthrough({ file: `${opts.sopsBase}/SopsSecret-db-creds.yaml` }),
+          s3: Sops.passthrough({ file: `${opts.sopsBase}/SopsSecret-s3-creds.yaml` }),
+          jwt: Sops.passthrough({ file: `${opts.sopsBase}/SopsSecret-jwt-signing-key.yaml` })
         }
       })
 
@@ -48,17 +36,8 @@ export const defineApi = Module.fixedNs({
         ports: [Port.make({ name: "http", containerPort: 8080 })],
         env: [
           ...bound.envVars,
-          EnvVar.fromSecretForPod({
-            name: "DATABASE_URL_PRIMARY",
-            ref: bound.members.db.ref,
-            key: "url",
-            podNamespace: namespace
-          }),
-          EnvVar.fromConfigMap({
-            name: "FEATURE_NEW_UI",
-            ref: featureFlags.ref,
-            key: "NEW_UI"
-          }),
+          ...EnvVar.secretEnv(bound.members.db.ref, { DATABASE_URL_PRIMARY: "url" }, { podNamespace: namespace }),
+          ...EnvVar.configMapEnv(featureFlags.ref, { FEATURE_NEW_UI: "NEW_UI" }),
           EnvVar.value({ name: "API_NAME", value: name })
         ],
         readinessProbe: {

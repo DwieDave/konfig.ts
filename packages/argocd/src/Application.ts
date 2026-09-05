@@ -1,4 +1,4 @@
-import { type AnyRenderError, Dep, type Module, unsafeCoerce } from "@konfig.ts/core"
+import { type AnyRenderError, Dep, Module, unsafeCoerce } from "@konfig.ts/core"
 import { type Context, Effect, Layer } from "effect"
 
 // Mutate-attach `layer` to the Context.Tag so yield* and .layer share one
@@ -204,3 +204,25 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
 }
 
 export const target: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs> = { define }
+
+// `provides` is spelled out (not derived via Omit<FixedNsConfig, "target">) because an
+// Omit over the generic interface stops TS inferring Extra from a bare `Dep.provideSecret(...)`.
+export interface ModuleConfig<Ns extends string, Opts extends object, R, Extra> extends ExtraConfig {
+  readonly namespace: Ns
+  readonly provides?: Layer.Layer<Extra>
+  readonly build: (ctx: Module.BuildContext<Ns>, opts: Opts) => Module.BuildResult<unknown, R>
+}
+
+// `Module.fixedNs` with `target: Application.target` pre-applied.
+export const module = <
+  const Ns extends string,
+  Opts extends object = Record<never, never>,
+  R = never,
+  Extra = never
+>(
+  config: ModuleConfig<Ns, Opts, R, Extra>
+) =>
+  Module.fixedNs<HandleKind, ExtraConfig, ExtraCallArgs, Ns, Opts, R, Extra>({
+    ...config,
+    target
+  })

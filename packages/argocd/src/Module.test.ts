@@ -1,7 +1,7 @@
-import { Module } from "@konfig.ts/core"
+import { Dep, Module } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { describe, expect, expectTypeOf, it } from "vitest"
-import { Application, Sync } from "./index"
+import { Application, AppOfApps, Sync } from "./index"
 
 const source: Application.ArgoSource = {
   repoURL: "ssh://git@github.com/example/infra.git",
@@ -123,5 +123,73 @@ describe("Module.dynamicNs({ target: Application.target, ... })", () => {
       source,
       image: "x"
     })
+  })
+})
+
+describe("Application.module({ ... })", () => {
+  const defineSops = Application.module({
+    namespace: "sops",
+    annotations: Sync.wave(-1),
+    build: ({ name, namespace }, opts: { readonly note?: string }) => [
+      { kind: "ServiceAccount", name, namespace, note: opts.note }
+    ]
+  })
+
+  it("behaves like Module.fixedNs with Application.target pinned", () => {
+    const sops = defineSops({ name: "sops-secrets-operator", source, note: "hello" })
+    const app = Effect.runSync(handleEffect(sops))
+
+    type NameOf<T> = T extends Application.ApplicationHandle<infer N, infer _Out, infer _In> ? N : never
+    expectTypeOf<NameOf<typeof sops>>().toEqualTypeOf<"sops-secrets-operator">()
+    expect(app.namespace).toBe("sops")
+    expect(app.annotations).toEqual({ "argocd.argoproj.io/sync-wave": "-1" })
+    expect(app.manifests).toEqual([
+      { kind: "ServiceAccount", name: "sops-secrets-operator", namespace: "sops", note: "hello" }
+    ])
+  })
+
+  it("infers Extra from a bare provides layer", () => {
+    const definePulls = Application.module({
+      namespace: "app",
+      provides: Dep.provideSecret("ghcr-pull"),
+      build: (_ctx, _opts: Record<never, never>) => []
+    })
+    const pulls = definePulls({ name: "pulls", source })
+
+    type OutOf<T> = T extends Application.ApplicationHandle<infer _N, infer Out, infer _In> ? Out : never
+    expectTypeOf<Dep.Provide<"Secret", "ghcr-pull">>().toExtend<OutOf<typeof pulls>>()
+  })
+
+  it("keeps the AppOfApps residual-dependency check", () => {
+    const defineApi = Application.module({
+      namespace: "app",
+      build: (_ctx) =>
+        Effect.gen(function*() {
+          yield* Dep.Secret("ghcr-pull")
+          return []
+        })
+    })
+    const definePulls = Application.module({
+      namespace: "app",
+      provides: Dep.provideSecret("ghcr-pull"),
+      build: (_ctx) => []
+    })
+    const target = { repoURL: "ssh://git@example/repo.git", branch: "main", rootPath: "./apps" }
+
+    const api = defineApi({ name: "api", source })
+    const pulls = definePulls({ name: "pulls", source })
+    void AppOfApps.entrypoint(AppOfApps.fromModules({ target, defaults: {}, modules: [pulls, api] as const }))
+
+    const apiAlone = defineApi({ name: "api-alone", source })
+    void AppOfApps.entrypoint(
+      // @ts-expect-error Secret "ghcr-pull" is unsatisfied (_konfig_unsatisfied)
+      AppOfApps.fromModules({ target, defaults: {}, modules: [apiAlone] as const })
+    )
+  })
+
+  it("rejects bare `string` for name at the call site", () => {
+    const dynamicName = "x" as string
+    // @ts-expect-error name must be a literal
+    defineSops({ name: dynamicName, source })
   })
 })

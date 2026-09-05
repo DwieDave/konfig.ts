@@ -7,7 +7,7 @@ export interface BuildOpts {
 }
 
 // Dep-graph anchors only — emit no manifests, just provide `Dep.Image` for the consuming workload.
-// Uses `Application.define`'s per-call `provides` (not `Module.fixedNs`) since registry/tag vary per instance.
+// Uses `Application.define`'s per-call `provides` (not `Application.module`) since registry/tag vary per instance.
 export const defineApiBuild = <const Name extends string>(
   opts: {
     readonly name: Application.LiteralName<Name>

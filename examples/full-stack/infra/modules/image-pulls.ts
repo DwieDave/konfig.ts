@@ -1,6 +1,6 @@
 import { ghcrPull } from "@example/env-contracts"
 import { Application, Sync } from "@konfig.ts/argocd"
-import { Dep, Module } from "@konfig.ts/core"
+import { Dep } from "@konfig.ts/core"
 import { Secret } from "@konfig.ts/k8s"
 import { Sops } from "@konfig.ts/sops"
 
@@ -10,8 +10,7 @@ export interface ImagePullsOpts {
 
 // Emits a SopsSecret for the GHCR pull credential, provided as `Dep.Secret("ghcr-pull")`.
 // `Sops.passthrough` reads the encrypted yaml as-is (no `sops --encrypt` shell-out, works offline).
-export const defineImagePulls = Module.fixedNs({
-  target: Application.target,
+export const defineImagePulls = Application.module({
   namespace: "app",
   annotations: Sync.wave(-1),
   provides: Dep.provideSecret("ghcr-pull"),

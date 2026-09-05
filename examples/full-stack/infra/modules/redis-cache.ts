@@ -1,13 +1,11 @@
 import { Application } from "@konfig.ts/argocd"
-import { Module } from "@konfig.ts/core"
 import { Container, Deployment, NetworkPolicy, Port, Service } from "@konfig.ts/k8s"
 import { apiPods, redisCachePods, workerPods } from "../podSets"
 
 // Redis cache sidecar, built without `Workload.web`. `Deployment.fromPodSet` derives selector labels from the same `Selector` used by the
 // netpol and Service, so the "Service has no endpoints" label-drift footgun is structurally impossible.
 // Vendor image stays a raw string — no in-tree build, so no `Dep.Image` needed.
-export const defineRedisCache = Module.fixedNs({
-  target: Application.target,
+export const defineRedisCache = Application.module({
   namespace: "app",
   build: ({ name, namespace }, _opts: Record<never, never>) => {
     const redisContainer = Container.define({
