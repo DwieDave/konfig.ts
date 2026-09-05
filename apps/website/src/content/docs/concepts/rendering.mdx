@@ -11,12 +11,12 @@ import { Aside } from "@/components/docs"
 
 ## From env file to files
 
-1. **Locate and load configuration.** The CLI finds `konfig.json` by walking up from the working directory and decodes it strictly. It then resolves the entry file for the env: `<root>/<envs.<env>.entry>`, or `<root>/env/<env>.ts` when the env is not listed. From the env name and the `--cluster`, `--k8s-version`, and `--flag k=v` flags it builds the render context. Errors at this step: `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`.
-2. **Import the entry module.** Its default export must be an Effect: an `AppOfApps.fromModules({ ... })` or `Bundle.fromModules({ ... })` program. A missing default export, a non-Effect, or an import failure fails with `EnvLoadError { entry, cause }`.
-3. **Run it.** The result is a list of Applications (or Bundles), each carrying its `manifests` array.
-4. **Render every manifest.** Each manifest's `render` is called with the context; concurrency is unbounded within an app, four apps at a time. Results are flattened: typed objects, arrays, and raw YAML blobs are all accepted, and raw YAML is split into documents. Values without a string `kind` and `metadata.name` are dropped silently.
-5. **Assign file names.** Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>.yaml`, where `outDir` is `<root>/<outDir.manifests>` from `konfig.json`. The Argo CD Application CR for each app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml`; `apps-name` is the `name` given to `AppOfApps.fromModules`, default `apps`. Bundles emit no CR.
-6. **Write atomically.** Files are staged under `<outDir>/<env>[/<cluster>].tmp` with mode `0600`. The previous live directory is then removed and the staged tree renamed into its place, so a build that dies while rendering never touches the previous output.
+1. The CLI finds `konfig.json` by walking up from the working directory and decodes it strictly. It then resolves the entry file for the env: `<root>/<envs.<env>.entry>`, or `<root>/env/<env>.ts` when the env is not listed. From the env name and the `--cluster`, `--k8s-version`, and `--flag k=v` flags it builds the render context. Errors at this step: `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`.
+2. It imports the entry module. The default export must be an Effect: an `AppOfApps.fromModules({ ... })` or `Bundle.fromModules({ ... })` program. A missing default export, a non-Effect, or an import failure fails with `EnvLoadError { entry, cause }`.
+3. It runs that Effect. The result is a list of Applications (or Bundles), each carrying its `manifests` array.
+4. It renders every manifest. Each manifest's `render` is called with the context; concurrency is unbounded within an app, four apps at a time. Results are flattened: typed objects, arrays, and raw YAML blobs are all accepted, and raw YAML is split into documents. Values without a string `kind` and `metadata.name` are dropped silently.
+5. It assigns file names. Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>.yaml`, where `outDir` is `<root>/<outDir.manifests>` from `konfig.json`. The Argo CD Application CR for each app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml`; `apps-name` is the `name` given to `AppOfApps.fromModules`, default `apps`. Bundles emit no CR.
+6. It writes atomically. Files are staged under `<outDir>/<env>[/<cluster>].tmp` with mode `0600`. The previous live directory is then removed and the staged tree renamed into its place, so a build that dies while rendering never touches the previous output.
 
 `validate` and `diff` run steps 1 to 4 in memory and skip the write.
 
@@ -29,7 +29,7 @@ All output goes through `Yaml.serialize`, so two renders of the same input are b
 - Root keys are ordered `apiVersion`, `kind`, `metadata`, `spec`, `status`, then everything else alphabetically. Inside `metadata`: `name`, `namespace`, `labels`, `annotations`, then the rest alphabetically. Every other object is sorted alphabetically.
 - `null` and `undefined` values are dropped.
 - Two-space indent, indented sequences, no line wrapping, plain scalars where possible.
-- YAML **1.1** semantics, so strings such as `"yes"`, `"no"`, `"on"`, `"off"` are quoted and are not read back as booleans by go-yaml based tools.
+- YAML 1.1 semantics, so strings such as `"yes"`, `"no"`, `"on"`, `"off"` are quoted and are not read back as booleans by go-yaml based tools.
 - CRLF is normalised and the file ends with a single newline.
 
 `Yaml.filenameFor({ kind, metadata: { name } })` produces `<Kind>-<name>.yaml` with `.` and `/` in either part replaced by `-`. It throws if `kind` or `metadata.name` is missing; validate or decode first.

@@ -17,32 +17,33 @@ the failures you'd otherwise see at `argocd sync` time: a workload
 referencing a Secret no one created, an env var consumed in code but
 forgotten in the bundle, a chart pinned by name but not by digest.
 
-## What you get
+## What it does
 
-- **Dep-graph at the type level.** Compose your Applications with
-  `AppOfApps.fromModules(...)` and every module's `Dep.Need<...>` must
-  be met by another module's `Dep.Provide<...>`. A missing provider is
-  a TypeScript error at `AppOfApps.fromModules`, not a Sunday-morning
-  incident.
-- **Env contracts as a single source of truth.** `Secret.define`,
-  `Literal.define`, and `Downward.define` produce atoms consumed by both
-  `Environment.bind` (manifest emission) and `Environment.runtime`
-  (process-time decode).
-- **Real YAML diffs, not patch noise.** Stable key ordering (YAML 1.1,
-  deterministic field sort, ArgoCD-friendly), structural multi-doc diff
-  that ignores reordering, and Helm/redact stripping out of the box.
-- **First-class secret backends.** sops, sealed-secrets, and
-  external-secrets each lower a `Secret.define` to the right CR with
-  full schema validation on the binary's stdout. `requiresSource` is
-  encoded in the backend's type, so a missing source on a Sops backend
-  is a compile error.
-- **Helm with digest verification.** `Helm.release({ digest })` hashes
-  the cached `.tgz` against `opts.digest` on every pull AND every cache
-  hit — flipping a byte fails the next render.
+The dependency graph lives at the type level. Compose Applications with
+`AppOfApps.fromModules(...)` and every module's `Dep.Need<...>` must be
+met by another module's `Dep.Provide<...>`. A missing provider is a
+TypeScript error at `AppOfApps.fromModules`, not a Sunday-morning
+incident.
 
-## A 60-second tour
+Env contracts are declared once. `Secret.define`, `Literal.define`, and
+`Downward.define` produce atoms consumed by both `Environment.bind`
+(manifest emission) and `Environment.runtime` (process-time decode).
 
-A typed workload — the env var's `ref` is branded, so a Secret in the
+YAML output is stable: YAML 1.1, deterministic field sort, ArgoCD-friendly
+key ordering. The structural multi-doc diff ignores reordering and strips
+Helm and redact noise, so diffs show real changes.
+
+Three secret backends ship: sops, sealed-secrets, and external-secrets.
+Each lowers a `Secret.define` to the matching CR and schema-validates
+the binary's stdout. `requiresSource` is encoded in the backend's type,
+so a missing source on a Sops backend is a compile error.
+
+`Helm.release({ digest })` hashes the cached `.tgz` against `opts.digest`
+on every pull and every cache hit. Flipping a byte fails the next render.
+
+## Tour
+
+A typed workload. The env var's `ref` is branded, so a Secret in the
 wrong namespace won't compile:
 
 ```ts
@@ -93,7 +94,7 @@ export const apiEnv = Environment.define({
 })
 ```
 
-Then bind and decode the same bundle — both via `@konfig.ts/k8s`:
+Then bind and decode the same bundle, both via `@konfig.ts/k8s`:
 
 ```ts
 import { Environment } from "@konfig.ts/k8s"
@@ -120,19 +121,19 @@ console.log(`api listening on :${config.port}`)
 | [`@konfig.ts/docker`](./packages/docker)                     | Workspace-graph-aware Dockerfile generator; Bun/Npm/Pnpm                                                                         |
 | [`@konfig.ts/cli`](./packages/cli)                           | `konfig build`, `validate`, `diff`, `set`, `crd`, `helm`, `docker`, `graph`                                                      |
 
-## What this is _not_
+## What this is not
 
-- **Not a kustomize replacement** for cases where you already have
-  hand-written YAML and want to overlay it. konfig owns the manifest
+- A kustomize replacement. If you already have hand-written YAML and
+  want to overlay it, this is the wrong tool; konfig owns the manifest
   source.
-- **Not a runtime mutator.** It emits manifests; ArgoCD or kubectl
-  applies them. There's no admission controller, no operator.
-- **Not a higher-level abstraction.** No Crossplane, no OAM, no
-  "Service" model that encapsulates Deployment/Service/Ingress beyond
-  the explicit `Workload.web` helper.
-- **Not a `helm` replacement.** It calls helm. Helm charts you depend
-  on stay charts; the integration just lifts each templated document
-  as a `ParsedDoc` `Manifest`.
+- A runtime mutator. It emits manifests; ArgoCD or kubectl applies
+  them. There is no admission controller and no operator.
+- A higher-level abstraction. No Crossplane, no OAM, no "Service" model
+  that encapsulates Deployment/Service/Ingress beyond the explicit
+  `Workload.web` helper.
+- A `helm` replacement. It calls helm. Charts you depend on stay
+  charts; the integration lifts each templated document as a
+  `ParsedDoc` `Manifest`.
 
 ## Requirements
 
@@ -140,8 +141,8 @@ konfig.ts is built on [Effect](https://effect.website/), currently a release can
 Until Effect ships a stable 4.x, every `@konfig.ts/*` package requires a
 caret range over the release-candidate line it is developed against:
 
-- **`effect@^4.0.0-rc.111`** — required by every package.
-- **`@effect/platform-node@^4.0.0-rc.111`** — a regular dependency of
+- `effect@^4.0.0-rc.111`, required by every package.
+- `@effect/platform-node@^4.0.0-rc.111`, a regular dependency of
   `@konfig.ts/core` (its `render()` entrypoint needs the Node filesystem and
   subprocess services), so it is installed automatically with core.
 
@@ -160,10 +161,10 @@ bun run konfig --help
 ```
 
 See [`examples/full-stack`](./examples/full-stack) for the complete
-walkthrough — a monorepo with env contracts, secret backends, and ArgoCD
-wiring — plus the worked-failure files under
+walkthrough: a monorepo with env contracts, secret backends, and ArgoCD
+wiring. The worked-failure files under
 [`examples/full-stack/infra/envs/`](./examples/full-stack/infra/envs)
-that demonstrate every compile error the type system catches.
+show each compile error the type system catches.
 
 For architecture and per-package internals see
 [`.docs/architecture.md`](./.docs/architecture.md).

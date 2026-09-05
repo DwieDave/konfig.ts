@@ -1,12 +1,12 @@
 /**
  * `Module.*` is the wrapper-factory layer on top of `Application.define`
- * (argocd) and `Bundle.define` (k8s). One call site, one set of
- * generics, two backend targets.
+ * (argocd) and `Bundle.define` (k8s). The same call site and generics
+ * work against either backend.
  *
- *  - `Module.fixedNs({ target, namespace, build })` — namespace baked
+ *  - `Module.fixedNs({ target, namespace, build })`: namespace baked
  *    into wrapper identity (e.g. cert-manager always lives in
  *    `cert-manager`).
- *  - `Module.dynamicNs({ target, build })` — namespace chosen per
+ *  - `Module.dynamicNs({ target, build })`: namespace chosen per
  *    instance (e.g. an `api` module shipped into per-env namespaces).
  *
  * Each backend exports a `target` adapter (e.g. `Application.target`,
@@ -16,7 +16,7 @@
  * TypeScript infers the rest.
  *
  * Provides + Needs flow exactly as they do for the underlying
- * `define` — Module is purely a typing/ergonomic layer.
+ * `define`. Module is only a typing layer.
  */
 import { Application } from "@konfig.ts/argocd"
 import { Bundle, Dep, Module } from "@konfig.ts/core"

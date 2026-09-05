@@ -8,7 +8,7 @@ const code = (s: string) => `<code class="rounded bg-zinc-800 px-1.5 py-0.5 font
 const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }> = [
   {
     question: "Why is it built on Effect?",
-    answer: `<p>The dependency graph is Effect's <em>Requirements</em> channel doing what it already does. A module's build is an Effect; ${code("yield* Dep.Secret(\"ghcr-pull\")")} adds a requirement; composing modules provides it. There is no bespoke graph engine to learn: the compiler error you get is the ordinary "this Effect still needs X" error, with a konfig message attached.</p><p class="mt-4">Effect also gives us ${code("Schema")} at every binary boundary (helm, sops, kubeseal stdout), ${code("Config")} for the runtime decoder, and ${code("Redacted")} for secret values.</p>`
+    answer: `<p>The dependency graph is Effect's <em>Requirements</em> channel doing what it already does. A module's build is an Effect; ${code("yield* Dep.Secret(\"ghcr-pull\")")} adds a requirement; composing modules provides it. There is no bespoke graph engine to learn. The compiler error you get is the ordinary "this Effect still needs X" error, with a konfig message attached.</p><p class="mt-4">Effect also gives us ${code("Schema")} at every binary boundary (helm, sops, kubeseal stdout), ${code("Config")} for the runtime decoder, and ${code("Redacted")} for secret values.</p>`
   },
   {
     question: "Do I need Bun?",
@@ -40,7 +40,7 @@ const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }
         <Eyebrow>FAQ</Eyebrow>
         <h2 class="text-2xl leading-tighter font-semibold text-white md:text-3xl">Questions a platform team asks first</h2>
         <p class="mt-5 max-w-lg text-lg leading-relaxed text-zinc-400">
-          Something missing? The docs go deeper, and issues are welcome.
+          Something missing? Open an issue.
         </p>
         <div class="mt-6">
           <Button href={`${SITE.repo}/issues/new`} external>Ask on GitHub</Button>

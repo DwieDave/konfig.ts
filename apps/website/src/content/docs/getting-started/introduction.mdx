@@ -18,11 +18,15 @@ Because both layers come from the same declarations, mistakes that would otherwi
 
 ## What you get
 
-- **A dependency graph checked at the type level.** Each module declares what it needs (a Secret, a Namespace, a database) and what it provides. When you compose modules into an environment, `fromModules` refuses to compile until every need has a provider. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
-- **One env contract for both sides.** You declare each environment variable once, as a secret, a literal, or a downward-API value. Binding that contract produces the Deployment env block and the Secret resources; the same contract decodes the variables inside the running process. Rename a variable once and both sides move.
-- **Deterministic YAML and structural diffs.** Output uses stable key ordering (`apiVersion`, `kind`, `metadata`, `spec`, `status` first, then alphabetical) and is emitted as YAML 1.1, so kubectl and go-yaml readers do not coerce strings like `yes` or `on`. `konfig diff` compares rendered output against a baseline structurally, so reordered keys and multi-document files do not show up as noise.
-- **Secret backends as typed values.** sops, sealed-secrets, and external-secrets each turn a declared secret into the matching custom resource, with schema validation on the binary's output. Whether a backend requires a source file is encoded in its type, so forgetting the source for a sops backend is a compile error.
-- **Helm with digest verification.** Every Helm release must name a chart digest. The cached chart tarball is hashed on every pull and every cache hit, so a chart whose bytes change fails the next render with `HelmDigestMismatch`.
+The dependency graph is checked at the type level. Each module declares what it needs (a Secret, a Namespace, a database) and what it provides. When you compose modules into an environment, `fromModules` refuses to compile until every need has a provider. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+
+Environment variables have one contract for both sides. You declare each variable once, as a secret, a literal, or a downward-API value. Binding that contract produces the Deployment env block and the Secret resources; the same contract decodes the variables inside the running process. Rename a variable once and both sides move.
+
+Rendered YAML is deterministic. Output uses stable key ordering (`apiVersion`, `kind`, `metadata`, `spec`, `status` first, then alphabetical) and is emitted as YAML 1.1, so kubectl and go-yaml readers do not coerce strings like `yes` or `on`. `konfig diff` compares rendered output against a baseline structurally, so reordered keys and multi-document files do not show up as noise.
+
+Secret backends are typed values. sops, sealed-secrets, and external-secrets each turn a declared secret into the matching custom resource, with schema validation on the binary's output. Whether a backend requires a source file is encoded in its type, so forgetting the source for a sops backend is a compile error.
+
+Helm releases are digest-verified. Every release must name a chart digest. The cached chart tarball is hashed on every pull and every cache hit, so a chart whose bytes change fails the next render with `HelmDigestMismatch`.
 
 ## A compile error instead of a sync failure
 
@@ -32,10 +36,13 @@ The example below is one of the compile-time-catch files shipped in `examples/fu
 
 ## What konfig.ts is not
 
-- **Not a kustomize replacement.** If you have hand-written YAML and want to overlay it, konfig.ts is the wrong tool. It owns the manifest source.
-- **Not a runtime mutator.** It emits manifests; Argo CD or `kubectl` applies them. There is no admission controller and no operator.
-- **Not a higher-level platform abstraction.** No Crossplane, no OAM, no "Service" model that hides Deployment, Service, and Ingress. `Workload.web` is a helper that emits those resources explicitly.
-- **Not a Helm replacement.** It shells out to `helm template`. Charts you depend on stay charts; each templated document is lifted into the render as a raw YAML manifest.
+It does not replace kustomize. If you have hand-written YAML and want to overlay it, konfig.ts is the wrong tool. It owns the manifest source.
+
+It does not mutate anything at runtime. It emits manifests; Argo CD or `kubectl` applies them. There is no admission controller and no operator.
+
+It is not a platform abstraction. No Crossplane, no OAM, no "Service" model that hides Deployment, Service, and Ingress. `Workload.web` is a helper that emits those resources explicitly.
+
+It does not replace Helm. It shells out to `helm template`. Charts you depend on stay charts; each templated document is lifted into the render as a raw YAML manifest.
 
 ## Requirements
 

@@ -11,17 +11,17 @@ An env contract is a TypeScript value that describes every environment variable 
 
 ## Declaring members
 
-`@konfig.ts/env` has three leaf constructors and one composite. Each returns an Effect `Config` (so the runtime can decode it) plus the metadata that `bind` reads to build manifests.
+`@konfig.ts/env` has three leaf constructors (`Secret.define`, `Literal.define`, `Downward.define`) and one composite (`Environment.define`). Each returns an Effect `Config` (so the runtime can decode it) plus the metadata that `bind` reads to build manifests.
 
-**Secrets.** `Secret.define({ name, namespace, env })` declares a Kubernetes Secret and maps each key to the env var it feeds:
+`Secret.define({ name, namespace, env })` declares a Kubernetes Secret and maps each key to the env var it feeds:
 
 <Snippet file="shared/env-contracts/src/secrets.ts" startAt="export const dbCreds" endBefore="export const s3Creds" />
 
-**Literals.** `Literal.define({ envName, value, schema?, serialize? })` declares a constant. Without a schema, `runtime` returns the value as declared. With one (for example `Config.number("HTTP_PORT").pipe(Config.withDefault(8080))`) it reads and parses the variable instead. `serialize` controls how the value is written into the pod; it is optional for primitives (`String(value)`) and required for objects.
+`Literal.define({ envName, value, schema?, serialize? })` declares a constant. Without a schema, `runtime` returns the value as declared. With one (for example `Config.number("HTTP_PORT").pipe(Config.withDefault(8080))`) it reads and parses the variable instead. `serialize` controls how the value is written into the pod; it is optional for primitives (`String(value)`) and required for objects.
 
-**Downward API.** `Downward.define({ envName, fieldPath })` declares a downward-API field such as `metadata.name`; the runtime reads it as a string.
+`Downward.define({ envName, fieldPath })` declares a downward-API field such as `metadata.name`. The runtime reads it as a string.
 
-**Groups.** `Environment.define({ ... })` groups members and is itself a member, so contracts nest:
+`Environment.define({ ... })` groups members. The group is itself a member, so contracts nest:
 
 <Snippet file="shared/env-contracts/src/bundles.ts" startAt="export const apiEnv" endBefore="// Strict subset of apiEnv" />
 
