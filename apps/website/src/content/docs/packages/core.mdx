@@ -31,7 +31,7 @@ A reusable module that creates a namespace and pulls a digest-verified Helm char
 
 <Snippet file="infra/modules/postgres.ts" startAt="export const definePostgres" title="infra/modules/postgres.ts" />
 
-Dependencies between modules are declared inside the build. Writing `yield* Dep.Secret("ghcr-pull")` records a typed need for that secret; some other module must satisfy it with `Dep.provideSecret("ghcr-pull")`. Nothing is checked at that point. The check happens when you compose modules at `AppOfApps.entrypoint`; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+Dependencies between modules are declared inside the build. Writing `yield* Dep.Secret("ghcr-pull")` records a typed need for that secret; some other module must satisfy it with `Dep.provideSecret("ghcr-pull")`. Nothing is checked at that point. The check happens when you compose modules at `AppOfApps.fromModules`; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
 
 ## Surface
 
@@ -42,7 +42,7 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 | `Dep` | Needs (`Secret`, `SecretValues`, `ConfigMap`, `Namespace`, `ServiceAccount`, `Pvc`, `Image`, `Application`, `App`) and `provide*` layers |
 | `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef`, `BuiltImageRef` | Branded reference types carried by the needs (`BuiltImageRef` is also a value with `of`); `*RefName`, `*RefKeys` helpers extract the brand parameters |
 | `Module` | `fixedNs`, `dynamicNs` factories; `Target`, `BuildContext`, `LiteralName` types |
-| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`, `Bundle.entrypoint`) and the type-level tracking of unmet needs behind every entrypoint (`Compose.makeResidualEntrypoint`, `Compose.NoDuplicateProvides`) |
+| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`; `Bundle.entrypoint` is a deprecated no-op wrapper) and the type-level tracking of unmet needs behind every `fromModules` (`Compose.makeResidualEntrypoint`, `Compose.NoDuplicateProvides`) |
 | `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template` |
 | `Yaml` | `serialize` (stable key order) and `filenameFor` |
 | `diffFiles`, `formatDiff`, `hasDifferences`, `parseYaml`, `parseYamlAll`, `deepEqual`, `redact` | Structural YAML diff with `Secret` data redaction |
@@ -53,7 +53,7 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 
 ## Errors
 
-Core exports tagged error classes from `src/index.ts`. The render-time ones are grouped in the `AnyRenderError` union, which is the error type you see on every manifest's render and on the entrypoints built on top of core.
+Core exports tagged error classes from `src/index.ts`. The render-time ones are grouped in the `AnyRenderError` union, which is the error type you see on every manifest's render and on the `fromModules` compositions built on top of core.
 
 | Error | Meaning | In `AnyRenderError` |
 | --- | --- | --- |

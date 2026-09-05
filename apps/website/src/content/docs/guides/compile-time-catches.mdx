@@ -20,9 +20,9 @@ A workload declares what it needs from other modules: here the api module asks f
 
 <Diagnostics case="missing-provider" />
 
-Why it fails: `AppOfApps.fromModules` walks the module list in order and keeps a running tally of what has been provided and what is still needed. Whatever is still needed at the end stays in the type of the returned Effect as an unsatisfied requirement; here that is the `api` image, the `worker` image, and the `ghcr-pull` secret. `AppOfApps.entrypoint` accepts only an Effect with nothing left over beyond the render services. It reports each leftover through the `_konfig_unsatisfied` hint as one `Missing provider for <Kind> "<name>"` message.
+Why it fails: `AppOfApps.fromModules` walks the module list in order and keeps a running tally of what has been provided and what is still needed. Whatever is still needed at the end stays as an unsatisfied requirement; here that is the `api` image, the `worker` image, and the `ghcr-pull` secret. `AppOfApps.fromModules` accepts the module list only when nothing is left over beyond the render services. It reports each leftover through the `_konfig_unsatisfied` hint, at the `fromModules` call site, as one `Missing provider for <Kind> "<name>"` message.
 
-Fix: add the provider modules to the list, before the consumers. `prod.ts` is the working version of this file.
+Fix: add the provider modules to the list, before the consumers, or satisfy the need with a group-level `provides:` layer on `fromModules`. `prod.ts` is the working version of this file.
 
 ## unbound-secret.ts: an env contract with an unbound secret
 

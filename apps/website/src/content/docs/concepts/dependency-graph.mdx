@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Diagnostics, Snippet } from "@/components/docs"
 
-Modules rarely stand alone. A workload needs an image somebody built and a pull secret somebody emitted. konfig.ts records those edges in the type system: a module declares what it **needs** and what it **provides**, and the entrypoint checks that every need has a provider. A missing edge is a compile error, not a `secret "ghcr-pull" not found` event in the cluster.
+Modules rarely stand alone. A workload needs an image somebody built and a pull secret somebody emitted. konfig.ts records those edges in the type system: a module declares what it **needs** and what it **provides**, and `fromModules` checks that every need has a provider. A missing edge is a compile error, not a `secret "ghcr-pull" not found` event in the cluster.
 
 ## Needs and provides
 
@@ -47,11 +47,11 @@ A consumer returns an Effect from `build` and yields what it needs:
 
 Each `yield*` adds one need to the Effect's requirements. The wrapper carries those requirements into the module handle as its declared input, minus whatever the module provides itself. Nothing is resolved at this point; the handle only records what it wants.
 
-## Resolution at the entrypoint
+## Resolution at fromModules
 
-`AppOfApps.fromModules({ target, defaults, modules })` walks the module handles in order, letting each module's provides satisfy the needs of the modules after it. The types follow the same walk: each module's needs are checked against everything earlier modules provide, and whatever is left over stays as an unmet requirement on the returned Effect.
+`AppOfApps.fromModules({ target, defaults, modules, provides? })` walks the module handles in order, letting each module's provides satisfy the needs of the modules after it. The types follow the same walk: each module's needs are checked against everything earlier modules provide, plus whatever the optional group-level `provides:` layer supplies.
 
-`AppOfApps.entrypoint(program)` accepts that Effect only when nothing is left unresolved. Otherwise the parameter type gains a `_konfig_unsatisfied` property with a hint such as `Missing provider for Secret "ghcr-pull". Add a module that provides it to AppOfApps.fromModules({ modules }), or check that providers come before consumers in the list.` The default export of an env file must be that entrypoint, so an unresolved graph never reaches `konfig build`.
+`fromModules` accepts the module list only when nothing is left unresolved, and returns a sealed, directly renderable Effect. Otherwise the call site gains a `_konfig_unsatisfied` property with a hint such as `Missing provider for Secret "ghcr-pull". Add a module that provides it to AppOfApps.fromModules({ modules }), pass it via provides:, or check that providers come before consumers in the list.` The default export of an env file must be that program, so an unresolved graph never reaches `konfig build`.
 
 <Diagnostics case="missing-provider" />
 
@@ -61,7 +61,7 @@ The fold is a left fold, so **providers must come before consumers** in `modules
 
 ### Duplicates
 
-Two modules providing the same name would silently shadow each other, so the entrypoint folds the list a second time and rejects duplicates for App, Secret, SecretValues, ConfigMap, ServiceAccount, Pvc, and Image. A hit adds a `_konfig_duplicate` property with the message `Duplicate <Kind> "<name>": two modules in AppOfApps.fromModules({ modules }) provide the same name; the later one silently shadows the earlier. Rename one of them.` Namespace and Application are exempt: shared namespaces are normal, and Application is always emitted alongside App.
+Two modules providing the same name would silently shadow each other, so `fromModules` folds the list a second time and rejects duplicates for App, Secret, SecretValues, ConfigMap, ServiceAccount, Pvc, and Image. A hit adds a `_konfig_duplicate` property with the message `Duplicate <Kind> "<name>": two modules in AppOfApps.fromModules({ modules }) provide the same name; the later one silently shadows the earlier. Rename one of them.` Namespace and Application are exempt: shared namespaces are normal, and Application is always emitted alongside App.
 
 <Diagnostics case="app-name-collision" />
 

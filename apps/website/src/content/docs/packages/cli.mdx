@@ -26,7 +26,7 @@ konfig diff prod --format detail
 konfig set prod api ghcr.io/example/api:1.2.3
 ```
 
-Every command starts by walking up from the current directory until it finds a `konfig.json`. An env is a named render target such as `prod` or `staging`. Its entry file is whatever `envs.<name>.entry` points to in `konfig.json`, and defaults to `<root>/env/<name>.ts`. That module's default export must be a program created with `AppOfApps.entrypoint`.
+Every command starts by walking up from the current directory until it finds a `konfig.json`. An env is a named render target such as `prod` or `staging`. Its entry file is whatever `envs.<name>.entry` points to in `konfig.json`, and defaults to `<root>/env/<name>.ts`. That module's default export must be a program created with `AppOfApps.fromModules`.
 
 ## Surface
 

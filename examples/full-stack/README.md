@@ -75,9 +75,9 @@ transitive closure of the target workspace.
 threads provider modules (`sopsOperator`, `imagePulls`, `postgres`)
 through `Layer.provideMerge` before the consumers (`api`, `worker`).
 Each consumer's `yield* Dep.Secret("ghcr-pull")` adds a type-level
-`Need<"Secret", "ghcr-pull">` to its environment slot; `AppOfApps.entrypoint`
-requires the program's environment to be `never`, so any missing
-provider surfaces as a TypeScript error.
+`Need<"Secret", "ghcr-pull">` to its environment slot; `AppOfApps.fromModules`
+requires every need to be satisfied by a listed module (or a group-level
+`provides:` layer), so any missing provider surfaces as a TypeScript error.
 
 `infra/envs/broken.ts` shows what that error looks like — the
 `@ts-expect-error` is satisfied by the missing `imagePulls` provider.

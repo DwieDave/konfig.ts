@@ -22,7 +22,7 @@ forgotten in the bundle, a chart pinned by name but not by digest.
 - **Dep-graph at the type level.** Compose your Applications with
   `AppOfApps.fromModules(...)` and every module's `Dep.Need<...>` must
   be met by another module's `Dep.Provide<...>`. A missing provider is
-  a TypeScript error at `AppOfApps.entrypoint`, not a Sunday-morning
+  a TypeScript error at `AppOfApps.fromModules`, not a Sunday-morning
   incident.
 - **Env contracts as a single source of truth.** `Secret.define`,
   `Literal.define`, and `Downward.define` produce atoms consumed by both
@@ -73,13 +73,11 @@ Dep-graph caught at compile time:
 ```ts
 import { AppOfApps } from "@konfig.ts/argocd"
 
-export default AppOfApps.entrypoint(
-  AppOfApps.fromModules({
-    target,
-    defaults,
-    modules: [postgres, api] // ← forgot to add `imagePulls`
-  })
-)
+export default AppOfApps.fromModules({
+  target,
+  defaults,
+  modules: [postgres, api] // ← forgot to add `imagePulls`
+})
 // api's build does `yield* Dep.Secret("ghcr-pull")`, which nothing provides:
 //   _konfig_unsatisfied: Missing provider for Secret "ghcr-pull"…   ← compile error
 ```
@@ -118,7 +116,7 @@ console.log(`api listening on :${config.port}`)
 | [`@konfig.ts/sops`](./packages/sops)                         | `Sops.source` + `Sops.backend` + `Sops.passthrough`; SopsSecret schema; fail-closed on unencrypted values                        |
 | [`@konfig.ts/sealed-secrets`](./packages/sealed-secrets)     | `SealedSecret` CR backend; shells out to `kubeseal` with schema-validated stdout                                                 |
 | [`@konfig.ts/external-secrets`](./packages/external-secrets) | `ExternalSecret` CR backend (no source required)                                                                                 |
-| [`@konfig.ts/argocd`](./packages/argocd)                     | `Application.define`/`.target`; `AppOfApps.fromModules`/`entrypoint`; `Sync.wave`/`hook`/`options`                               |
+| [`@konfig.ts/argocd`](./packages/argocd)                     | `Application.define`/`.target`; `AppOfApps.fromModules` (compile-time dep check); `Sync.wave`/`hook`/`options`                   |
 | [`@konfig.ts/docker`](./packages/docker)                     | Workspace-graph-aware Dockerfile generator; Bun/Npm/Pnpm                                                                         |
 | [`@konfig.ts/cli`](./packages/cli)                           | `konfig build`, `validate`, `diff`, `set`, `crd`, `helm`, `docker`, `graph`                                                      |
 

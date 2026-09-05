@@ -18,7 +18,7 @@ Install `@konfig.ts/cli` as a dev dependency and the library packages as regular
 | `@konfig.ts/core` | Manifests, module wrappers, Helm releases, dependency declarations, YAML output and diffing | Always |
 | `@konfig.ts/k8s` | Builders for Kubernetes resources: workloads, containers, Secrets, ConfigMaps, and binding an env contract to a pod | When you build Kubernetes resources directly |
 | `@konfig.ts/env` | The env contract: declare secrets, literals, and downward-API values, plus the runtime decoder for the running process. `@konfig.ts/k8s` re-exports the decoder as `Environment.runtime` | When you declare env contracts |
-| `@konfig.ts/argocd` | Argo CD Applications, the app-of-apps entrypoint, and sync options | When you compose modules into an Argo CD environment |
+| `@konfig.ts/argocd` | Argo CD Applications, the app-of-apps composition, and sync options | When you compose modules into an Argo CD environment |
 | `@konfig.ts/sops`, `@konfig.ts/sealed-secrets`, or `@konfig.ts/external-secrets` | One secret backend | When you render Secrets |
 
 <Install packages="@konfig.ts/cli" dev />
@@ -84,7 +84,7 @@ images.json              # { "envs": { "<env>": { "<app>": "<image ref>" } } }, 
 infra/
   cluster.ts             # cluster-wide constants (domain, repositoryUrl, per-cluster overlays)
   envs/
-    prod.ts              # default export: AppOfApps.entrypoint(...)
+    prod.ts              # default export: AppOfApps.fromModules({ ... })
     staging.ts
   modules/
     postgres.ts          # one Module.fixedNs / Module.dynamicNs per Application
@@ -95,7 +95,7 @@ infra/
 .konfig/                 # cache/ (build cache, next to konfig.json) and helm-cache/, ignore in git
 ```
 
-Two conventions matter. Each env file's default export must be an `AppOfApps.entrypoint(...)` program, because that is what the CLI loads and runs. Each module file exports a module definition (`Module.fixedNs` or `Module.dynamicNs`) that the env file instantiates with a name, an Argo CD source, and its options.
+Two conventions matter. Each env file's default export must be an `AppOfApps.fromModules({ ... })` program, because that is what the CLI loads and runs. Each module file exports a module definition (`Module.fixedNs` or `Module.dynamicNs`) that the env file instantiates with a name, an Argo CD source, and its options.
 
 ## Runtime requirements
 

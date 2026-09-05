@@ -40,7 +40,7 @@ export const FAILURE_CASES: ReadonlyArray<FailureCase> = [
     tab: "broken.ts",
     title: "A module needs a Secret nobody provides",
     summary:
-      "`api` and `worker` do `yield* Dep.Secret(\"ghcr-pull\")` and `yield* Dep.Image(...)` in their builds. Leave the `imagePulls` and build modules out of the list and `entrypoint` refuses to compile.",
+      "`api` and `worker` do `yield* Dep.Secret(\"ghcr-pull\")` and `yield* Dep.Image(...)` in their builds. Leave the `imagePulls` and build modules out of the list and `fromModules` refuses to compile.",
     spec: {
       file: "infra/envs/broken.ts",
       stripMeta: true,
@@ -216,7 +216,7 @@ export const SNIPPETS = {
   },
   prodEnv: {
     file: "infra/envs/prod.ts",
-    between: { startAt: "export default AppOfApps.entrypoint(" }
+    between: { startAt: "export default AppOfApps.fromModules({" }
   },
   envContract: {
     file: "shared/env-contracts/src/bundles.ts",

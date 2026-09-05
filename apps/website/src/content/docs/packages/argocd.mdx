@@ -8,7 +8,7 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`@konfig.ts/argocd` turns each of your modules into an Argo CD `Application` and composes those applications into a single app-of-apps. The point of the package is the check that happens while you compose: every module declares what it provides and what it needs, and `AppOfApps.entrypoint` only compiles when every need is met by some listed module. A missing provider is therefore a TypeScript error in the env file, not a failed sync in the cluster. The env file's default export is what `konfig build <env>` renders.
+`@konfig.ts/argocd` turns each of your modules into an Argo CD `Application` and composes those applications into a single app-of-apps. The point of the package is the check that happens while you compose: every module declares what it provides and what it needs, and `AppOfApps.fromModules` only compiles when every need is met by some listed module (or a group-level `provides:` layer). A missing provider is therefore a TypeScript error in the env file, not a failed sync in the cluster. The env file's default export is what `konfig build <env>` renders.
 
 ## Install
 
@@ -20,9 +20,9 @@ bun add @konfig.ts/argocd
 
 Below is the `prod` env of the full-stack example. Each `define*` call is a module built with `Module.fixedNs` and adapted into an Application through `Application.target`. The small `src(name)` helper builds the Argo CD source (repo URL, target revision, path) for each app.
 
-<Snippet file="infra/envs/prod.ts" startAt="export default AppOfApps.entrypoint" title="infra/envs/prod.ts" />
+<Snippet file="infra/envs/prod.ts" startAt="export default AppOfApps.fromModules" title="infra/envs/prod.ts" />
 
-The check in practice: if the `api` module needs the `ghcr-pull` secret (it yields `Dep.Secret("ghcr-pull")`) and none of the listed modules provides it, `entrypoint` refuses to compile with `Missing provider for Secret "ghcr-pull"`. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+The check in practice: if the `api` module needs the `ghcr-pull` secret (it yields `Dep.Secret("ghcr-pull")`) and none of the listed modules provides it, `fromModules` refuses to compile with `Missing provider for Secret "ghcr-pull"`. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
 
 ## Surface
 
@@ -32,8 +32,8 @@ The check in practice: if the `api` module needs the `ghcr-pull` secret (it yiel
 | `Application.make` | Plain `Application` value constructor, no dependency graph |
 | `Application.target` | Adapter passed as `target` to `Module.fixedNs` / `Module.dynamicNs` |
 | `Application.LiteralName<T>`, `Application.ApplicationHandle`, `Application.HandleKind` | Types: reject a `string`-widened `name` at the call site; the handle and kind produced by `define` |
-| `AppOfApps.fromModules` | Compose handles into a renderable app-of-apps; unmet needs surface in its `R` |
-| `AppOfApps.entrypoint` | Wrap the program as the env's default export; the compile-time check fires here |
+| `AppOfApps.fromModules` | Compose handles into a sealed, directly renderable app-of-apps; the compile-time check fires here. `provides?: Layer` satisfies group-level needs |
+| `AppOfApps.entrypoint` | Deprecated no-op wrapper, kept for one release; export `fromModules` directly instead |
 | `AppOfApps.make` | Plain `AppOfAppsResult` from already-built `Application`s |
 | `Sync.wave(n)`, `Sync.hook(phase)`, `Sync.options([...])` | `argocd.argoproj.io/*` annotation helpers to spread into `annotations` |
 | `buildCR`, `serializeApplicationCR`, `applicationCRFilename`, `emitApplicationCR` | Emit an Application CR as an object, YAML string, filename, or `Manifest<string>` |

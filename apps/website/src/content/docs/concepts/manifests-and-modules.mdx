@@ -76,7 +76,7 @@ A module is a function: give it a name (and per-instance options) and it returns
 
 Your `build` function receives two arguments. The first is `{ name, namespace }`: the name is the string literal passed at the call site (`definePostgres({ name: "postgres", ... })`), and the namespace is the literal from the wrapper or from the call, depending on which wrapper you used. The second is your options object, typed however you declare the parameter. The wrapper's call signature is derived from that: callers pass `name`, your options, anything the target requires (for Argo CD, a required `source`), and, for `dynamicNs`, a `namespace`.
 
-`build` returns a list of manifests, either directly or wrapped in an Effect. Return an Effect when the module depends on something another module provides, for example `yield* Dep.Secret("ghcr-pull")` for a pull secret; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/). Whatever the Effect requires becomes the module's declared input, which is how a missing provider becomes a compile error at the entrypoint.
+`build` returns a list of manifests, either directly or wrapped in an Effect. Return an Effect when the module depends on something another module provides, for example `yield* Dep.Secret("ghcr-pull")` for a pull secret; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/). Whatever the Effect requires becomes the module's declared input, which is how a missing provider becomes a compile error at `fromModules`.
 
 Names must be string literals, because the dependency graph keys everything by literal name. A wrapper that forwards a widened `string` fails with the hint `_konfig_error: "Module name/namespace must be a string literal..."`. To fix it, make the wrapper generic over `<const Name extends string>` and forward the name through `Module.LiteralName<Name>`.
 
@@ -99,7 +99,7 @@ The wrappers do not know about Argo CD. They delegate to a **target**, an object
 `@konfig.ts/core` also exports a `Bundle` target for plain manifest bundles without Argo CD.
 
 <Aside type="note">
-`Application.define` returns a service tag with a layer attached. `AppOfApps.fromModules` runs those layers; the module itself renders nothing until the CLI drives the entrypoint.
+`Application.define` returns a service tag with a layer attached. `AppOfApps.fromModules` runs those layers; the module itself renders nothing until the CLI drives the env file's program.
 </Aside>
 
 Next: [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).

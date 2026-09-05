@@ -11,13 +11,12 @@ Argo CD's app-of-apps pattern uses one root Application that syncs a directory o
 
 ## The pieces
 
-The workflow has three parts. You define one Application per module, you compose the modules into an app-of-apps, and the type checker confirms that every dependency between them is satisfied before anything is rendered. Five exports cover this.
+The workflow has three parts. You define one Application per module, you compose the modules into an app-of-apps, and the type checker confirms that every dependency between them is satisfied before anything is rendered. Four exports cover this.
 
 - `Application.define(opts)` builds one Application. You give it a name, a namespace, where its manifests live in git, and a build function that produces the manifests. The name and namespace must be string literals rather than values typed as `string`; that restriction is what lets the dependency graph reason about names at the type level.
 - `Application.target` is what you pass as the target when you wrap a reusable module with `Module.fixedNs` or `Module.dynamicNs`. It makes the git source a per-call argument and lets the module set project, sync policy, and annotations.
 - `Application.make(opts)` builds the plain Application value without any dependency tracking. `Application.define` calls it once the build function has produced the manifests.
-- `AppOfApps.fromModules({ target, defaults, modules, name? })` composes the modules and resolves every dependency between them. The result carries the composed name, target, defaults, and the list of Applications. The name defaults to `"apps"` and becomes the directory of Application CRs.
-- `AppOfApps.entrypoint(program)` is the compile-time gate. It accepts the program only when no dependency is left unsatisfied. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+- `AppOfApps.fromModules({ target, defaults, modules, provides?, name? })` composes the modules, resolves every dependency between them, and is the compile-time gate: it compiles only when no dependency is left unsatisfied, and returns a sealed, directly renderable program. A `provides:` layer satisfies group-level needs that no listed module covers. The result carries the composed name, target, defaults, and the list of Applications. The name defaults to `"apps"` and becomes the directory of Application CRs. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
 
 The options of `Application.define`:
 
@@ -52,7 +51,7 @@ interface ArgoSource {
 }
 ```
 
-In practice every module's source is a subdirectory of the target. The example derives it with a small helper so each child points at `<rootPath>/<module name>`. Here is the whole entrypoint of the production environment.
+In practice every module's source is a subdirectory of the target. The example derives it with a small helper so each child points at `<rootPath>/<module name>`. Here is the whole env file of the production environment.
 
 <Snippet file="infra/envs/prod.ts" startAt="const branch = " title="infra/envs/prod.ts" />
 

@@ -21,7 +21,7 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
 
 2. ### Instantiate it in an env file
 
-   An env file is a plain TypeScript module whose default export is `AppOfApps.entrypoint(...)`. It does three things: builds a `source` helper for the Argo CD repo path, instantiates each module with a `name` and that `source`, and lists the instances in `AppOfApps.fromModules`. From `infra/envs/staging.ts`:
+   An env file is a plain TypeScript module whose default export is `AppOfApps.fromModules({ ... })`. It does three things: builds a `source` helper for the Argo CD repo path, instantiates each module with a `name` and that `source`, and lists the instances in `AppOfApps.fromModules`. From `infra/envs/staging.ts`:
 
    <Snippet file="infra/envs/staging.ts" startAt="const branch" endBefore="const sopsBase" />
 
@@ -29,9 +29,9 @@ This walkthrough builds one Argo CD `Application` from scratch using the pieces 
 
    `name` is a literal string and becomes both the Application name and the output directory. `source` is the Argo CD `source` block for the child Application. Its `rootPath` must be the repository path where the rendered tree for this env is committed, because that is where Argo CD will look. In the example it is `./infra/k8s/manifests/staging`, a committed copy of the `.generated/manifests/staging` output.
 
-   The entrypoint composes every instance:
+   The default export composes every instance:
 
-   <Snippet file="infra/envs/staging.ts" startAt="export default AppOfApps.entrypoint" />
+   <Snippet file="infra/envs/staging.ts" startAt="export default AppOfApps.fromModules" />
 
    `target` describes the parent app-of-apps source. `defaults` is merged into every child Application (here the destination cluster). `modules` is the list of instances. If any instance needs something that no other instance provides, this call is a TypeScript error; see [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/). To start with only the ConfigMap, keep `modules: [featureFlags]` and add the rest as you go.
 

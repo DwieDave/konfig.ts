@@ -9,10 +9,10 @@ import { Aside } from "@/components/docs"
 
 `konfig build <env>` turns the default export of an env entry file into a directory of YAML files. This page follows that path and names the pieces you can rely on when reading diffs, debugging a failed render, or wiring CI.
 
-## From entrypoint to files
+## From env file to files
 
 1. **Locate and load configuration.** The CLI finds `konfig.json` by walking up from the working directory and decodes it strictly. It then resolves the entry file for the env: `<root>/<envs.<env>.entry>`, or `<root>/env/<env>.ts` when the env is not listed. From the env name and the `--cluster`, `--k8s-version`, and `--flag k=v` flags it builds the render context. Errors at this step: `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`.
-2. **Import the entry module.** Its default export must be an Effect: an `AppOfApps.entrypoint(...)` or `Bundle.entrypoint(...)` program. A missing default export, a non-Effect, or an import failure fails with `EnvLoadError { entry, cause }`.
+2. **Import the entry module.** Its default export must be an Effect: an `AppOfApps.fromModules({ ... })` or `Bundle.fromModules({ ... })` program. A missing default export, a non-Effect, or an import failure fails with `EnvLoadError { entry, cause }`.
 3. **Run it.** The result is a list of Applications (or Bundles), each carrying its `manifests` array.
 4. **Render every manifest.** Each manifest's `render` is called with the context; concurrency is unbounded within an app, four apps at a time. Results are flattened: typed objects, arrays, and raw YAML blobs are all accepted, and raw YAML is split into documents. Values without a string `kind` and `metadata.name` are dropped silently.
 5. **Assign file names.** Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>.yaml`, where `outDir` is `<root>/<outDir.manifests>` from `konfig.json`. The Argo CD Application CR for each app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml`; `apps-name` is the `name` given to `AppOfApps.fromModules`, default `apps`. Bundles emit no CR.

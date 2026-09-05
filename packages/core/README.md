@@ -43,7 +43,7 @@ export const definePostgres = Module.fixedNs({
 
 Inside a build, `yield* Dep.Secret("ghcr-pull")` records a typed dependency that
 another module must provide — the graph is checked when you compose everything
-at `AppOfApps.entrypoint` (see [`@konfig.ts/argocd`](../argocd)).
+at `AppOfApps.fromModules` (see [`@konfig.ts/argocd`](../argocd)).
 
 `Helm.release` caches the pulled tarball under
 `<cacheDir>/<chart>-<version>-<digest12>.tgz`. `Helm.cacheFileName({ chart,

@@ -18,7 +18,7 @@ Because both layers come from the same declarations, mistakes that would otherwi
 
 ## What you get
 
-- **A dependency graph checked at the type level.** Each module declares what it needs (a Secret, a Namespace, a database) and what it provides. When you compose modules into an environment, the entrypoint refuses to compile until every need has a provider. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
+- **A dependency graph checked at the type level.** Each module declares what it needs (a Secret, a Namespace, a database) and what it provides. When you compose modules into an environment, `fromModules` refuses to compile until every need has a provider. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
 - **One env contract for both sides.** You declare each environment variable once, as a secret, a literal, or a downward-API value. Binding that contract produces the Deployment env block and the Secret resources; the same contract decodes the variables inside the running process. Rename a variable once and both sides move.
 - **Deterministic YAML and structural diffs.** Output uses stable key ordering (`apiVersion`, `kind`, `metadata`, `spec`, `status` first, then alphabetical) and is emitted as YAML 1.1, so kubectl and go-yaml readers do not coerce strings like `yes` or `on`. `konfig diff` compares rendered output against a baseline structurally, so reordered keys and multi-document files do not show up as noise.
 - **Secret backends as typed values.** sops, sealed-secrets, and external-secrets each turn a declared secret into the matching custom resource, with schema validation on the binary's output. Whether a backend requires a source file is encoded in its type, so forgetting the source for a sops backend is a compile error.
@@ -26,7 +26,7 @@ Because both layers come from the same declarations, mistakes that would otherwi
 
 ## A compile error instead of a sync failure
 
-The example below is one of the compile-time-catch files shipped in `examples/full-stack/infra/envs/`. The `api` module asks for a Secret named `ghcr-pull`, but no module in the list provides it. The entrypoint rejects the program at compile time, before anything is rendered.
+The example below is one of the compile-time-catch files shipped in `examples/full-stack/infra/envs/`. The `api` module asks for a Secret named `ghcr-pull`, but no module in the list provides it. `fromModules` rejects the composition at compile time, before anything is rendered.
 
 <Diagnostics case="missing-provider" />
 

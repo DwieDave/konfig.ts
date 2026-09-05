@@ -59,7 +59,7 @@ An env is a named render target such as `prod` or `staging`. Each env has one en
 1. `envs.<NAME>.entry` from `konfig.json`, joined onto `<configDir>/<root>`, when the env is declared.
 2. Otherwise `<configDir>/<root>/env/<NAME>.ts`.
 
-The entry's default export must be an Effect program that produces the render. Normally that is `AppOfApps.entrypoint(AppOfApps.fromModules({ ... }))` from `@konfig.ts/argocd`; a `Bundle` set program is also accepted. A missing file fails with `EnvEntryNotFound`. A module without a default export, or whose default export is not an Effect, fails with `EnvLoadError`.
+The entry's default export must be an Effect program that produces the render. Normally that is `AppOfApps.fromModules({ ... })` from `@konfig.ts/argocd`; a `Bundle` set program is also accepted. A missing file fails with `EnvEntryNotFound`. A module without a default export, or whose default export is not an Effect, fails with `EnvLoadError`.
 
 ## Shared render flags
 
