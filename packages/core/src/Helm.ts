@@ -1,14 +1,22 @@
-import { Config, Effect } from "effect"
+import { Config, Duration, Effect, Option, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import type { PlatformError } from "effect/PlatformError"
+import { createHash } from "node:crypto"
 import * as YAML from "yaml"
 import { unsafeCoerce } from "./_cast"
 import { ChildProcess, ChildProcessSpawner } from "./_unstable"
 import { parseYamlAll } from "./diff"
-import { DEFAULT_HELM_CACHE_DIR, KONFIG_HELM_CACHE_ENV } from "./konfigDefaults"
-import { make, type Manifest, type RawYaml } from "./Manifest"
-import { HelmDigestMismatch, HelmRenderError, HelmVersionTooLow } from "./RenderError"
-import { runProcessExit, runProcessString } from "./subprocess"
+import {
+  DEFAULT_HELM_CACHE_DIR,
+  DEFAULT_HELM_TIMEOUT_SECONDS,
+  DEFAULT_HELM_VERSION_TIMEOUT_SECONDS,
+  KONFIG_HELM_CACHE_ENV,
+  KONFIG_HELM_TIMEOUT_ENV
+} from "./konfigDefaults"
+import { make, type Manifest, type ParsedDoc } from "./Manifest"
+import { HelmDigestMismatch, HelmRenderError, type HelmRenderPhase, HelmVersionTooLow } from "./RenderError"
+import { type ProcessFailure, runProcessExit, runProcessString } from "./subprocess"
 
 const CLUSTER_SCOPED_KINDS: ReadonlySet<string> = new Set([
   "APIService",
@@ -68,12 +76,14 @@ const _asDocShape = (value: unknown): _ParsedDocShape | null =>
     : null
 
 // Uses parseYamlAll (not a naive /^---$/m split) so a `---` inside a block scalar can't
-// spuriously split one manifest into two.
-const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<RawYaml[]> =>
+// spuriously split one manifest into two. Docs stay parsed (ParsedDoc, not
+// RawYaml): re-stringifying here only for the CLI to parse and serialize again
+// roughly doubled the CPU spent per helm doc.
+const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<ParsedDoc[]> =>
   Effect.sync(() => {
     const { output, chart, version, namespace } = input
     const origin = `helm:${chart}@${version}`
-    const results: RawYaml[] = []
+    const results: ParsedDoc[] = []
     for (const parsed of parseYamlAll(output)) {
       let value: unknown = parsed
       if (namespace !== undefined) {
@@ -87,9 +97,7 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<RawYaml[]
           value = { ...shape, metadata: { ...shape.metadata, namespace } }
         }
       }
-      let content = `---\n${YAML.stringify(value, { lineWidth: 0 })}`
-      if (!content.endsWith("\n")) content += "\n"
-      results.push({ _tag: "RawYaml", content, origin })
+      results.push({ _tag: "ParsedDoc", value, origin })
     }
     return results
   })
@@ -115,14 +123,58 @@ const _isBelow = (
   return false
 }
 
+// How long a network-bound helm call (`pull`, `template`) may run before konfig
+// gives up with ProcessTimeout. Without a bound, a `helm pull` that prompts for
+// registry credentials sits forever on a closed stdin. KONFIG_HELM_TIMEOUT takes
+// a bare number of seconds ("300") or an effect duration ("5 minutes").
+export const timeout: Config.Config<Duration.Duration> = Config.number(KONFIG_HELM_TIMEOUT_ENV).pipe(
+  Config.map(Duration.seconds),
+  Config.orElse(() => Config.duration(KONFIG_HELM_TIMEOUT_ENV)),
+  Config.withDefault(Duration.seconds(DEFAULT_HELM_TIMEOUT_SECONDS))
+)
+
+// The `helm version` preflight is local; capped at the smaller of 30s and the configured timeout.
+export const versionTimeout: Config.Config<Duration.Duration> = Config.map(
+  timeout,
+  (t) => Duration.min(t, Duration.seconds(DEFAULT_HELM_VERSION_TIMEOUT_SECONDS))
+)
+
+type _HelmVersionProbe = Effect.Effect<string, ProcessFailure | Config.ConfigError, ChildProcessSpawner>
+
+const _helmVersionProbe: _HelmVersionProbe = Effect.gen(function*() {
+  const cmd = ChildProcess.make("helm", ["version", "--short"])
+  return yield* versionTimeout.pipe(
+    Effect.flatMap((t) => runProcessString(cmd, { allowEmptyStdout: false, timeout: t }))
+  )
+})
+
+// `helm version --short` is spawned once per process, not once per release:
+// the binary doesn't change under a running render. Keyed by the spawner
+// service (not truly module-global) so a test that swaps in a different mock
+// spawner per case isn't served the previous case's answer. `Effect.cached` is
+// a pure `sync` constructor, so building it under `runSync` inside the map
+// check is race-free; concurrent first callers share the one in-flight probe.
+const _helmVersionBySpawner = new WeakMap<ChildProcessSpawner["Service"], _HelmVersionProbe>()
+
+const _memoizedHelmVersion: _HelmVersionProbe = Effect.gen(function*() {
+  const spawner = yield* ChildProcessSpawner
+  let probe = _helmVersionBySpawner.get(spawner)
+  if (probe === undefined) {
+    // oxlint-disable-next-line effecttsgo/run-effect-inside-effect -- must not yield between the map check and set
+    probe = Effect.runSync(Effect.cached(_helmVersionProbe))
+    _helmVersionBySpawner.set(spawner, probe)
+  }
+  return yield* probe
+})
+
+// A failed `helm version` (not on PATH, permission denied, timeout) surfaces as
+// its ProcessError/ProcessTimeout; HelmVersionTooLow is reserved for a version
+// that was actually read and is too old (or unparseable).
 const _assertHelmMinVersion = (
   minVersion: string
-): Effect.Effect<void, HelmVersionTooLow, ChildProcessSpawner> =>
+): Effect.Effect<void, HelmVersionTooLow | ProcessFailure | Config.ConfigError, ChildProcessSpawner> =>
   Effect.gen(function*() {
-    const cmd = ChildProcess.make("helm", ["version", "--short"])
-    const stdout = yield* runProcessString(cmd, { allowEmptyStdout: false }).pipe(
-      Effect.mapError(() => new HelmVersionTooLow({ required: minVersion, found: "not found" }))
-    )
+    const stdout = yield* _memoizedHelmVersion
     const found = _parseVersionTriple(stdout)
     const min = _parseVersionTriple(minVersion)
     if (found === null || (min !== null && _isBelow(found, min))) {
@@ -152,34 +204,38 @@ export const cacheFileName = (input: CacheFileNameInput): string => {
 
 const _normalizeDigest = (digest: string): string => digest.startsWith("sha256:") ? digest : `sha256:${digest}`
 
-const _toHex = (buf: ArrayBuffer): string => {
-  const view = new Uint8Array(buf)
-  let hex = ""
-  for (let i = 0; i < view.length; i++) {
-    hex += (view[i] ?? 0).toString(16).padStart(2, "0")
-  }
-  return hex
-}
-
-// tsconfig lib is ES2022 (no DOM), so Crypto isn't declared; minimal local typing instead.
-interface _SubtleCrypto {
-  readonly digest: (algorithm: "SHA-256", data: ArrayBufferView) => Promise<ArrayBuffer>
-}
-interface _CryptoGlobal {
-  readonly subtle: _SubtleCrypto
-}
-
-// crypto.subtle is a runtime global on Node >=20 and Bun; avoids a node:crypto import.
+// Streamed through node:crypto rather than readFile + crypto.subtle so a
+// large chart tarball never has to sit in memory whole.
 const _hashFile = (filePath: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
-    const bytes = yield* fs.readFile(filePath)
-    const subtle = unsafeCoerce<{ readonly crypto: _CryptoGlobal }>(
-      globalThis,
-      "globalThis.crypto is provided by the runtime (Node ≥ 20, Bun) — typed via local _CryptoGlobal interface"
-    ).crypto.subtle
-    const digest = yield* Effect.promise(() => subtle.digest("SHA-256", bytes))
-    return `sha256:${_toHex(digest)}`
+    const hash = createHash("sha256")
+    yield* Stream.runForEach(fs.stream(filePath), (chunk) => Effect.sync(() => hash.update(chunk)))
+    return `sha256:${hash.digest("hex")}`
+  })
+
+interface _VerifiedDigest {
+  readonly mtimeMs: number
+  readonly size: bigint
+  readonly digest: string
+}
+
+// Digests already computed in this process, keyed by tarball path and
+// invalidated by (mtime, size). A render of N releases against a warm cache
+// hashes each distinct chart once instead of once per release.
+const _verifiedDigests = new Map<string, _VerifiedDigest>()
+
+const _hashFileCached = (filePath: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const info = yield* fs.stat(filePath)
+    const mtimeMs = Option.map(info.mtime, (d) => d.getTime())
+    if (Option.isNone(mtimeMs)) return yield* _hashFile(filePath)
+    const hit = _verifiedDigests.get(filePath)
+    if (hit !== undefined && hit.mtimeMs === mtimeMs.value && hit.size === info.size) return hit.digest
+    const digest = yield* _hashFile(filePath)
+    _verifiedDigests.set(filePath, { mtimeMs: mtimeMs.value, size: info.size, digest })
+    return digest
   })
 
 export interface VerifyChartDigestInput {
@@ -197,8 +253,9 @@ export const verifyChartDigest = (input: VerifyChartDigestInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const expected = _normalizeDigest(input.digest)
-    const actual = yield* _hashFile(input.cachedTgz)
+    const actual = yield* _hashFileCached(input.cachedTgz)
     if (expected !== actual) {
+      _verifiedDigests.delete(input.cachedTgz)
       yield* fs.remove(input.cachedTgz).pipe(Effect.ignore)
       return yield* new HelmDigestMismatch({
         chart: input.chart,
@@ -214,17 +271,50 @@ interface _EnsureCachedTarballInput {
   readonly cacheDir: string
   readonly cachedTgz: string
 }
+type _PullOnce = Effect.Effect<
+  void,
+  HelmRenderError | HelmDigestMismatch | ProcessFailure | Config.ConfigError | PlatformError,
+  FileSystem | Path | ChildProcessSpawner
+>
+
+// In-flight pulls keyed by cached tarball path. Renders run several releases
+// concurrently, and two releases of the same chart@version would otherwise
+// both miss the cache and both spawn `helm pull`; the second now awaits the
+// first's result. Entries are dropped once the pull settles so a failed pull
+// is retried by the next render rather than replayed from memory.
+const _pullsInFlight = new Map<string, _PullOnce>()
+
+const _pullOnce = (cachedTgz: string, pull: _PullOnce): _PullOnce =>
+  Effect.suspend(() => {
+    const inFlight = _pullsInFlight.get(cachedTgz)
+    if (inFlight !== undefined) return inFlight
+    // oxlint-disable-next-line effecttsgo/run-effect-inside-effect -- must not yield between the map check and set
+    const shared = Effect.runSync(Effect.cached(pull)).pipe(
+      Effect.ensuring(Effect.sync(() => _pullsInFlight.delete(cachedTgz)))
+    )
+    _pullsInFlight.set(cachedTgz, shared)
+    return shared
+  })
+
 const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
   Effect.gen(function*() {
-    const { opts, cacheDir, cachedTgz } = input
+    const { opts, cachedTgz } = input
     const fs = yield* FileSystem
-    const path = yield* Path
 
     const cacheExists = yield* fs.exists(cachedTgz)
     if (cacheExists) {
       yield* verifyChartDigest({ chart: opts.chart, version: opts.version, digest: opts.digest, cachedTgz })
       return
     }
+
+    yield* _pullOnce(cachedTgz, _pullAndVerify(input))
+  })
+
+const _pullAndVerify = (input: _EnsureCachedTarballInput): _PullOnce =>
+  Effect.gen(function*() {
+    const { opts, cacheDir, cachedTgz } = input
+    const fs = yield* FileSystem
+    const path = yield* Path
 
     // Pull into a per-invocation temp directory nested inside cacheDir (same
     // filesystem, so the rename below is atomic), then rename the known
@@ -233,6 +323,7 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
     // releases shared KONFIG_HELM_CACHE.
     const pullDir = yield* fs.makeTempDirectory({ directory: cacheDir, prefix: ".konfig-helm-pull-" })
 
+    yield* Effect.logInfo(`helm: pulling ${opts.chart}@${opts.version} from ${opts.repo}`)
     yield* Effect.gen(function*() {
       const pull = ChildProcess.make("helm", [
         "pull",
@@ -244,7 +335,7 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
         "--destination",
         pullDir
       ])
-      yield* runProcessExit(pull)
+      yield* runProcessExit(pull, { timeout: yield* timeout })
 
       const pulledFiles = yield* fs.readDirectory(pullDir)
       const candidates = pulledFiles.filter((f) => f.endsWith(".tgz") && f.startsWith(opts.chart))
@@ -253,6 +344,7 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
         return yield* new HelmRenderError({
           chart: opts.chart,
           version: opts.version,
+          phase: "pull",
           cause: `helm pull produced ${candidates.length} matching tarball(s) in ${pullDir}, expected exactly 1`
         })
       }
@@ -269,16 +361,32 @@ const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
     yield* verifyChartDigest({ chart: opts.chart, version: opts.version, digest: opts.digest, cachedTgz })
   })
 
-export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {
+type _ReleaseError = HelmRenderError | HelmVersionTooLow | HelmDigestMismatch
+
+// HelmVersionTooLow and HelmDigestMismatch already name the chart and carry a
+// precise message, so they pass through; everything else is wrapped with the
+// phase it failed in.
+const _inPhase =
+  (opts: HelmReleaseOptions, phase: HelmRenderPhase) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, _ReleaseError, R> =>
+    Effect.mapError(
+      self,
+      (cause): _ReleaseError =>
+        cause instanceof HelmVersionTooLow || cause instanceof HelmDigestMismatch || cause instanceof HelmRenderError
+          ? cause
+          : new HelmRenderError({ chart: opts.chart, version: opts.version, phase, cause })
+    )
+
+export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> => {
   const extraOpts = opts.extraOpts ?? []
 
-  return make<RawYaml[]>(() =>
+  return make<ParsedDoc[]>(() =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
 
       if (opts.minVersion !== undefined) {
-        yield* _assertHelmMinVersion(opts.minVersion)
+        yield* _assertHelmMinVersion(opts.minVersion).pipe(_inPhase(opts, "version-check"))
       }
 
       // cacheDir is read from Config (KONFIG_HELM_CACHE) rather than accepted
@@ -294,19 +402,22 @@ export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {
       // resolves the same way is enforced at the CLI boundary instead (the
       // `helm version` preflight in `crd extract`/`crd verify`/`helm fetch`).
       const cacheDir = yield* Config.string(KONFIG_HELM_CACHE_ENV).pipe(
-        Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR))
+        Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR)),
+        _inPhase(opts, "pull")
       )
-      yield* fs.makeDirectory(cacheDir, { recursive: true })
+      yield* fs.makeDirectory(cacheDir, { recursive: true }).pipe(_inPhase(opts, "pull"))
 
       const cachedTgz = path.join(
         cacheDir,
         cacheFileName({ chart: opts.chart, version: opts.version, digest: opts.digest })
       )
-      yield* _ensureCachedTarball({ opts, cacheDir, cachedTgz })
+      yield* _ensureCachedTarball({ opts, cacheDir, cachedTgz }).pipe(_inPhase(opts, "pull"))
 
-      const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-" })
+      const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-" }).pipe(_inPhase(opts, "template"))
       const valuesFile = path.join(tmpDir, "values.yaml")
-      yield* fs.writeFileString(valuesFile, YAML.stringify(opts.values, { lineWidth: 0 }))
+      yield* fs.writeFileString(valuesFile, YAML.stringify(opts.values, { lineWidth: 0 })).pipe(
+        _inPhase(opts, "template")
+      )
 
       const releaseName = opts.releaseName ?? opts.chart
       const template = ChildProcess.make("helm", [
@@ -318,20 +429,17 @@ export const release = (opts: HelmReleaseOptions): Manifest<RawYaml[]> => {
         ...(opts.namespace !== undefined ? ["--namespace", opts.namespace] : []),
         ...extraOpts
       ])
-      const stdout = yield* runProcessString(template, { allowEmptyStdout: false })
+      yield* Effect.logDebug(`helm: templating ${opts.chart}@${opts.version} as release ${releaseName}`)
+      const stdout = yield* timeout.pipe(
+        Effect.flatMap((t) => runProcessString(template, { allowEmptyStdout: false, timeout: t })),
+        _inPhase(opts, "template")
+      )
       return yield* _parseHelmOutput({
         output: stdout,
         chart: opts.chart,
         version: opts.version,
         namespace: opts.namespace
-      })
-    }).pipe(
-      Effect.scoped,
-      Effect.mapError((cause) =>
-        cause instanceof HelmVersionTooLow
-          ? cause
-          : new HelmRenderError({ chart: opts.chart, version: opts.version, cause })
-      )
-    )
+      }).pipe(_inPhase(opts, "parse"))
+    }).pipe(Effect.scoped)
   )
 }

@@ -132,13 +132,18 @@ const _collectOutputs = (input: _CollectOutputsInput): OutputFile[] => {
   const { value, appDir, pathJoin } = input
   if (value === null || value === undefined) return []
 
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    unsafeCoerce<{ _tag?: unknown }>(value, "narrowed to object above; reading optional _tag")._tag === "RawYaml"
-  ) {
-    const raw = unsafeCoerce<{ content: string }>(value, "RawYaml _tag implies the content field")
-    return _splitRawYaml({ content: raw.content, dir: appDir, pathSep: pathJoin })
+  if (typeof value === "object") {
+    const tag = unsafeCoerce<{ _tag?: unknown }>(value, "narrowed to object above; reading optional _tag")._tag
+    if (tag === "RawYaml") {
+      const raw = unsafeCoerce<{ content: string }>(value, "RawYaml _tag implies the content field")
+      return _splitRawYaml({ content: raw.content, dir: appDir, pathSep: pathJoin })
+    }
+    if (tag === "ParsedDoc") {
+      // Helm.release output: already parsed, so it goes straight to the
+      // object branch below (one serialize, no re-parse).
+      const doc = unsafeCoerce<{ value: unknown }>(value, "ParsedDoc _tag implies the value field")
+      return _collectOutputs({ value: doc.value, appDir, pathJoin })
+    }
   }
 
   if (Array.isArray(value)) {

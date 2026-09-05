@@ -11,7 +11,13 @@ export const DEFAULT_CRD_OUT_DIR = ".generated/crd"
 // this is now the single value both use.
 export const DEFAULT_CHARTS_DIR = "infra/k8s-konfig/charts"
 
+// Accepts a bare number of seconds ("120") or an effect duration ("2 minutes").
+export const DEFAULT_HELM_TIMEOUT_SECONDS = 120
+// The `helm version` preflight is local and should never need this long.
+export const DEFAULT_HELM_VERSION_TIMEOUT_SECONDS = 30
+
 export const KONFIG_HELM_CACHE_ENV = "KONFIG_HELM_CACHE"
+export const KONFIG_HELM_TIMEOUT_ENV = "KONFIG_HELM_TIMEOUT"
 export const KONFIG_HELM_MIN_VERSION_ENV = "KONFIG_HELM_MIN_VERSION"
 export const KONFIG_CRD_OUT_DIR_ENV = "KONFIG_CRD_OUT_DIR"
 export const KONFIG_CHARTS_DIR_ENV = "KONFIG_CHARTS_DIR"

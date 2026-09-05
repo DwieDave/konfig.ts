@@ -75,6 +75,12 @@ const _spawnerFor = (input: { readonly tarball: Buffer; readonly templateStdout:
     )
   )
 
+interface _DocShape {
+  readonly kind?: string
+  readonly metadata?: { readonly namespace?: string }
+}
+const _docOf = (value: unknown): _DocShape => value as _DocShape
+
 const TEMPLATE_STDOUT = `---
 apiVersion: apps/v1
 kind: Deployment
@@ -127,18 +133,23 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
 
       expect(docs).toHaveLength(3)
 
-      const deployment = docs.find((d) => d.content.includes("kind: Deployment"))
-      expect(deployment?.content).toContain("namespace: myns")
+      const byKind = (kind: string) => {
+        const doc = docs.find((d) => _docOf(d.value).kind === kind)
+        return doc === undefined ? undefined : { ..._docOf(doc.value), origin: doc.origin }
+      }
+
+      const deployment = byKind("Deployment")
+      expect(deployment?.metadata?.namespace).toBe("myns")
       expect(deployment?.origin).toBe("helm:mychart@2.0.0")
 
       // Cluster-scoped kind must never get a namespace patched in.
-      const clusterRole = docs.find((d) => d.content.includes("kind: ClusterRole"))
-      expect(clusterRole?.content).not.toContain("namespace:")
+      const clusterRole = byKind("ClusterRole")
+      expect(clusterRole).toBeDefined()
+      expect(clusterRole?.metadata?.namespace).toBeUndefined()
 
       // A doc that already pins a namespace keeps its own value, not `myns`.
-      const service = docs.find((d) => d.content.includes("kind: Service"))
-      expect(service?.content).toContain("namespace: already-set")
-      expect(service?.content).not.toContain("namespace: myns")
+      const service = byKind("Service")
+      expect(service?.metadata?.namespace).toBe("already-set")
 
       // The pulled tarball was cached under the digest-suffixed filename,
       // and the download was renamed rather than left alongside it.

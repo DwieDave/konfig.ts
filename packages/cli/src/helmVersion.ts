@@ -1,4 +1,4 @@
-import { HelmVersionTooLow, runProcessString } from "@konfig.ts/core"
+import { Helm, HelmVersionTooLow, runProcessString } from "@konfig.ts/core"
 import { Effect } from "effect"
 import semver from "semver"
 import { ChildProcess } from "./_unstable"
@@ -10,11 +10,14 @@ export const _parseHelmVersion = (output: string): string | null => {
   return match?.[1] ?? null
 }
 
+// A failed `helm version` (not on PATH, permission denied, timeout) surfaces as
+// its ProcessError/ProcessTimeout so the message names the real cause;
+// HelmVersionTooLow is reserved for a version that was actually read.
 export const assertHelmVersion = (minVersion: string) =>
   Effect.gen(function*() {
     const cmd = ChildProcess.make("helm", ["version", "--short"])
-    const stdout = yield* runProcessString(cmd, { allowEmptyStdout: false }).pipe(
-      Effect.mapError(() => new HelmVersionTooLow({ required: minVersion, found: "not found" }))
+    const stdout = yield* Helm.versionTimeout.pipe(
+      Effect.flatMap((timeout) => runProcessString(cmd, { allowEmptyStdout: false, timeout }))
     )
 
     const found = _parseHelmVersion(stdout)

@@ -134,7 +134,7 @@ console.log(`api listening on :${config.port}`)
   the explicit `Workload.web` helper.
 - **Not a `helm` replacement.** It calls helm. Helm charts you depend
   on stay charts; the integration just lifts each templated document
-  as a `RawYaml` `Manifest`.
+  as a `ParsedDoc` `Manifest`.
 
 ## Requirements
 

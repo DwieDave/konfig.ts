@@ -62,7 +62,7 @@ re-encrypt-on-render flows, swap `Sops.passthrough({ file })` for
 **Helm via `Helm.release`.** Both `sops-operator` and `postgres` lift a
 Helm chart into the manifest stream. The release options (`repo`,
 `chart`, `version`, `digest`, `values`) are typed; rendering shells out
-to `helm template` and lifts each emitted YAML doc as a `RawYaml`
+to `helm template` and lifts each emitted YAML doc as a `ParsedDoc`
 manifest under the parent Application.
 
 **Docker generation.** `apps/api/docker.ts` and `apps/worker/docker.ts`

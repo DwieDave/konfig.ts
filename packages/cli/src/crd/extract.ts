@@ -156,7 +156,7 @@ const _pullChart = (input: _PullChartInput) =>
     const digest = opts.digest
     if (digest === undefined) {
       const cmd = helmPullCommand({ chart: opts, options: { destination: opts.cacheDir } })
-      yield* runProcessExit(cmd)
+      yield* runProcessExit(cmd, { timeout: yield* Helm.timeout })
       return
     }
 
@@ -168,7 +168,7 @@ const _pullChart = (input: _PullChartInput) =>
     const pullDir = yield* fs.makeTempDirectory({ directory: opts.cacheDir, prefix: ".konfig-crd-pull-" })
     yield* Effect.gen(function*() {
       const cmd = helmPullCommand({ chart: opts, options: { destination: pullDir } })
-      yield* runProcessExit(cmd)
+      yield* runProcessExit(cmd, { timeout: yield* Helm.timeout })
       const pulled = path.join(pullDir, Helm.cacheFileName({ chart: opts.chart, version: opts.version }))
       yield* Helm.verifyChartDigest({ chart: opts.chart, version: opts.version, digest, cachedTgz: pulled })
       yield* fs.rename(pulled, cachedTgz)
@@ -181,7 +181,7 @@ const _readCrdsDirYaml = (opts: CrdExtractOptions, tmpDir: string) =>
     const path = yield* Path
 
     const untarCmd = helmPullCommand({ chart: opts, options: { destination: tmpDir, untar: true } })
-    yield* runProcessExit(untarCmd)
+    yield* runProcessExit(untarCmd, { timeout: yield* Helm.timeout })
 
     const chartDir = path.join(tmpDir, opts.chart)
     const crdsDir = path.join(chartDir, "crds")
@@ -218,7 +218,7 @@ const _templateChartYaml = (opts: CrdExtractOptions) =>
       "--include-crds",
       "--no-hooks"
     ])
-    return yield* runProcessString(templateCmd, { allowEmptyStdout: true })
+    return yield* runProcessString(templateCmd, { allowEmptyStdout: true, timeout: yield* Helm.timeout })
   })
 
 export const _dedupeCrdDocuments = (allYaml: ReadonlyArray<string>): Effect.Effect<Map<string, CrdDocument>, never> =>

@@ -1,5 +1,6 @@
 import { it } from "@effect/vitest"
-import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option, Schema, Sink, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { ChildProcess } from "effect/unstable/process"
 import type { Command } from "effect/unstable/process/ChildProcess"
 import {
@@ -11,12 +12,14 @@ import {
   ProcessId
 } from "effect/unstable/process/ChildProcessSpawner"
 import { describe, expect } from "vitest"
-import { ProcessError, runProcessExit, runProcessString } from "./subprocess"
+import { ProcessError, ProcessTimeout, runProcessExit, runProcessString } from "./subprocess"
 
 interface FakeProc {
   readonly stdout?: string
   readonly stderr?: string
   readonly exitCode?: number
+  // When true the fake never exits — simulates helm blocked on a credential prompt.
+  readonly hangs?: boolean
 }
 
 const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
@@ -25,7 +28,7 @@ const _handle = (proc: FakeProc): ChildProcessHandle =>
   makeHandle(
     {
       pid: ProcessId(4242),
-      exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
+      exitCode: proc.hangs === true ? Effect.never : Effect.succeed(ExitCode(proc.exitCode ?? 0)),
       isRunning: Effect.succeed(false),
       kill: () => Effect.void,
       stdin: Sink.drain,
@@ -38,10 +41,76 @@ const _handle = (proc: FakeProc): ChildProcessHandle =>
     } as Parameters<typeof makeHandle>[0]
   )
 
-const _spawnerFor = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(ChildProcessSpawner, makeSpawner((_command: Command) => Effect.succeed(_handle(proc))))
+const _spawnerFor = (proc: FakeProc, seen?: Command[]): Layer.Layer<ChildProcessSpawner> =>
+  Layer.succeed(
+    ChildProcessSpawner,
+    makeSpawner((command: Command) => {
+      seen?.push(command)
+      return Effect.succeed(_handle(proc))
+    })
+  )
 
 const _cmd = ChildProcess.make("echo", ["hi"])
+
+describe("stdin", () => {
+  it.effect("spawns with stdin ignored when the caller set none", () =>
+    Effect.gen(function*() {
+      const seen: Command[] = []
+      yield* runProcessExit(_cmd).pipe(Effect.provide(_spawnerFor({ exitCode: 0 }, seen)))
+      const spawned = seen[0]
+      expect(spawned !== undefined && ChildProcess.isStandardCommand(spawned)).toBe(true)
+      if (spawned !== undefined && ChildProcess.isStandardCommand(spawned)) {
+        expect(spawned.options.stdin).toBe("ignore")
+        expect(spawned.args).toEqual(["hi"])
+      }
+    }))
+
+  it.effect("keeps an explicitly provided stdin stream", () =>
+    Effect.gen(function*() {
+      const seen: Command[] = []
+      const stdin = Stream.succeed(new TextEncoder().encode("secret"))
+      const cmd = ChildProcess.make("cat", [], { stdin })
+      const out = yield* runProcessString(cmd).pipe(Effect.provide(_spawnerFor({ stdout: "ok" }, seen)))
+      expect(out).toBe("ok")
+      const spawned = seen[0]
+      if (spawned !== undefined && ChildProcess.isStandardCommand(spawned)) {
+        expect(spawned.options.stdin).toBe(stdin)
+      }
+    }))
+})
+
+describe("timeout", () => {
+  it.effect("fails with ProcessTimeout when the process never exits", () =>
+    Effect.gen(function*() {
+      const fiber = yield* Effect.forkChild(
+        Effect.exit(
+          runProcessExit(_cmd, { timeout: "5 seconds" }).pipe(
+            Effect.provide(_spawnerFor({ hangs: true, stderr: "Username: " }))
+          )
+        )
+      )
+      yield* TestClock.adjust("6 seconds")
+      const exit = yield* Fiber.join(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+        expect(err).toBeInstanceOf(ProcessTimeout)
+        if (err instanceof ProcessTimeout) {
+          expect(err.command).toBe("echo hi")
+          expect(err.message).toContain("timed out after 5s")
+          expect(err.message).toContain("Username:")
+        }
+      }
+    }))
+
+  it.effect("does not fire when the process exits in time", () =>
+    Effect.gen(function*() {
+      const out = yield* runProcessString(_cmd, { timeout: "5 seconds" }).pipe(
+        Effect.provide(_spawnerFor({ stdout: "fast" }))
+      )
+      expect(out).toBe("fast")
+    }))
+})
 
 describe("runProcessString", () => {
   it.effect("zero-exit with non-empty stdout returns stdout", () =>
@@ -79,8 +148,12 @@ describe("runProcessString", () => {
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
-        expect(text).toContain("ProcessError")
+        const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+        expect(err).toBeInstanceOf(ProcessError)
+        if (err instanceof ProcessError) {
+          expect(err.message).toContain("produced no output")
+          expect(err.message).not.toContain("failed (exit 0)")
+        }
       }
     }))
 

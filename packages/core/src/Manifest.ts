@@ -99,6 +99,15 @@ export interface RawYaml {
   readonly origin?: string
 }
 
+// One already-parsed YAML document. `Helm.release` emits these instead of
+// RawYaml so the build path serializes each doc exactly once instead of
+// stringify → re-parse → re-serialize.
+export interface ParsedDoc {
+  readonly _tag: "ParsedDoc"
+  readonly value: unknown
+  readonly origin?: string
+}
+
 export const embedYaml = (source: EmbedYamlSource): Manifest<RawYaml> =>
   make<RawYaml>((_ctx) => {
     if ("literal" in source) {

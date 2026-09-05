@@ -1,5 +1,5 @@
-import { HelmVersionTooLow } from "@konfig.ts/core"
 import { describe as effectDescribe, it as effectIt } from "@effect/vitest"
+import { HelmVersionTooLow, ProcessError } from "@konfig.ts/core"
 import { Cause, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
 import { systemError } from "effect/PlatformError"
 import type { Command } from "effect/unstable/process/ChildProcess"
@@ -123,31 +123,40 @@ effectDescribe("assertHelmVersion", () => {
       }
     }))
 
-  effectIt.effect("fails HelmVersionTooLow with found \"not found\" when helm cannot be run", () =>
-    Effect.gen(function*() {
-      const exit = yield* Effect.exit(
-        assertHelmVersion("3.16.0").pipe(Effect.provide(_spawnerFailing()))
-      )
-      expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) {
-        const err = _findHelmVersionTooLow(exit.cause)
-        expect(err).toBeInstanceOf(HelmVersionTooLow)
-        expect(err?.found).toBe("not found")
-      }
-    }))
-
-  effectIt.effect("fails HelmVersionTooLow when helm exits non-zero", () =>
-    Effect.gen(function*() {
-      const exit = yield* Effect.exit(
-        assertHelmVersion("3.16.0").pipe(
-          Effect.provide(_spawnerFor({ stdout: "", stderr: "unknown flag", exitCode: 1 }))
+  effectIt.effect(
+    "passes the ProcessError through (not HelmVersionTooLow) when helm cannot be spawned",
+    () =>
+      Effect.gen(function*() {
+        const exit = yield* Effect.exit(
+          assertHelmVersion("3.16.0").pipe(Effect.provide(_spawnerFailing()))
         )
-      )
-      expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) {
-        const err = _findHelmVersionTooLow(exit.cause)
-        expect(err).toBeInstanceOf(HelmVersionTooLow)
-        expect(err?.found).toBe("not found")
-      }
-    }))
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(_findHelmVersionTooLow(exit.cause)).toBeUndefined()
+          const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+          expect(err).toBeInstanceOf(ProcessError)
+          expect((err as ProcessError).message).toContain("helm version --short")
+        }
+      })
+  )
+
+  effectIt.effect(
+    "passes the ProcessError through with exit code and stderr when helm exits non-zero",
+    () =>
+      Effect.gen(function*() {
+        const exit = yield* Effect.exit(
+          assertHelmVersion("3.16.0").pipe(
+            Effect.provide(_spawnerFor({ stdout: "", stderr: "unknown flag", exitCode: 1 }))
+          )
+        )
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(_findHelmVersionTooLow(exit.cause)).toBeUndefined()
+          const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+          expect(err).toBeInstanceOf(ProcessError)
+          expect((err as ProcessError).exitCode).toBe(1)
+          expect((err as ProcessError).message).toContain("unknown flag")
+        }
+      })
+  )
 })

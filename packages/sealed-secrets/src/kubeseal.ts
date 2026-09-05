@@ -1,4 +1,4 @@
-import { boundary, processDetail, ProcessError, runProcessString } from "@konfig.ts/core"
+import { boundary, processDetail, type ProcessFailure, runProcessString } from "@konfig.ts/core"
 import { Config, Data, Effect, Option, Stream } from "effect"
 import * as YAML from "yaml"
 import { ChildProcess } from "./_unstable"
@@ -19,7 +19,7 @@ export class KubesealCertMissing extends Data.TaggedError("KubesealCertMissing")
 }
 
 export class KubesealInvocationError extends Data.TaggedError("KubesealInvocationError")<{
-  readonly cause: ProcessError
+  readonly cause: ProcessFailure
 }> {
   get message(): string {
     return `kubeseal invocation failed${processDetail(this.cause)}`

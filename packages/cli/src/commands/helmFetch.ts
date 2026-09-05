@@ -34,7 +34,7 @@ export const _fetchOne = (input: FetchOneInput) =>
       const exists = yield* fs.exists(cachedTgz)
       if (!exists) {
         const cmd = helmPullCommand({ chart: input, options: { destination: input.cacheDir } })
-        yield* runProcessExit(cmd)
+        yield* runProcessExit(cmd, { timeout: yield* Helm.timeout })
       }
       yield* Console.log(
         `  warning: ${input.chart}@${input.version} has no recorded digest — cached under a plain name that Helm.release's digest-suffixed cache won't reuse`
@@ -57,7 +57,7 @@ export const _fetchOne = (input: FetchOneInput) =>
     const pullDir = yield* fs.makeTempDirectory({ directory: input.cacheDir, prefix: ".konfig-helm-fetch-" })
     yield* Effect.gen(function*() {
       const cmd = helmPullCommand({ chart: input, options: { destination: pullDir } })
-      yield* runProcessExit(cmd)
+      yield* runProcessExit(cmd, { timeout: yield* Helm.timeout })
       const pulled = path.join(pullDir, Helm.cacheFileName({ chart: input.chart, version: input.version }))
       yield* Helm.verifyChartDigest({
         chart: input.chart,
@@ -90,16 +90,22 @@ export const helmFetchEffect = (flags: HelmFetchFlags) =>
 
     const registry = yield* loadChartRegistryEffect(chartsDir)
 
-    for (const def of registry) {
-      yield* Console.log(`Fetching ${def.chart}@${def.version}...`)
-      yield* _fetchOne({
-        repo: def.repo,
-        chart: def.chart,
-        version: def.version,
-        cacheDir,
-        digest: def.digest === "" ? undefined : def.digest
-      })
-    }
+    // Bounded at 4 (same as buildEnv): keeps the helm subprocess count manageable.
+    yield* Effect.forEach(
+      registry,
+      (def) =>
+        Effect.gen(function*() {
+          yield* Console.log(`Fetching ${def.chart}@${def.version}...`)
+          yield* _fetchOne({
+            repo: def.repo,
+            chart: def.chart,
+            version: def.version,
+            cacheDir,
+            digest: def.digest === "" ? undefined : def.digest
+          })
+        }),
+      { concurrency: 4, discard: true }
+    )
 
     yield* Console.log(`Done. Cache at ${cacheDir}`)
   })

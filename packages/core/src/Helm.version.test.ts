@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Cause, ConfigProvider, Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { Command } from "effect/unstable/process/ChildProcess"
 import {
@@ -13,6 +13,8 @@ import {
 } from "effect/unstable/process/ChildProcessSpawner"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
+import { HelmRenderError } from "./RenderError"
+import { ProcessError } from "./subprocess"
 
 interface FakeProc {
   readonly stdout?: string
@@ -73,14 +75,21 @@ describe("Helm.release helm-version preflight", () => {
       }
     }))
 
-  it.effect("fails HelmVersionTooLow ('not found') when helm is absent (non-zero exit)", () =>
+  it.effect("fails HelmRenderError (version-check) carrying the ProcessError when helm cannot run", () =>
     Effect.gen(function*() {
       const exit = yield* _run("3.16.0", { stdout: "", stderr: "command not found", exitCode: 127 })
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        const pretty = Cause.pretty(exit.cause)
-        expect(pretty).toContain("HelmVersionTooLow")
-        expect(pretty).toContain("not found")
+        const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+        expect(err).toBeInstanceOf(HelmRenderError)
+        if (err instanceof HelmRenderError) {
+          expect(err.phase).toBe("version-check")
+          expect(err.cause).toBeInstanceOf(ProcessError)
+          expect(err.message).toContain("failed during version-check")
+          expect(err.message).toContain("exit 127")
+          expect(err.message).toContain("command not found")
+        }
+        expect(Cause.pretty(exit.cause)).not.toContain("HelmVersionTooLow")
       }
     }))
 

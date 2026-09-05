@@ -81,18 +81,24 @@ export const crdExtractEffect = (flags: CrdExtractFlags) =>
         yield* Console.log(`No chart definitions found in ${chartsDir}`)
         return
       }
-      for (const def of registry) {
-        yield* Console.log(`Extracting CRDs for ${def.chart}@${def.version}...`)
-        yield* extractCrdsEffect({
-          repo: def.repo,
-          chart: def.chart,
-          version: def.version,
-          id: def.id,
-          outDir,
-          cacheDir,
-          digest: _digestOf(def)
-        })
-      }
+      // Bounded at 4 (same as buildEnv): keeps the helm subprocess count manageable.
+      yield* Effect.forEach(
+        registry,
+        (def) =>
+          Effect.gen(function*() {
+            yield* Console.log(`Extracting CRDs for ${def.chart}@${def.version}...`)
+            yield* extractCrdsEffect({
+              repo: def.repo,
+              chart: def.chart,
+              version: def.version,
+              id: def.id,
+              outDir,
+              cacheDir,
+              digest: _digestOf(def)
+            })
+          }),
+        { concurrency: 4, discard: true }
+      )
       yield* Console.log(`Done. Generated files in ${outDir}`)
     } else {
       yield* Console.error("Specify --release <id> or --all")
