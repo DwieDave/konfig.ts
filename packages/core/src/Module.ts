@@ -4,11 +4,25 @@ import type { AnyRenderError } from "./RenderError"
 
 // Forces name/namespace fields to stay literal: the dep graph keys providers by literal
 // name, so a widened `string` would silently collapse distinct modules into one slot.
-export type LiteralName<T extends string> = string extends T ? {
+// The conditional keeps T in both branches, so LiteralName<T> is assignable to T even
+// while deferred inside a generic body, and generic wrappers can forward
+// `LiteralName<Name>` into `define` (conditional-to-conditional inference unifies the
+// type parameters, unlike an intersection guard, which re-wraps and never unifies).
+export type LiteralName<T extends string> = string extends T ? T & {
     readonly _konfig_error:
       "Module name/namespace must be a string literal. Make the wrapper generic (`<const Name extends string>`) and forward via `Module.LiteralName<Name>`."
   }
   : T
+
+// Single audited coercion for the T -> LiteralName<T> direction: with a concrete
+// literal T the conditional collapses to T, but inside a generic body TS keeps the
+// conditional deferred and cannot verify it. (LiteralName<T> -> T needs no witness:
+// both branches are assignable to T.)
+export const asLiteralName = <T extends string>(value: T): LiteralName<T> =>
+  unsafeCoerce<LiteralName<T>>(
+    value,
+    "T extends string; for any literal instantiation LiteralName<T> = T, and non-literal T is rejected at the wrapper call site"
+  )
 
 export interface BuildContext<Ns extends string = string> {
   readonly name: string
@@ -103,46 +117,25 @@ export const fixedNs = <
 >(
   config: FixedNsConfig<Kind, ExtraConfig, ExtraCallArgs, Ns, Opts, R, Extra> & ExtraConfig
 ) => {
-  const { target, namespace, provides, build, ...extraConfig } = unsafeCoerce<
-    FixedNsConfig<Kind, ExtraConfig, ExtraCallArgs, Ns, Opts, R, Extra> & ExtraConfig & Record<string, unknown>
-  >(config, "Record spread shape mirrors the FixedNsConfig & ExtraConfig intersection")
-  const adapter = unsafeCoerce<Target<Kind, ExtraConfig, ExtraCallArgs>>(
-    target,
-    "target was destructured from config without preserving its typed shape; reattach the constraint"
-  )
+  const { build, namespace, provides, target, ...extraConfig } = config
 
   return <const Name extends string>(
     args: { readonly name: LiteralName<Name> } & ExtraCallArgs & Opts
   ): ApplyHandle<Kind, Name, Ns, R, Extra> => {
-    const { name, ...rest } = unsafeCoerce<
-      { readonly name: LiteralName<Name> } & Record<string, unknown>
-    >(args, "destructuring the wrapper args; rest carries ExtraCallArgs & Opts as a flat record")
+    const buildResult = build({ name: args.name, namespace }, args)
 
-    const ctxName = unsafeCoerce<Name>(
-      name,
-      "LiteralName<Name> resolves to Name itself once the wrapper call typechecks"
-    )
-
-    const buildResult = build(
-      { name: ctxName, namespace },
-      unsafeCoerce<Opts>(rest, "rest carries Opts fields; ExtraCallArgs flow to target.define below")
-    )
-
-    return adapter.define<Name, Ns, R, Extra>(unsafeCoerce<
+    return target.define<Name, Ns, R, Extra>(unsafeCoerce<
       DefineBaseArgs<Name, Ns, R, Extra> & ExtraConfig & ExtraCallArgs
     >(
       {
         ...extraConfig,
-        ...rest,
-        name,
-        namespace: unsafeCoerce<LiteralName<Ns>>(
-          namespace,
-          "Ns is a const string literal; LiteralName<Ns> resolves to Ns itself"
-        ),
+        ...args,
+        name: args.name,
+        namespace: asLiteralName(namespace),
         build: _liftBuild(buildResult),
         ...(provides !== undefined ? { provides } : {})
       },
-      "the assembled object structurally matches the target's define-args; spread layout matches the intersection"
+      "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
     ))
   }
 }
@@ -172,13 +165,7 @@ export const dynamicNs = <
 >(
   config: DynamicNsConfig<Kind, ExtraConfig, ExtraCallArgs, Opts, R, Extra> & ExtraConfig
 ) => {
-  const { target, provides, build, ...extraConfig } = unsafeCoerce<
-    DynamicNsConfig<Kind, ExtraConfig, ExtraCallArgs, Opts, R, Extra> & ExtraConfig & Record<string, unknown>
-  >(config, "Record spread shape mirrors the DynamicNsConfig & ExtraConfig intersection")
-  const adapter = unsafeCoerce<Target<Kind, ExtraConfig, ExtraCallArgs>>(
-    target,
-    "target was destructured from config without preserving its typed shape; reattach the constraint"
-  )
+  const { build, provides, target, ...extraConfig } = config
 
   return <const Name extends string, const Ns extends string>(
     args:
@@ -189,36 +176,18 @@ export const dynamicNs = <
       & ExtraCallArgs
       & Opts
   ): ApplyHandle<Kind, Name, Ns, R, Extra> => {
-    const { name, namespace, ...rest } = unsafeCoerce<
-      { readonly name: LiteralName<Name>; readonly namespace: LiteralName<Ns> } & Record<string, unknown>
-    >(args, "destructuring the wrapper args; rest carries ExtraCallArgs & Opts as a flat record")
+    const buildResult = build({ name: args.name, namespace: args.namespace }, args)
 
-    const ctxName = unsafeCoerce<Name>(
-      name,
-      "LiteralName<Name> resolves to Name itself once the wrapper call typechecks"
-    )
-    const ctxNs = unsafeCoerce<Ns>(
-      namespace,
-      "LiteralName<Ns> resolves to Ns itself once the wrapper call typechecks"
-    )
-
-    const buildResult = build(
-      { name: ctxName, namespace: ctxNs },
-      unsafeCoerce<Opts>(rest, "rest carries Opts fields; ExtraCallArgs flow to target.define below")
-    )
-
-    return adapter.define<Name, Ns, R, Extra>(unsafeCoerce<
+    return target.define<Name, Ns, R, Extra>(unsafeCoerce<
       DefineBaseArgs<Name, Ns, R, Extra> & ExtraConfig & ExtraCallArgs
     >(
       {
         ...extraConfig,
-        ...rest,
-        name,
-        namespace,
+        ...args,
         build: _liftBuild(buildResult),
         ...(provides !== undefined ? { provides } : {})
       },
-      "the assembled object structurally matches the target's define-args; spread layout matches the intersection"
+      "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
     ))
   }
 }

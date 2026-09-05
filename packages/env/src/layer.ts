@@ -1,12 +1,10 @@
+import { unsafeCoerce } from "@konfig.ts/core"
 import type { Context, Effect } from "effect"
 import { Layer } from "effect"
-import type { Environment, EnvMember, MemberValue } from "./environment"
+import type { Environment, EnvironmentShape, EnvMember } from "./environment"
+import { runtime } from "./runtime"
 
-export type EnvironmentShape<M extends Readonly<Record<string, EnvMember>>> = {
-  readonly [K in keyof M]: MemberValue<M[K]>
-}
-
-import { unsafeCoerce } from "@konfig.ts/core"
+export type { EnvironmentShape } from "./environment"
 
 // Bundle is resolved once at Layer construction; downstream services read
 // from that resolved record rather than each doing per-service Config reads.
@@ -21,7 +19,7 @@ export const environmentLayer = <Self, M extends Readonly<Record<string, EnvMemb
   Layer.effect(
     input.tag,
     unsafeCoerce<Effect.Effect<EnvironmentShape<M>>>(
-      input.env,
-      "Environment<M> extends Config<EnvironmentShape<M>>, and Config is structurally a no-deps Effect — Layer.effect accepts it"
+      runtime(input.env),
+      "drops the ConfigError channel so environmentLayer keeps its Layer<Self> signature; a missing env var still fails the layer at build time, just untyped"
     )
   )

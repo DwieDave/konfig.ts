@@ -4,17 +4,20 @@ import {
   type Bundle,
   KONFIG_HELM_CACHE_ENV,
   type Manifest as M,
+  type ParsedDoc,
   parseYamlAll,
+  type RawYaml,
   type RenderContext,
   renderManifest,
   type ResolvedKonfigConfig,
   unsafeCoerce,
   Yaml
 } from "@konfig.ts/core"
-import { ConfigProvider, Data, Effect } from "effect"
+import { ConfigProvider, Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { resolveCliPaths } from "./cliConfig"
+import { moduleDefault } from "./moduleDefault"
 
 export interface EnvOutDirInput {
   readonly cfg: ResolvedKonfigConfig
@@ -73,7 +76,7 @@ const _loadEnv = (entry: string) =>
       try: () => import(entry),
       catch: (cause) => new EnvLoadError({ entry, cause })
     })
-    const program = unsafeCoerce<{ default?: unknown }>(mod, "imported module is a plain JS object").default
+    const program = moduleDefault(mod)
     if (program === undefined) {
       return yield* new EnvLoadError({ entry, cause: "default export is missing" })
     }
@@ -96,6 +99,14 @@ interface OutputFile {
   readonly content: string
 }
 
+// Extracts just the `kind`/`metadata.name` routing fields off a parsed doc;
+// excess properties are left alone (the original doc is what gets serialized).
+const _KindNameSchema = Schema.Struct({
+  kind: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String) }))
+})
+const _decodeKindName = Schema.decodeUnknownOption(_KindNameSchema)
+
 interface _SplitRawYamlInput {
   readonly content: string
   readonly dir: string
@@ -108,20 +119,22 @@ const _splitRawYaml = (input: _SplitRawYamlInput): OutputFile[] => {
   // regex, so a literal `---` inside a block scalar isn't mis-split.
   for (const doc of parseYamlAll(content)) {
     if (doc === null || typeof doc !== "object") continue
-    const parsed = unsafeCoerce<{ kind?: string; metadata?: { name?: string } }>(
-      doc,
-      "parsed YAML doc (narrowed to object above) — runtime typeof checks below filter to the kind/metadata.name shape"
-    )
-    const kind = parsed.kind
-    const name = parsed.metadata?.name
-    if (typeof kind !== "string" || typeof name !== "string") continue
+    const parsed = Option.getOrUndefined(_decodeKindName(doc))
+    const kind = parsed?.kind
+    const name = parsed?.metadata?.name
+    if (kind === undefined || name === undefined) continue
     files.push({
       path: pathSep(dir, Yaml.filenameFor({ kind, metadata: { name } })),
-      content: Yaml.serialize({ value: parsed })
+      content: Yaml.serialize({ value: doc })
     })
   }
   return files
 }
+
+const _isRawYaml = (v: object): v is RawYaml =>
+  "_tag" in v && v._tag === "RawYaml" && "content" in v && typeof v.content === "string"
+
+const _isParsedDoc = (v: object): v is ParsedDoc => "_tag" in v && v._tag === "ParsedDoc" && "value" in v
 
 interface _CollectOutputsInput {
   readonly value: unknown
@@ -133,16 +146,13 @@ const _collectOutputs = (input: _CollectOutputsInput): OutputFile[] => {
   if (value === null || value === undefined) return []
 
   if (typeof value === "object") {
-    const tag = unsafeCoerce<{ _tag?: unknown }>(value, "narrowed to object above; reading optional _tag")._tag
-    if (tag === "RawYaml") {
-      const raw = unsafeCoerce<{ content: string }>(value, "RawYaml _tag implies the content field")
-      return _splitRawYaml({ content: raw.content, dir: appDir, pathSep: pathJoin })
+    if (_isRawYaml(value)) {
+      return _splitRawYaml({ content: value.content, dir: appDir, pathSep: pathJoin })
     }
-    if (tag === "ParsedDoc") {
+    if (_isParsedDoc(value)) {
       // Helm.release output: already parsed, so it goes straight to the
       // object branch below (one serialize, no re-parse).
-      const doc = unsafeCoerce<{ value: unknown }>(value, "ParsedDoc _tag implies the value field")
-      return _collectOutputs({ value: doc.value, appDir, pathJoin })
+      return _collectOutputs({ value: value.value, appDir, pathJoin })
     }
   }
 
@@ -151,18 +161,14 @@ const _collectOutputs = (input: _CollectOutputsInput): OutputFile[] => {
   }
 
   if (typeof value === "object") {
-    const obj = unsafeCoerce<{ kind?: unknown; metadata?: { name?: unknown } }>(
-      value,
-      "narrowed to object above; probing kind/metadata.name"
-    )
-    if (typeof obj.kind === "string" && typeof obj.metadata?.name === "string") {
+    const parsed = Option.getOrUndefined(_decodeKindName(value))
+    const kind = parsed?.kind
+    const name = parsed?.metadata?.name
+    if (kind !== undefined && name !== undefined) {
       return [
         {
-          path: pathJoin(
-            appDir,
-            Yaml.filenameFor({ kind: obj.kind, metadata: { name: obj.metadata.name } })
-          ),
-          content: Yaml.serialize({ value: obj })
+          path: pathJoin(appDir, Yaml.filenameFor({ kind, metadata: { name } })),
+          content: Yaml.serialize({ value })
         }
       ]
     }
@@ -269,10 +275,8 @@ const _renderEnvBody = (input: RenderEnvInput) =>
     )
     const files: OutputFile[] = perAppFiles.flat()
 
-    return unsafeCoerce<RenderedEnv>(
-      { appsDirAbs, outDirAbs, files },
-      "shape matches RenderedEnv exactly; mutable file[] widened to readonly"
-    )
+    const rendered: RenderedEnv = { appsDirAbs, outDirAbs, files }
+    return rendered
   }).pipe(Effect.scoped)
 
 export const renderEnv = (input: RenderEnvInput) =>

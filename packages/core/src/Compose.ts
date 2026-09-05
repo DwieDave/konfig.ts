@@ -66,26 +66,25 @@ export type NoDuplicateProvides<
     readonly _konfig_duplicate: DuplicateHint<DuplicateProvides<Ms>, Api>
   }
 
+export interface ComposeLayersInput {
+  readonly modules: ReadonlyArray<{ readonly layer: unknown }>
+  readonly provides?: Layer.Layer<never, AnyRenderError, never> | undefined
+}
+
 export const composeLayers = (
-  modules: ReadonlyArray<{ readonly layer: unknown }>
+  { modules, provides }: ComposeLayersInput
 ): Layer.Layer<never, AnyRenderError, never> => {
   type AnyLayer = Layer.Layer<never, AnyRenderError, never>
   return modules.reduce<AnyLayer>(
     (acc, mod) =>
-      unsafeCoerce<AnyLayer>(
-        Layer.provideMerge(
-          unsafeCoerce<AnyLayer>(
-            mod.layer,
-            "handle.layer carries its narrow type at the call site; the fold collapses to AnyLayer here"
-          ),
-          acc
+      Layer.provideMerge(
+        unsafeCoerce<AnyLayer>(
+          mod.layer,
+          "handle.layer carries its narrow type at the call site; the fold collapses to AnyLayer here"
         ),
-        "Layer.provideMerge's return type is per-call; the fold accumulator stays AnyLayer"
+        acc
       ),
-    unsafeCoerce<AnyLayer>(
-      Layer.empty,
-      "Layer.empty has type Layer<never, never, never>; widening to AnyLayer is a no-op at runtime"
-    )
+    provides ?? Layer.empty
   )
 }
 

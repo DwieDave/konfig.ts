@@ -1,5 +1,5 @@
 import * as YAML from "yaml"
-import { unsafeCoerce } from "../_cast"
+import { isRecord } from "../guards"
 
 const ORDER_ROOT = ["apiVersion", "kind", "metadata", "spec", "status"]
 const ORDER_METADATA = ["name", "namespace", "labels", "annotations"]
@@ -41,15 +41,8 @@ const _normalize = (input: _NormalizeInput): unknown => {
   if (Array.isArray(value)) {
     return value.map((v) => _normalize({ value: v, depth: depth + 1, parentKey: null }))
   }
-  if (typeof value === "object") {
-    return _reorderObject({
-      obj: unsafeCoerce<Record<string, unknown>>(
-        value,
-        "typeof === object branch (value !== null, !Array.isArray above) — treated as a keyed record for reordering"
-      ),
-      depth,
-      parentKey
-    })
+  if (isRecord(value)) {
+    return _reorderObject({ obj: value, depth, parentKey })
   }
   return value
 }

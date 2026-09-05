@@ -36,6 +36,7 @@ export {
   redactedEqual,
   type RedactOptions
 } from "./diff"
+export { isRecord } from "./guards"
 export * as Helm from "./Helm"
 export {
   decodeImagesEffect,

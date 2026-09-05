@@ -1,5 +1,6 @@
-import { Manifest, unsafeCoerce } from "@konfig.ts/core"
+import { Manifest } from "@konfig.ts/core"
 import { Effect } from "effect"
+import { _lowerPodTemplate } from "./_lower"
 import type {
   CronJob as K8sCronJob,
   Deployment as K8sDeployment,
@@ -72,10 +73,7 @@ export const Deployment = {
       spec: {
         replicas: input.replicas,
         selector: input.selector,
-        template: unsafeCoerce(
-          input.template,
-          "konfig PodSpecInput is structurally a K8s PodTemplateSpec body; brand-checked fields lower at construction"
-        ),
+        template: _lowerPodTemplate(input.template),
         strategy: input.strategy,
         revisionHistoryLimit: input.revisionHistoryLimit,
         progressDeadlineSeconds: input.progressDeadlineSeconds,
@@ -131,10 +129,7 @@ export const StatefulSet = {
       spec: {
         replicas: input.replicas,
         selector: input.selector,
-        template: unsafeCoerce(
-          input.template,
-          "konfig PodSpecInput is structurally a K8s PodTemplateSpec body; brand-checked fields lower at construction"
-        ),
+        template: _lowerPodTemplate(input.template),
         serviceName: input.serviceName,
         volumeClaimTemplates: input.volumeClaimTemplates
           ? [...input.volumeClaimTemplates]
@@ -181,10 +176,7 @@ export const Job = {
         activeDeadlineSeconds: input.activeDeadlineSeconds,
         ttlSecondsAfterFinished: input.ttlSecondsAfterFinished,
         suspend: input.suspend,
-        template: unsafeCoerce(
-          input.template,
-          "konfig PodSpecInput is structurally a K8s PodTemplateSpec body; brand-checked fields lower at construction"
-        )
+        template: _lowerPodTemplate(input.template)
       }
     }
     return Manifest.make<K8sJob>(() => Effect.succeed(resource))
@@ -236,10 +228,15 @@ export const CronJob = {
         failedJobsHistoryLimit: input.failedJobsHistoryLimit,
         startingDeadlineSeconds: input.startingDeadlineSeconds,
         suspend: input.suspend,
-        jobTemplate: unsafeCoerce(
-          input.jobTemplate,
-          "konfig CronJob jobTemplate is structurally a K8s JobTemplateSpec body"
-        )
+        jobTemplate: {
+          metadata: input.jobTemplate.metadata,
+          spec: {
+            template: _lowerPodTemplate(input.jobTemplate.spec.template),
+            backoffLimit: input.jobTemplate.spec.backoffLimit,
+            activeDeadlineSeconds: input.jobTemplate.spec.activeDeadlineSeconds,
+            ttlSecondsAfterFinished: input.jobTemplate.spec.ttlSecondsAfterFinished
+          }
+        }
       }
     }
     return Manifest.make<K8sCronJob>(() => Effect.succeed(resource))

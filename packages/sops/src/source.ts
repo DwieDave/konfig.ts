@@ -1,6 +1,5 @@
-import { unsafeCoerce } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
-import { SecretSourceError } from "@konfig.ts/env"
+import { collectByKey, SecretSourceError } from "@konfig.ts/env"
 import { Effect, Redacted } from "effect"
 import * as YAML from "yaml"
 import type { ChildProcessSpawner } from "./_unstable"
@@ -13,12 +12,11 @@ export interface SopsSourceInput<K extends string> {
   readonly extract?: (key: K, parsed: unknown) => unknown
 }
 
+const _hasKey = <K extends string>(obj: object, key: K): obj is { readonly [P in K]: unknown } => key in obj
+
 const _defaultExtract = (key: string, parsed: unknown): unknown => {
   if (parsed === null || typeof parsed !== "object") return undefined
-  return unsafeCoerce<Record<string, unknown>>(
-    parsed,
-    "typeof === object branch above narrows parsed to a non-null object; index access yields unknown"
-  )[key]
+  return _hasKey(parsed, key) ? parsed[key] : undefined
 }
 
 // Decrypts the file once; plucks every requested key from the in-memory plaintext.
@@ -48,10 +46,7 @@ const _source = <const K extends string>(
       }
       out[key] = Redacted.make(value)
     }
-    return unsafeCoerce<{ readonly [P in K]: Redacted.Redacted<string> }>(
-      out,
-      "out was populated by iterating over input.keys: ReadonlyArray<K>, so every K is present"
-    )
+    return collectByKey({ keys: input.keys, build: (key) => out[key] })
   })
   return { _tag: "SecretSource", keys: input.keys, resolve }
 }

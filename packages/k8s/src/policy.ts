@@ -1,9 +1,10 @@
-import { Manifest, unsafeCoerce } from "@konfig.ts/core"
+import { Manifest } from "@konfig.ts/core"
 import { Effect } from "effect"
 import type { PersistentVolumeSpec as K8sPersistentVolumeSpec } from "kubernetes-types/core/v1"
 import type {
   NetworkPolicyEgressRule as K8sNetworkPolicyEgressRule,
-  NetworkPolicyIngressRule as K8sNetworkPolicyIngressRule
+  NetworkPolicyIngressRule as K8sNetworkPolicyIngressRule,
+  NetworkPolicyPeer as K8sNetworkPolicyPeer
 } from "kubernetes-types/networking/v1"
 import type {
   ClusterRole as K8sClusterRole,
@@ -57,6 +58,17 @@ export interface PersistentVolumeInput extends ClusterMeta {
   readonly spec: PersistentVolumeSpecInput
 }
 
+const _lowerPvSpec = (spec: PersistentVolumeSpecInput): K8sPersistentVolume["spec"] => ({
+  ...spec,
+  capacity: { storage: spec.capacity.storage },
+  accessModes: [...spec.accessModes],
+  persistentVolumeReclaimPolicy: spec.persistentVolumeReclaimPolicy,
+  volumeMode: spec.volumeMode,
+  claimRef: spec.claimRef === undefined
+    ? undefined
+    : { namespace: spec.claimRef.namespace, name: spec.claimRef.name }
+})
+
 export const PersistentVolume = {
   make: (input: PersistentVolumeInput): Manifest.Manifest<K8sPersistentVolume> =>
     Manifest.make<K8sPersistentVolume>(() =>
@@ -68,10 +80,7 @@ export const PersistentVolume = {
           labels: input.labels,
           annotations: input.annotations
         },
-        spec: unsafeCoerce<K8sPersistentVolume["spec"]>(
-          input.spec,
-          "user-supplied PV spec; structural match to the K8s type"
-        )
+        spec: _lowerPvSpec(input.spec)
       })
     )
 }
@@ -89,6 +98,17 @@ export interface PersistentVolumeClaimInput extends NamespacedMeta {
   readonly spec: PersistentVolumeClaimSpecInput
 }
 
+const _lowerPvcSpec = (spec: PersistentVolumeClaimSpecInput): K8sPersistentVolumeClaim["spec"] => ({
+  accessModes: [...spec.accessModes],
+  resources: { requests: { storage: spec.resources.requests.storage } },
+  storageClassName: spec.storageClassName,
+  volumeMode: spec.volumeMode,
+  volumeName: spec.volumeName,
+  selector: spec.selector === undefined ? undefined : {
+    matchLabels: spec.selector.matchLabels === undefined ? undefined : { ...spec.selector.matchLabels }
+  }
+})
+
 export const PersistentVolumeClaim = {
   make: (input: PersistentVolumeClaimInput): Manifest.Manifest<K8sPersistentVolumeClaim> =>
     Manifest.make<K8sPersistentVolumeClaim>(() =>
@@ -101,10 +121,7 @@ export const PersistentVolumeClaim = {
           labels: input.labels,
           annotations: input.annotations
         },
-        spec: unsafeCoerce<K8sPersistentVolumeClaim["spec"]>(
-          input.spec,
-          "user-supplied PVC spec; structural match to the K8s type"
-        )
+        spec: _lowerPvcSpec(input.spec)
       })
     )
 }
@@ -136,14 +153,27 @@ export interface NetworkPolicyFromPodSetInput<L extends Readonly<Record<string, 
   readonly egress?: ReadonlyArray<NetworkPolicyEgressRule>
 }
 
-const _lowerPeer = (peer: NetworkPolicyPeer): {
-  readonly podSelector?: { readonly matchLabels?: Readonly<Record<string, string>> }
-  readonly namespaceSelector?: { readonly matchLabels?: Readonly<Record<string, string>> }
-  readonly ipBlock?: { readonly cidr: string; readonly except?: ReadonlyArray<string> }
-} => ({
-  ...(peer.podSet !== undefined ? { podSelector: { matchLabels: peer.podSet.labels } } : {}),
-  ...(peer.namespaceSelector !== undefined ? { namespaceSelector: peer.namespaceSelector } : {}),
-  ...(peer.ipBlock !== undefined ? { ipBlock: peer.ipBlock } : {})
+const _lowerPeer = (peer: NetworkPolicyPeer): K8sNetworkPolicyPeer => ({
+  ...(peer.podSet !== undefined
+    ? { podSelector: { matchLabels: { ...peer.podSet.labels } } }
+    : {}),
+  ...(peer.namespaceSelector !== undefined
+    ? {
+      namespaceSelector: {
+        matchLabels: peer.namespaceSelector.matchLabels === undefined
+          ? undefined
+          : { ...peer.namespaceSelector.matchLabels }
+      }
+    }
+    : {}),
+  ...(peer.ipBlock !== undefined
+    ? {
+      ipBlock: {
+        cidr: peer.ipBlock.cidr,
+        except: peer.ipBlock.except === undefined ? undefined : [...peer.ipBlock.except]
+      }
+    }
+    : {})
 })
 
 export const NetworkPolicy = {
@@ -164,28 +194,25 @@ export const NetworkPolicy = {
   fromPodSet: <L extends Readonly<Record<string, string>>>(
     input: NetworkPolicyFromPodSetInput<L>
   ): Manifest.Manifest<K8sNetworkPolicy> => {
-    const ingress = input.ingress?.map((rule) => ({
+    const ingress = input.ingress?.map((rule): K8sNetworkPolicyIngressRule => ({
       from: rule.from?.map(_lowerPeer),
-      ports: rule.ports
+      ports: rule.ports === undefined ? undefined : [...rule.ports]
     }))
-    const egress = input.egress?.map((rule) => ({
+    const egress = input.egress?.map((rule): K8sNetworkPolicyEgressRule => ({
       to: rule.to?.map(_lowerPeer),
-      ports: rule.ports
+      ports: rule.ports === undefined ? undefined : [...rule.ports]
     }))
     return NetworkPolicy.make({
       name: input.name,
       namespace: input.namespace,
       labels: input.labels,
       annotations: input.annotations,
-      spec: unsafeCoerce<K8sNetworkPolicy["spec"]>(
-        {
-          podSelector: { matchLabels: input.podSet.labels },
-          policyTypes: input.policyTypes,
-          ingress,
-          egress
-        },
-        "konfig peers carry readonly arrays; upstream NetworkPolicySpec is mutable but the runtime shape matches"
-      )
+      spec: {
+        podSelector: { matchLabels: { ...input.podSet.labels } },
+        policyTypes: input.policyTypes === undefined ? undefined : [...input.policyTypes],
+        ingress,
+        egress
+      }
     })
   }
 }

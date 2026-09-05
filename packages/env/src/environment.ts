@@ -1,5 +1,5 @@
-import { unsafeCoerce } from "@konfig.ts/core"
-import { Config } from "effect"
+import type { Config } from "effect"
+import { allConfigs } from "./_record"
 import type { AnyDownwardEntry, DownwardEntry } from "./downward"
 import { _makeEntry, type EntryMarker, type EnvClaim, EnvNameCollision, type HasEnvClaims } from "./entry"
 import type { AnyLiteralEntry, LiteralEntry } from "./literal"
@@ -13,10 +13,14 @@ export type EnvMember =
   | AnyDownwardEntry
   | AnyEnvironment
 
-export type MemberValue<A> = A extends Config.Config<infer T> ? T : never
+export type MemberValue<A> = [A] extends [Config.Config<infer T>] ? T : never
+
+export type EnvironmentShape<M extends Readonly<Record<string, EnvMember>>> = {
+  readonly [K in keyof M]: MemberValue<M[K]>
+}
 
 export interface Environment<M extends Readonly<Record<string, EnvMember>>>
-  extends Config.Config<{ readonly [K in keyof M]: MemberValue<M[K]> }>, EntryMarker<"Environment">, HasEnvClaims
+  extends Config.Config<EnvironmentShape<M>>, EntryMarker<"Environment">, HasEnvClaims
 {
   readonly members: M
 }
@@ -93,16 +97,7 @@ const _define = <const M extends Readonly<Record<string, EnvMember>>>(
 ): Environment<M> => {
   const envClaims = _collectClaims(members)
 
-  const root = unsafeCoerce<
-    Config.Config<
-      {
-        readonly [K in keyof M]: MemberValue<M[K]>
-      }
-    >
-  >(
-    Config.all(members),
-    "Config.all over the members record yields a Config of the mapped record whose values are each member's MemberValue"
-  )
+  const root: Config.Config<EnvironmentShape<M>> = allConfigs(members)
 
   return _makeEntry({
     config: root,

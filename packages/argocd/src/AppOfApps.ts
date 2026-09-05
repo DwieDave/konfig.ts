@@ -82,16 +82,7 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = n
     })
   })
 
-  const composed = Compose.composeLayers(opts.modules)
-  const wired = opts.provides !== undefined
-    ? Layer.provideMerge(
-      composed,
-      unsafeCoerce<Layer.Layer<never>>(
-        opts.provides,
-        "group-level provides layer participates only via the type-level residual check; the fold collapses to AnyLayer"
-      )
-    )
-    : composed
+  const wired = Compose.composeLayers({ modules: opts.modules, provides: opts.provides })
 
   return unsafeCoerce<
     Effect.Effect<AppOfAppsResult, AnyRenderError, CoreManifest.RenderServices>

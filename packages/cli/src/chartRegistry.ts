@@ -1,4 +1,3 @@
-import { unsafeCoerce } from "@konfig.ts/core"
 import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -34,7 +33,7 @@ const _hasHelmReleaseMarker = (val: unknown): val is Record<string, unknown> =>
   val !== null &&
   typeof val === "object" &&
   HELM_RELEASE_MARKER in val &&
-  unsafeCoerce<Record<string, unknown>>(val, "narrowed by the `in` check above")[HELM_RELEASE_MARKER] === true
+  val[HELM_RELEASE_MARKER] === true
 
 const _decodeEntry = (val: Record<string, unknown>, file: string, defaultId: string) =>
   Schema.decodeUnknownEffect(ChartRegistryEntrySchema)({

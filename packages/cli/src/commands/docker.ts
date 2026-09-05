@@ -1,4 +1,4 @@
-import { diffFiles, type DiffFormat, formatDiff, hasDifferences, unsafeCoerce } from "@konfig.ts/core"
+import { diffFiles, type DiffFormat, formatDiff, hasDifferences } from "@konfig.ts/core"
 import {
   DockerWriteError,
   DockerWriteRefused,
@@ -12,6 +12,7 @@ import { Console, Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { Argument, Command, Flag } from "../_unstable"
+import { moduleDefault } from "../moduleDefault"
 
 export class SpecImportError extends Data.TaggedError("SpecImportError")<{
   readonly specPath: string
@@ -49,10 +50,7 @@ export const loadSpec = (
       try: () => import(dockerTsPath),
       catch: (e) => new SpecImportError({ specPath: dockerTsPath, cause: e })
     })
-    const app = unsafeCoerce<{ readonly default: unknown }>(
-      mod,
-      "dynamic import() returns a module namespace object; .default is typed unknown and guarded by isDockerApp below"
-    ).default
+    const app = moduleDefault(mod)
     if (!isDockerApp(app)) {
       return yield* new SpecNotADockerApp({ specPath: dockerTsPath })
     }

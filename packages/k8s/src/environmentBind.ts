@@ -1,6 +1,9 @@
 import { type Manifest, type RenderError, unsafeCoerce } from "@konfig.ts/core"
 import type {
+  AnyDownwardEntry,
   AnyEnvironment,
+  AnyLiteralEntry,
+  AnySecretEntry,
   DownwardEntry,
   Environment,
   EnvMember,
@@ -8,7 +11,7 @@ import type {
   SecretEntry,
   SecretSource
 } from "@konfig.ts/env"
-import { Layer, Match } from "effect"
+import { Layer, Match, Predicate } from "effect"
 import type { SecretBackend } from "./backend"
 import type { EnvVar } from "./env"
 import { bindSecret, type DeclaredSecret } from "./secretBind"
@@ -170,11 +173,16 @@ const _bindDownward = (input: _BindDownwardInput): DeclaredDownward<string> => (
 
 type _AnyValuesLayer = Layer.Layer<unknown, RenderError, Manifest.RenderServices>
 
+// Layer's ROut parameter is contravariant, so every per-member layer
+// (Layer<Provide<"SecretValues", N>, ...>) is assignable to Layer<never, ...>
+// without a cast; the fold in `_mergeValuesLayers` widens the result once.
+type _CollectedLayer = Layer.Layer<never, RenderError, Manifest.RenderServices>
+
 interface _BindAcc {
   readonly declared: Record<string, unknown>
   readonly envVars: EnvVar[]
   readonly manifests: Manifest.Manifest<unknown>[]
-  readonly valuesLayers: _AnyValuesLayer[]
+  readonly valuesLayers: _CollectedLayer[]
 }
 
 interface _DispatchInput {
@@ -195,19 +203,21 @@ const _normalizeSecretMember = (
   return raw._tag === "SecretSource" ? { source: raw } : { backend: raw }
 }
 
-const _handleSecret = (input: _DispatchInput): void => {
+// The typed options records (SecretMembersOpts / LiteralMembersOpts and their
+// nested sub-records) are walked with runtime string keys; this helper is the
+// single boundary where the typed view becomes Record<string, unknown>.
+const _asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  Predicate.isObject(value) ? value : undefined
+
+const _handleSecret = (entry: AnySecretEntry, input: _DispatchInput): void => {
   const memberOpts = _normalizeSecretMember(
     unsafeCoerce<SecretMemberInput<string, string> | undefined>(
       input.secretsOpts?.[input.memberKey],
-      "SecretMembersOpts<M> shape — runtime key lookup against the typed input"
+      "SecretMembersOpts<M> puts a SecretMemberInput under every secret member's key; the runtime key lookup erases that"
     )
   )
-  const secret = unsafeCoerce<SecretEntry<string, string, Readonly<Record<string, string>>>>(
-    input.entry,
-    "Match.tag('Secret') narrowed entry to SecretEntry; the helper-level signature is the general SecretEntry shape"
-  )
   const d = bindSecret({
-    secret,
+    secret: entry,
     backend: memberOpts?.backend,
     source: memberOpts?.source,
     labels: memberOpts?.labels,
@@ -217,75 +227,48 @@ const _handleSecret = (input: _DispatchInput): void => {
   input.acc.declared[input.memberKey] = d
   input.acc.envVars.push(...d.envVars)
   if (d.manifest !== undefined) input.acc.manifests.push(d.manifest)
-  if (d.layer !== undefined) {
-    input.acc.valuesLayers.push(
-      unsafeCoerce<_AnyValuesLayer>(
-        d.layer,
-        "DeclaredSecret.layer is Layer<Provide<SecretValues, N>, ...>; widen to unknown for the heterogeneous Layer.mergeAll"
-      )
-    )
-  }
+  if (d.layer !== undefined) input.acc.valuesLayers.push(d.layer)
 }
 
-const _handleLiteral = (input: _DispatchInput): void => {
-  const literal = unsafeCoerce<LiteralEntry<string, unknown>>(
-    input.entry,
-    "Match.tag('Literal') narrowed entry to LiteralEntry<string, unknown>"
-  )
-  const d = _bindLiteral({ entry: literal, override: input.literalsOpts?.[input.memberKey] })
+const _handleLiteral = (entry: AnyLiteralEntry, input: _DispatchInput): void => {
+  const d = _bindLiteral({ entry, override: input.literalsOpts?.[input.memberKey] })
   input.acc.declared[input.memberKey] = d
   input.acc.envVars.push(d.envVar)
 }
 
-const _handleDownward = (input: _DispatchInput): void => {
-  const downward = unsafeCoerce<DownwardEntry<string>>(
-    input.entry,
-    "Match.tag('Downward') narrowed entry to DownwardEntry<string>"
-  )
-  const d = _bindDownward({ entry: downward })
+const _handleDownward = (entry: AnyDownwardEntry, input: _DispatchInput): void => {
+  const d = _bindDownward({ entry })
   input.acc.declared[input.memberKey] = d
   input.acc.envVars.push(d.envVar)
 }
 
-const _handleEnvironment = (input: _DispatchInput): void => {
-  const subEnv = unsafeCoerce<AnyEnvironment>(
-    input.entry,
-    "Match.tag('Environment') narrowed entry to a nested Environment"
-  )
-  const sub = bindEnvironment({
-    env: subEnv,
-    secrets: unsafeCoerce<SecretMembersOpts<Readonly<Record<string, EnvMember>>>>(
-      input.secretsOpts?.[input.memberKey] ?? {},
-      "sub-record from SecretMembersOpts<M> — type is checked at the outer call site"
-    ),
-    literals: unsafeCoerce<LiteralMembersOpts<Readonly<Record<string, EnvMember>>>>(
-      input.literalsOpts?.[input.memberKey] ?? {},
-      "sub-record from LiteralMembersOpts<M> — type is checked at the outer call site"
-    ),
-    namespace: input.namespace
+const _handleEnvironment = (entry: AnyEnvironment, input: _DispatchInput): void => {
+  const acc: _BindAcc = { declared: {}, envVars: [], manifests: [], valuesLayers: [] }
+  _dispatchAllMembers({
+    members: entry.members,
+    secretsOpts: _asRecord(input.secretsOpts?.[input.memberKey]),
+    literalsOpts: _asRecord(input.literalsOpts?.[input.memberKey]),
+    namespace: input.namespace,
+    acc
   })
-  input.acc.declared[input.memberKey] = sub.members
-  input.acc.envVars.push(...sub.envVars)
-  input.acc.manifests.push(...sub.manifests)
-  input.acc.valuesLayers.push(
-    unsafeCoerce<_AnyValuesLayer>(
-      sub.valuesLayer,
-      "valuesLayer aggregate over the recursive merge"
-    )
-  )
+  input.acc.declared[input.memberKey] = acc.declared
+  input.acc.envVars.push(...acc.envVars)
+  input.acc.manifests.push(...acc.manifests)
+  input.acc.valuesLayers.push(...acc.valuesLayers)
 }
 
 const _dispatch = (input: _DispatchInput): void =>
-  Match.value(input.entry._kind).pipe(
-    Match.when("Secret", () => _handleSecret(input)),
-    Match.when("Literal", () => _handleLiteral(input)),
-    Match.when("Downward", () => _handleDownward(input)),
-    Match.when("Environment", () => _handleEnvironment(input)),
-    Match.exhaustive
+  Match.value(input.entry).pipe(
+    Match.discriminatorsExhaustive("_kind")({
+      Secret: (entry) => _handleSecret(entry, input),
+      Literal: (entry) => _handleLiteral(entry, input),
+      Downward: (entry) => _handleDownward(entry, input),
+      Environment: (entry) => _handleEnvironment(entry, input)
+    })
   )
 
 interface _DispatchAllInput {
-  readonly env: AnyEnvironment
+  readonly members: Readonly<Record<string, EnvMember>>
   readonly secretsOpts: Record<string, unknown> | undefined
   readonly literalsOpts: Record<string, unknown> | undefined
   readonly namespace: string | undefined
@@ -293,11 +276,7 @@ interface _DispatchAllInput {
 }
 
 const _dispatchAllMembers = (input: _DispatchAllInput): void => {
-  for (const memberKey of Object.keys(input.env.members)) {
-    const entry = unsafeCoerce<EnvMember>(
-      input.env.members[memberKey],
-      "env.members values are EnvMember by construction"
-    )
+  for (const [memberKey, entry] of Object.entries(input.members)) {
     _dispatch({
       memberKey,
       entry,
@@ -309,10 +288,10 @@ const _dispatchAllMembers = (input: _DispatchAllInput): void => {
   }
 }
 
-const _mergeValuesLayers = (layers: ReadonlyArray<_AnyValuesLayer>): _AnyValuesLayer =>
+const _mergeValuesLayers = (layers: ReadonlyArray<_CollectedLayer>): _AnyValuesLayer =>
   unsafeCoerce<_AnyValuesLayer>(
     layers.length === 0 ? Layer.empty : Layer.mergeAll(layers[0]!, ...layers.slice(1)),
-    "merged Layer over a heterogeneous list of per-secret value layers"
+    "the fold provides every collected SecretValues service; ROut is widened from never to unknown so consumers can Effect.provide the aggregate"
   )
 
 export const bindEnvironment = <
@@ -327,16 +306,13 @@ export const bindEnvironment = <
     manifests: [],
     valuesLayers: []
   }
-  const secretsOpts = unsafeCoerce<Record<string, unknown> | undefined>(
-    input.secrets,
-    "discriminated union from BindEnvironmentInput; iterate keys at runtime"
-  )
-  const literalsOpts = unsafeCoerce<Record<string, unknown> | undefined>(
-    input.literals,
-    "discriminated union from BindEnvironmentInput; iterate keys at runtime"
-  )
-
-  _dispatchAllMembers({ env: input.env, secretsOpts, literalsOpts, namespace: input.namespace, acc })
+  _dispatchAllMembers({
+    members: input.env.members,
+    secretsOpts: _asRecord(input.secrets),
+    literalsOpts: _asRecord(input.literals),
+    namespace: input.namespace,
+    acc
+  })
 
   return {
     envVars: acc.envVars,

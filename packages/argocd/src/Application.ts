@@ -12,11 +12,7 @@ const _attachLayerToTag = <
 >(
   tag: Tag,
   layer: Layer.Layer<Out, Err, In>
-): Tag & { readonly layer: Layer.Layer<Out, Err, In> } =>
-  unsafeCoerce<Tag & { readonly layer: Layer.Layer<Out, Err, In> }>(
-    Object.assign(tag, { layer }),
-    "Effect Context.Tag is callable + extensible; Object.assign mutates in place and the cast widens the public type"
-  )
+): Tag & { readonly layer: Layer.Layer<Out, Err, In> } => Object.assign(tag, { layer })
 
 export interface ArgoSource {
   readonly repoURL: string
@@ -110,26 +106,9 @@ export interface ExtraCallArgs {
   readonly source: ArgoSource
 }
 
-export interface ApplicationDefineOptions<Name extends string, Ns extends string, R, Extra> {
-  readonly name: LiteralName<Name>
-  readonly namespace: LiteralName<Ns>
-  readonly source: ArgoSource
-  readonly project?: string
-  readonly syncPolicy?: SyncPolicy
-  readonly annotations?: Readonly<Record<string, string>>
-  readonly build:
-    | Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
-    | (() => ReadonlyArray<unknown>)
-  readonly provides?: Layer.Layer<Extra>
-}
-
-const _coerceLiteralNames = <Name extends string, Ns extends string>(
-  name: LiteralName<Name>,
-  namespace: LiteralName<Ns>
-): { readonly name: Name; readonly namespace: Ns } => ({
-  name: unsafeCoerce<Name>(name, "LiteralName<Name> resolves to Name itself once the call typechecks"),
-  namespace: unsafeCoerce<Ns>(namespace, "LiteralName<Ns> resolves to Ns itself once the call typechecks")
-})
+export interface ApplicationDefineOptions<Name extends string, Ns extends string, R, Extra>
+  extends Module.DefineBaseArgs<Name, Ns, R, Extra>, ExtraConfig, ExtraCallArgs
+{}
 
 const _ownsLayer = <Name extends string, Ns extends string>(
   name: Name,
@@ -181,7 +160,10 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
   | Extra,
   Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
 > => {
-  const names = _coerceLiteralNames(opts.name, opts.namespace)
+  const names: { readonly name: Name; readonly namespace: Ns } = {
+    name: opts.name,
+    namespace: opts.namespace
+  }
   const tag = Dep.App<Name, Application>(names.name)
 
   const ownsLayer = _ownsLayer(names.name, names.namespace)

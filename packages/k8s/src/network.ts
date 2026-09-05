@@ -1,5 +1,6 @@
-import { Manifest, type SecretRef, unsafeCoerce } from "@konfig.ts/core"
+import { Manifest, type SecretRef } from "@konfig.ts/core"
 import { Effect } from "effect"
+import { _lowerServicePorts } from "./_lower"
 import type { IngressBackend as K8sIngressBackend } from "kubernetes-types/networking/v1"
 import type {
   Ingress as K8sIngress,
@@ -72,10 +73,7 @@ export const Service = {
       spec: {
         selector: input.selector,
         type: input.type,
-        ports: unsafeCoerce(
-          input.ports,
-          "input.ports is the user-typed Service spec; K8s ServicePort allows the same fields"
-        ),
+        ports: _lowerServicePorts(input.ports),
         clusterIP: input.clusterIP,
         sessionAffinity: input.sessionAffinity,
         publishNotReadyAddresses: input.publishNotReadyAddresses,
@@ -94,10 +92,7 @@ export const Service = {
       labels: input.labels,
       annotations: input.annotations,
       selector: input.selector,
-      ports: unsafeCoerce<ReadonlyArray<K8sServicePort>>(
-        input.ports,
-        "ServicePortSpec<Ports> structurally matches K8sServicePort; targetPort's PortName<Ports> brand is a phantom — runtime value is the underlying string"
-      ),
+      ports: _lowerServicePorts(input.ports),
       type: input.type,
       clusterIP: input.clusterIP,
       sessionAffinity: input.sessionAffinity,
@@ -153,12 +148,12 @@ export const Ingress = {
       },
       spec: {
         ingressClassName: input.ingressClassName,
-        rules: unsafeCoerce(
-          input.rules,
-          "user-supplied Ingress rules; widening from our convenience type to the K8s type"
-        ),
-        tls: unsafeCoerce<K8sIngressTLS[]>(input.tls, "Ingress.tls produces K8sIngressTLS with branded secretName"),
-        defaultBackend: unsafeCoerce(input.defaultBackend, "user-supplied IngressBackend; structural match to K8s type")
+        rules: input.rules === undefined ? undefined : [...input.rules],
+        tls: input.tls?.map((t): K8sIngressTLS => ({
+          hosts: t.hosts === undefined ? undefined : [...t.hosts],
+          secretName: t.secretName
+        })),
+        defaultBackend: input.defaultBackend
       }
     }
     return Manifest.make<K8sIngress>(() => Effect.succeed(resource))

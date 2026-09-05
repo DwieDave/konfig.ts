@@ -1,5 +1,6 @@
-import { runProcessString, unsafeCoerce } from "@konfig.ts/core"
+import { runProcessString } from "@konfig.ts/core"
 import { Config, Data, Effect, Redacted } from "effect"
+import { collectByKey, typedKeys } from "./_record"
 import { ChildProcess, ChildProcessSpawner } from "./_unstable"
 
 export class SecretSourceError extends Data.TaggedError("SecretSourceError")<{
@@ -28,17 +29,13 @@ const _fromConfig = <const K extends string>(input: FromConfigInput<K>): SecretS
   const resolve = Effect.gen(function*() {
     const out: Record<string, Redacted.Redacted<string>> = {}
     for (const key of input.keys) {
-      const v = yield* Config.redacted(envName(key)).pipe(
+      out[key] = yield* Config.redacted(envName(key)).pipe(
         Effect.mapError(
           (cause) => new SecretSourceError({ source: "fromConfig", key, cause })
         )
       )
-      out[key] = v
     }
-    return unsafeCoerce<ResolvedSecretValues<K>>(
-      out,
-      "per-key redacted record built from input.keys is the mapped type ResolvedSecretValues<K>"
-    )
+    return collectByKey({ keys: input.keys, build: (key) => out[key] })
   })
   return { _tag: "SecretSource", keys: input.keys, resolve }
 }
@@ -50,20 +47,8 @@ export interface LiteralInput<D extends Readonly<Record<string, string>>> {
 const _literal = <const D extends Readonly<Record<string, string>>>(
   input: LiteralInput<D>
 ): SecretSource<keyof D & string> => {
-  const keys = unsafeCoerce<Array<keyof D & string>>(
-    Object.keys(input.data),
-    "Object.keys of D returns the string keys of D, i.e. Array<keyof D & string>"
-  )
-  const resolve = Effect.sync(() => {
-    const out: Record<string, Redacted.Redacted<string>> = {}
-    for (const k of keys) {
-      out[k] = Redacted.make(input.data[k])
-    }
-    return unsafeCoerce<ResolvedSecretValues<keyof D & string>>(
-      out,
-      "per-key redacted record built from keys is the mapped type ResolvedSecretValues<keyof D & string>"
-    )
-  })
+  const keys = typedKeys(input.data)
+  const resolve = Effect.sync(() => collectByKey({ keys, build: (key) => Redacted.make(input.data[key]) }))
   return { _tag: "SecretSource", keys, resolve }
 }
 
@@ -100,10 +85,7 @@ const _fromCommand = <const K extends string>(
       }
       out[key] = Redacted.make(value)
     }
-    return unsafeCoerce<ResolvedSecretValues<K>>(
-      out,
-      "per-key redacted record built from input.keys is the mapped type ResolvedSecretValues<K>"
-    )
+    return collectByKey({ keys: input.keys, build: (key) => out[key] })
   })
   return { _tag: "SecretSource", keys: input.keys, resolve }
 }

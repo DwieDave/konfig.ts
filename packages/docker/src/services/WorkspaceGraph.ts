@@ -1,4 +1,4 @@
-import { brand, unsafeCoerce } from "@konfig.ts/core"
+import { brand } from "@konfig.ts/core"
 import { Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -11,17 +11,26 @@ export type RootDir = string & { readonly [ROOT_BRAND]: true }
 
 const _brandRoot = (s: string): RootDir => brand<RootDir>(s)
 
-export interface PackageJson {
-  readonly name?: string
-  readonly version?: string
-  readonly workspaces?: ReadonlyArray<string> | { packages?: ReadonlyArray<string> }
-  readonly dependencies?: Record<string, string>
-  readonly devDependencies?: Record<string, string>
-  readonly peerDependencies?: Record<string, string>
-  readonly scripts?: Record<string, string>
-  readonly packageManager?: string
-  readonly engines?: Record<string, string>
-}
+const DepRecord = Schema.Record(Schema.String, Schema.String)
+
+const PackageJsonSchema = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  version: Schema.optionalKey(Schema.String),
+  workspaces: Schema.optionalKey(Schema.Union([
+    Schema.Array(Schema.String),
+    Schema.Struct({ packages: Schema.optionalKey(Schema.Array(Schema.String)) })
+  ])),
+  dependencies: Schema.optionalKey(DepRecord),
+  devDependencies: Schema.optionalKey(DepRecord),
+  peerDependencies: Schema.optionalKey(DepRecord),
+  scripts: Schema.optionalKey(DepRecord),
+  packageManager: Schema.optionalKey(Schema.String),
+  engines: Schema.optionalKey(DepRecord)
+})
+
+export type PackageJson = typeof PackageJsonSchema.Type
+
+const _decodePkgJsonString = Schema.decodeEffect(Schema.fromJsonString(PackageJsonSchema))
 
 export interface Workspace {
   readonly name: string
@@ -54,13 +63,7 @@ const _readPkgJsonIfExists = (
     if (!exists) return undefined
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-      Effect.map((decoded) =>
-        unsafeCoerce<PackageJson>(
-          decoded,
-          "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses"
-        )
-      ),
+    return yield* _decodePkgJsonString(text).pipe(
       Effect.orElseSucceed(() => undefined)
     )
   })
@@ -152,9 +155,11 @@ const _expandWorkspaceGlob = (
     return filtered
   }).pipe(Effect.orElseSucceed(() => []))
 
-interface PnpmWorkspaceYaml {
-  readonly packages?: ReadonlyArray<string>
-}
+const PnpmWorkspaceYamlSchema = Schema.Struct({
+  packages: Schema.optionalKey(Schema.Array(Schema.String))
+})
+
+const _isStringArray = (u: ReadonlyArray<string> | object): u is ReadonlyArray<string> => Array.isArray(u)
 
 const _readWorkspacePatterns = (
   root: RootDir,
@@ -167,22 +172,17 @@ const _readWorkspacePatterns = (
     if (pnpmExists) {
       const text = yield* fs.readFileString(pnpmPath).pipe(Effect.orElseSucceed(() => ""))
       if (text === "") return []
-      return yield* Effect.try((): ReadonlyArray<string> => {
-        const parsed = unsafeCoerce<PnpmWorkspaceYaml>(
-          parseYaml(text),
-          "YAML.parse over a pnpm-workspace.yaml file — defensively typed as PnpmWorkspaceYaml with optional packages"
-        )
-        return parsed.packages ?? []
-      }).pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []))
+      return yield* Effect.try((): unknown => parseYaml(text)).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(PnpmWorkspaceYamlSchema)),
+        Effect.map((parsed): ReadonlyArray<string> => parsed.packages ?? []),
+        Effect.orElseSucceed((): ReadonlyArray<string> => [])
+      )
     }
     const pkg = yield* _readPkgJsonIfExists(fs, p, root)
     const ws = pkg?.workspaces
     if (!ws) return []
-    if (Array.isArray(ws)) return ws
-    return unsafeCoerce<{ readonly packages?: ReadonlyArray<string> }>(
-      ws,
-      "Array.isArray narrowed the array branch above; remaining branch is the object form"
-    ).packages ?? []
+    if (_isStringArray(ws)) return ws
+    return ws.packages ?? []
   })
 
 const _parseWorkspacePackage = (
@@ -195,12 +195,8 @@ const _parseWorkspacePackage = (
     const pkgPath = p.join(root, relDir, "package.json")
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-      Effect.map((decoded): Workspace | undefined => {
-        const pkg = unsafeCoerce<PackageJson>(
-          decoded,
-          "JSON.parse over a package.json file — structural typing accepts missing optional fields; consumer guards Object accesses"
-        )
+    return yield* _decodePkgJsonString(text).pipe(
+      Effect.map((pkg): Workspace | undefined => {
         if (!pkg.name) return undefined
         return {
           name: pkg.name,
@@ -348,7 +344,7 @@ const WORKSPACE_PROTOCOLS = ["workspace:", "link:"] as const
 
 const _workspaceDeps = (pkg: PackageJson): ReadonlyArray<string> => {
   const out: string[] = []
-  const merge = (rec?: Record<string, string>): void => {
+  const merge = (rec?: Readonly<Record<string, string>>): void => {
     if (!rec) return
     for (const [name, spec] of Object.entries(rec)) {
       if (WORKSPACE_PROTOCOLS.some((p) => spec.startsWith(p))) out.push(name)

@@ -49,13 +49,13 @@ describe("composeLayers", () => {
           expect(ref).toBe("shared")
         })
       )
-      const wired = composeLayers([{ layer: providerLayer }, { layer: consumerLayer }])
+      const wired = composeLayers({ modules: [{ layer: providerLayer }, { layer: consumerLayer }] })
       yield* Layer.build(wired).pipe(Effect.scoped, Effect.asVoid)
     }))
 
   it.effect("collapses to an empty layer when given no modules", () =>
     Effect.gen(function*() {
-      const wired = composeLayers([])
+      const wired = composeLayers({ modules: [] })
       yield* Layer.build(wired).pipe(Effect.scoped, Effect.asVoid)
     }))
 })

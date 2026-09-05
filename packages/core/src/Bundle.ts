@@ -9,11 +9,7 @@ import type { AnyRenderError } from "./RenderError"
 const _attachLayerToTag = <Tag extends object, Out, Err, In>(
   tag: Tag,
   layer: Layer.Layer<Out, Err, In>
-): Tag & { readonly layer: Layer.Layer<Out, Err, In> } =>
-  unsafeCoerce<Tag & { readonly layer: Layer.Layer<Out, Err, In> }>(
-    Object.assign(tag, { layer }),
-    "Effect Context.Tag is callable + extensible; Object.assign mutates in place and the cast widens the public type"
-  )
+): Tag & { readonly layer: Layer.Layer<Out, Err, In> } => Object.assign(tag, { layer })
 
 export interface Bundle {
   readonly name: string
@@ -85,16 +81,8 @@ export const define = <
   Dep.Provide<"App", Name> | _NsProvides<Ns> | Extra,
   Exclude<R, _NsExcludes<Ns> | Extra>
 > => {
-  const name = unsafeCoerce<Name>(
-    opts.name,
-    "LiteralName<Name> resolves to Name itself once the call typechecks"
-  )
-  const namespace = opts.namespace === undefined
-    ? undefined
-    : unsafeCoerce<Ns>(
-      opts.namespace,
-      "LiteralName<Ns> resolves to Ns itself once the call typechecks"
-    )
+  const name: Name = opts.name
+  const namespace: Ns | undefined = opts.namespace
 
   const tag = Dep.App<Name, Bundle>(name)
 
@@ -203,16 +191,7 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = n
     return makeSet({ name: opts.name, bundles })
   })
 
-  const composed = Compose.composeLayers(opts.modules)
-  const wired = opts.provides !== undefined
-    ? Layer.provideMerge(
-      composed,
-      unsafeCoerce<Layer.Layer<never>>(
-        opts.provides,
-        "group-level provides layer participates only via the type-level residual check; the fold collapses to AnyLayer"
-      )
-    )
-    : composed
+  const wired = Compose.composeLayers({ modules: opts.modules, provides: opts.provides })
 
   return unsafeCoerce<
     Effect.Effect<BundleSetResult, AnyRenderError, CoreManifest.RenderServices>

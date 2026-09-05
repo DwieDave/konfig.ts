@@ -1,5 +1,5 @@
 import type { Manifest, SecretRef } from "@konfig.ts/core"
-import { Manifest as M, unsafeCoerce } from "@konfig.ts/core"
+import { Manifest as M } from "@konfig.ts/core"
 import { Effect } from "effect"
 import type {
   CronJob as K8sCronJob,
@@ -7,8 +7,7 @@ import type {
   Ingress as K8sIngress,
   IngressRule as K8sIngressRule,
   Service as K8sService,
-  ServiceAccount as K8sServiceAccount,
-  ServicePort as K8sServicePort
+  ServiceAccount as K8sServiceAccount
 } from "./.generated/k8s-types"
 import type { ContainerInput, ContainerSpec } from "./container"
 import { Ingress, type IngressTLSInput, Service } from "./network"
@@ -118,10 +117,7 @@ const _webService = <Cs extends ReadonlyArray<ContainerInput>>(
     annotations: input.annotations,
     selector: selectorLabels,
     type: input.service.type ?? "ClusterIP",
-    ports: unsafeCoerce<ReadonlyArray<K8sServicePort>>(
-      input.service.ports,
-      "ServicePortSpec<Ports> structurally matches K8sServicePort; the PortName<Ports> brand on targetPort is a phantom whose runtime value is the underlying string"
-    )
+    ports: input.service.ports
   })
 
 const _webIngress = <Cs extends ReadonlyArray<ContainerInput>>(

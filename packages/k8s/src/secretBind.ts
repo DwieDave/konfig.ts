@@ -1,4 +1,4 @@
-import { Dep, Manifest, RenderError, type SecretRef, unsafeCoerce } from "@konfig.ts/core"
+import { Dep, Manifest, RenderError, type SecretRef } from "@konfig.ts/core"
 import type { SecretEntry, SecretSource } from "@konfig.ts/env"
 import { type Context, Effect, type Layer, Layer as L } from "effect"
 import type { SecretBackend } from "./backend"
@@ -85,20 +85,31 @@ const _missingSourceManifest = (backend: { readonly _tag: string }, name: string
     )
   )
 
-export const bindSecret = <
+// Overloaded so the namespace type parameter `Ns` only narrows when an explicit
+// `namespace` override is passed; without one, the fallback is the secret's own
+// namespace, which is only known to be `string`.
+export const bindSecret: {
+  <
+    N extends string,
+    K extends string,
+    E extends Readonly<Record<K, string>>,
+    const Ns extends string
+  >(
+    input: BindSecretInput<N, K, E, Ns> & { readonly namespace: Ns }
+  ): DeclaredSecret<N, K, Ns>
+  <N extends string, K extends string, E extends Readonly<Record<K, string>>>(
+    input: BindSecretInput<N, K, E, string>
+  ): DeclaredSecret<N, K, string>
+} = <
   N extends string,
   K extends string,
-  E extends Readonly<Record<K, string>>,
-  const Ns extends string = string
+  E extends Readonly<Record<K, string>>
 >(
-  input: BindSecretInput<N, K, E, Ns>
-): DeclaredSecret<N, K, Ns> => {
+  input: BindSecretInput<N, K, E, string>
+): DeclaredSecret<N, K, string> => {
   const { secret } = input
-  const namespace = unsafeCoerce<Ns>(
-    input.namespace ?? secret.namespace,
-    "Ns defaults to `string`; the override (if present) is `Ns`, the secret's own namespace is `string` — runtime value either way is a string"
-  )
-  const ref = SecretRefValue.of<N, K, Ns>(secret.name)
+  const namespace = input.namespace ?? secret.namespace
+  const ref = SecretRefValue.of<N, K, string>(secret.name)
   const manifest = input.backend === undefined
     ? undefined
     : input.backend.requiresSource && input.source === undefined
@@ -112,7 +123,7 @@ export const bindSecret = <
       source: input.source
     })
 
-  const out: DeclaredSecret<N, K, Ns> = {
+  const out: DeclaredSecret<N, K, string> = {
     ref,
     name: secret.name,
     namespace,

@@ -1,5 +1,5 @@
 import { CrdExtractError, Helm, parseYamlAll, runProcessExit, runProcessString, unsafeCoerce } from "@konfig.ts/core"
-import { Data, Effect, Schema } from "effect"
+import { Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { compile } from "json-schema-to-typescript"
@@ -48,41 +48,52 @@ const _decodeOpts = (opts: CrdExtractOptions) =>
 export interface CrdDocument {
   readonly crdName: string
   readonly group: string
-  readonly schema: Record<string, unknown>
+  readonly schema: { readonly [key: string]: unknown }
   readonly versions: readonly string[]
 }
 
+// One checked boundary for raw parsed CRD YAML — a doc that doesn't decode
+// (wrong kind, missing metadata.name, malformed versions) is skipped.
+const CrdVersionSchema = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  schema: Schema.optional(
+    Schema.Struct({
+      openAPIV3Schema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown))
+    })
+  )
+})
+
+const CrdDocumentSchema = Schema.Struct({
+  kind: Schema.Literal("CustomResourceDefinition"),
+  metadata: Schema.Struct({ name: Schema.String }),
+  spec: Schema.Struct({
+    group: Schema.optional(Schema.String),
+    versions: Schema.optional(Schema.Array(CrdVersionSchema))
+  })
+})
+
+const _decodeCrdDoc = Schema.decodeUnknownOption(CrdDocumentSchema)
+
 const _buildCrds = (parsedDocs: ReadonlyArray<unknown>): CrdDocument[] => {
-  const docs: unknown[] = []
-  for (const parsed of parsedDocs) {
-    if (parsed && typeof parsed === "object") docs.push(parsed)
-  }
-
   const crds: CrdDocument[] = []
-  const reason = "raw parsed YAML — every read is validated by an explicit kind/typeof check"
-  for (const doc of docs) {
-    const d = unsafeCoerce<Record<string, unknown>>(doc, reason)
-    if (d.kind !== "CustomResourceDefinition") continue
-    const meta = unsafeCoerce<Record<string, unknown> | undefined>(d.metadata, reason)
-    const spec = unsafeCoerce<Record<string, unknown> | undefined>(d.spec, reason)
-    if (!meta || !spec) continue
+  for (const parsed of parsedDocs) {
+    const doc = Option.getOrUndefined(_decodeCrdDoc(parsed))
+    if (doc === undefined) continue
 
-    const crdName = typeof meta.name === "string" ? meta.name : ""
+    const crdName = doc.metadata.name
     if (!crdName) continue
 
-    const group = typeof spec.group === "string" ? spec.group : ""
-    const versions = unsafeCoerce<Array<Record<string, unknown>> | undefined>(spec.versions, reason)
-    if (!versions?.length) continue
+    const group = doc.spec.group ?? ""
+    const versions = doc.spec.versions
+    if (versions === undefined || versions.length === 0) continue
 
     const versionNames: string[] = []
-    let schema: Record<string, unknown> | undefined
+    let schema: CrdDocument["schema"] | undefined
 
     for (const v of versions) {
-      const vName = typeof v.name === "string" ? v.name : ""
-      if (vName) versionNames.push(vName)
+      if (v.name !== undefined && v.name !== "") versionNames.push(v.name)
       if (!schema) {
-        const validation = unsafeCoerce<Record<string, unknown> | undefined>(v.schema, reason)
-        const openAPI = unsafeCoerce<Record<string, unknown> | undefined>(validation?.openAPIV3Schema, reason)
+        const openAPI = v.schema?.openAPIV3Schema
         if (openAPI) schema = openAPI
       }
     }

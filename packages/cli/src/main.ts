@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { unsafeCoerce } from "@konfig.ts/core"
 import { Cause, Console, Effect, Runtime } from "effect"
 import { createRequire } from "node:module"
 import { Command } from "./_unstable"
@@ -32,10 +31,11 @@ const root = Command.make(
 
 // At runtime this module is `dist/main.mjs`, so `../package.json` resolves to
 // the package root in both source and bundled layouts.
-const { version } = unsafeCoerce<{ version: string }>(
-  createRequire(import.meta.url)("../package.json"),
-  "package.json parsed as JSON — reading its string `version` field"
-)
+const _pkg: unknown = createRequire(import.meta.url)("../package.json")
+const version =
+  typeof _pkg === "object" && _pkg !== null && "version" in _pkg && typeof _pkg.version === "string"
+    ? _pkg.version
+    : "0.0.0"
 
 const _FULL_CAUSE_LOG_LEVELS: ReadonlySet<string> = new Set(["debug", "trace", "all"])
 

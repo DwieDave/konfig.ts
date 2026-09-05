@@ -1,5 +1,5 @@
 import * as YAML from "yaml"
-import { unsafeCoerce } from "./_cast"
+import { isRecord } from "./guards"
 
 const IGNORED_LABEL_KEYS = new Set(["helm.sh/chart"])
 const IGNORED_ANNOTATION_KEYS = new Set([
@@ -54,24 +54,20 @@ export const redact = (input: RedactInput): unknown => {
   if (Array.isArray(value)) {
     return value.map((v) => redact({ value: v, parentKey: null, options }))
   }
-  if (value !== null && typeof value === "object") {
-    const obj = unsafeCoerce<Record<string, unknown>>(
-      value,
-      "typeof === object && !Array.isArray && !== null narrowed above"
-    )
+  if (isRecord(value)) {
     const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(obj)) {
+    for (const [k, v] of Object.entries(value)) {
       if (v === null || v === undefined) continue
-      if (k === "labels" && parentKey === "metadata" && v !== null && typeof v === "object") {
-        out[k] = _redactLabelMap(unsafeCoerce(v, "metadata.labels is Record<string, string>"))
+      if (k === "labels" && parentKey === "metadata" && isRecord(v)) {
+        out[k] = _redactLabelMap(v)
         continue
       }
-      if (k === "annotations" && parentKey === "metadata" && v !== null && typeof v === "object") {
-        out[k] = _redactAnnotationMap(unsafeCoerce(v, "metadata.annotations is Record<string, string>"))
+      if (k === "annotations" && parentKey === "metadata" && isRecord(v)) {
+        out[k] = _redactAnnotationMap(v)
         continue
       }
-      if ((k === "data" || k === "stringData") && obj.kind === "Secret" && v !== null && typeof v === "object") {
-        out[k] = _redactSecretDataMap(unsafeCoerce(v, "Secret data/stringData is a map of key -> value"))
+      if ((k === "data" || k === "stringData") && value.kind === "Secret" && isRecord(v)) {
+        out[k] = _redactSecretDataMap(v)
         continue
       }
       out[k] = redact({ value: v, parentKey: k, options })
@@ -105,10 +101,9 @@ export const deepEqual = (input: DeepEqualInput): boolean => {
     }
     return true
   }
-  if (typeof a === "object" && typeof b === "object") {
-    if (Array.isArray(b)) return false
-    const oa = unsafeCoerce<Record<string, unknown>>(a, "typeof === object branch")
-    const ob = unsafeCoerce<Record<string, unknown>>(b, "typeof === object branch")
+  if (isRecord(a) && isRecord(b)) {
+    const oa = a
+    const ob = b
     const ka = Object.keys(oa)
     if (ka.length !== Object.keys(ob).length) return false
     for (const k of ka) {
@@ -125,7 +120,7 @@ export const deepEqual = (input: DeepEqualInput): boolean => {
 // in diff.property.test.ts checks it against `deepEqual(redact(a), redact(b))`.
 const _isPresent = (v: unknown): boolean => v !== null && v !== undefined
 
-const _isObjectLike = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object"
+const _isObjectLike = (v: unknown): v is Record<string, unknown> => isRecord(v)
 
 const _labelKept = (k: string, v: unknown): boolean =>
   !IGNORED_LABEL_KEYS.has(k) && !(k === MANAGED_BY_HELM_LABEL && v === "Helm")
@@ -238,16 +233,11 @@ export const parseYamlAll = (text: string): ReadonlyArray<unknown> => {
 
 // Keys by (kind, name, namespace) so docs diff by identity, not position.
 const _docKey = (value: unknown, fallbackIdx: number): string => {
-  if (value === null || typeof value !== "object") return `:doc:${fallbackIdx}`
-  const v = unsafeCoerce<
-    { readonly kind?: unknown; readonly metadata?: { readonly name?: unknown; readonly namespace?: unknown } }
-  >(
-    value,
-    "typeof === object && !== null branch above narrowed value; every field access below is guarded by a typeof check"
-  )
-  const kind = typeof v.kind === "string" ? v.kind : ""
-  const name = typeof v.metadata?.name === "string" ? v.metadata.name : ""
-  const ns = typeof v.metadata?.namespace === "string" ? v.metadata.namespace : ""
+  if (!isRecord(value)) return `:doc:${fallbackIdx}`
+  const kind = typeof value["kind"] === "string" ? value["kind"] : ""
+  const metadata = isRecord(value["metadata"]) ? value["metadata"] : undefined
+  const name = typeof metadata?.["name"] === "string" ? metadata["name"] : ""
+  const ns = typeof metadata?.["namespace"] === "string" ? metadata["namespace"] : ""
   if (kind || name) return `${kind}|${ns}|${name}`
   return `:doc:${fallbackIdx}`
 }

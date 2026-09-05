@@ -1,11 +1,11 @@
-import {
-  type ConfigMapRef,
-  type ConfigMapRefKeys,
-  type SecretRef,
-  type SecretRefKeys,
-  type SecretRefNamespace,
-  unsafeCoerce
+import type {
+  ConfigMapRef,
+  ConfigMapRefKeys,
+  SecretRef,
+  SecretRefKeys,
+  SecretRefNamespace
 } from "@konfig.ts/core"
+import { _entriesOf } from "./_lower"
 
 export interface EnvVarSource {
   readonly secretKeyRef?: {
@@ -117,8 +117,8 @@ export const EnvVar = {
     map: Map,
     opts?: SecretEnvOptions<R>
   ): ReadonlyArray<EnvVar<keyof Map & string>> =>
-    Object.entries(map).map(([name, key]) => ({
-      name: unsafeCoerce<keyof Map & string>(name, "Object.entries of Map yields its own keys"),
+    _entriesOf(map).map(([name, key]) => ({
+      name,
       valueFrom: { secretKeyRef: { name: ref, key, optional: opts?.optional } }
     })),
   // oxlint-disable-next-line app/no-multiple-function-params -- same shape as secretEnv
@@ -130,8 +130,8 @@ export const EnvVar = {
     map: Map,
     opts?: ConfigMapEnvOptions
   ): ReadonlyArray<EnvVar<keyof Map & string>> =>
-    Object.entries(map).map(([name, key]) => ({
-      name: unsafeCoerce<keyof Map & string>(name, "Object.entries of Map yields its own keys"),
+    _entriesOf(map).map(([name, key]) => ({
+      name,
       valueFrom: { configMapKeyRef: { name: ref, key, optional: opts?.optional } }
     })),
   fromConfigMap: <const EnvName extends string, N extends string, K extends string = string>(

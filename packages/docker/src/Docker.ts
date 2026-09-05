@@ -1,4 +1,3 @@
-import { unsafeCoerce } from "@konfig.ts/core"
 import type {
   BuildAtom,
   CopyAtom,
@@ -32,11 +31,11 @@ export const makeDockerApp = (spec: DockerSpec): DockerApp => ({
 export const isDockerApp = (u: unknown): u is DockerApp => typeof u === "object" && u !== null && DockerAppTypeId in u
 
 const _omitUndef = <T extends object>(o: T): T => {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(o)) {
-    if (v !== undefined) out[k] = v
+  const out = { ...o }
+  for (const [k, v] of Object.entries(out)) {
+    if (v === undefined) Reflect.deleteProperty(out, k)
   }
-  return unsafeCoerce<T>(out, "out is built from Object.entries(o) with only defined keys of T dropped")
+  return out
 }
 
 export const Docker = {

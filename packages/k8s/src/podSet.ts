@@ -1,4 +1,4 @@
-import { Manifest, unsafeCoerce } from "@konfig.ts/core"
+import { Manifest } from "@konfig.ts/core"
 import { Effect } from "effect"
 import type {
   Deployment as K8sDeployment,
@@ -51,11 +51,18 @@ const _asPodSetOutput = (
   s: K8sService | undefined,
   n: K8sNetworkPolicy | undefined
 ): PodSetOutput => {
-  const reason = "PodSet.define: tuple shape is determined by which of service/netPol are present"
   if (s !== undefined && n !== undefined) {
-    return unsafeCoerce<readonly [K8sDeployment, K8sService, K8sNetworkPolicy]>([d, s, n], reason)
+    const out: readonly [K8sDeployment, K8sService, K8sNetworkPolicy] = [d, s, n]
+    return out
   }
-  if (s !== undefined) return unsafeCoerce<readonly [K8sDeployment, K8sService]>([d, s], reason)
-  if (n !== undefined) return unsafeCoerce<readonly [K8sDeployment, K8sNetworkPolicy]>([d, n], reason)
-  return unsafeCoerce<readonly [K8sDeployment]>([d], reason)
+  if (s !== undefined) {
+    const out: readonly [K8sDeployment, K8sService] = [d, s]
+    return out
+  }
+  if (n !== undefined) {
+    const out: readonly [K8sDeployment, K8sNetworkPolicy] = [d, n]
+    return out
+  }
+  const out: readonly [K8sDeployment] = [d]
+  return out
 }

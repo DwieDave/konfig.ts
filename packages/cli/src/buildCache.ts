@@ -1,5 +1,4 @@
 import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
-import { unsafeCoerce } from "@konfig.ts/core"
 import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -24,13 +23,17 @@ const _orAbsentIfNotFound = <A, R>(
     )
   )
 
-export interface BuildCacheEntry {
-  readonly inputHash: string
-  readonly outputHash: string
-  readonly outDirAbs: string
-  readonly fileCount: number
-  readonly timestamp: string
-}
+const BuildCacheEntrySchema = Schema.Struct({
+  inputHash: Schema.String,
+  outputHash: Schema.String,
+  outDirAbs: Schema.String,
+  fileCount: Schema.Finite,
+  timestamp: Schema.String
+})
+
+export type BuildCacheEntry = typeof BuildCacheEntrySchema.Type
+
+const _decodeCacheEntryJson = Schema.decodeEffect(Schema.fromJsonString(BuildCacheEntrySchema))
 
 interface ComputeInputHashInput {
   readonly cfg: ResolvedKonfigConfig
@@ -272,13 +275,6 @@ interface ReadEntryInput {
   readonly ctx: RenderContext
 }
 
-const _parseCacheEntry = (text: string): BuildCacheEntry =>
-  // oxlint-disable-next-line app/no-parse-coercion
-  unsafeCoerce<BuildCacheEntry>(
-    JSON.parse(text),
-    "parsed JSON shape matches BuildCacheEntry — caller revalidates by recomputing inputHash"
-  )
-
 export const readCacheEntry = (input: ReadEntryInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -288,7 +284,10 @@ export const readCacheEntry = (input: ReadEntryInput) =>
     if (!exists) return undefined
     const text = yield* fs.readFileString(cacheFile).pipe(Effect.orElseSucceed(() => ""))
     if (text === "") return undefined
-    return yield* Effect.try(() => _parseCacheEntry(text)).pipe(Effect.orElseSucceed(() => undefined))
+    // A decode failure (stale/corrupt cache file) is just a cache miss.
+    return yield* _decodeCacheEntryJson(text).pipe(
+      Effect.orElseSucceed((): BuildCacheEntry | undefined => undefined)
+    )
   })
 
 interface WriteEntryInput {

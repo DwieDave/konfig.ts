@@ -40,12 +40,10 @@ const _define = <const EnvName extends string, T = string>(
     )
   const serialized = userSerialize(input.value)
 
-  const parser = input.schema !== undefined
+  const value: T = input.value
+  const parser: Config.Config<T> = input.schema !== undefined
     ? input.schema
-    : unsafeCoerce<Config.Config<T>>(
-      Config.succeed(input.value),
-      "Config.succeed of the T-typed input.value is a constant Config<T>"
-    )
+    : Config.succeed(value)
 
   const envClaims: ReadonlyArray<EnvClaim> = [
     _envClaim({ envName: input.envName, label: `Literal(${input.envName})` })

@@ -36,12 +36,7 @@ export const make = <A>(run: MakeRun<A>): Manifest<A> => ({
   ),
   render: (ctx) => {
     const result = run(ctx)
-    return Effect.isEffect(result)
-      ? unsafeCoerce<Effect.Effect<A, AnyRenderError, RenderServices>>(
-        result,
-        "Effect.isEffect narrowed `result` to an Effect; TS's narrowing doesn't carry the Effect's full type parameters"
-      )
-      : Effect.succeed(result)
+    return Effect.isEffect(result) ? result : Effect.succeed(result)
   }
 })
 
@@ -85,10 +80,7 @@ export const whenever = <A>(input: WheneverInput<A>): Manifest<A | undefined> =>
   make((ctx) =>
     input.cond
       ? input.thunk().render(ctx)
-      : unsafeCoerce<Effect.Effect<A | undefined, AnyRenderError, RenderServices>>(
-        Effect.undefined,
-        "undefined branch — A is the type seen by the consumer when cond=false"
-      )
+      : Effect.undefined
   )
 
 export type EmbedYamlSource = { readonly path: string } | { readonly literal: string }

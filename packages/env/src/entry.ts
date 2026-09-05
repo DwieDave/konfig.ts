@@ -1,4 +1,3 @@
-import { unsafeCoerce } from "@konfig.ts/core"
 import type { Config } from "effect"
 import { Data } from "effect"
 
@@ -39,8 +38,4 @@ export interface MakeEntryInput<C extends Config.Config<unknown>, M extends obje
 
 export const _makeEntry = <C extends Config.Config<unknown>, M extends object>(
   input: MakeEntryInput<C, M>
-): C & M =>
-  unsafeCoerce<C & M>(
-    Object.assign(input.config, input.metadata),
-    "Object.assign mutates and returns config carrying metadata's own properties, widening it to the intersection C & M"
-  )
+): C & M => Object.assign(input.config, input.metadata)

@@ -1,5 +1,5 @@
-import { unsafeCoerce } from "@konfig.ts/core"
 import { Config, type Redacted } from "effect"
+import { allConfigsByKey, collectByKey, typedKeys } from "./_record"
 import { _envClaim, _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
 
 export interface SecretEntry<
@@ -29,26 +29,11 @@ const _define = <
 >(
   input: DefineSecretInput<N, E>
 ): SecretEntry<N, keyof E & string, E> => {
-  const keys = unsafeCoerce<Array<keyof E & string>>(
-    Object.keys(input.env),
-    "Object.keys of E returns the string keys of E, i.e. Array<keyof E & string>"
-  )
+  const keys = typedKeys(input.env)
 
-  const fields: Record<string, Config.Config<Redacted.Redacted<string>>> = {}
-  for (const key of keys) {
-    fields[key] = Config.redacted(input.env[key])
-  }
+  const fields = collectByKey({ keys, build: (key) => Config.redacted(input.env[key]) })
 
-  const root = unsafeCoerce<
-    Config.Config<
-      {
-        readonly [P in keyof E & string]: Redacted.Redacted<string>
-      }
-    >
-  >(
-    Config.all(fields),
-    "Config.all over the per-key redacted fields yields a Config of the mapped record keyed by keyof E & string"
-  )
+  const root: Config.Config<{ readonly [P in keyof E & string]: Redacted.Redacted<string> }> = allConfigsByKey(fields)
 
   const envClaims: ReadonlyArray<EnvClaim> = keys.map((key) =>
     _envClaim({ envName: input.env[key], label: `Secret(${input.name}).${key}` })
@@ -62,14 +47,7 @@ const _define = <
       namespace: input.namespace,
       env: input.env,
       keys,
-      fields: unsafeCoerce<
-        {
-          readonly [P in keyof E & string]: Config.Config<Redacted.Redacted<string>>
-        }
-      >(
-        fields,
-        "fields record was populated for every key in keys, matching the mapped type keyed by keyof E & string"
-      ),
+      fields,
       envClaims
     }
   })

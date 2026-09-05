@@ -4,9 +4,9 @@ import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
 import { createHash } from "node:crypto"
 import * as YAML from "yaml"
-import { unsafeCoerce } from "./_cast"
 import { ChildProcess, ChildProcessSpawner } from "./_unstable"
 import { parseYamlAll } from "./diff"
+import { isRecord } from "./guards"
 import {
   DEFAULT_HELM_CACHE_DIR,
   DEFAULT_HELM_TIMEOUT_SECONDS,
@@ -62,19 +62,6 @@ interface _ParseHelmOutputInput {
   readonly version: string
   readonly namespace: string | undefined
 }
-interface _ParsedDocShape {
-  readonly kind?: string
-  readonly metadata?: { readonly namespace?: string }
-}
-
-const _asDocShape = (value: unknown): _ParsedDocShape | null =>
-  value !== null && typeof value === "object"
-    ? unsafeCoerce<_ParsedDocShape>(
-      value,
-      "parseYamlAll returned a parsed document object; the kind/metadata reads below are each typeof-guarded"
-    )
-    : null
-
 // Uses parseYamlAll (not a naive /^---$/m split) so a `---` inside a block scalar can't
 // spuriously split one manifest into two. Docs stay parsed (ParsedDoc, not
 // RawYaml): re-stringifying here only for the CLI to parse and serialize again
@@ -86,15 +73,16 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<ParsedDoc
     const results: ParsedDoc[] = []
     for (const parsed of parseYamlAll(output)) {
       let value: unknown = parsed
-      if (namespace !== undefined) {
-        const shape = _asDocShape(parsed)
+      if (namespace !== undefined && isRecord(parsed)) {
+        const kind = parsed["kind"]
+        const metadata = isRecord(parsed["metadata"]) ? parsed["metadata"] : undefined
+        const ns = metadata?.["namespace"]
         if (
-          shape !== null &&
-          typeof shape.kind === "string" &&
-          !CLUSTER_SCOPED_KINDS.has(shape.kind) &&
-          (shape.metadata?.namespace === undefined || shape.metadata.namespace === "")
+          typeof kind === "string" &&
+          !CLUSTER_SCOPED_KINDS.has(kind) &&
+          (ns === undefined || ns === "")
         ) {
-          value = { ...shape, metadata: { ...shape.metadata, namespace } }
+          value = { ...parsed, metadata: { ...metadata, namespace } }
         }
       }
       results.push({ _tag: "ParsedDoc", value, origin })
