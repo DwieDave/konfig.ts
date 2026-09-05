@@ -1,5 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { RenderContext, Yaml } from "@konfig.ts/core"
+import { renderAllYamlEffect, RenderContext } from "@konfig.ts/core"
 import { Downward, Literal, Secret, SecretSource } from "@konfig.ts/env"
 import { Environment, Workload } from "@konfig.ts/k8s"
 import { ConfigProvider, Context, Effect, Layer, Redacted, Schema } from "effect"
@@ -70,10 +70,7 @@ void _podFieldPath
 
 const renderManifests = Effect.gen(function*() {
   const ctx = RenderContext.make("prod")
-  const [deployment, service] = yield* api.render(ctx)
-  for (const r of [deployment, service]) {
-    yield* Effect.log(`${Yaml.serialize({ value: r })}---`)
-  }
+  yield* Effect.log(yield* renderAllYamlEffect({ ctx, manifests: [api] }))
 })
 
 const podMainBundle = Effect.gen(function*() {

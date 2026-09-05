@@ -1,5 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { RenderContext, Yaml } from "@konfig.ts/core"
+import { renderAllYamlEffect, RenderContext } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
 import { ExternalSecrets } from "@konfig.ts/external-secrets"
 import { hashSecretValues, Secret, Workload } from "@konfig.ts/k8s"
@@ -45,12 +45,9 @@ const program = Effect.gen(function*() {
 
   yield* Effect.log(`session-key build-time hash: ${sessionHash}`)
   yield* Effect.log("=== ExternalSecret ===")
-  yield* Effect.log(`${Yaml.serialize({ value: yield* sessionKeyK8s.manifest!.render(ctx) })}---`)
+  yield* Effect.log(yield* renderAllYamlEffect({ ctx, manifests: [sessionKeyK8s.manifest!] }))
   yield* Effect.log("=== Deployment + Service ===")
-  const [deployment, service] = yield* api.render(ctx)
-  for (const r of [deployment, service]) {
-    yield* Effect.log(`${Yaml.serialize({ value: r })}---`)
-  }
+  yield* Effect.log(yield* renderAllYamlEffect({ ctx, manifests: [api] }))
 }).pipe(Effect.provide(sessionKeyK8s.layer!))
 
 NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(NodeServices.layer)))

@@ -1,5 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { RenderContext, Yaml } from "@konfig.ts/core"
+import { renderAllYamlEffect, RenderContext } from "@konfig.ts/core"
 import { Literal, Secret, SecretSource } from "@konfig.ts/env"
 import { Environment, NativeSecret, Workload } from "@konfig.ts/k8s"
 import { Effect } from "effect"
@@ -45,15 +45,9 @@ const api = Workload.web({
 const program = Effect.gen(function*() {
   const ctx = RenderContext.make("prod")
   yield* Effect.log("=== Secret manifests (from Environment.bind) ===")
-  for (const m of apiEnvK8s.manifests) {
-    const rendered = yield* m.render(ctx)
-    yield* Effect.log(`${Yaml.serialize({ value: rendered })}---`)
-  }
+  yield* Effect.log(yield* renderAllYamlEffect({ ctx, manifests: apiEnvK8s.manifests }))
   yield* Effect.log("=== Workload manifests ===")
-  const [deployment, service] = yield* api.render(ctx)
-  for (const r of [deployment, service]) {
-    yield* Effect.log(`${Yaml.serialize({ value: r })}---`)
-  }
+  yield* Effect.log(yield* renderAllYamlEffect({ ctx, manifests: [api] }))
 })
 
 NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(NodeServices.layer)))

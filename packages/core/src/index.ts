@@ -33,6 +33,7 @@ export {
   parseYaml,
   parseYamlAll,
   redact,
+  redactedEqual,
   type RedactOptions
 } from "./diff"
 export * as Helm from "./Helm"
@@ -67,15 +68,25 @@ export {
   DEFAULT_CRD_OUT_DIR,
   DEFAULT_HELM_CACHE_DIR,
   DEFAULT_HELM_MIN_VERSION,
+  DEFAULT_HELM_TIMEOUT_SECONDS,
+  DEFAULT_HELM_VERSION_TIMEOUT_SECONDS,
   KONFIG_CHARTS_DIR_ENV,
   KONFIG_CRD_OUT_DIR_ENV,
   KONFIG_HELM_CACHE_ENV,
-  KONFIG_HELM_MIN_VERSION_ENV
+  KONFIG_HELM_MIN_VERSION_ENV,
+  KONFIG_HELM_TIMEOUT_ENV
 } from "./konfigDefaults"
-export type { EmbedYamlSource, RawYaml } from "./Manifest"
+export type { EmbedYamlSource, ParsedDoc, RawYaml } from "./Manifest"
 export * as Manifest from "./Manifest"
 export * as Module from "./Module"
-export { render, type RenderOptions } from "./render"
+export {
+  render,
+  renderAllYaml,
+  renderAllYamlEffect,
+  type RenderAllYamlEffectInput,
+  type RenderAllYamlInput,
+  type RenderOptions
+} from "./render"
 export { RenderContext } from "./RenderContext"
 export {
   type AnyRenderError,
@@ -88,5 +99,14 @@ export {
   RenderError
 } from "./RenderError"
 export { renderManifest } from "./renderManifest"
-export { processDetail, ProcessError, runProcessExit, runProcessString } from "./subprocess"
+export {
+  processDetail,
+  ProcessError,
+  type ProcessFailure,
+  type ProcessOptions,
+  ProcessTimeout,
+  runProcessExit,
+  runProcessString,
+  type RunProcessStringOptions
+} from "./subprocess"
 export * as Yaml from "./yaml"

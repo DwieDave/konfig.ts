@@ -1,7 +1,5 @@
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { RenderContext, Yaml } from "@konfig.ts/core"
+import { renderAllYaml } from "@konfig.ts/core"
 import { EnvVar, Secret, Workload } from "@konfig.ts/k8s"
-import { Effect } from "effect"
 
 const dbCreds = Secret.make({
   name: "db-creds",
@@ -42,13 +40,4 @@ const _wrong: typeof dbCreds.ref = Secret.make({
 // @ts-expect-error  keys are in the type — only "url" was declared on dbCreds
 EnvVar.fromSecret({ name: "DATABASE_PASSWORD", ref: dbCreds.ref, key: "passowrd" })
 
-const program = Effect.gen(function*() {
-  const ctx = RenderContext.make("prod")
-  const secret = yield* dbCreds.render(ctx)
-  const [deployment, service] = yield* api.render(ctx)
-  for (const r of [secret, deployment, service]) {
-    yield* Effect.log(`${Yaml.serialize({ value: r })}---`)
-  }
-})
-
-NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+process.stdout.write(await renderAllYaml({ env: "prod", manifests: [dbCreds, api] }))

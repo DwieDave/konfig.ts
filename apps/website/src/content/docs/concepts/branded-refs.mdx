@@ -38,7 +38,7 @@ The following inputs take a branded ref and reject a raw string:
 
 ### Namespace match
 
-The kube-apiserver only resolves a `secretKeyRef` inside the pod's own namespace, so a secret ref also carries the namespace it was bound in. `EnvVar.fromSecretForPod({ name, ref, key, podNamespace })` requires the two to match: passing a ref bound in `"app"` to a pod in `"batch"` is a compile error. `EnvVar.fromSecret` is the unchecked variant for cases where the namespace is not known at the call site, and `SecretRef.unsafeReNamespace` widens the slot when you have to.
+The kube-apiserver only resolves a `secretKeyRef` inside the pod's own namespace, so a secret ref also carries the namespace it was bound in. `EnvVar.fromSecretForPod({ name, ref, key, podNamespace })` requires the two to match: passing a ref bound in `"app"` to a pod in `"batch"` is a compile error. `EnvVar.secretEnv(ref, { DATABASE_URL: "url", DATABASE_PASSWORD: "password" }, { podNamespace })` does the same for several vars in one call (`EnvVar.configMapEnv` is the ConfigMap twin). `EnvVar.fromSecret`, or `secretEnv` without `podNamespace`, is the unchecked variant for cases where the namespace is not known at the call site, and `SecretRef.unsafeReNamespace` widens the slot when you have to.
 
 ### Duplicate env names
 
