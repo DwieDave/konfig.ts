@@ -87,16 +87,16 @@ export const setImageEffect = (args: SetImageArgs) =>
 export const setCommand = Command.make(
   "set",
   {
-    env: Argument.string("env").pipe(
+    env: Argument.String("env").pipe(
       Argument.withDescription("Env key in images.json (e.g. prod, staging)")
     ),
-    app: Argument.string("app").pipe(
+    app: Argument.String("app").pipe(
       Argument.withDescription("App key under envs.<env> in images.json")
     ),
-    image: Argument.string("image").pipe(
+    image: Argument.String("image").pipe(
       Argument.withDescription("Full image ref (e.g. ghcr.io/<org>/<app>:<sha>)")
     ),
-    create: Flag.boolean("create").pipe(
+    create: Flag.Boolean("create").pipe(
       Flag.withDescription("Allow adding a new app key under an existing env (fails otherwise)"),
       Flag.withDefault(false)
     )

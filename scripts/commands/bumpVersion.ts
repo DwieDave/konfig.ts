@@ -55,7 +55,7 @@ const _execFile = promisify(execFile)
 export const bumpVersionCommand = Command.make(
   "bump-version",
   {
-    target: Argument.string("target").pipe(
+    target: Argument.String("target").pipe(
       Argument.withDescription("Explicit x.y.z version, or one of major | minor | patch")
     )
   },

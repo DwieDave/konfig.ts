@@ -35,7 +35,7 @@ describe("Literal", () => {
       const port = Literal.define({
         envName: "PORT",
         value: 8080,
-        schema: Config.port("PORT")
+        schema: Config.Port("PORT")
       })
       const v = yield* port
       expect(v).toBe(9090)

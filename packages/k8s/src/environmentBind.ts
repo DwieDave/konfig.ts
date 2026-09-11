@@ -260,10 +260,10 @@ const _handleEnvironment = (entry: AnyEnvironment, input: _DispatchInput): void 
 const _dispatch = (input: _DispatchInput): void =>
   Match.value(input.entry).pipe(
     Match.discriminatorsExhaustive("_kind")({
-      Secret: (entry) => _handleSecret(entry, input),
-      Literal: (entry) => _handleLiteral(entry, input),
-      Downward: (entry) => _handleDownward(entry, input),
-      Environment: (entry) => _handleEnvironment(entry, input)
+      Secret: (entry: AnySecretEntry) => _handleSecret(entry, input),
+      Literal: (entry: AnyLiteralEntry) => _handleLiteral(entry, input),
+      Downward: (entry: AnyDownwardEntry) => _handleDownward(entry, input),
+      Environment: (entry: AnyEnvironment) => _handleEnvironment(entry, input)
     })
   )
 

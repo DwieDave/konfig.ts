@@ -65,7 +65,7 @@ const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFi
 export const testCommand = Command.make(
   "test",
   {
-    concurrency: Flag.integer("concurrency").pipe(
+    concurrency: Flag.Int("concurrency").pipe(
       Flag.withDefault(Math.max(2, Math.floor(availableParallelism() / 2))),
       Flag.withDescription("How many package suites run at once (each already parallelizes internally)")
     )

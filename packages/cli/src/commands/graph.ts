@@ -134,24 +134,24 @@ export const runGraph = (
 export const graphCommand = Command.make(
   "graph",
   {
-    target: Argument.string("target")
+    target: Argument.String("target")
       .pipe(
         Argument.withDescription(
           "workspace dir or name; omit to render the whole monorepo"
         ),
         Argument.optional
       ),
-    withDev: Flag.boolean("with-dev").pipe(
+    withDev: Flag.Boolean("with-dev").pipe(
       Flag.withDescription("also draw devDependency edges (annotated with ▽)"),
       Flag.withDefault(false)
     ),
-    full: Flag.boolean("full").pipe(
+    full: Flag.Boolean("full").pipe(
       Flag.withDescription(
         "show every direct edge (default hides transitively-implied edges, e.g. A→C when A→B→C exists)"
       ),
       Flag.withDefault(false)
     ),
-    width: Flag.integer("width").pipe(
+    width: Flag.Int("width").pipe(
       Flag.withDescription(
         "override detected terminal width (defaults to stdout.columns or 100)"
       ),

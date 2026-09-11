@@ -33,8 +33,8 @@ export class CrdDrift extends Data.TaggedError("CrdDrift")<{
 }> {}
 
 const _crdExtractFlags = {
-  release: Flag.string("release").pipe(Flag.withDescription("Chart release id"), Flag.optional),
-  all: Flag.boolean("all").pipe(
+  release: Flag.String("release").pipe(Flag.withDescription("Chart release id"), Flag.optional),
+  all: Flag.Boolean("all").pipe(
     Flag.withDescription("Extract for all charts"),
     Flag.withDefault(false)
   )

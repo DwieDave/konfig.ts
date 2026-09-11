@@ -29,7 +29,7 @@ const _fromConfig = <const K extends string>(input: FromConfigInput<K>): SecretS
   const resolve = Effect.gen(function*() {
     const out: Record<string, Redacted.Redacted<string>> = {}
     for (const key of input.keys) {
-      out[key] = yield* Config.redacted(envName(key)).pipe(
+      out[key] = yield* Config.Redacted(envName(key)).pipe(
         Effect.mapError(
           (cause) => new SecretSourceError({ source: "fromConfig", key, cause })
         )

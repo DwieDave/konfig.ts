@@ -10,12 +10,12 @@ export const apiEnv = Environment.define({
     port: Literal.define({
       envName: "HTTP_PORT",
       value: 8080,
-      schema: Config.number("HTTP_PORT").pipe(Config.withDefault(8080))
+      schema: Config.Number("HTTP_PORT").pipe(Config.withDefault(8080))
     }),
     logLevel: Literal.define({
       envName: "LOG_LEVEL",
       value: "info",
-      schema: Config.string("LOG_LEVEL").pipe(Config.withDefault("info"))
+      schema: Config.String("LOG_LEVEL").pipe(Config.withDefault("info"))
     })
   }),
   runtime: Environment.define({
@@ -31,12 +31,12 @@ export const workerEnv = Environment.define({
     batchSize: Literal.define({
       envName: "BATCH_SIZE",
       value: 100,
-      schema: Config.number("BATCH_SIZE").pipe(Config.withDefault(100))
+      schema: Config.Number("BATCH_SIZE").pipe(Config.withDefault(100))
     }),
     concurrency: Literal.define({
       envName: "CONCURRENCY",
       value: 4,
-      schema: Config.number("CONCURRENCY").pipe(Config.withDefault(4))
+      schema: Config.Number("CONCURRENCY").pipe(Config.withDefault(4))
     })
   }),
   runtime: Environment.define({

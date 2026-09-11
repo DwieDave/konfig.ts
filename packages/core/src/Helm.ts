@@ -115,9 +115,9 @@ const _isBelow = (
 // gives up with ProcessTimeout. Without a bound, a `helm pull` that prompts for
 // registry credentials sits forever on a closed stdin. KONFIG_HELM_TIMEOUT takes
 // a bare number of seconds ("300") or an effect duration ("5 minutes").
-export const timeout: Config.Config<Duration.Duration> = Config.number(KONFIG_HELM_TIMEOUT_ENV).pipe(
+export const timeout: Config.Config<Duration.Duration> = Config.Number(KONFIG_HELM_TIMEOUT_ENV).pipe(
   Config.map(Duration.seconds),
-  Config.orElse(() => Config.duration(KONFIG_HELM_TIMEOUT_ENV)),
+  Config.orElse(() => Config.Duration(KONFIG_HELM_TIMEOUT_ENV)),
   Config.withDefault(Duration.seconds(DEFAULT_HELM_TIMEOUT_SECONDS))
 )
 
@@ -389,7 +389,7 @@ export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> => {
       // not a shared filesystem path, and the project-wide default the CLI
       // resolves the same way is enforced at the CLI boundary instead (the
       // `helm version` preflight in `crd extract`/`crd verify`/`helm fetch`).
-      const cacheDir = yield* Config.string(KONFIG_HELM_CACHE_ENV).pipe(
+      const cacheDir = yield* Config.String(KONFIG_HELM_CACHE_ENV).pipe(
         Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR)),
         _inPhase(opts, "pull")
       )

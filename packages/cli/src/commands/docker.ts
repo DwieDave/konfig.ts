@@ -130,12 +130,12 @@ export const previewEffect = (
 const previewCommand = Command.make(
   "preview",
   {
-    target: Argument.string("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
-    prodOnly: Flag.boolean("prod-only").pipe(
+    target: Argument.String("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
+    prodOnly: Flag.Boolean("prod-only").pipe(
       Flag.withDescription("only emit the prod Dockerfile"),
       Flag.withDefault(false)
     ),
-    devOnly: Flag.boolean("dev-only").pipe(
+    devOnly: Flag.Boolean("dev-only").pipe(
       Flag.withDescription("only emit the dev Dockerfile"),
       Flag.withDefault(false)
     )
@@ -184,14 +184,14 @@ export const writeEffect = (
 const writeCommand = Command.make(
   "write",
   {
-    target: Argument.string("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
-    outDir: Flag.string("out-dir").pipe(
+    target: Argument.String("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
+    outDir: Flag.String("out-dir").pipe(
       Flag.withDescription("destination directory (default: <target>)"),
       Flag.optional
     ),
-    prodOnly: Flag.boolean("prod-only").pipe(Flag.withDefault(false)),
-    devOnly: Flag.boolean("dev-only").pipe(Flag.withDefault(false)),
-    force: Flag.boolean("force").pipe(
+    prodOnly: Flag.Boolean("prod-only").pipe(Flag.withDefault(false)),
+    devOnly: Flag.Boolean("dev-only").pipe(Flag.withDefault(false)),
+    force: Flag.Boolean("force").pipe(
       Flag.withDescription("overwrite a destination file even if it is not konfig-managed"),
       Flag.withDefault(false)
     )
@@ -263,8 +263,8 @@ export const diffEffect = (
 const diffCommand = Command.make(
   "diff",
   {
-    target: Argument.string("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
-    format: Flag.choice("format", ["summary", "detail", "json"] as const satisfies readonly DiffFormat[]).pipe(
+    target: Argument.String("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
+    format: Flag.Literals("format", ["summary", "detail", "json"] as const satisfies readonly DiffFormat[]).pipe(
       Flag.withDescription("Output format"),
       Flag.withDefault("summary" as const)
     )

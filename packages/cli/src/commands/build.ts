@@ -145,16 +145,16 @@ export const runBuild = (input: RunBuildInput) =>
 export const buildCommand = Command.make(
   "build",
   {
-    env: Argument.string("env").pipe(Argument.withDescription("Env name to build (e.g. prod)")),
-    log: Flag.choice("log", ["text", "json"] as const).pipe(
+    env: Argument.String("env").pipe(Argument.withDescription("Env name to build (e.g. prod)")),
+    log: Flag.Literals("log", ["text", "json"] as const).pipe(
       Flag.withDescription("Output format for log lines"),
       Flag.withDefault("text" as const)
     ),
-    verbose: Flag.boolean("verbose").pipe(
+    verbose: Flag.Boolean("verbose").pipe(
       Flag.withDescription("Enable Effect tracing for the render program"),
       Flag.withDefault(false)
     ),
-    noCache: Flag.boolean("no-cache").pipe(
+    noCache: Flag.Boolean("no-cache").pipe(
       Flag.withDescription(
         "Skip the input-hash check and force a fresh render (debug / first-build use)."
       ),

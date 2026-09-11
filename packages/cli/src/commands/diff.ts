@@ -47,8 +47,8 @@ export const readBaselineDir = (baselineDir: string) =>
 export const diffCommand = Command.make(
   "diff",
   {
-    env: Argument.string("env").pipe(Argument.withDescription("Env to diff")),
-    format: Flag.choice("format", ["summary", "detail", "json"] as const satisfies readonly DiffFormat[]).pipe(
+    env: Argument.String("env").pipe(Argument.withDescription("Env to diff")),
+    format: Flag.Literals("format", ["summary", "detail", "json"] as const satisfies readonly DiffFormat[]).pipe(
       Flag.withDescription("Output format"),
       Flag.withDefault("summary" as const)
     ),

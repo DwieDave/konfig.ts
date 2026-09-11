@@ -71,14 +71,14 @@ export const runValidate = (input: RunValidateInput) =>
 export const validateCommand = Command.make(
   "validate",
   {
-    env: Argument.string("env").pipe(Argument.withDescription("Env name to validate")),
-    strict: Flag.boolean("strict").pipe(
+    env: Argument.String("env").pipe(Argument.withDescription("Env name to validate")),
+    strict: Flag.Boolean("strict").pipe(
       Flag.withDescription(
         "Additionally run kubeconform -strict over the rendered manifests (requires kubeconform on PATH)"
       ),
       Flag.withDefault(false)
     ),
-    ignoreMissingSchemas: Flag.boolean("ignore-missing-schemas").pipe(
+    ignoreMissingSchemas: Flag.Boolean("ignore-missing-schemas").pipe(
       Flag.withDescription(
         "Pass --ignore-missing-schemas to kubeconform (useful for CRDs the bundled schema set doesn't know)"
       ),

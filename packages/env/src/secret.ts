@@ -31,7 +31,7 @@ const _define = <
 ): SecretEntry<N, keyof E & string, E> => {
   const keys = typedKeys(input.env)
 
-  const fields = collectByKey({ keys, build: (key) => Config.redacted(input.env[key]) })
+  const fields = collectByKey({ keys, build: (key) => Config.Redacted(input.env[key]) })
 
   const root: Config.Config<{ readonly [P in keyof E & string]: Redacted.Redacted<string> }> = allConfigsByKey(fields)
 

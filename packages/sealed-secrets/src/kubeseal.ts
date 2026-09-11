@@ -47,7 +47,7 @@ export const resolveCertPath = (
   Effect.gen(function*() {
     const fromOpt = input.certPath
     if (fromOpt !== undefined && fromOpt.length > 0) return fromOpt
-    const fromEnv = yield* Config.string("KUBESEAL_CERT").pipe(Config.option, Effect.orDie)
+    const fromEnv = yield* Config.String("KUBESEAL_CERT").pipe(Config.option, Effect.orDie)
     if (Option.isSome(fromEnv) && fromEnv.value.length > 0) return fromEnv.value
     return yield* new KubesealCertMissing({ hint: "checked opts.certPath, then $KUBESEAL_CERT" })
   })

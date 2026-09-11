@@ -75,7 +75,7 @@ const _restore = Effect.gen(function*() {
 export const prepackExportsCommand = Command.make(
   "prepack-exports",
   {
-    mode: Argument.string("mode").pipe(
+    mode: Argument.String("mode").pipe(
       Argument.withDescription(`"strip" before npm pack/publish, "restore" afterwards`)
     )
   },

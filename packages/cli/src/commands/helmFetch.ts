@@ -113,7 +113,7 @@ export const helmFetchEffect = (flags: HelmFetchFlags) =>
 const helmFetchCommand = Command.make(
   "fetch",
   {
-    all: Flag.boolean("all").pipe(
+    all: Flag.Boolean("all").pipe(
       Flag.withDescription("Fetch all charts into the local cache"),
       Flag.withDefault(false)
     )

@@ -43,7 +43,7 @@ const _fakeSpawner = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
   )
 
 describe("SecretSource.fromConfig", () => {
-  it.effect("resolves each key via Config.redacted", () =>
+  it.effect("resolves each key via Config.Redacted", () =>
     Effect.gen(function*() {
       const src = SecretSource.fromConfig({ keys: ["url", "password"] as const })
       const v = yield* src.resolve

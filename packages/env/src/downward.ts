@@ -16,7 +16,7 @@ export interface DefineDownwardInput<EnvName extends string> {
 const _define = <const EnvName extends string>(
   input: DefineDownwardInput<EnvName>
 ): DownwardEntry<EnvName> => {
-  const parser = Config.string(input.envName)
+  const parser = Config.String(input.envName)
 
   const envClaims: ReadonlyArray<EnvClaim> = [
     _envClaim({ envName: input.envName, label: `Downward(${input.envName})` })
