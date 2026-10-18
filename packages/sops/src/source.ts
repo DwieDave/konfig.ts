@@ -1,8 +1,8 @@
 import type { SecretSource } from "@konfig.ts/env"
 import { collectByKey, SecretSourceError } from "@konfig.ts/env"
 import { Effect, Redacted } from "effect"
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import * as YAML from "yaml"
-import type { ChildProcessSpawner } from "./_unstable"
 import { sopsDecrypt } from "./sops"
 
 export interface SopsSourceInput<K extends string> {

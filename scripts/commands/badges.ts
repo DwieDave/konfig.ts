@@ -1,7 +1,7 @@
 import { Console, Effect, Schema } from "effect"
+import { Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { Command } from "effect/unstable/cli"
 import { renderBadge } from "../lib/badge"
 import { coveragePackageNames, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
 

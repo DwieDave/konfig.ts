@@ -1,7 +1,7 @@
 import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
+import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
-import { Argument, Command, Flag } from "../_unstable"
 import { renderEnv, writeFilesToDir } from "../buildEnv"
 import { resolveConfig } from "../configResolver"
 import { renderContextFlags, renderContextFromFlags } from "../renderContextFlags"
@@ -25,8 +25,9 @@ export const runValidate = (input: RunValidateInput) =>
     const { cfg, ctx, envName, ignoreMissingSchemas, strict } = input
     const rendered = yield* renderEnv({ cfg, envName, ctx })
 
-    const allIssues = yield* Effect.all(
-      rendered.files.map((f) => validateManifestFile({ file: f.path, content: f.content })),
+    const allIssues = yield* Effect.forEach(
+      rendered.files,
+      (f) => validateManifestFile({ file: f.path, content: f.content }),
       { concurrency: "unbounded" }
     )
     const issues = allIssues.flat()

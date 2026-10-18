@@ -1,5 +1,5 @@
 import { Console, Data, Effect, Option, Path } from "effect"
-import { Command, Flag } from "../_unstable"
+import { Command, Flag } from "effect/cli"
 import { loadChartRegistryEffect } from "../chartRegistry"
 import { resolveCliPaths } from "../cliConfig"
 import { resolveConfig } from "../configResolver"

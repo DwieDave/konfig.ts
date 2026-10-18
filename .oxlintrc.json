@@ -36,7 +36,8 @@
     "app/no-type-assertion": "warn",
     "app/no-typeof-object": "warn",
     "app/no-yieldless-effect-gen": "error",
-    "app/private-function-prefix": "error"
+    "app/private-function-prefix": "error",
+    "effecttsgo/unstable-api-usage": "off"
   },
   "overrides": [
     {

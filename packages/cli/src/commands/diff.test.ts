@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Cause, Console, Effect, Exit, Option, Schema } from "effect"
+import { Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { Command } from "../_unstable"
 import { diffCommand, readBaselineDir } from "./diff"
 
 const _write = (file: string, body: string) =>

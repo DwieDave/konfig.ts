@@ -1,8 +1,8 @@
 {
   "tests": 721,
-  "lineCoverage": 94.8,
+  "lineCoverage": 94.6,
   "linesCovered": 3328,
-  "linesTotal": 3509,
-  "effectVersion": "4.0.0-rc.111",
+  "linesTotal": 3519,
+  "effectVersion": "4.0.5",
   "packages": 9
 }

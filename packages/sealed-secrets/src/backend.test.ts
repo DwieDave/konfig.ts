@@ -4,16 +4,16 @@ import { Yaml } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
 import { Cause, ConfigProvider, Effect, Exit, Layer, Sink, Stream } from "effect"
-import { type Command, isStandardCommand } from "effect/unstable/process/ChildProcess"
+import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ExitCode,
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { describe, expect } from "vitest"
-import { ChildProcessSpawner } from "./_unstable"
 import { SealedSecrets } from "./backend"
 import type { SealedSecret } from "./crd"
 

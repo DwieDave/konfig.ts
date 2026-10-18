@@ -1,7 +1,8 @@
 import { runProcessString } from "@konfig.ts/core"
 import { Config, Data, Effect, Redacted } from "effect"
+import { ChildProcess } from "effect/process"
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { collectByKey, typedKeys } from "./_record"
-import { ChildProcess, ChildProcessSpawner } from "./_unstable"
 
 export class SecretSourceError extends Data.TaggedError("SecretSourceError")<{
   readonly source: string

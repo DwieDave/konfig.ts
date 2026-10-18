@@ -1,8 +1,8 @@
 import { decodeImagesEffect, ImagesConfig } from "@konfig.ts/core"
 import { Data, Effect, Schema } from "effect"
+import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { Argument, Command, Flag } from "../_unstable"
 import { resolveConfig } from "../configResolver"
 
 export class SetUnknownEnv extends Data.TaggedError("SetUnknownEnv")<{

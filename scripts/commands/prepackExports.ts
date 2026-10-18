@@ -1,7 +1,7 @@
 import { Console, Effect } from "effect"
+import { Argument, Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { Argument, Command } from "effect/unstable/cli"
 import { parseJson, RepoScriptError } from "../lib/repo"
 
 // npm publish ignores publishConfig.exports and src/ is excluded from files[], so the

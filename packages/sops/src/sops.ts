@@ -1,6 +1,6 @@
 import { boundary, processDetail, runProcessString } from "@konfig.ts/core"
 import { Data, Effect, Stream } from "effect"
-import { ChildProcess } from "./_unstable"
+import { ChildProcess } from "effect/process"
 import type { SopsRecipients } from "./crd"
 import { SopsRecipientsSchema } from "./schema"
 

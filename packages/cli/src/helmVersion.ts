@@ -1,7 +1,7 @@
 import { Helm, HelmVersionTooLow, runProcessString } from "@konfig.ts/core"
 import { Effect } from "effect"
+import { ChildProcess } from "effect/process"
 import semver from "semver"
-import { ChildProcess } from "./_unstable"
 
 // Pre-release/build metadata is preserved: truncating `v3.16.0-rc.1` to
 // `3.16.0` would misjudge it as < 3.16.0 by `semver.gte`.

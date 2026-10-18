@@ -1,7 +1,7 @@
 import { allWorkspaces, CircularWorkspaceDep, findRoot } from "@konfig.ts/docker"
 import { Console, Data, Effect, Option } from "effect"
+import { Argument, Command, Flag } from "effect/cli"
 import { Path } from "effect/Path"
-import { Argument, Command, Flag } from "../_unstable"
 import { detectCycle, type GraphEdge, type GraphNode, renderGraph } from "./graph/layout"
 
 class GraphTargetNotFound extends Data.TaggedError("GraphTargetNotFound")<{

@@ -1,7 +1,7 @@
 import { boundary, processDetail, type ProcessFailure, runProcessString } from "@konfig.ts/core"
 import { Config, Data, Effect, Option, Stream } from "effect"
+import { ChildProcess } from "effect/process"
 import * as YAML from "yaml"
-import { ChildProcess } from "./_unstable"
 import type { SealedSecretScope } from "./crd"
 import { SealedSecretSchema } from "./schema"
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Cause, Console, Effect, Runtime } from "effect"
+import { Command } from "effect/cli"
 import { createRequire } from "node:module"
-import { Command } from "./_unstable"
 import { buildCommand } from "./commands/build"
 import { crdCommand } from "./commands/crd"
 import { diffCommand } from "./commands/diff"
@@ -32,10 +32,9 @@ const root = Command.make(
 // At runtime this module is `dist/main.mjs`, so `../package.json` resolves to
 // the package root in both source and bundled layouts.
 const _pkg: unknown = createRequire(import.meta.url)("../package.json")
-const version =
-  typeof _pkg === "object" && _pkg !== null && "version" in _pkg && typeof _pkg.version === "string"
-    ? _pkg.version
-    : "0.0.0"
+const version = typeof _pkg === "object" && _pkg !== null && "version" in _pkg && typeof _pkg.version === "string"
+  ? _pkg.version
+  : "0.0.0"
 
 const _FULL_CAUSE_LOG_LEVELS: ReadonlySet<string> = new Set(["debug", "trace", "all"])
 

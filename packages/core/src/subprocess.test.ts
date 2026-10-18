@@ -1,8 +1,7 @@
 import { it } from "@effect/vitest"
 import { Cause, Effect, Exit, Fiber, Layer, Option, Schema, Sink, Stream } from "effect"
-import { TestClock } from "effect/testing"
-import { ChildProcess } from "effect/unstable/process"
-import type { Command } from "effect/unstable/process/ChildProcess"
+import { ChildProcess } from "effect/process"
+import type { Command } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -10,7 +9,8 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
+import { TestClock } from "effect/testing"
 import { describe, expect } from "vitest"
 import { ProcessError, ProcessTimeout, runProcessExit, runProcessString } from "./subprocess"
 

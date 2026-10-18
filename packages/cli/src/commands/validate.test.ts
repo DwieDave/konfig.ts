@@ -4,7 +4,7 @@ import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Effect, Layer, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import type { Command } from "effect/unstable/process/ChildProcess"
+import type { Command } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -12,7 +12,7 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import { runValidate, StructuralValidationFailed } from "./validate"
 
 const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))

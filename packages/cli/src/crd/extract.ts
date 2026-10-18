@@ -2,8 +2,8 @@ import { CrdExtractError, Helm, parseYamlAll, runProcessExit, runProcessString, 
 import { Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import { ChildProcess } from "effect/process"
 import { compile } from "json-schema-to-typescript"
-import { ChildProcess } from "../_unstable"
 import { ChartDigest, ChartId, ChartName, ChartRepoUrl, ChartVersion } from "../chartSchemas"
 import { helmPullCommand } from "../helmPull"
 

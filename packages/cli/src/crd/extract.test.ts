@@ -4,7 +4,7 @@ import { Helm } from "@konfig.ts/core"
 import { Effect, Exit, Layer, Schema, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { type Command, isStandardCommand } from "effect/unstable/process/ChildProcess"
+import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -12,7 +12,7 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import * as crypto from "node:crypto"
 import {
   _crdNameToIdentifier,

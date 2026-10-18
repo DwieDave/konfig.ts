@@ -1,14 +1,14 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Effect, Exit, Layer, Schema, Sink, Stream } from "effect"
-import { type Command } from "effect/unstable/process/ChildProcess"
+import { type Command } from "effect/process/ChildProcess"
 import {
   ChildProcessSpawner,
   ExitCode,
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import { describe, expect } from "vitest"
 import { sopsEncryptStdin } from "./sops"
 

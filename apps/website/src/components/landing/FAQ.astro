@@ -16,7 +16,7 @@ const FAQS: ReadonlyArray<{ readonly question: string; readonly answer: string }
   },
   {
     question: "Which Effect builds are supported?",
-    answer: `<p>Effect 4 is still in release-candidate. Its pre-release line makes breaking changes between builds, so the range is deliberately narrow: every ${code("@konfig.ts/*")} package accepts any rc build from ${code("4.0.0-rc.111")} on, and never crosses into another prerelease line or a stable major. The range widens once Effect ships a stable 4.x.</p>`
+    answer: `<p>Stable Effect 4. Every ${code("@konfig.ts/*")} package declares a caret range, ${code("^4.0.5")}, so any 4.x build from 4.0.5 on works. Effect 3 and the 4.0.0 beta/rc builds are not supported.</p>`
   },
   {
     question: "Can I keep my Helm charts?",
