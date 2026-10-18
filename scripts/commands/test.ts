@@ -1,7 +1,7 @@
 import { Console, Effect } from "effect"
+import { Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { Command, Flag } from "effect/unstable/cli"
 import { spawn } from "node:child_process"
 import { availableParallelism } from "node:os"
 import { REPO_ROOT, RepoScriptError, testPackageNames } from "../lib/repo"

@@ -1,7 +1,7 @@
 import { Effect, Exit } from "effect"
 import { describe, expect, it } from "vitest"
 import type { DepRecord } from "./rewriteWorkspaceDeps"
-import { _caretRcRange, _rewriteRecord } from "./rewriteWorkspaceDeps"
+import { _caretRange, _rewriteRecord } from "./rewriteWorkspaceDeps"
 
 const _base = {
   catalog: { yaml: "2.9.0" } satisfies DepRecord,
@@ -54,26 +54,29 @@ describe("_rewriteRecord", () => {
     expect(rec.yaml).toBe("2.9.0")
   })
 
-  it("emits exact versions for non-prerelease effect-family catalog entries", () => {
-    const base = { ..._base, catalog: { effect: "4.1.0" } }
-    const rec: DepRecord = { effect: "catalog:" }
+  it("emits a caret range for the effect family when the catalog pins a stable build", () => {
+    const base = { ..._base, catalog: { effect: "4.0.5", "@effect/platform-node": "4.0.5", yaml: "2.9.0" } }
+    const rec: DepRecord = { effect: "catalog:", "@effect/platform-node": "catalog:", yaml: "catalog:" }
     const changed = Effect.runSync(_rewriteRecord({ ...base, rec, version: "1.0.0" }))
     expect(changed).toBe(true)
-    expect(rec.effect).toBe("4.1.0")
+    expect(rec.effect).toBe("^4.0.5")
+    expect(rec["@effect/platform-node"]).toBe("^4.0.5")
+    expect(rec.yaml).toBe("2.9.0")
   })
 
-  describe("_caretRcRange", () => {
+  describe("_caretRange", () => {
     it.each([
       ["4.0.0-rc.111", "^4.0.0-rc.111"],
       ["^4.0.0-rc.7", "^4.0.0-rc.7"],
       ["~4.0.0-beta.2", "^4.0.0-beta.2"],
-      ["4.1.0", "4.1.0"],
-      ["^5.0.0", "^5.0.0"]
+      ["4.1.0", "^4.1.0"],
+      ["~4.0.5", "^4.0.5"],
+      ["^5.0.0", "^5.0.0"],
+      [">=4.0.0 <5.0.0", ">=4.0.0 <5.0.0"]
     ])("%s → %s", (input, expected) => {
-      expect(_caretRcRange(input)).toBe(expected)
+      expect(_caretRange(input)).toBe(expected)
     })
   })
-
 
   it("leaves plain semver specs and non-@konfig.ts workspace deps unchanged", () => {
     const rec: DepRecord = { semver: "^1.0.0", "some-lib": "workspace:*" }

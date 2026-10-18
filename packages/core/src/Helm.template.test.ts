@@ -3,8 +3,8 @@ import { describe, expect, it } from "@effect/vitest"
 import { ConfigProvider, Effect, Layer, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import type { Command } from "effect/unstable/process/ChildProcess"
-import { isStandardCommand } from "effect/unstable/process/ChildProcess"
+import type { Command } from "effect/process/ChildProcess"
+import { isStandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -12,7 +12,7 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import * as crypto from "node:crypto"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"

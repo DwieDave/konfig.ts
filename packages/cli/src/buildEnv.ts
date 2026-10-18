@@ -224,12 +224,12 @@ const _renderChild = (input: RenderChildInput) =>
   Effect.gen(function*() {
     const { appsDirAbs, child, ctx, outDirAbs, path } = input
     const appDir = path.join(outDirAbs, child.name)
-    const rendered = yield* Effect.all(
-      child.manifests.map((m) =>
+    const rendered = yield* Effect.forEach(
+      child.manifests,
+      (m) =>
         M.isManifest(m)
           ? renderManifest({ manifest: m, ctx })
-          : Effect.die(new NonManifestChild({ child: child.name }))
-      ),
+          : Effect.die(new NonManifestChild({ child: child.name })),
       { concurrency: "unbounded" }
     )
     const out: OutputFile[] = []
@@ -267,8 +267,9 @@ const _renderEnvBody = (input: RenderEnvInput) =>
     const children = _childrenOf(result)
 
     // Bounded at 4: keeps the helm/sops subprocess count manageable.
-    const perAppFiles = yield* Effect.all(
-      children.map((child) => _renderChild({ appsDirAbs, child, ctx, outDirAbs, path })),
+    const perAppFiles = yield* Effect.forEach(
+      children,
+      (child) => _renderChild({ appsDirAbs, child, ctx, outDirAbs, path }),
       { concurrency: 4 }
     )
     const files: OutputFile[] = perAppFiles.flat()

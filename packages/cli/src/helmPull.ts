@@ -1,4 +1,4 @@
-import { ChildProcess } from "./_unstable"
+import { ChildProcess } from "effect/process"
 
 interface HelmPullChart {
   readonly repo: string

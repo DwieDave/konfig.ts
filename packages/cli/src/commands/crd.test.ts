@@ -3,7 +3,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { ConfigProvider, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { type Command, isStandardCommand } from "effect/unstable/process/ChildProcess"
+import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -11,7 +11,7 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import { CrdDrift, crdExtractEffect, crdVerifyEffect, MissingCrdFlags, ReleaseNotFound } from "./crd"
 
 const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))

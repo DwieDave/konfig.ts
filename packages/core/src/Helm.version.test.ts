@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
-import type { Command } from "effect/unstable/process/ChildProcess"
+import type { Command } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -10,7 +10,7 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
 import { HelmRenderError } from "./RenderError"

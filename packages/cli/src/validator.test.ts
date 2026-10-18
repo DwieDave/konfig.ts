@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
 import * as PlatformError from "effect/PlatformError"
-import type { Command } from "effect/unstable/process/ChildProcess"
+import type { Command } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -9,7 +9,7 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import { KubeconformNotFound, KubeconformReportError, runKubeconform, validateManifestFile } from "./validator"
 
 interface FakeProc {

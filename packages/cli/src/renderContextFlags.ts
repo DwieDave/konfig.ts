@@ -1,6 +1,6 @@
 import { RenderContext } from "@konfig.ts/core"
 import { Option } from "effect"
-import { Flag } from "./_unstable"
+import { Flag } from "effect/cli"
 
 export const renderContextFlags = {
   cluster: Flag.String("cluster").pipe(

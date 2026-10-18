@@ -20,10 +20,9 @@ describe("deps — yieldable Key constructors", () => {
       Effect.Effect<SecretRef<"postgres-credentials">, never, SecretReq<"postgres-credentials">>
     >()
     return prog.pipe(
-      Effect.provide(
-        Layer.succeed(Secret("postgres-credentials"))(
-          "postgres-credentials" as SecretRef<"postgres-credentials">
-        )
+      Effect.provideService(
+        Secret("postgres-credentials"),
+        "postgres-credentials" as SecretRef<"postgres-credentials">
       ),
       Effect.map((result) => {
         expect(result).toBe("postgres-credentials")
@@ -98,7 +97,7 @@ describe("deps — yieldable Key constructors", () => {
       return { a, b }
     })
     return prog.pipe(
-      Effect.provide(Layer.succeed(Secret("same"))("same" as SecretRef<"same">)),
+      Effect.provideService(Secret("same"), "same" as SecretRef<"same">),
       Effect.map((result) => {
         expect(result).toEqual({ a: "same", b: "same" })
       })

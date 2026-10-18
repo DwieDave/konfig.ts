@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Console, Effect, Schema } from "effect"
-import { Command } from "effect/unstable/cli"
+import { Command } from "effect/cli"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { badgesCommand } from "./commands/badges"

@@ -1,77 +1,77 @@
 {
-	"name": "@konfig.ts/k8s",
-	"version": "0.1.0",
-	"description": "Kubernetes resource builders (workloads, network, identity, policy, volume, env) for konfig.ts.",
-	"license": "MIT",
-	"author": "David Stahl-Gruber",
-	"homepage": "https://dwiedave.github.io/konfig.ts/",
-	"bugs": "https://github.com/DwieDave/konfig.ts/issues",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/DwieDave/konfig.ts.git",
-		"directory": "packages/k8s"
-	},
-	"keywords": [
-		"kubernetes",
-		"k8s",
-		"config",
-		"effect",
-		"typescript"
-	],
-	"type": "module",
-	"sideEffects": false,
-	"main": "./dist/index.mjs",
-	"types": "./dist/index.d.ts",
-	"exports": {
-		".": {
-			"bun": "./src/index.ts",
-			"source": "./src/index.ts",
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.mjs"
-		}
-	},
-	"files": [
-		"dist",
-		"README.md",
-		"LICENSE"
-	],
-	"engines": {
-		"node": ">=22"
-	},
-	"publishConfig": {
-		"access": "public",
-		"exports": {
-			".": {
-				"types": "./dist/index.d.ts",
-				"import": "./dist/index.mjs"
-			}
-		}
-	},
-	"scripts": {
-		"build": "tsdown ./src/index.ts --format=esm --target=node22 --sourcemap --clean --no-dts && tsc -p tsconfig.build.json",
-		"check": "tsc -p tsconfig.check.json --noEmit",
-		"test": "vitest run",
-		"lint": "oxlint",
-		"lint:apply": "oxlint --fix",
-		"prepublishOnly": "bun run build",
-		"prepack": "bun ../../scripts/cli.ts prepack-exports strip",
-		"postpack": "bun ../../scripts/cli.ts prepack-exports restore",
-		"test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
-	},
-	"dependencies": {
-		"@konfig.ts/core": "workspace:*",
-		"@konfig.ts/env": "workspace:*",
-		"kubernetes-types": "~1.30.0"
-	},
-	"peerDependencies": {
-		"effect": ">=4.0.0-rc.113 <4.0.0"
-	},
-	"devDependencies": {
-		"@effect/platform-node": "catalog:",
-		"@effect/vitest": "catalog:",
-		"@types/bun": "catalog:",
-		"@vitest/coverage-v8": "catalog:",
-		"effect": "catalog:",
-		"vitest": "catalog:"
-	}
+  "name": "@konfig.ts/k8s",
+  "version": "0.2.0",
+  "description": "Kubernetes resource builders (workloads, network, identity, policy, volume, env) for konfig.ts.",
+  "license": "MIT",
+  "author": "David Stahl-Gruber",
+  "homepage": "https://dwiedave.github.io/konfig.ts/",
+  "bugs": "https://github.com/DwieDave/konfig.ts/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DwieDave/konfig.ts.git",
+    "directory": "packages/k8s"
+  },
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "config",
+    "effect",
+    "typescript"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.mjs"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsdown ./src/index.ts --format=esm --target=node22 --sourcemap --clean --no-dts && tsc -p tsconfig.build.json",
+    "check": "tsc -p tsconfig.check.json --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint",
+    "lint:apply": "oxlint --fix",
+    "prepublishOnly": "bun run build",
+    "prepack": "bun ../../scripts/cli.ts prepack-exports strip",
+    "postpack": "bun ../../scripts/cli.ts prepack-exports restore",
+    "test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
+  },
+  "dependencies": {
+    "@konfig.ts/core": "workspace:*",
+    "@konfig.ts/env": "workspace:*",
+    "kubernetes-types": "~1.30.0"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.5"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/bun": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "vitest": "catalog:"
+  }
 }

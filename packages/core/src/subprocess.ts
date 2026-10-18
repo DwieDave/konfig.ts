@@ -1,6 +1,7 @@
 import { Data, Duration, Effect, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
-import { ChildProcess, ChildProcessSpawner } from "./_unstable"
+import { ChildProcess } from "effect/process"
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 
 // -1 marks a spawn that never produced a real exit code, distinct from any OS exit code.
 const SPAWN_FAILED_EXIT = -1

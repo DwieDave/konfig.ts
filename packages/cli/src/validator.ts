@@ -1,7 +1,8 @@
 import { parseYamlAll } from "@konfig.ts/core"
 import { Data, Effect, Result, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
-import { ChildProcess, ChildProcessSpawner } from "./_unstable"
+import { ChildProcess } from "effect/process"
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 
 export interface ValidationIssue {
   readonly file: string

@@ -1,7 +1,7 @@
 import { Console, Effect } from "effect"
+import { Argument, Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { Argument, Command } from "effect/unstable/cli"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { packageDirs, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"

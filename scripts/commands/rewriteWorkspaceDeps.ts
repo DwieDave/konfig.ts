@@ -1,14 +1,13 @@
 import { Console, Effect } from "effect"
+import { Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { Command } from "effect/unstable/cli"
 import { packageDirs, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
 
 // npm understands neither workspace:* nor catalog: protocols, so both must be
 // resolved to concrete semver before npm publish. The effect family is the one
-// exception: it publishes as a caret range over the release-candidate line
-// (`^4.0.0-rc.N`) so consumers resolve any rc build from N on, while dev and CI
-// stay pinned to the exact catalog build.
+// exception: it publishes as a caret range (`^4.0.5`) so consumers resolve any
+// compatible 4.x build, while dev and CI stay pinned to the exact catalog build.
 
 export type DepRecord = Record<string, string>
 type Catalogs = Record<string, DepRecord>
@@ -21,16 +20,16 @@ export interface _RewriteInput {
   readonly pkgJsonPath: string
 }
 
-/** Packages whose published spec floats across the rc line instead of pinning exact. */
+/** Packages whose published spec floats as a caret range instead of pinning exact. */
 const EFFECT_FAMILY: Record<string, true> = {
   "effect": true,
   "@effect/platform-node": true,
   "@effect/vitest": true
 }
 
-/** `4.0.0-rc.111` → `^4.0.0-rc.111`; non-prerelease versions pass through unchanged. */
-export const _caretRcRange = (version: string) =>
-  /^(?:\^|~)?(\d+\.\d+\.\d+-[0-9A-Za-z.-]+)$/.test(version) ? `^${version.replace(/^(?:\^|~)/, "")}` : version
+/** `4.0.5` / `~4.0.5` → `^4.0.5`; specs that aren't a single version pass through unchanged. */
+export const _caretRange = (version: string) =>
+  /^(?:\^|~)?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version) ? `^${version.replace(/^(?:\^|~)/, "")}` : version
 
 export const _rewriteRecord = (input: _RewriteInput) =>
   Effect.gen(function*() {
@@ -54,7 +53,7 @@ export const _rewriteRecord = (input: _RewriteInput) =>
             message: `${pkgJsonPath}: no catalog entry for "${name}" (spec "${spec}")`
           })
         }
-        rec[name] = EFFECT_FAMILY[name] === true ? _caretRcRange(resolved) : resolved
+        rec[name] = EFFECT_FAMILY[name] === true ? _caretRange(resolved) : resolved
         changed = true
       }
     }

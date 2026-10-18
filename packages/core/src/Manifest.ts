@@ -1,10 +1,10 @@
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { Path } from "effect/Path"
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import type * as Scope from "effect/Scope"
 import { unsafeCoerce } from "./_cast"
 import { isRecord } from "./guards"
-import type { ChildProcessSpawner } from "./_unstable"
 import type { RenderContext } from "./RenderContext"
 import { type AnyRenderError, EmbedYamlReadError } from "./RenderError"
 
@@ -61,13 +61,8 @@ export const concat = <A>(
   ...manifests: (IsArray<A> extends true ? never : Manifest<A | A[]>)[]
 ): Manifest<A[]> =>
   make((ctx) =>
-    Effect.all(
-      manifests.map((m) => m.render(ctx)),
-      { concurrency: "unbounded" }
-    ).pipe(
-      Effect.map((results) =>
-        results.flatMap((r) => (Array.isArray(r) ? r : [r]))
-      )
+    Effect.forEach(manifests, (m) => m.render(ctx), { concurrency: "unbounded" }).pipe(
+      Effect.map((results) => results.flatMap((r) => (Array.isArray(r) ? r : [r])))
     )
   )
 

@@ -9,9 +9,9 @@ import {
   isDockerApp
 } from "@konfig.ts/docker"
 import { Console, Data, Effect } from "effect"
+import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { Argument, Command, Flag } from "../_unstable"
 import { moduleDefault } from "../moduleDefault"
 
 export class SpecImportError extends Data.TaggedError("SpecImportError")<{

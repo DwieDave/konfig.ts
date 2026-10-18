@@ -2,7 +2,7 @@ import { describe as effectDescribe, it as effectIt } from "@effect/vitest"
 import { HelmVersionTooLow, ProcessError } from "@konfig.ts/core"
 import { Cause, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
 import { systemError } from "effect/PlatformError"
-import type { Command } from "effect/unstable/process/ChildProcess"
+import type { Command } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -10,7 +10,7 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import semver from "semver"
 import { describe, expect, it } from "vitest"
 import { _parseHelmVersion, assertHelmVersion } from "./helmVersion"

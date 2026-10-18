@@ -82,17 +82,12 @@ lives one level up, in the Effect `Layer`s that `Module` and
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/), currently a release candidate.
-Until Effect ships a stable 4.x, install a build from the rc line konfig.ts is
-built against:
+konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.0.5 on
+is supported:
 
-- **`effect@^4.0.0-rc.111`** — required by every package (declared as a peer
+- **`effect@^4.0.5`** — required by every package (declared as a peer
   dependency).
-- **`@effect/platform-node@^4.0.0-rc.111`** — a regular (non-optional)
+- **`@effect/platform-node@^4.0.5`** — a regular (non-optional)
   dependency of `@konfig.ts/core`, since `render()` needs its Node
   filesystem/subprocess implementations. It is installed automatically
   whenever you install `@konfig.ts/core`.
-
-The range floats within the rc line on purpose: Effect's pre-release line makes breaking
-changes between builds, so a looser range surfaces as `ERESOLVE` install conflicts. It
-widens to `^4.x` once Effect reaches a stable 4.x.

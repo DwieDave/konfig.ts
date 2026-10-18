@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest"
 import { ConfigProvider, Effect, Exit, Layer, Redacted, Schema, Sink, Stream } from "effect"
-import type { Command } from "effect/unstable/process/ChildProcess"
+import type { Command } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -8,7 +8,7 @@ import {
   make as makeSpawner,
   makeHandle,
   ProcessId
-} from "effect/unstable/process/ChildProcessSpawner"
+} from "effect/process/ChildProcessSpawner"
 import { describe, expect } from "vitest"
 import { SecretSource, SecretSourceError } from "./source"
 
