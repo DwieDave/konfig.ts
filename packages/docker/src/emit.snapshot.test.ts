@@ -93,6 +93,25 @@ describe("emit snapshots — pnpm-hoisted fixture", () => {
     }).pipe(Effect.provide(NodeServices.layer)))
 })
 
+const production = (target: string): DockerSpec => {
+  const base = minimal(target)
+  return { ...base, runner: { ...base.runner, production: true } }
+}
+
+describe("emit snapshots — production spec (prod-deps stage)", () => {
+  const fixtures = ["bun", "npm", "pnpm-isolated", "pnpm-hoisted", "yarn-classic", "yarn-berry"] as const
+  for (const fixture of fixtures) {
+    it.effect(fixture, () =>
+      Effect.gen(function*() {
+        const out = yield* emit({
+          spec: production(`${FIXTURES}${fixture}/packages/app`),
+          specPath: "packages/app/docker.ts"
+        })
+        expect(out.dockerfile).toMatchSnapshot(`${fixture}-production-Dockerfile`)
+      }).pipe(Effect.provide(NodeServices.layer)))
+  }
+})
+
 describe("emit determinism (NFR-2)", () => {
   it.effect("two runs of bun minimal produce byte-identical output", () =>
     Effect.gen(function*() {

@@ -4,6 +4,7 @@ import { Path } from "effect/Path"
 import {
   type AnyDockerError,
   BuildScriptMissing,
+  BunVersionUnsupported,
   EngineVersionMissing,
   PlatformMultiUnsupported,
   SharedRootFileMissing,
@@ -28,6 +29,7 @@ import {
   type Workspace
 } from "../services/WorkspaceGraph"
 import type { CopyAtom, DevSpec, DockerSpec, HealthcheckAtom, RunnerSpec, UserAtom } from "../spec"
+import { MIN_FILTERED_INSTALL, supportsFilteredInstall } from "./bunVersion"
 import type { Dockerfile, DockerfileBundle, Instruction, Stage } from "./DockerfileIR"
 
 export interface LowerContext {
@@ -313,6 +315,22 @@ const _resolveDefaults = (
     }
   })
 
+// The bun prod-deps stage relies on `bun install --filter`.
+const _checkBunFilterSupport = (
+  spec: DockerSpec,
+  ctx: LowerContext,
+  pm: PmContext
+): Effect.Effect<void, BunVersionUnsupported> =>
+  pm.pmKind === "Bun" && spec.runner.production && !supportsFilteredInstall(pm.pmVersion)
+    ? Effect.fail(
+      new BunVersionUnsupported({
+        target: ctx.target.name,
+        version: pm.pmVersion,
+        minimum: `${MIN_FILTERED_INSTALL.major}.${MIN_FILTERED_INSTALL.minor}`
+      })
+    )
+    : Effect.void
+
 const _baseStage = (img: ImageRef): Stage => ({
   name: "base",
   from: { _tag: "FromImage", image: img.image, tag: img.tag },
@@ -349,34 +367,43 @@ const _packageJsonCopyInstructions = (workspaces: ReadonlyArray<Workspace>): Ins
 // devDependencies since --production still needs to RESOLVE them, and
 // non-closure workspace:* deps would otherwise fail resolution. Script
 // uses double quotes so it can be wrapped in a single-quoted shell string.
-const _prodDepsWorkspaceRewriteInstruction = (ctx: LowerContext, pm: PmContext): Instruction => {
+const _prodDepsWorkspaceRewriteInstruction = (ctx: LowerContext): Instruction => {
   const closureRelDirs = ctx.closure.map((ws) => ws.relDir).sort()
   const rewriteScript = `const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json","utf-8"));` +
     ` p.workspaces=${JSON.stringify(closureRelDirs)};` +
     ` delete p.devDependencies;` +
     ` fs.writeFileSync("package.json", JSON.stringify(p,null,2));`
-  const runtimeBin = pm.pmKind === "Bun" ? "bun" : "node"
-  return { _tag: "Run", cmd: `${runtimeBin} -e '${rewriteScript}'` }
+  return { _tag: "Run", cmd: `node -e '${rewriteScript}'` }
 }
 
-// Bun re-resolves from scratch so its full-graph lockfile is dropped and
-// regenerated; other managers keep the lockfile and run a non-frozen
-// install (no --frozen-lockfile/--immutable) since it must re-resolve
-// against the trimmed package.json using the lockfile only as a hint.
-const _prodDepsInstallInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] => {
-  const instructions: Instruction[] = []
-  if (pm.pmKind === "Bun") {
-    const lockfileTokens = _lockfilesToCopy(ctx, pm).join(" ")
-    instructions.push({ _tag: "Run", cmd: `rm -f ${lockfileTokens}` })
-  }
-  instructions.push(..._packageJsonCopyInstructions(ctx.closure))
-  for (const r of pm.pmImpl.prependDepsRuns(pm.pmVersion)) {
-    instructions.push({ _tag: "Run", cmd: r })
-  }
-  const cmd = [...pm.pmImpl.prodInstallCommand, ...pm.pmImpl.productionFlag].join(" ")
-  instructions.push({ _tag: "Run", cmd })
-  return instructions
-}
+// Bun installs straight from the untouched lockfile: --frozen-lockfile pins
+// versions and --filter narrows to the target's closure. bun refuses a
+// lockfile whose workspaces aren't all on disk, so every package.json is copied.
+const _bunProdDepsInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] => [
+  ..._packageJsonCopyInstructions(ctx.allWorkspaces),
+  ..._runs(pm.pmImpl.prependDepsRuns(pm.pmVersion)),
+  { _tag: "Run", cmd: [..._prodInstallCmd(pm), "--filter", ctx.target.name].join(" ") }
+]
+
+// Other managers keep the lockfile only as a hint and run a non-frozen
+// install (no --frozen-lockfile/--immutable/ci) against a root package.json
+// trimmed to the closure.
+const _rewriteProdDepsInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] => [
+  _prodDepsWorkspaceRewriteInstruction(ctx),
+  ..._packageJsonCopyInstructions(ctx.closure),
+  ..._runs(pm.pmImpl.prependDepsRuns(pm.pmVersion)),
+  { _tag: "Run", cmd: _prodInstallCmd(pm).join(" ") }
+]
+
+const _runs = (cmds: ReadonlyArray<string>): Instruction[] => cmds.map((cmd): Instruction => ({ _tag: "Run", cmd }))
+
+const _prodInstallCmd = (pm: PmContext): ReadonlyArray<string> => [
+  ...pm.pmImpl.prodInstallCommand,
+  ...pm.pmImpl.productionFlag
+]
+
+const _prodDepsInstallInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] =>
+  pm.pmKind === "Bun" ? _bunProdDepsInstructions(ctx, pm) : _rewriteProdDepsInstructions(ctx, pm)
 
 // Applied after install (not in the runner) so the deletion actually
 // shrinks the layer rather than just adding a deletion marker.
@@ -386,7 +413,6 @@ const _removePathInstructions = (paths: ReadonlyArray<string> | undefined): Inst
 const _prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
   const instructions: Instruction[] = [
     ..._rootCopyInstructions(ctx, pm),
-    _prodDepsWorkspaceRewriteInstruction(ctx, pm),
     ..._prodDepsInstallInstructions(ctx, pm),
     ..._removePathInstructions(spec.runner.removePaths)
   ]
@@ -653,5 +679,6 @@ export const lower = (
     const ctx = yield* prepareContext(spec)
     yield* validateSpec({ spec, ctx })
     const pm = yield* _resolveDefaults(spec, ctx)
+    yield* _checkBunFilterSupport(spec, ctx, pm)
     return buildIR({ spec, ctx, pm })
   })
