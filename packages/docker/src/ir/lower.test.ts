@@ -1,8 +1,10 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
+import * as fc from "fast-check"
 import { describe, expect } from "vitest"
 import type { DockerSpec } from "../spec"
+import type { Stage } from "./DockerfileIR"
 import { lower } from "./lower"
 
 const FIXTURES = new URL("../../fixtures/", import.meta.url).pathname
@@ -333,7 +335,7 @@ describe("lower prod-deps stage (production install per package manager)", () =>
   ] as const
   const FROZEN_RE = /(^| )(ci|--frozen-lockfile|--immutable)( |$)/
   for (const c of cases) {
-    it.effect(`${c.pm}: never both deletes the lockfile and runs a frozen install`, () =>
+    it.effect(`${c.pm}: keeps the lockfile; only bun installs frozen`, () =>
       Effect.gen(function*() {
         const base = minimalSpec(c.target)
         const spec: DockerSpec = {
@@ -350,13 +352,39 @@ describe("lower prod-deps stage (production install per package manager)", () =>
           (r) => r.cmd.startsWith("rm -f") && r.cmd.includes(c.lockfile)
         )
         const frozenInstall = runs.some((r) => FROZEN_RE.test(r.cmd))
-        expect(deletesLockfile && frozenInstall).toBe(false)
-        if (c.pm !== "bun") {
-          expect(deletesLockfile).toBe(false)
-          expect(frozenInstall).toBe(false)
-        }
+        expect(deletesLockfile).toBe(false)
+        expect(frozenInstall).toBe(c.pm === "bun")
       }).pipe(Effect.provide(NodeServices.layer)))
   }
+})
+
+describe("lower prod-deps stage (bun keeps bun.lock authoritative)", () => {
+  const runsOf = (stage: Stage | undefined): ReadonlyArray<string> =>
+    (stage?.instructions ?? []).flatMap((i) => (i._tag === "Run" ? [i.cmd] : []))
+  const copiedPkgJsons = (stage: Stage | undefined): ReadonlyArray<string> =>
+    (stage?.instructions ?? []).flatMap((i) =>
+      i._tag === "Copy" ? i.src.filter((src) => src.endsWith("/package.json")) : []
+    )
+
+  it.effect("frozen, filtered install over every workspace package.json for any removePaths", () =>
+    Effect.gen(function*() {
+      const samples = fc.sample(fc.array(fc.string({ minLength: 1, maxLength: 12 }), { maxLength: 4 }), 25)
+      for (const removePaths of samples) {
+        const base = minimalSpec(`${FIXTURES}bun/packages/app`)
+        const bundle = yield* lower({ ...base, runner: { ...base.runner, production: true, removePaths } })
+        const stage = bundle.prod.stages.find((s) => s.name === "prod-deps")
+        const runs = runsOf(stage)
+        expect(runs).toContain("bun install --ignore-scripts --frozen-lockfile --production --filter @fix/app")
+        expect(runs.some((r) => r.startsWith("rm -f "))).toBe(false)
+        expect(runs.some((r) => r.startsWith("bun -e "))).toBe(false)
+        expect([...copiedPkgJsons(stage)].sort()).toEqual([
+          "packages/app/package.json",
+          "packages/other/package.json",
+          "packages/shared/package.json",
+          "packages/util/package.json"
+        ])
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
 })
 
 describe("lower (pnpm fixtures: layout branching)", () => {
