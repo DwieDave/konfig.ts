@@ -25,7 +25,7 @@ import { Docker } from "@konfig.ts/docker"
 export default Docker.app({
   target: "apps/api",
   runner: {
-    production: true, // re-install prod-only deps for the closure
+    production: true, // install prod-only deps for the closure
     workdir: "/app/apps/api",
     copy: [Docker.copy.workspaceSourceAll()], // target + workspace deps' source, for bun's export conditions
     expose: 8080,
@@ -52,6 +52,12 @@ full workspace set, `builder` copies only the target's closure and runs the
 build, `prod-deps` re-installs production-only dependencies for that closure,
 `runner` is non-root, pinned to `engines.<runtime>`, and copies only what the
 spec declares. Dev is a single `base → dev` stage.
+
+With bun, `prod-deps` installs from the committed `bun.lock` via
+`bun install --frozen-lockfile --production --filter <target>`, so production
+images get exactly the locked versions. This needs `engines.bun` ≥ 1.2
+(otherwise lowering fails with `BunVersionUnsupported`) and an up-to-date
+`bun.lock`: a stale lockfile fails the image build.
 
 ## Spec atoms
 
