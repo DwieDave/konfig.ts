@@ -34,7 +34,17 @@ Optional fields of `runner`:
 | `healthcheck` | `HEALTHCHECK` line |
 | `platform` | Target platform |
 | `baseImage` | Replace the default runtime base image with `{ image, tag }` |
-| `removePaths` | Paths deleted in the runner stage (one `rm -rf` line per path) |
+| `removePaths` | Paths deleted after the production install (one `rm -rf` line per path); `*` and `?` glob, everything else is quoted literally |
+
+### Removing packages under bun's isolated linker
+
+With `[install] linker = "isolated"` in `bunfig.toml`, bun stores packages at `/app/node_modules/.bun/<name>@<version>/` (scoped names use `+` instead of `/`, for example `@img+sharp-linux-arm64@0.34.5`) and `/app/node_modules/<name>` is only a symlink into that store, if it exists at all. A literal `removePaths: ["/app/node_modules/sharp"]` would then only drop the symlink. Use a glob so the store directory goes regardless of version:
+
+```ts
+removePaths: ["/app/node_modules/.bun/sharp@*", "/app/node_modules/.bun/@img+*"]
+```
+
+Only `*` and `?` are left unquoted; every other character is single-quoted, so a path containing spaces, quotes or `$(...)` is still a literal file name and never shell code. Removing a store directory leaves any symlinks that pointed at it dangling, which is fine for packages the application never imports.
 
 Secrets do not belong in an image layer, so the schema screens `env` values with a heuristic: values with an `sk_` prefix, values containing a `BEGIN PRIVATE KEY` header, and base64-looking strings of 40 or more characters that are not plain hex are rejected. A value that looks like a secret fails the decode. Runtime secrets are wired through `Environment.bind` instead.
 

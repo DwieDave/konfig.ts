@@ -222,6 +222,55 @@ describe("lower (bun fixture)", () => {
       ])
     }).pipe(Effect.provide(NodeServices.layer)))
 
+  it.effect("removePaths leaves `*` and `?` unquoted so the shell expands them (isolated-linker stores)", () =>
+    Effect.gen(function*() {
+      const base = minimalSpec(`${FIXTURES}bun/packages/app`)
+      const spec: DockerSpec = {
+        ...base,
+        runner: {
+          ...base.runner,
+          production: true,
+          removePaths: [
+            "/app/node_modules/.bun/sharp@*",
+            "/app/node_modules/.bun/@img+sharp-linux-*",
+            "/app/node_modules/.bun/x'; rm -rf /*",
+            "/app/node_modules/.bun/$(whoami)@?"
+          ]
+        }
+      }
+      const bundle = yield* lower(spec)
+      const stage = bundle.prod.stages.find((s) => s.name === "prod-deps")!
+      const rmRuns = stage.instructions.flatMap((i) => (i._tag === "Run" && i.cmd.startsWith("rm -rf ") ? [i.cmd] : []))
+      expect(rmRuns).toEqual([
+        `rm -rf '/app/node_modules/.bun/sharp@'*`,
+        `rm -rf '/app/node_modules/.bun/@img+sharp-linux-'*`,
+        `rm -rf '/app/node_modules/.bun/x'\\''; rm -rf /'*`,
+        `rm -rf '/app/node_modules/.bun/$(whoami)@'?`
+      ])
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it("removePaths: every non-glob character is single-quoted; globs stay bare (property)", async () => {
+    const globFree = (s: string) => !/[*?]/.test(s)
+    await fc.assert(
+      fc.asyncProperty(fc.string({ minLength: 1, maxLength: 24 }), async (path) => {
+        const base = minimalSpec(`${FIXTURES}bun/packages/app`)
+        const bundle = await Effect.runPromise(
+          lower({ ...base, runner: { ...base.runner, production: true, removePaths: [path] } }).pipe(
+            Effect.provide(NodeServices.layer)
+          )
+        )
+        const stage = bundle.prod.stages.find((s) => s.name === "prod-deps")!
+        const cmd = stage.instructions.flatMap((i) => (i._tag === "Run" && i.cmd.startsWith("rm -rf ") ? [i.cmd] : []))[0]!
+        const arg = cmd.slice("rm -rf ".length)
+        // Literal paths render exactly as before.
+        if (globFree(path)) expect(arg).toBe(`'${path.replaceAll("'", "'\\''")}'`)
+        // Outside quotes only glob metacharacters may appear — nothing the shell could interpret otherwise.
+        const unquoted = arg.replaceAll("'\\''", "").replace(/'[^']*'/g, "")
+        expect(unquoted).toMatch(/^[*?]*$/)
+      })
+    )
+  })
+
   it.effect("user-supplied env is sorted alphabetically and NODE_ENV not overridden", () =>
     Effect.gen(function*() {
       const spec: DockerSpec = {
