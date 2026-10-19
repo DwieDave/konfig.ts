@@ -405,10 +405,21 @@ const _prodInstallCmd = (pm: PmContext): ReadonlyArray<string> => [
 const _prodDepsInstallInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] =>
   pm.pmKind === "Bun" ? _bunProdDepsInstructions(ctx, pm) : _rewriteProdDepsInstructions(ctx, pm)
 
+// Quote a path for `rm -rf`, leaving `*` and `?` bare so the shell expands
+// them (needed for versioned store dirs such as node_modules/.bun/<name>@<ver>).
+// Every other character sits inside single quotes, so the only unquoted bytes
+// are glob metacharacters — nothing a shell could parse as a command.
+// Paths without globs render exactly as `_shSingleQuote` does.
+const _shGlobQuote = (path: string): string =>
+  path
+    .split(/([*?])/)
+    .map((part) => (part === "*" || part === "?" ? part : part === "" ? "" : _shSingleQuote(part)))
+    .join("")
+
 // Applied after install (not in the runner) so the deletion actually
 // shrinks the layer rather than just adding a deletion marker.
 const _removePathInstructions = (paths: ReadonlyArray<string> | undefined): Instruction[] =>
-  (paths ?? []).map((path): Instruction => ({ _tag: "Run", cmd: `rm -rf ${_shSingleQuote(path)}` }))
+  (paths ?? []).map((path): Instruction => ({ _tag: "Run", cmd: `rm -rf ${_shGlobQuote(path)}` }))
 
 const _prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
   const instructions: Instruction[] = [
