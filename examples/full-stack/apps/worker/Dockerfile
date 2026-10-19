@@ -1,6 +1,6 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/worker/docker.ts
-# hash: sha256:ad4f1cc51127709af51f7a03c0994f59ae3f13a9af3f79b2f7eff3483a43b163
+# hash: sha256:ed626b14f7ba278649f7ea2803fff9186b5e32b508ac906dc1dbb5958d4e1366
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -40,14 +40,25 @@ WORKDIR /app/examples/full-stack/apps/worker
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
-RUN bun -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json","utf-8")); p.workspaces=["examples/full-stack/apps/worker","examples/full-stack/shared/env-contracts","packages/core","packages/env"]; delete p.devDependencies; fs.writeFileSync("package.json", JSON.stringify(p,null,2));'
-RUN rm -f bun.lock
-COPY packages/core/package.json ./packages/core/
-COPY packages/env/package.json ./packages/env/
+COPY examples/full-stack/apps/api/package.json ./examples/full-stack/apps/api/
 COPY examples/full-stack/shared/env-contracts/package.json ./examples/full-stack/shared/env-contracts/
 COPY examples/full-stack/apps/worker/package.json ./examples/full-stack/apps/worker/
-RUN bun install --ignore-scripts --production
+COPY packages/argocd/package.json ./packages/argocd/
+COPY packages/cli/package.json ./packages/cli/
+COPY packages/core/package.json ./packages/core/
+COPY packages/docker/package.json ./packages/docker/
+COPY packages/env/package.json ./packages/env/
+COPY examples/full-stack/package.json ./examples/full-stack/
+COPY examples/package.json ./examples/
+COPY packages/external-secrets/package.json ./packages/external-secrets/
+COPY packages/k8s/package.json ./packages/k8s/
+COPY packages/oxc/package.json ./packages/oxc/
+COPY packages/sealed-secrets/package.json ./packages/sealed-secrets/
+COPY packages/sops/package.json ./packages/sops/
+COPY apps/website/package.json ./apps/website/
+RUN bun install --ignore-scripts --frozen-lockfile --production --filter @example/worker
 RUN rm -rf '/app/node_modules/typescript'
+RUN rm -rf '/app/node_modules/.bun/typescript@'*
 
 FROM base AS runner
 WORKDIR /app/apps/worker

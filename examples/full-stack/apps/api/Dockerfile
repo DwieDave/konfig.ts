@@ -1,6 +1,6 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/api/docker.ts
-# hash: sha256:f6d37b751e152776f7c55e068c2cf5cb4cfc2e074051f31b8223237129a1ae0f
+# hash: sha256:59feabbd50c599aea0b8e2f917d8db50ff872c37608226013d50b5856525ad0f
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -40,13 +40,23 @@ WORKDIR /app/examples/full-stack/apps/api
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
-RUN bun -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json","utf-8")); p.workspaces=["examples/full-stack/apps/api","examples/full-stack/shared/env-contracts","packages/core","packages/env"]; delete p.devDependencies; fs.writeFileSync("package.json", JSON.stringify(p,null,2));'
-RUN rm -f bun.lock
-COPY packages/core/package.json ./packages/core/
-COPY packages/env/package.json ./packages/env/
-COPY examples/full-stack/shared/env-contracts/package.json ./examples/full-stack/shared/env-contracts/
 COPY examples/full-stack/apps/api/package.json ./examples/full-stack/apps/api/
-RUN bun install --ignore-scripts --production
+COPY examples/full-stack/shared/env-contracts/package.json ./examples/full-stack/shared/env-contracts/
+COPY examples/full-stack/apps/worker/package.json ./examples/full-stack/apps/worker/
+COPY packages/argocd/package.json ./packages/argocd/
+COPY packages/cli/package.json ./packages/cli/
+COPY packages/core/package.json ./packages/core/
+COPY packages/docker/package.json ./packages/docker/
+COPY packages/env/package.json ./packages/env/
+COPY examples/full-stack/package.json ./examples/full-stack/
+COPY examples/package.json ./examples/
+COPY packages/external-secrets/package.json ./packages/external-secrets/
+COPY packages/k8s/package.json ./packages/k8s/
+COPY packages/oxc/package.json ./packages/oxc/
+COPY packages/sealed-secrets/package.json ./packages/sealed-secrets/
+COPY packages/sops/package.json ./packages/sops/
+COPY apps/website/package.json ./apps/website/
+RUN bun install --ignore-scripts --frozen-lockfile --production --filter @example/api
 
 FROM base AS runner
 WORKDIR /app/apps/api
