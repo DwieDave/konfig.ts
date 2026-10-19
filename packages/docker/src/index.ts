@@ -3,6 +3,7 @@ export const PACKAGE_NAME = "@konfig.ts/docker"
 export {
   type AnyDockerError,
   BuildScriptMissing,
+  BunVersionUnsupported,
   CircularWorkspaceDep,
   DockerWriteError,
   DockerWriteRefused,

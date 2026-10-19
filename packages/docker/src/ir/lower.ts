@@ -4,6 +4,7 @@ import { Path } from "effect/Path"
 import {
   type AnyDockerError,
   BuildScriptMissing,
+  BunVersionUnsupported,
   EngineVersionMissing,
   PlatformMultiUnsupported,
   SharedRootFileMissing,
@@ -28,6 +29,7 @@ import {
   type Workspace
 } from "../services/WorkspaceGraph"
 import type { CopyAtom, DevSpec, DockerSpec, HealthcheckAtom, RunnerSpec, UserAtom } from "../spec"
+import { MIN_FILTERED_INSTALL, supportsFilteredInstall } from "./bunVersion"
 import type { Dockerfile, DockerfileBundle, Instruction, Stage } from "./DockerfileIR"
 
 export interface LowerContext {
@@ -312,6 +314,22 @@ const _resolveDefaults = (
       alpine
     }
   })
+
+// The bun prod-deps stage relies on `bun install --filter`.
+const _checkBunFilterSupport = (
+  spec: DockerSpec,
+  ctx: LowerContext,
+  pm: PmContext
+): Effect.Effect<void, BunVersionUnsupported> =>
+  pm.pmKind === "Bun" && spec.runner.production && !supportsFilteredInstall(pm.pmVersion)
+    ? Effect.fail(
+      new BunVersionUnsupported({
+        target: ctx.target.name,
+        version: pm.pmVersion,
+        minimum: `${MIN_FILTERED_INSTALL.major}.${MIN_FILTERED_INSTALL.minor}`
+      })
+    )
+    : Effect.void
 
 const _baseStage = (img: ImageRef): Stage => ({
   name: "base",
@@ -653,5 +671,6 @@ export const lower = (
     const ctx = yield* prepareContext(spec)
     yield* validateSpec({ spec, ctx })
     const pm = yield* _resolveDefaults(spec, ctx)
+    yield* _checkBunFilterSupport(spec, ctx, pm)
     return buildIR({ spec, ctx, pm })
   })

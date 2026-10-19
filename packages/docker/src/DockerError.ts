@@ -22,6 +22,12 @@ export class EngineVersionMissing extends Data.TaggedError("EngineVersionMissing
   readonly engineField: string
 }> {}
 
+export class BunVersionUnsupported extends Data.TaggedError("BunVersionUnsupported")<{
+  readonly target: string
+  readonly version: string
+  readonly minimum: string
+}> {}
+
 export class SpecDecodeError extends Data.TaggedError("SpecDecodeError")<{
   readonly specPath: string
   readonly cause: unknown
@@ -63,6 +69,7 @@ export type AnyDockerError =
   | UnsupportedPm
   | CircularWorkspaceDep
   | EngineVersionMissing
+  | BunVersionUnsupported
   | SpecDecodeError
   | BuildScriptMissing
   | WorkspaceSourceUnknown

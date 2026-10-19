@@ -305,6 +305,25 @@ describe("lower error paths", () => {
     }).pipe(Effect.provide(NodeServices.layer)))
 })
 
+describe("lower (bun < 1.2)", () => {
+  const legacy = `${FIXTURES}bun-legacy/packages/app`
+  it.effect("fails with BunVersionUnsupported when runner.production needs a filtered install", () =>
+    Effect.gen(function*() {
+      const base = minimalSpec(legacy)
+      const exit = yield* Effect.exit(lower({ ...base, runner: { ...base.runner, production: true } }))
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(exit.cause.toString()).toContain("BunVersionUnsupported")
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("still lowers without runner.production", () =>
+    Effect.gen(function*() {
+      const bundle = yield* lower(minimalSpec(legacy))
+      expect(bundle.prod.stages.map((s) => s.name)).not.toContain("prod-deps")
+    }).pipe(Effect.provide(NodeServices.layer)))
+})
+
 describe("lower prod-deps stage (production install per package manager)", () => {
   const cases = [
     { pm: "bun", target: `${FIXTURES}bun/packages/app`, lockfile: "bun.lock" },

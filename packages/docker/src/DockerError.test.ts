@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   type AnyDockerError,
   BuildScriptMissing,
+  BunVersionUnsupported,
   CircularWorkspaceDep,
   DockerWriteError,
   DockerWriteRefused,
@@ -54,10 +55,14 @@ describe("DockerError", () => {
       [
         new DockerWriteError({ path: "Dockerfile", cause: new Error("perm") }),
         "DockerWriteError"
+      ],
+      [
+        new BunVersionUnsupported({ target: "apps/x", version: "1.1.38", minimum: "1.2" }),
+        "BunVersionUnsupported"
       ]
     ]
 
-    expect(all).toHaveLength(11)
+    expect(all).toHaveLength(12)
     for (const [err, tag] of all) {
       expect(err._tag).toBe(tag)
     }
