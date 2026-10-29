@@ -60,14 +60,13 @@
     "test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
   },
   "dependencies": {
+    "@effect/platform-node": "catalog:",
     "yaml": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform-node": "^4.0.0",
     "effect": "^4.0.0"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "@vitest/coverage-v8": "catalog:",

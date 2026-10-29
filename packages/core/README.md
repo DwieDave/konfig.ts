@@ -86,6 +86,6 @@ konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.
 is supported:
 
 - **`effect@^4.0.0`** — peer dependency of every package.
-- **`@effect/platform-node@^4.0.0`** — peer dependency of `@konfig.ts/core`,
-  since `render()` needs its Node filesystem/subprocess implementations.
-  Install it next to `effect` and keep both on the same minor version.
+- **`@effect/platform-node@^4.1.0`** — a regular dependency of
+  `@konfig.ts/core`, since `render()` needs its Node filesystem/subprocess
+  implementations. It is installed automatically with core.

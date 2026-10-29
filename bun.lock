@@ -131,6 +131,7 @@
         "konfig": "./dist/main.mjs",
       },
       "dependencies": {
+        "@effect/platform-node": "catalog:",
         "@konfig.ts/argocd": "workspace:*",
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/docker": "workspace:*",
@@ -138,7 +139,6 @@
         "semver": "^7.7.2",
       },
       "devDependencies": {
-        "@effect/platform-node": "catalog:",
         "@effect/vitest": "catalog:",
         "@konfig.ts/k8s": "workspace:*",
         "@types/bun": "catalog:",
@@ -149,7 +149,6 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "@effect/platform-node": "^4.0.0",
         "effect": "^4.0.0",
       },
     },
@@ -157,10 +156,10 @@
       "name": "@konfig.ts/core",
       "version": "0.4.0",
       "dependencies": {
+        "@effect/platform-node": "catalog:",
         "yaml": "catalog:",
       },
       "devDependencies": {
-        "@effect/platform-node": "catalog:",
         "@effect/vitest": "catalog:",
         "@types/bun": "catalog:",
         "@vitest/coverage-v8": "catalog:",
@@ -169,7 +168,6 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "@effect/platform-node": "^4.0.0",
         "effect": "^4.0.0",
       },
     },

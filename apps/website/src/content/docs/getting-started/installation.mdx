@@ -23,13 +23,13 @@ Install `@konfig.ts/cli` as a dev dependency and the library packages as regular
 
 <Install packages="@konfig.ts/cli" dev />
 
-<Install packages="@konfig.ts/core @konfig.ts/k8s @konfig.ts/env @konfig.ts/argocd @konfig.ts/sops effect@^4.0.0 @effect/platform-node@^4.0.0" />
+<Install packages="@konfig.ts/core @konfig.ts/k8s @konfig.ts/env @konfig.ts/argocd @konfig.ts/sops effect@^4.0.0" />
 
 The binary is exposed as `konfig`. Run `bunx konfig --help` (or `npx konfig --help`) to confirm the install.
 
 ## The Effect peer range
 
-Every `@konfig.ts/*` library declares `effect` as a peer dependency with a caret range, currently `^4.0.0`: any stable 4.x build satisfies it. `@konfig.ts/core` and the CLI also declare `@effect/platform-node` as a peer at the same range, because they use the Node filesystem and subprocess services to write files and call `helm`. Install it next to `effect` and keep both on the same minor version: `@effect/platform-node` 4.1 requires `effect` 4.1. All packages declare `engines.node >= 22`.
+Every `@konfig.ts/*` library declares `effect` as a peer dependency with a caret range, currently `^4.0.0`: any stable 4.x build satisfies it. `@konfig.ts/core` and the CLI additionally depend on `@effect/platform-node` as a regular dependency rather than a peer, because they use the Node filesystem and subprocess services to write files and call `helm`. All packages declare `engines.node >= 22`.
 
 <Aside type="tip">
 If your workspace already depends on Effect for application code, align it to the same version. One `effect` in `node_modules` avoids duplicated service keys and the type mismatches that come with two copies.
