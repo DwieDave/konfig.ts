@@ -82,12 +82,10 @@ lives one level up, in the Effect `Layer`s that `Module` and
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.0.5 on
+konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.0.0 on
 is supported:
 
-- **`effect@^4.0.5`** — required by every package (declared as a peer
-  dependency).
-- **`@effect/platform-node@^4.0.5`** — a regular (non-optional)
-  dependency of `@konfig.ts/core`, since `render()` needs its Node
-  filesystem/subprocess implementations. It is installed automatically
-  whenever you install `@konfig.ts/core`.
+- **`effect@^4.0.0`** — peer dependency of every package.
+- **`@effect/platform-node@^4.0.0`** — peer dependency of `@konfig.ts/core`,
+  since `render()` needs its Node filesystem/subprocess implementations.
+  Install it next to `effect` and keep both on the same minor version.

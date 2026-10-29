@@ -97,9 +97,9 @@ warms its cache too.
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/) 4. The CLI installs these as direct
-dependencies and accepts any 4.x build from 4.0.5 on:
+konfig.ts is built on [Effect](https://effect.website/) 4. The CLI declares these as peer
+dependencies and accepts any 4.x build from 4.0.0 on (keep both on the same minor version):
 
-- **`effect@^4.0.5`**
-- **`@effect/platform-node@^4.0.5`** — the CLI uses `render()` and the
+- **`effect@^4.0.0`**
+- **`@effect/platform-node@^4.0.0`** — the CLI uses `render()` and the
   Node filesystem/subprocess services.

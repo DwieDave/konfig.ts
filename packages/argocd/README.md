@@ -70,10 +70,10 @@ See [`.docs/architecture.md`](../../.docs/architecture.md).
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.0.5 on
+konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.0.0 on
 is supported:
 
-- **`effect@^4.0.5`** — required by every package.
-- **`@effect/platform-node@^4.0.5`** — required only when you call
-  `render()` (the Node filesystem/subprocess entrypoint); manifest-only
-  consumers can omit it (it is declared as an optional peer).
+- **`effect@^4.0.0`** — peer dependency of every package.
+- **`@effect/platform-node@^4.0.0`** — peer dependency of `@konfig.ts/core`,
+  whose `render()` entrypoint needs the Node filesystem/subprocess services.
+  Install it next to `effect` and keep both on the same minor version.

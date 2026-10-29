@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { ConfigProvider, Effect, Layer, Sink, Stream } from "effect"
+import { ConfigProvider, Effect, Layer, Redacted, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import type { Command } from "effect/process/ChildProcess"
+import type { Command, StandardCommand } from "effect/process/ChildProcess"
 import { isStandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
@@ -18,6 +18,9 @@ import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
 
 const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
+
+const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
+  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
 
 const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
 
@@ -56,7 +59,7 @@ const _spawnerFor = (input: { readonly tarball: Buffer; readonly templateStdout:
       ((command: Command) =>
         Effect.gen(function*() {
           if (!isStandardCommand(command)) return _handle("")
-          const args = command.args
+          const args = _plainArgs(command)
           if (args[0] === "pull") {
             const fs = yield* FileSystem
             const path = yield* Path
@@ -234,7 +237,7 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
             ((command: Command) =>
               Effect.gen(function*() {
                 if (!isStandardCommand(command)) return _handle("")
-                const args = command.args
+                const args = _plainArgs(command)
                 if (args[0] === "pull") {
                   const fsInner = yield* FileSystem
                   const pathInner = yield* Path

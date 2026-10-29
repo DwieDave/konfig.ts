@@ -1,10 +1,10 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
 import { Helm } from "@konfig.ts/core"
-import { Effect, Exit, Layer, Schema, Sink, Stream } from "effect"
+import { Effect, Exit, Layer, Redacted, Schema, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { type Command, isStandardCommand } from "effect/process/ChildProcess"
+import { type Command, isStandardCommand, type StandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -32,6 +32,9 @@ const validOpts = {
   outDir: "/tmp/konfig-test-out",
   cacheDir: "/tmp/konfig-test-cache"
 }
+
+const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
+  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
 
 const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
 
@@ -62,7 +65,7 @@ const _helmSpawner = (templateStdout: string): Layer.Layer<ChildProcessSpawner> 
   Layer.succeed(
     ChildProcessSpawner,
     makeSpawner((command: Command) => {
-      const args = isStandardCommand(command) ? command.args : []
+      const args = isStandardCommand(command) ? _plainArgs(command) : []
       if (args.includes("template")) {
         return Effect.succeed(_handle({ stdout: templateStdout, exitCode: 0 }))
       }
@@ -113,7 +116,7 @@ const _pullingHelmSpawner = (
       const path = yield* Path
       return makeSpawner((command: Command) =>
         Effect.gen(function*() {
-          const args = isStandardCommand(command) ? command.args : []
+          const args = isStandardCommand(command) ? _plainArgs(command) : []
           if (args.includes("template")) return _handle({ stdout: templateStdout, exitCode: 0 })
           if (args[0] === "pull" && !args.includes("--untar")) {
             const dest = args[args.indexOf("--destination") + 1] ?? ""

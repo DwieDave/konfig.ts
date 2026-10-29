@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Redacted, Sink, Stream } from "effect"
 import * as PlatformError from "effect/PlatformError"
-import type { Command } from "effect/process/ChildProcess"
+import type { Command, StandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -42,6 +42,9 @@ const _spawnerFor = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
     )
   )
 
+const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
+  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
+
 // Captures the args each spawned `Command` carried, so tests can assert on
 // what `runKubeconform` actually forwards (e.g. `-kubernetes-version`).
 const _spawnerCapturing = (
@@ -51,7 +54,7 @@ const _spawnerCapturing = (
   Layer.succeed(
     ChildProcessSpawner,
     makeSpawner((command: Command) => {
-      captured.args = command._tag === "StandardCommand" ? command.args : []
+      captured.args = command._tag === "StandardCommand" ? _plainArgs(command) : []
       return Effect.succeed(
         makeHandle({
           pid: ProcessId(1),

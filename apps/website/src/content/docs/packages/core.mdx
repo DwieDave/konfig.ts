@@ -74,8 +74,8 @@ Core exports tagged error classes from `src/index.ts`. The render-time ones are 
 
 ## Requirements
 
-- `effect@^4.0.5` as a peer dependency (Effect 4).
-- `@effect/platform-node` and `yaml` are regular dependencies: `render()` needs the Node filesystem and subprocess services, so they install with the package.
+- `effect@^4.0.0` and `@effect/platform-node@^4.0.0` as peer dependencies (Effect 4): `render()` needs the Node filesystem and subprocess services. Keep both on the same minor version.
+- `yaml` is a regular dependency.
 - Runtime: Bun recommended; Node >= 23.6 works; Node 22.6 to 23.5 with `--experimental-strip-types`; `tsx` works.
 
 Source and README: [packages/core](https://github.com/DwieDave/konfig.ts/tree/main/packages/core).

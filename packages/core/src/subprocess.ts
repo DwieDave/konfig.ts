@@ -1,4 +1,4 @@
-import { Data, Duration, Effect, Stream } from "effect"
+import { Data, Duration, Effect, Redacted, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/process"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
@@ -14,7 +14,7 @@ const _tail = (text: string): string =>
 
 const _commandLabel = (command: ChildProcess.Command): string =>
   ChildProcess.isStandardCommand(command)
-    ? [command.command, ...command.args].join(" ")
+    ? [command.command, ...command.args.map((arg) => (Redacted.isRedacted(arg) ? "<redacted>" : arg))].join(" ")
     : "<pipeline>"
 
 // `command` must never be interpolated with secret material by callers.

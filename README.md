@@ -138,12 +138,13 @@ console.log(`api listening on :${config.port}`)
 ## Requirements
 
 konfig.ts is built on [Effect](https://effect.website/) 4. Every `@konfig.ts/*` package
-accepts any 4.x build from 4.0.5 on:
+accepts any 4.x build from 4.0.0 on:
 
-- `effect@^4.0.5`, required by every package.
-- `@effect/platform-node@^4.0.5`, a regular dependency of
-  `@konfig.ts/core` (its `render()` entrypoint needs the Node filesystem and
-  subprocess services), so it is installed automatically with core.
+- `effect@^4.0.0`, a peer dependency of every package.
+- `@effect/platform-node@^4.0.0`, a peer dependency of `@konfig.ts/core`
+  and the CLI (`render()` needs the Node filesystem and subprocess
+  services). Install it next to `effect` and keep both on the same minor
+  version.
 
 ## Quickstart
 

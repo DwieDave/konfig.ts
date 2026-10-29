@@ -1,10 +1,10 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Effect, Layer, Sink, Stream } from "effect"
+import { Effect, Layer, Redacted, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import type { Command } from "effect/process/ChildProcess"
+import type { Command, StandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -24,6 +24,9 @@ interface _CapturedKubeconform {
   filesInDir: ReadonlyArray<string> | undefined
 }
 
+const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
+  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
+
 // A fake `kubeconform` that exits 0 and records the args it was spawned
 // with plus the contents of the directory it was pointed at.
 const _kubeconformSpawner = (
@@ -35,7 +38,7 @@ const _kubeconformSpawner = (
       const fs = yield* FileSystem
       return makeSpawner((command: Command) =>
         Effect.gen(function*() {
-          const args = command._tag === "StandardCommand" ? command.args : []
+          const args = command._tag === "StandardCommand" ? _plainArgs(command) : []
           captured.args = args
           const dir = args[2]
           if (dir !== undefined) {

@@ -1,11 +1,11 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Helm } from "@konfig.ts/core"
-import { ConfigProvider, Effect, Exit, Layer, Sink, Stream } from "effect"
+import { ConfigProvider, Effect, Exit, Layer, Redacted, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { ChildProcess } from "effect/process"
-import type { Command } from "effect/process/ChildProcess"
+import type { Command, StandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -62,11 +62,14 @@ const _recordingSpawner = (
         if (command.args.includes("version")) {
           return Effect.succeed(_handle({ stdout: "v3.99.0\n", exitCode: 0 }))
         }
-        calls.push([command.command, ...command.args])
+        calls.push([command.command, ..._plainArgs(command)])
       }
       return Effect.succeed(_handle(proc))
     })
   )
+
+const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
+  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
 
 /**
  * A `pull` here writes `tarball`'s bytes to `<destination>/<chart>-<version>.tgz`
@@ -83,7 +86,7 @@ const _pullingSpawner = (tarball: Buffer): Layer.Layer<ChildProcessSpawner, neve
         ((command: Command) =>
           Effect.gen(function*() {
             if (!ChildProcess.isStandardCommand(command)) return _handle({ exitCode: 0 })
-            const args = command.args
+            const args = _plainArgs(command)
             if (args.includes("version")) return _handle({ stdout: "v3.99.0\n", exitCode: 0 })
             if (args[0] === "pull") {
               const destIdx = args.indexOf("--destination")

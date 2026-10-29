@@ -4,9 +4,9 @@ import { Yaml } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
 import { SealedSecrets } from "@konfig.ts/sealed-secrets"
-import { Effect, Exit, Layer, Schema, Sink, Stream } from "effect"
+import { Effect, Exit, Layer, Redacted, Schema, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
-import { type Command, isStandardCommand } from "effect/process/ChildProcess"
+import { type Command, isStandardCommand, type StandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
   ChildProcessSpawner,
@@ -93,6 +93,9 @@ const _handleForOutput = (output: string): ChildProcessHandle =>
     unref: Effect.succeed(Effect.void)
   })
 
+const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
+  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
+
 const _makeStubSpawner = (
   sink: CallSink,
   respond: (cmd: Command) => string
@@ -103,7 +106,7 @@ const _makeStubSpawner = (
       Effect.gen(function*() {
         const stdin = yield* _stdinAsString(cmd)
         if (isStandardCommand(cmd)) {
-          sink.calls.push({ cmd: cmd.command, args: cmd.args, stdin })
+          sink.calls.push({ cmd: cmd.command, args: _plainArgs(cmd), stdin })
         }
         return _handleForOutput(respond(cmd))
       })
