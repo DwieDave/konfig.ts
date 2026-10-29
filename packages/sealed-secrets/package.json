@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/sealed-secrets",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "SealedSecret CR backend for konfig.ts — shells out to kubeseal at render time and emits bitnami.com/v1alpha1 manifests.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

@@ -1,6 +1,6 @@
 {
   "name": "@konfig.ts/argocd",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "ArgoCD Application and AppOfApps emitters for konfig.ts.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
