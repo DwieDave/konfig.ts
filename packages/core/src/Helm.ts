@@ -14,6 +14,7 @@ import {
   KONFIG_HELM_TIMEOUT_ENV
 } from "./konfigDefaults"
 import { make, type Manifest, type ParsedDoc } from "./Manifest"
+import type { RenderContext } from "./RenderContext"
 import {
   HelmDigestMismatch,
   HelmMinVersionInvalid,
@@ -499,6 +500,14 @@ const _inPhase =
 // author chooses, not a shared filesystem path.
 const _resolveCacheDir = (opts: HelmReleaseOptions) => helmCacheDirConfig.pipe(_inPhase({ opts, phase: "pull" }))
 
+export const _valuesYaml = (values: YamlRecord): string =>
+  YAML.stringify(values, {
+    lineWidth: 0,
+    version: "1.1",
+    defaultStringType: "QUOTE_DOUBLE",
+    defaultKeyType: "QUOTE_DOUBLE"
+  })
+
 const _writeValues = (opts: HelmReleaseOptions) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -509,15 +518,22 @@ const _writeValues = (opts: HelmReleaseOptions) =>
     )
 
     const valuesFile = path.join(tmpDir, "values.yaml")
-    yield* fs.writeFileString(valuesFile, YAML.stringify(opts.values, { lineWidth: 0 })).pipe(
+    yield* fs.writeFileString(valuesFile, _valuesYaml(opts.values)).pipe(
       _inPhase({ opts, phase: "template" })
     )
 
     return valuesFile
   })
 
+const _kubeVersionArgs = (input: { readonly extraOpts: readonly string[]; readonly ctx: RenderContext }) =>
+  input.ctx.k8sVersion === undefined ||
+    input.extraOpts.some((o) => o === "--kube-version" || o.startsWith("--kube-version="))
+    ? []
+    : ["--kube-version", input.ctx.k8sVersion]
+
 const _templateCommand = (
   input: {
+    readonly ctx: RenderContext
     readonly opts: HelmReleaseOptions
     readonly releaseName: string
     readonly cachedTgz: string
@@ -531,11 +547,17 @@ const _templateCommand = (
     "--values",
     input.valuesFile,
     ...(input.opts.namespace !== undefined ? ["--namespace", input.opts.namespace] : []),
-    ...(input.opts.extraOpts ?? [])
+    ...(input.opts.extraOpts ?? []),
+    ..._kubeVersionArgs({ extraOpts: input.opts.extraOpts ?? [], ctx: input.ctx })
   ])
 
 const _runTemplate = (
-  input: { readonly opts: HelmReleaseOptions; readonly cachedTgz: string; readonly valuesFile: string }
+  input: {
+    readonly opts: HelmReleaseOptions
+    readonly ctx: RenderContext
+    readonly cachedTgz: string
+    readonly valuesFile: string
+  }
 ) =>
   Effect.gen(function*() {
     const { opts } = input
@@ -554,13 +576,13 @@ const _preflight = (opts: HelmReleaseOptions) =>
     ? Effect.void
     : assertMinVersion(opts.minVersion).pipe(_inPhase({ opts, phase: "version-check" }))
 
-const _releaseDocs = (opts: HelmReleaseOptions) =>
+const _releaseDocs = ({ opts, ctx }: { readonly opts: HelmReleaseOptions; readonly ctx: RenderContext }) =>
   Effect.gen(function*() {
     yield* _preflight(opts)
     const cacheDir = yield* _resolveCacheDir(opts)
     const cachedTgz = yield* ensureChartTarball({ ...opts, cacheDir }).pipe(_inPhase({ opts, phase: "pull" }))
     const valuesFile = yield* _writeValues(opts)
-    const output = yield* _runTemplate({ opts, cachedTgz, valuesFile })
+    const output = yield* _runTemplate({ opts, ctx, cachedTgz, valuesFile })
 
     return yield* _parseHelmOutput({
       output,
@@ -572,4 +594,4 @@ const _releaseDocs = (opts: HelmReleaseOptions) =>
   })
 
 export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> =>
-  make<ParsedDoc[]>(() => _releaseDocs(opts).pipe(Effect.scoped))
+  make<ParsedDoc[]>((ctx) => _releaseDocs({ opts, ctx }).pipe(Effect.scoped))

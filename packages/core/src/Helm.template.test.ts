@@ -68,7 +68,9 @@ const _handle = (stdout: string, exitCode = 0): ChildProcessHandle =>
  * supplied by `NodeServices.layer` at every call site below) — the cast
  * documents that gap rather than hiding a real R mismatch.
  */
-const _spawnerFor = (input: { readonly tarball: Buffer; readonly templateStdout: string }) =>
+const _spawnerFor = (
+  input: { readonly tarball: Buffer; readonly templateStdout: string; readonly captured?: string[][] }
+) =>
   Layer.succeed(
     ChildProcessSpawner,
     makeSpawner(
@@ -91,6 +93,8 @@ const _spawnerFor = (input: { readonly tarball: Buffer; readonly templateStdout:
             }
 
             if (args[0] === "template") {
+              input.captured?.push([...args])
+
               return _handle(input.templateStdout)
             }
 
@@ -418,5 +422,58 @@ describe("Helm.timeout validation", () => {
       expect(Exit.isSuccess(yield* _run("90"))).toBe(true)
       const exit = yield* _run("2 minutes")
       expect(Exit.isSuccess(exit) && Duration.toSeconds(exit.value)).toBe(120)
+    }))
+})
+
+describe("Helm.release --kube-version", () => {
+  const run = (input: { readonly k8sVersion?: string; readonly extraOpts?: readonly string[] }) =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-kube-" })
+      const tarball = Buffer.from("fake-chart-tarball")
+      const captured: string[][] = []
+
+      const m = Helm.release({
+        repo: "https://example.com/charts",
+        chart: "mychart",
+        version: "2.0.0",
+        digest: `sha256:${sha256Hex(tarball)}`,
+        values: {},
+        extraOpts: input.extraOpts ?? []
+      })
+
+      const ctx = RenderContext.makeFull({ env: "prod", k8sVersion: input.k8sVersion })
+
+      yield* m.render(ctx).pipe(
+        Effect.provide(
+          Layer.mergeAll(NodeServices.layer, _spawnerFor({ tarball, templateStdout: TEMPLATE_STDOUT, captured }))
+        ),
+        Effect.provideService(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({ KONFIG_HELM_CACHE: cacheDir })
+        ),
+        Effect.scoped
+      )
+
+      return captured[0] ?? []
+    }).pipe(Effect.provide(NodeServices.layer))
+
+  it.effect("forwards ctx.k8sVersion", () =>
+    Effect.gen(function*() {
+      const args = yield* run({ k8sVersion: "1.30" })
+      expect(args.slice(args.indexOf("--kube-version"))).toEqual(["--kube-version", "1.30"])
+    }))
+
+  it.effect("explicit extraOpts wins", () =>
+    Effect.gen(function*() {
+      const args = yield* run({ k8sVersion: "1.30", extraOpts: ["--kube-version", "1.29"] })
+      expect(args.filter((a) => a === "--kube-version")).toHaveLength(1)
+      expect(args).toContain("1.29")
+      expect(args).not.toContain("1.30")
+    }))
+
+  it.effect("no flag without k8sVersion", () =>
+    Effect.gen(function*() {
+      expect(yield* run({})).not.toContain("--kube-version")
     }))
 })

@@ -44,7 +44,7 @@ So a `CustomResourceDefinition` named `sopssecrets.isindir.github.com` passes un
 
 Every issue appears in the `StructuralValidationFailed` message as `<file> (doc <n>) <path>: <message>`, naming the specific rule that was violated (for example `metadata.name '...' is not a valid RFC 1123 subdomain — ...` or `metadata.namespace '...' is not a valid RFC 1123 label — ...`). A YAML parse failure is reported as one issue for `doc 0`. On success the command prints an `OK` line: `env '<env>': <n> file(s) pass structural validation`.
 
-With `--strict`, the command renders fresh in memory, stages the result into a scoped scratch directory that is cleaned up when the command exits, and runs kubeconform against that directory. It does not depend on a prior `konfig build` and never reads stale output from a previous build's output directory. When `--k8s-version` is set it both shapes your render (as `ctx.k8sVersion`) and is forwarded to kubeconform as `-kubernetes-version <ver>`.
+With `--strict`, the command renders fresh in memory, stages the result into a scoped scratch directory that is cleaned up when the command exits, and runs kubeconform against that directory. It does not depend on a prior `konfig build` and never reads stale output from a previous build's output directory. When `--k8s-version` is set it both shapes your render (as `ctx.k8sVersion`) and is forwarded to kubeconform as `-kubernetes-version <ver>` and to `helm template` as `--kube-version <ver>` for Helm releases (unless the release's `extraOpts` already sets `--kube-version`).
 
 Nothing is written to disk outside the `--strict` scratch directory, and the build cache is neither consulted nor updated.
 

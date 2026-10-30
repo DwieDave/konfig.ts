@@ -29,7 +29,7 @@ konfig build <env> [--log text|json] [--no-cache]
 | `--log` | `text` | Output format for the report line: `text` or `json`. |
 | `--no-cache` | `false` | Skip the input-hash check and force a fresh render (debugging, first build). |
 | `--cluster` | unset | Shared render flag, see [CLI overview](/konfig.ts/docs/cli/overview/). Writes to a sibling `<env>@<cluster>` directory. Must be a DNS-1123 label. |
-| `--k8s-version` | unset | Shared render flag. |
+| `--k8s-version` | unset | Shared render flag. Forwarded to `helm template` as `--kube-version` for Helm releases. |
 | `--flag k=v` | unset | Shared render flag, repeatable. |
 
 ## Output layout
