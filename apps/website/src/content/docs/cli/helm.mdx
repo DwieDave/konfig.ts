@@ -31,7 +31,7 @@ konfig helm fetch --all
 | Tarball cache | `KONFIG_HELM_CACHE` | `helm.cacheDir` | `.konfig/helm-cache` |
 | Minimum Helm version | `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` |
 
-The command first runs `helm version --short` and fails with `HelmVersionTooLow` when `helm` is absent or too old.
+The command first runs `helm version --short` and fails with `HelmVersionTooLow` when the version it reads is older than the minimum or cannot be parsed. A missing or failing `helm` binary surfaces as the raw `ProcessError`.
 
 It then walks the registry and prints `Fetching <chart>@<version>...` for every entry. What happens next depends on whether the entry records a digest:
 
@@ -49,10 +49,11 @@ Digest-suffixed cache entries (`<chart>-<version>-<digest12>.tgz`) are shared be
 | Error | When |
 | --- | --- |
 | `MissingAllFlag` | `--all` was not passed. |
-| `HelmVersionTooLow { required, found }` | `helm` is absent or older than the minimum version. |
+| `HelmVersionTooLow { required, found }` | The `helm` version was read but is older than the minimum, or could not be parsed. |
+| `HelmMinVersionInvalid` | The configured minimum Helm version is not `major.minor` or `major.minor.patch`. |
 | `ChartRegistryError` | Loading the chart registry failed. |
 | `ChartRegistryEntryDecodeError` | A registry entry does not match the expected shape or patterns. |
-| process failures | `helm pull` exited non-zero. |
+| `ProcessError` | `helm` is missing or failing, or `helm pull` exited non-zero. |
 
 ## Example
 
