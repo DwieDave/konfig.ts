@@ -131,7 +131,10 @@ export const writeOne = (
   Effect.gen(function*() {
     const { content, dest, force } = input
     const fs = yield* FileSystem
-    const existed = yield* existsOrFalse(dest)
+
+    const existed = yield* existsOrFalse(dest).pipe(
+      Effect.mapError((cause) => new DockerWriteError({ path: dest, cause }))
+    )
 
     if (existed) {
       const existing = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))

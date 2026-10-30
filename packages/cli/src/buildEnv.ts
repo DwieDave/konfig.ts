@@ -446,7 +446,11 @@ const _removeIfExists = (target: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
 
-    if (!(yield* existsOrFalse(target))) return
+    const present = yield* existsOrFalse(target).pipe(
+      Effect.mapError((cause) => new WriteEnvError({ path: target, cause }))
+    )
+
+    if (!present) return
     yield* fs
       .remove(target, { recursive: true })
       .pipe(Effect.mapError((cause) => new WriteEnvError({ path: target, cause })))
