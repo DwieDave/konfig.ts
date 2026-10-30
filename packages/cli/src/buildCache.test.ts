@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import fc from "fast-check"
+import { createHash } from "node:crypto"
 import {
   type BuildCacheEntry,
   computeInputHash,
@@ -16,6 +17,26 @@ import {
 } from "./buildCache"
 
 describe("computeOutputHash", () => {
+  it("matches the digest recorded before the sha256 helper moved to core", () => {
+    const files = [
+      { path: "out/b.yaml", content: "kind: B\n" },
+      { path: "out/a.yaml", content: "kind: A\n" }
+    ]
+
+    expect(computeOutputHash(files)).toBe(
+      createHash("sha256").update("out/a.yaml\nkind: A\n\nout/b.yaml\nkind: B\n\n").digest("hex")
+    )
+  })
+
+  it("equals the incremental sha256 reducer for arbitrary unicode content", () => {
+    fc.assert(
+      fc.property(fc.string({ unit: "binary" }), (content) => {
+        const incremental = createHash("sha256").update("x.yaml\n").update(content).update("\n").digest("hex")
+        expect(computeOutputHash([{ path: "x.yaml", content }])).toBe(incremental)
+      })
+    )
+  })
+
   it("is deterministic regardless of input order", () => {
     const a = [
       { path: "out/a.yaml", content: "kind: A\n" },

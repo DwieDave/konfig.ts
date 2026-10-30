@@ -31,20 +31,9 @@ const arbGraph = fc
       hasBuildScript: i % 2 === 0
     }))
 
-    const seen = new Set<string>()
-    const edges: GraphEdge[] = []
-
-    for (const [a, b, kind] of triples) {
-      const from = Math.min(a, b)
-      const to = Math.max(a, b)
-
-      if (from === to) continue
-      const key = `n${from}->n${to}`
-
-      if (seen.has(key)) continue
-      seen.add(key)
-      edges.push({ from: `n${from}`, to: `n${to}`, kind })
-    }
+    const edges: GraphEdge[] = triples.flatMap(([a, b, kind]) =>
+      a === b ? [] : [{ from: `n${Math.min(a, b)}`, to: `n${Math.max(a, b)}`, kind }]
+    )
 
     return { nodes, edges, withDev }
   })
@@ -136,6 +125,49 @@ describe("renderGraph — layout property tests", () => {
       fc.property(arbGraph, ({ nodes, edges, withDev }) => {
         const out = renderGraph({ nodes, edges, target: undefined, withDev, reduce: false })
         expect(out).toContain(`${nodes.length} workspaces`)
+      }),
+      { numRuns: 100 }
+    )
+  })
+})
+
+const _parseTreeLine = (line: string): { readonly depth: number; readonly name: string } | undefined => {
+  const branch = /^((?:│   |    )*)(?:├── |└── )(n\d+)/.exec(line)
+  const root = /^(n\d+)\s/.exec(line)
+
+  return branch
+    ? { depth: (branch[1] ?? "").length / 4 + 1, name: branch[2] ?? "" }
+    : root
+    ? { depth: 0, name: root[1] ?? "" }
+    : undefined
+}
+
+const _treeChildren = (out: string): ReadonlyArray<ReadonlyArray<string>> => {
+  const parsed = out.split("\n").flatMap((line) => _parseTreeLine(line) ?? [])
+
+  return parsed.map((entry, index) => {
+    const next = parsed.slice(index + 1)
+    const end = next.findIndex((later) => later.depth <= entry.depth)
+
+    return (end === -1 ? next : next.slice(0, end))
+      .filter((later) => later.depth === entry.depth + 1)
+      .map((later) => later.name)
+  })
+}
+
+describe("renderGraph — duplicate edges", () => {
+  it("never repeats a child under a parent and counts distinct (from,to) pairs", () => {
+    fc.assert(
+      fc.property(arbGraph, ({ nodes, edges }) => {
+        const out = renderGraph({ nodes, edges, target: undefined, withDev: true, reduce: false })
+        const runtime = new Set(edges.filter((e) => e.kind === "runtime").map((e) => `${e.from}>${e.to}`))
+        const dev = new Set(edges.map((e) => `${e.from}>${e.to}`).filter((k) => !runtime.has(k))).size
+        expect(out).toContain(`${runtime.size} runtime edge`)
+        expect(out).toContain(`${dev} dev edge`)
+
+        for (const names of _treeChildren(out)) {
+          expect(new Set(names).size).toBe(names.length)
+        }
       }),
       { numRuns: 100 }
     )

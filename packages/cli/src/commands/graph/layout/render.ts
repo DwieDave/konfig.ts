@@ -1,4 +1,4 @@
-import { activeEdges, reachableFromTarget, transitiveReduce } from "./adjacency"
+import { activeEdges, dedupeEdges, reachableFromTarget, transitiveReduce } from "./adjacency"
 import { renderTree } from "./tree"
 import { BUILD_TOKEN, type GraphEdge, type RenderInput, type Scope } from "./types"
 
@@ -35,7 +35,7 @@ const _renderLegend = (input: { readonly withDev: boolean; readonly showBuild: b
 }
 
 const _scopeOf = (input: RenderInput): Scope => {
-  const filtered = activeEdges({ edges: input.edges, withDev: input.withDev })
+  const filtered = activeEdges({ edges: dedupeEdges(input.edges), withDev: input.withDev })
 
   const scope = input.target !== undefined
     ? reachableFromTarget({ nodes: input.nodes, edges: filtered, target: input.target })

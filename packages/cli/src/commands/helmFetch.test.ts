@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Helm } from "@konfig.ts/core"
+import { Helm, sha256Hex } from "@konfig.ts/core"
 import { fakeHandle, type FakeProc, plainArgs } from "@konfig.ts/core/testing"
 import { ConfigProvider, Effect, Exit, Layer, Predicate } from "effect"
 import { FileSystem } from "effect/FileSystem"
@@ -8,11 +8,8 @@ import { Path } from "effect/Path"
 import { ChildProcess } from "effect/process"
 import type { Command } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
-import * as crypto from "node:crypto"
 import { ChartRegistryEntryDecodeError } from "../chartRegistry"
 import { fetchOne, helmFetchEffect, MissingAllFlag } from "./helmFetch"
-
-const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
 /**
  * Records every command argv the fake spawner is asked to run, so tests
@@ -149,7 +146,7 @@ describe("fetchOne", () => {
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helmfetch-digest-" })
 
       const tarball = Buffer.from("fake-postgresql-tarball")
-      const digest = `sha256:${_sha256Hex(tarball)}`
+      const digest = `sha256:${sha256Hex(tarball)}`
 
       yield* fetchOne({
         repo: "https://charts.bitnami.com/bitnami",
@@ -170,7 +167,7 @@ describe("fetchOne", () => {
       const fs = yield* FileSystem
       const path = yield* Path
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helmfetch-digest-cached-" })
-      const digest = `sha256:${_sha256Hex(Buffer.from("already-cached"))}`
+      const digest = `sha256:${sha256Hex(Buffer.from("already-cached"))}`
       yield* fs.writeFileString(
         path.join(cacheDir, Helm.cacheFileName({ chart: "postgresql", version: "16.0.0", digest })),
         "already-cached"
@@ -194,7 +191,7 @@ describe("fetchOne", () => {
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helmfetch-digest-mismatch-" })
 
       const tarball = Buffer.from("real-tarball-bytes")
-      const wrongDigest = `sha256:${_sha256Hex(Buffer.from("not-the-tarball"))}`
+      const wrongDigest = `sha256:${sha256Hex(Buffer.from("not-the-tarball"))}`
 
       const exit = yield* Effect.exit(
         fetchOne({

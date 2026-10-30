@@ -9,7 +9,7 @@ const _hasMarker = (dir: string) =>
   Effect.gen(function*() {
     const path = yield* Path
 
-    return yield* existsOrFalse(path.join(dir, "marker"))
+    return yield* existsOrFalse(path.join(dir, "marker")).pipe(Effect.orElseSucceed(() => false))
   })
 
 describe("existsOrFalse", () => {

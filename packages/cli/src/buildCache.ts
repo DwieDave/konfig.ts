@@ -1,9 +1,8 @@
-import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
+import { type RenderContext, type ResolvedKonfigConfig, sha256Hex } from "@konfig.ts/core"
 import { Array as Arr, Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
-import * as crypto from "node:crypto"
 import type { EnvTarget } from "./buildEnv"
 import { resolveCliPaths } from "./cliConfig"
 import { envEntryPath } from "./envEntry"
@@ -29,7 +28,7 @@ const _orAbsentIfNotFound = <A, R>(input: OrAbsentInput<A, R>): Effect.Effect<A,
   )
 
 const _sha256 = (chunks: ReadonlyArray<string | Uint8Array>): string =>
-  chunks.reduce((hash, chunk) => hash.update(chunk), crypto.createHash("sha256")).digest("hex")
+  sha256Hex(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))))
 
 const BuildCacheEntrySchema = Schema.Struct({
   inputHash: Schema.String,
@@ -183,7 +182,10 @@ const _lockfilesIn = (dir: string) =>
   Effect.gen(function*() {
     const path = yield* Path
 
-    return yield* Effect.filter(_LOCKFILES.map((name) => path.join(dir, name)), existsOrFalse)
+    return yield* Effect.filter(
+      _LOCKFILES.map((name) => path.join(dir, name)),
+      (file) => existsOrFalse(file).pipe(Effect.orElseSucceed(() => false))
+    )
   })
 
 // Walks up from the config dir to the nearest directory holding a lockfile:

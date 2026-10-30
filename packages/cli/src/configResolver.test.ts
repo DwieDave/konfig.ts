@@ -99,4 +99,19 @@ describe("resolveConfig", () => {
       expect(failure).toBeInstanceOf(ConfigParseError)
       expect(failure._tag).toBe("ConfigParseError")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("walks past an unreadable ancestor directory to the nearest readable konfig.json", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-resolve-" })
+      const locked = path.join(root, "locked")
+      yield* fs.writeFileString(path.join(root, "konfig.json"), _validConfigJson)
+      yield* fs.makeDirectory(path.join(locked, "sub"), { recursive: true })
+      yield* fs.chmod(locked, 0)
+      yield* Effect.addFinalizer(() => Effect.orDie(fs.chmod(locked, 0o755)))
+
+      const resolved = yield* resolveConfig(path.join(locked, "sub"))
+      expect(resolved.configDir).toBe(path.resolve(root))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

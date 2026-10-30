@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect"
 import type { GraphEdge, GraphNode, LinkLike, Scope } from "./types"
 
 const _indexBy = (input: {
@@ -17,6 +18,14 @@ export const adjacency = (edges: ReadonlyArray<LinkLike>): Map<string, string[]>
 
 export const reverseAdjacency = (edges: ReadonlyArray<LinkLike>): Map<string, string[]> =>
   _indexBy({ edges, key: (e) => e.to, value: (e) => e.from })
+
+const _isRuntime = (edge: GraphEdge): boolean => edge.kind === "runtime"
+
+export const dedupeEdges = (edges: ReadonlyArray<GraphEdge>): GraphEdge[] =>
+  Arr.dedupeWith(
+    [...edges.filter(_isRuntime), ...edges.filter((edge) => !_isRuntime(edge))],
+    (a, b) => a.from === b.from && a.to === b.to
+  )
 
 export const activeEdges = (input: {
   readonly edges: ReadonlyArray<GraphEdge>

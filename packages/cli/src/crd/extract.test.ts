@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
-import { Helm } from "@konfig.ts/core"
+import { Helm, sha256Hex } from "@konfig.ts/core"
 import { fakeHandle, plainArgs } from "@konfig.ts/core/testing"
 import { Effect, Exit, Layer, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
@@ -8,7 +8,6 @@ import { Path } from "effect/Path"
 import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
-import * as crypto from "node:crypto"
 import {
   CrdInputDecodeError,
   crdNameToIdentifier,
@@ -68,8 +67,6 @@ spec:
             size:
               type: string
 `
-
-const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
 interface _Call {
   readonly args: ReadonlyArray<string>
@@ -204,7 +201,7 @@ describe("extractCrdsEffect end-to-end", () => {
       const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-out-" })
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-cache-" })
       const tarball = Buffer.from("fake-postgresql-tarball")
-      const digest = `sha256:${_sha256Hex(tarball)}`
+      const digest = `sha256:${sha256Hex(tarball)}`
 
       yield* extractCrdsEffect({ ...validOpts, outDir, cacheDir, digest }).pipe(
         Effect.provide(_pullingHelmSpawner(tarball, _validCrdYaml))
@@ -224,7 +221,7 @@ describe("extractCrdsEffect end-to-end", () => {
       const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-out-" })
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-cache-" })
       const tarball = Buffer.from("real-tarball-bytes")
-      const wrongDigest = `sha256:${_sha256Hex(Buffer.from("not-the-tarball"))}`
+      const wrongDigest = `sha256:${sha256Hex(Buffer.from("not-the-tarball"))}`
 
       const exit = yield* Effect.exit(
         extractCrdsEffect({ ...validOpts, outDir, cacheDir, digest: wrongDigest }).pipe(

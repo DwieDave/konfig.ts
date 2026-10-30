@@ -169,3 +169,18 @@ describe("detectCycle", () => {
     expect(detectCycle({ ...input, withDev: true })).not.toBeNull()
   })
 })
+
+describe("renderGraph — duplicate edges", () => {
+  it("prints a doubly-declared dependency once and counts it once", () => {
+    const out = renderGraph({
+      nodes: [node("a", "packages/a"), node("x", "packages/x")],
+      edges: [{ from: "a", to: "x", kind: "runtime" }, { from: "a", to: "x", kind: "runtime" }],
+      target: "a",
+      withDev: false,
+      reduce: true
+    })
+
+    expect(out).toContain("2 workspaces  ·  1 runtime edge")
+    expect(out).not.toContain("(see above)")
+  })
+})

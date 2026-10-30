@@ -1,8 +1,15 @@
-import { allWorkspaces, CircularWorkspaceDep, findRoot, type Workspace } from "@konfig.ts/docker"
+import {
+  allWorkspaces,
+  CircularWorkspaceDep,
+  findRoot,
+  lookupWorkspace,
+  type Workspace,
+  workspaceDeps
+} from "@konfig.ts/docker"
 import { Console, Data, Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { Path } from "effect/Path"
-import { detectCycle, type EdgeKind, type GraphEdge, type GraphNode, renderGraph } from "./graph/layout"
+import { detectCycle, type GraphEdge, type GraphNode, renderGraph } from "./graph/layout"
 
 class GraphTargetNotFound extends Data.TaggedError("GraphTargetNotFound")<{
   readonly target: string
@@ -13,39 +20,14 @@ class GraphTargetNotFound extends Data.TaggedError("GraphTargetNotFound")<{
   }
 }
 
-const _depEdges = (input: {
-  readonly workspace: Workspace
-  readonly names: ReadonlySet<string>
-  readonly record: Readonly<Record<string, string>> | undefined
-  readonly kind: EdgeKind
-}): GraphEdge[] =>
-  Object.keys(input.record ?? {}).flatMap((to): GraphEdge[] =>
-    input.names.has(to) ? [{ from: input.workspace.name, to, kind: input.kind }] : []
+const _buildEdges = (workspaces: ReadonlyArray<Workspace>): GraphEdge[] =>
+  workspaces.flatMap((ws) =>
+    workspaceDeps({ ws, names: workspaces.map((w) => w.name), includeDev: true }).map(({ to, kind }) => ({
+      from: ws.name,
+      to,
+      kind
+    }))
   )
-
-const _buildEdges = (workspaces: ReadonlyArray<Workspace>): GraphEdge[] => {
-  const names = new Set(workspaces.map((w) => w.name))
-
-  return workspaces.flatMap((workspace) => [
-    ..._depEdges({ workspace, names, record: workspace.pkg.dependencies, kind: "runtime" }),
-    ..._depEdges({ workspace, names, record: workspace.pkg.peerDependencies, kind: "runtime" }),
-    ..._depEdges({ workspace, names, record: workspace.pkg.devDependencies, kind: "dev" })
-  ])
-}
-
-const _resolveTargetName = (input: {
-  readonly workspaces: ReadonlyArray<Workspace>
-  readonly rawTarget: string
-  readonly cwd: string
-  readonly root: string
-}): Effect.Effect<string | undefined, never, Path> =>
-  Effect.gen(function*() {
-    const p = yield* Path
-    const wanted = p.resolve(input.cwd, input.rawTarget)
-
-    return (input.workspaces.find((w) => p.join(input.root, w.relDir) === wanted) ??
-      input.workspaces.find((w) => w.name === input.rawTarget))?.name
-  })
 
 interface RunGraphArgs {
   readonly cwd: string
@@ -62,9 +44,9 @@ const _resolveTarget = (input: {
 }) =>
   Effect.gen(function*() {
     if (Option.isNone(input.target)) return undefined
-    const resolved = yield* _resolveTargetName({ ...input, rawTarget: input.target.value })
+    const found = lookupWorkspace({ ...input, target: input.target.value })
 
-    if (resolved) return resolved
+    if (found) return found.name
 
     return yield* new GraphTargetNotFound({
       target: input.target.value,

@@ -23,7 +23,7 @@ const _hasConfig = (dir: string) =>
   Effect.gen(function*() {
     const path = yield* Path
 
-    return yield* existsOrFalse(path.join(dir, _CONFIG_FILE))
+    return yield* existsOrFalse(path.join(dir, _CONFIG_FILE)).pipe(Effect.orElseSucceed(() => false))
   })
 
 const _findConfig = (start: string) =>
