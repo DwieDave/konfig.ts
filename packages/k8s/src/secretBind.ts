@@ -69,6 +69,13 @@ const _buildValuesLayer = <N extends string, K extends string>(
   return { values, layer }
 }
 
+const _memoizeSource = <K extends string>(
+  source: SecretSource<K, Manifest.RenderServices>
+): SecretSource<K, Manifest.RenderServices> => ({
+  ...source,
+  resolve: Effect.runSync(Effect.cached(source.resolve))
+})
+
 const _buildEnvVars = <N extends string, K extends string, Ns extends string>(
   secret: SecretEntry<N, K, Readonly<Record<K, string>>>,
   ref: SecretRef<N, K, Ns>
@@ -108,11 +115,12 @@ export const bindSecret: {
   input: BindSecretInput<N, K, E, string>
 ): DeclaredSecret<N, K, string> => {
   const { secret } = input
+  const source = input.source === undefined ? undefined : _memoizeSource(input.source)
   const namespace = input.namespace ?? secret.namespace
   const ref = SecretRefValue.of<N, K, string>(secret.name)
   const manifest = input.backend === undefined
     ? undefined
-    : input.backend.requiresSource && input.source === undefined
+    : input.backend.requiresSource && source === undefined
     ? _missingSourceManifest(input.backend, secret.name, namespace)
     : input.backend.emit({
       name: secret.name,
@@ -120,7 +128,7 @@ export const bindSecret: {
       keys: secret.keys,
       labels: input.labels,
       annotations: input.annotations,
-      source: input.source
+      source
     })
 
   const out: DeclaredSecret<N, K, string> = {
@@ -133,7 +141,7 @@ export const bindSecret: {
     refLayer: Dep.provideSecret(secret.name)
   }
 
-  return input.source === undefined
+  return source === undefined
     ? out
-    : { ...out, ..._buildValuesLayer({ name: secret.name, namespace, source: input.source }) }
+    : { ...out, ..._buildValuesLayer({ name: secret.name, namespace, source }) }
 }

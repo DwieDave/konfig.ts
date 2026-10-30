@@ -1,8 +1,8 @@
 import { Manifest, type SecretRef } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { _lowerServicePorts } from "./_lower"
-import type { IngressBackend as K8sIngressBackend } from "kubernetes-types/networking/v1"
 import type {
+  IngressBackend as K8sIngressBackend,
   Ingress as K8sIngress,
   IngressRule as K8sIngressRule,
   IngressTLS as K8sIngressTLS,

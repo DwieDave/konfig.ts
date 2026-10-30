@@ -1,4 +1,6 @@
-import { Manifest } from "@konfig.ts/core"
+import { NodeServices } from "@effect/platform-node"
+import { it as effectIt } from "@effect/vitest"
+import { Manifest, RenderContext } from "@konfig.ts/core"
 import { Downward, Literal, SecretSource } from "@konfig.ts/env"
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
@@ -293,4 +295,48 @@ describe("Environment.bind secret shorthand", () => {
     expect(bound.members.inner.db.ref).toBe("db-creds")
     expect(bound.manifests).toHaveLength(2)
   })
+})
+
+describe("Secret.bind source resolution", () => {
+  effectIt.effect("resolves the source once across emit and values layer", () =>
+    Effect.gen(function*() {
+      let calls = 0
+      const base = SecretSource.literal({ data: { value: "s" } })
+      const source = {
+        ...base,
+        resolve: Effect.sync(() => ++calls).pipe(Effect.flatMap(() => base.resolve))
+      }
+      const backend: SecretBackend<"session-key", "value", false> = {
+        _tag: "NativeSecret",
+        requiresSource: false,
+        emit: (i) => Manifest.make(() => (i.source?.resolve ?? Effect.succeed({})).pipe(Effect.as({})))
+      }
+      const bound = Secret.bind({ secret: sessionKey, backend, source })
+      yield* bound.manifest!.render(RenderContext.make("test"))
+      yield* Effect.service(bound.values!).pipe(Effect.provide(bound.layer!))
+      expect(calls).toBe(1)
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  effectIt.effect(
+    "memoizes per bind: re-rendering the same bound secret does not re-resolve",
+    () =>
+      Effect.gen(function*() {
+        let calls = 0
+        const base = SecretSource.literal({ data: { value: "s" } })
+        const source = {
+          ...base,
+          resolve: Effect.sync(() => ++calls).pipe(Effect.flatMap(() => base.resolve))
+        }
+        const backend: SecretBackend<"session-key", "value", false> = {
+          _tag: "NativeSecret",
+          requiresSource: false,
+          emit: (i) => Manifest.make(() => (i.source?.resolve ?? Effect.succeed({})).pipe(Effect.as({})))
+        }
+        const bound = Secret.bind({ secret: sessionKey, backend, source })
+        const ctx = RenderContext.make("test")
+        yield* bound.manifest!.render(ctx)
+        yield* bound.manifest!.render(ctx)
+        expect(calls).toBe(1)
+      }).pipe(Effect.provide(NodeServices.layer))
+  )
 })

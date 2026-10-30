@@ -1,6 +1,5 @@
 import { Manifest } from "@konfig.ts/core"
 import { Effect } from "effect"
-import { _lowerPodTemplate } from "./_lower"
 import type {
   CronJob as K8sCronJob,
   Deployment as K8sDeployment,
@@ -10,6 +9,7 @@ import type {
   StatefulSet as K8sStatefulSet,
   StatefulSetUpdateStrategy
 } from "./.generated/k8s-types"
+import { _lowerPodTemplate } from "./_lower"
 import type { PodSpecInput } from "./container"
 import type { Selector } from "./selector"
 
@@ -67,14 +67,14 @@ export const Deployment = {
       metadata: {
         name: input.name,
         namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
+        labels: structuredClone(input.labels),
+        annotations: structuredClone(input.annotations)
       },
       spec: {
         replicas: input.replicas,
-        selector: input.selector,
+        selector: structuredClone(input.selector),
         template: _lowerPodTemplate(input.template),
-        strategy: input.strategy,
+        strategy: structuredClone(input.strategy),
         revisionHistoryLimit: input.revisionHistoryLimit,
         progressDeadlineSeconds: input.progressDeadlineSeconds,
         minReadySeconds: input.minReadySeconds
@@ -100,7 +100,7 @@ export const Deployment = {
         },
         spec: input.template.spec
       },
-      strategy: input.strategy,
+      strategy: structuredClone(input.strategy),
       revisionHistoryLimit: input.revisionHistoryLimit,
       progressDeadlineSeconds: input.progressDeadlineSeconds,
       minReadySeconds: input.minReadySeconds
@@ -123,19 +123,19 @@ export const StatefulSet = {
       metadata: {
         name: input.name,
         namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
+        labels: structuredClone(input.labels),
+        annotations: structuredClone(input.annotations)
       },
       spec: {
         replicas: input.replicas,
-        selector: input.selector,
+        selector: structuredClone(input.selector),
         template: _lowerPodTemplate(input.template),
         serviceName: input.serviceName,
         volumeClaimTemplates: input.volumeClaimTemplates
-          ? [...input.volumeClaimTemplates]
+          ? structuredClone([...input.volumeClaimTemplates])
           : undefined,
         podManagementPolicy: input.podManagementPolicy,
-        updateStrategy: input.updateStrategy
+        updateStrategy: structuredClone(input.updateStrategy)
       }
     }
     return Manifest.make<K8sStatefulSet>(() => Effect.succeed(resource))
@@ -166,8 +166,8 @@ export const Job = {
       metadata: {
         name: input.name,
         namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
+        labels: structuredClone(input.labels),
+        annotations: structuredClone(input.annotations)
       },
       spec: {
         parallelism: input.parallelism,
@@ -218,8 +218,8 @@ export const CronJob = {
       metadata: {
         name: input.name,
         namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
+        labels: input.labels === undefined ? undefined : { ...input.labels },
+        annotations: input.annotations === undefined ? undefined : { ...input.annotations }
       },
       spec: {
         schedule: input.schedule,
@@ -229,7 +229,7 @@ export const CronJob = {
         startingDeadlineSeconds: input.startingDeadlineSeconds,
         suspend: input.suspend,
         jobTemplate: {
-          metadata: input.jobTemplate.metadata,
+          metadata: structuredClone(input.jobTemplate.metadata),
           spec: {
             template: _lowerPodTemplate(input.jobTemplate.spec.template),
             backoffLimit: input.jobTemplate.spec.backoffLimit,

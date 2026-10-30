@@ -33,6 +33,7 @@ export type {
   Namespace,
   PersistentVolume,
   PersistentVolumeClaim,
+  PersistentVolumeSpec,
   PodSpec,
   PodTemplateSpec,
   Secret,
@@ -43,5 +44,15 @@ export type {
   VolumeMount
 } from "kubernetes-types/core/v1"
 export type { ObjectMeta } from "kubernetes-types/meta/v1"
-export type { Ingress, IngressRule, IngressSpec, IngressTLS, NetworkPolicy } from "kubernetes-types/networking/v1"
+export type {
+  Ingress,
+  IngressBackend,
+  IngressRule,
+  IngressSpec,
+  IngressTLS,
+  NetworkPolicy,
+  NetworkPolicyEgressRule,
+  NetworkPolicyIngressRule,
+  NetworkPolicyPeer
+} from "kubernetes-types/networking/v1"
 export type { ClusterRole, ClusterRoleBinding, Role, RoleBinding } from "kubernetes-types/rbac/v1"

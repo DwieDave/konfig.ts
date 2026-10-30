@@ -1,6 +1,6 @@
 // Explicit, type-checked lowering from konfig's readonly/branded input shapes to the plain
-// kubernetes-types shapes. Bodies copy arrays (fresh mutable arrays, so emitted manifests never
-// alias caller-owned readonly arrays) and let branded strings widen to `string` structurally.
+// kubernetes-types shapes. Bodies deep-copy their input (so emitted manifests never alias
+// caller-owned objects or arrays) and let branded strings widen to `string` structurally.
 import { unsafeCoerce } from "@konfig.ts/core"
 import type {
   Container as K8sContainer,
@@ -29,12 +29,12 @@ type ProbeInput = K8sContainer["readinessProbe"] | ProbeTarget<string>
 const _lowerProbe = (probe: ProbeInput): K8sContainer["readinessProbe"] => {
   if (probe === undefined) return undefined
   return {
-    ...probe,
+    ...structuredClone(probe),
     httpGet: probe.httpGet === undefined ? undefined : {
       ...probe.httpGet,
       httpHeaders: probe.httpGet.httpHeaders === undefined
         ? undefined
-        : [...probe.httpGet.httpHeaders]
+        : structuredClone([...probe.httpGet.httpHeaders])
     },
     tcpSocket: probe.tcpSocket === undefined ? undefined : { ...probe.tcpSocket },
     grpc: probe.grpc === undefined ? undefined : {
@@ -48,26 +48,32 @@ const _lowerProbe = (probe: ProbeInput): K8sContainer["readinessProbe"] => {
 }
 
 const _lowerVolume = (volume: Volume): K8sVolume => ({
-  ...volume,
+  ...structuredClone(volume),
   configMap: volume.configMap === undefined ? undefined : {
     ...volume.configMap,
-    items: volume.configMap.items === undefined ? undefined : [...volume.configMap.items]
+    items: volume.configMap.items === undefined
+      ? undefined
+      : structuredClone([...volume.configMap.items])
   }
 })
 
 const _lowerContainer = (container: ContainerInput): K8sContainer => ({
-  ...container,
+  ...structuredClone(container),
   image: container.image,
-  env: container.env === undefined ? undefined : [...container.env],
-  ports: container.ports === undefined ? undefined : [...container.ports],
+  command: container.command === undefined ? undefined : [...container.command],
+  args: container.args === undefined ? undefined : [...container.args],
+  env: container.env === undefined ? undefined : container.env.map((e) => structuredClone(e)),
+  ports: container.ports === undefined ? undefined : container.ports.map((p) => ({ ...p })),
   readinessProbe: _lowerProbe(container.readinessProbe),
   livenessProbe: _lowerProbe(container.livenessProbe),
   startupProbe: _lowerProbe(container.startupProbe),
-  volumeMounts: container.volumeMounts === undefined ? undefined : [...container.volumeMounts]
+  volumeMounts: container.volumeMounts === undefined
+    ? undefined
+    : container.volumeMounts.map((m) => ({ ...m }))
 })
 
 const _lowerPodSpec = (spec: PodSpecInput): K8sPodSpec => ({
-  ...spec,
+  ...structuredClone(spec),
   containers: spec.containers.map(_lowerContainer),
   initContainers: spec.initContainers?.map(_lowerContainer),
   volumes: spec.volumes?.map(_lowerVolume),

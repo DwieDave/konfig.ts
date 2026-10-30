@@ -1,12 +1,10 @@
 import { Manifest } from "@konfig.ts/core"
 import { Effect } from "effect"
-import type { PersistentVolumeSpec as K8sPersistentVolumeSpec } from "kubernetes-types/core/v1"
 import type {
   NetworkPolicyEgressRule as K8sNetworkPolicyEgressRule,
   NetworkPolicyIngressRule as K8sNetworkPolicyIngressRule,
-  NetworkPolicyPeer as K8sNetworkPolicyPeer
-} from "kubernetes-types/networking/v1"
-import type {
+  NetworkPolicyPeer as K8sNetworkPolicyPeer,
+  PersistentVolumeSpec as K8sPersistentVolumeSpec,
   ClusterRole as K8sClusterRole,
   ClusterRoleBinding as K8sClusterRoleBinding,
   NetworkPolicy as K8sNetworkPolicy,
@@ -185,10 +183,10 @@ export const NetworkPolicy = {
         metadata: {
           name: input.name,
           namespace: input.namespace,
-          labels: input.labels,
-          annotations: input.annotations
+          labels: input.labels === undefined ? undefined : { ...input.labels },
+          annotations: input.annotations === undefined ? undefined : { ...input.annotations }
         },
-        spec: input.spec
+        spec: structuredClone(input.spec)
       })
     ),
   fromPodSet: <L extends Readonly<Record<string, string>>>(
