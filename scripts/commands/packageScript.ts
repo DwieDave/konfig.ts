@@ -5,41 +5,63 @@ import { type PackageInfo, packageInfos, REPO_ROOT, RepoScriptError } from "../l
 import { spawnInherit } from "../lib/spawn"
 import { topoOrder } from "../lib/topo"
 
-const _runScript = (input: { readonly pkg: PackageInfo; readonly script: string }) =>
-  Console.log(`\n> ${input.pkg.name} ${input.script}`).pipe(
-    Effect.andThen(spawnInherit({ argv: ["bun", "run", "--cwd", input.pkg.dir, input.script], cwd: REPO_ROOT }))
+export interface ScriptRun {
+  readonly name: string
+  readonly argv: ReadonlyArray<string>
+  readonly cwd: string
+}
+
+export const SCRIPTS_RUN: ScriptRun = {
+  name: "scripts vitest run",
+  argv: ["bunx", "vitest", "run"],
+  cwd: `${REPO_ROOT}/scripts`
+}
+
+export const planScript = (input: { readonly pkgs: ReadonlyArray<PackageInfo>; readonly script: string }) =>
+  topoOrder(input.pkgs)
+    .filter((p) => p.scripts.has(input.script))
+    .map((pkg): ScriptRun => ({
+      name: `${pkg.name} ${input.script}`,
+      argv: ["bun", "run", "--cwd", pkg.dir, input.script],
+      cwd: REPO_ROOT
+    }))
+
+export const planCoverage = (pkgs: ReadonlyArray<PackageInfo>) => [
+  ...planScript({ pkgs, script: "test:coverage" }),
+  SCRIPTS_RUN
+]
+
+const _execute = (run: ScriptRun) =>
+  Console.log(`\n> ${run.name}`).pipe(
+    Effect.andThen(spawnInherit({ argv: run.argv, cwd: run.cwd })),
+    Effect.filterOrFail((code) => code === 0, () => new RepoScriptError({ message: `${run.name} failed` }))
   )
 
-const _runAll = (script: string) =>
-  Effect.gen(function*() {
-    const pkgs = topoOrder(yield* packageInfos).filter((p) => p.scripts.has(script))
+const _runAll = (plan: (pkgs: ReadonlyArray<PackageInfo>) => ReadonlyArray<ScriptRun>) =>
+  packageInfos.pipe(Effect.flatMap((pkgs) => Effect.forEach(plan(pkgs), _execute, { discard: true })))
 
-    for (const pkg of pkgs) {
-      const code = yield* _runScript({ pkg, script })
-
-      if (code !== 0) return yield* new RepoScriptError({ message: `${script} failed in ${pkg.name}` })
-    }
-  })
-
-const _makeCommand = (input: { readonly name: string; readonly script: string; readonly description: string }) =>
-  Command.make(input.name, {}, () => _runAll(input.script)).pipe(Command.withDescription(input.description))
+const _makeCommand = (input: {
+  readonly name: string
+  readonly plan: (pkgs: ReadonlyArray<PackageInfo>) => ReadonlyArray<ScriptRun>
+  readonly description: string
+}) => Command.make(input.name, {}, () => _runAll(input.plan)).pipe(Command.withDescription(input.description))
 
 export const buildCommand = _makeCommand({
   name: "build",
-  script: "build",
+  plan: (pkgs) => planScript({ pkgs, script: "build" }),
   description: "Run each package's build script in dependency order"
 })
 
 export const checkCommand = _makeCommand({
   name: "check",
-  script: "check",
+  plan: (pkgs) => planScript({ pkgs, script: "check" }),
   description: "Run each package's check script in dependency order"
 })
 
 export const coverageCommand = _makeCommand({
   name: "coverage",
-  script: "test:coverage",
-  description: "Run each package's test:coverage script in dependency order"
+  plan: planCoverage,
+  description: "Run each package's test:coverage script in dependency order, then the scripts tests"
 })
 
 export const packagesCommand = Command.make("packages", {}, () =>

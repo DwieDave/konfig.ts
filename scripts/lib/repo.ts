@@ -53,7 +53,7 @@ export const readJson = (file: string) =>
     return yield* parseJson({ file, text })
   })
 
-/** Packages without a test:coverage script, skipped only where coverage output is read. */
+/** Packages whose test:coverage writes no coverage-summary.json, skipped only where coverage output is read. */
 const COVERAGE_EXCLUDED_PACKAGES: ReadonlySet<string> = new Set(["oxc"])
 
 export const packageDirs = Effect.gen(function*() {
