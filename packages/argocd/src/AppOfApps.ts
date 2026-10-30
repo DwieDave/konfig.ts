@@ -1,28 +1,32 @@
 import { type AnyRenderError, Compose, type Manifest as CoreManifest } from "@konfig.ts/core"
-import type { Effect, Layer } from "effect"
-import type { Application, ApplicationHandle } from "./Application"
+import { type Effect, type Layer, Schema } from "effect"
+import { type Application, Application as ApplicationSchema, type ApplicationHandle, SyncPolicy } from "./Application"
 
-export interface AppOfAppsTarget {
-  readonly repoURL: string
-  readonly branch: string
-  readonly rootPath: string
-  readonly controllerNamespace?: string
-}
+export const AppOfAppsTarget = Schema.Struct({
+  repoURL: Schema.String,
+  branch: Schema.String,
+  rootPath: Schema.String,
+  controllerNamespace: Schema.optionalKey(Schema.String)
+})
 
-export interface AppOfAppsDefaults {
-  readonly destination?: {
-    readonly server?: string
-  }
-  readonly project?: string
-  readonly syncPolicy?: import("./Application").SyncPolicy
-}
+export type AppOfAppsTarget = typeof AppOfAppsTarget.Type
 
-export interface AppOfAppsResult {
-  readonly name: string
-  readonly target: AppOfAppsTarget
-  readonly defaults: AppOfAppsDefaults
-  readonly apps: ReadonlyArray<Application>
-}
+export const AppOfAppsDefaults = Schema.Struct({
+  destination: Schema.optionalKey(Schema.Struct({ server: Schema.optionalKey(Schema.String) })),
+  project: Schema.optionalKey(Schema.String),
+  syncPolicy: Schema.optionalKey(SyncPolicy)
+})
+
+export type AppOfAppsDefaults = typeof AppOfAppsDefaults.Type
+
+export const AppOfAppsResult = Schema.Struct({
+  name: Schema.String,
+  target: AppOfAppsTarget,
+  defaults: AppOfAppsDefaults,
+  apps: Schema.Array(ApplicationSchema)
+})
+
+export type AppOfAppsResult = typeof AppOfAppsResult.Type
 
 export interface AppOfAppsMakeOptions {
   readonly name?: string

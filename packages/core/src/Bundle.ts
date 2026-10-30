@@ -1,4 +1,4 @@
-import { type Context, Effect, Layer } from "effect"
+import { type Context, Effect, Layer, Schema } from "effect"
 import { unsafeCoerce } from "./_cast"
 import * as Compose from "./Compose"
 import * as Dep from "./deps"
@@ -7,11 +7,13 @@ import type * as CoreManifest from "./Manifest"
 import type * as Module from "./Module"
 import type { AnyRenderError } from "./RenderError"
 
-export interface Bundle {
-  readonly name: string
-  readonly namespace?: string
-  readonly manifests: ReadonlyArray<unknown>
-}
+export const Bundle = Schema.Struct({
+  name: Schema.String,
+  namespace: Schema.optionalKey(Schema.String),
+  manifests: Schema.Array(Schema.Unknown)
+})
+
+export type Bundle = typeof Bundle.Type
 
 const _make = (opts: Bundle): Bundle => {
   const bundle = { name: opts.name, manifests: opts.manifests }
@@ -124,10 +126,12 @@ export const target: Module.Target<HandleKind, Record<never, never>, Record<neve
     })
 }
 
-export interface BundleSetResult {
-  readonly name: string
-  readonly bundles: ReadonlyArray<Bundle>
-}
+export const BundleSetResult = Schema.Struct({
+  name: Schema.String,
+  bundles: Schema.Array(Bundle)
+})
+
+export type BundleSetResult = typeof BundleSetResult.Type
 
 interface BundleSetMakeOptions {
   readonly name?: string

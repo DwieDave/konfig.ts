@@ -1,7 +1,7 @@
-import { AppOfApps as AppOfAppsNS } from "@konfig.ts/argocd"
-import type { Application as ApplicationNS } from "@konfig.ts/argocd"
 import type { Dep, Manifest } from "@konfig.ts/core"
 import type { Effect } from "effect"
+import type * as ApplicationNS from "../src/Application"
+import * as AppOfAppsNS from "../src/AppOfApps"
 
 type Expect<T extends true> = T
 

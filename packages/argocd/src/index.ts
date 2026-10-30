@@ -1,8 +1,8 @@
-export * as Application from "./Application"
+export * as Application from "./api/Application"
 
-export type { AppOfAppsResult } from "./AppOfApps"
+export * as AppOfApps from "./api/AppOfApps"
 
-export * as AppOfApps from "./AppOfApps"
+export { AppOfAppsResult } from "./AppOfApps"
 
 export { applicationCRFilename, serializeApplicationCR } from "./emit"
 

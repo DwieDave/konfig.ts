@@ -1,6 +1,6 @@
-import type { Application as ApplicationNS } from "@konfig.ts/argocd"
 import type { AnyRenderError, Dep } from "@konfig.ts/core"
 import type { Context, Effect, Layer } from "effect"
+import type * as ApplicationNS from "../src/Application"
 
 type Expect<T extends true> = T
 

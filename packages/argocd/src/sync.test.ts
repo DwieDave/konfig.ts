@@ -43,8 +43,9 @@ describe("Sync properties", () => {
     }))
   })
 
-  it("wave rejects non-integers", () => {
-    expect(() => Sync.wave(1.5)).toThrow()
-    expect(() => Sync.wave(Number.NaN)).toThrow()
+  it("wave never throws for any numeric input", () => {
+    fc.assert(fc.property(fc.double(), (n) => {
+      expect(() => Sync.wave(n)).not.toThrow()
+    }))
   })
 })

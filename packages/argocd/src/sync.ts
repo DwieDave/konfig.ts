@@ -1,16 +1,14 @@
-import { Result, Schema } from "effect"
-
 type HookPhase = "PreSync" | "Sync" | "PostSync" | "SyncFail" | "PostDelete"
 
-const _decodeWave = (n: number): number => Result.getOrThrow(Schema.decodeResult(Schema.Int)(n))
+type IntegerLiteral<N extends number> = `${N}` extends `${string}.${string}` | `${string}e${string}` ? never : N
 
 const _syncOptionsKey = "argocd.argoproj.io/sync-options"
 
 // ArgoCD argocd.argoproj.io/* annotation helpers; spread the result into
 // Application.define({ annotations }) or a resource's metadata.annotations.
 export const Sync = {
-  wave: (n: number) => ({
-    "argocd.argoproj.io/sync-wave": String(_decodeWave(n))
+  wave: <const N extends number>(n: IntegerLiteral<N>) => ({
+    "argocd.argoproj.io/sync-wave": String(n)
   }),
   hook: (phase: HookPhase) => ({
     "argocd.argoproj.io/hook": phase

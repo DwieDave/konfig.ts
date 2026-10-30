@@ -7,41 +7,47 @@ import {
   omitUndefined,
   unsafeCoerce
 } from "@konfig.ts/core"
-import { type Context, Layer } from "effect"
+import { type Context, Layer, Schema } from "effect"
 
-export interface ArgoSource {
-  readonly repoURL: string
-  readonly targetRevision: string
-  readonly path: string
-}
+export const ArgoSource = Schema.Struct({
+  repoURL: Schema.String,
+  targetRevision: Schema.String,
+  path: Schema.String
+})
 
-export interface SyncPolicy {
-  readonly automated?: {
-    readonly enabled?: boolean
-    readonly prune?: boolean
-    readonly selfHeal?: boolean
-    readonly allowEmpty?: boolean
-  }
-  readonly syncOptions?: ReadonlyArray<string>
-  readonly retry?: {
-    readonly limit?: number
-    readonly backoff?: {
-      readonly duration?: string
-      readonly factor?: number
-      readonly maxDuration?: string
-    }
-  }
-}
+export type ArgoSource = typeof ArgoSource.Type
 
-export interface Application {
-  readonly name: string
-  readonly namespace: string
-  readonly manifests: ReadonlyArray<unknown>
-  readonly source: ArgoSource
-  readonly project?: string
-  readonly syncPolicy?: SyncPolicy
-  readonly annotations?: Readonly<Record<string, string>>
-}
+export const SyncPolicy = Schema.Struct({
+  automated: Schema.optionalKey(Schema.Struct({
+    enabled: Schema.optionalKey(Schema.Boolean),
+    prune: Schema.optionalKey(Schema.Boolean),
+    selfHeal: Schema.optionalKey(Schema.Boolean),
+    allowEmpty: Schema.optionalKey(Schema.Boolean)
+  })),
+  syncOptions: Schema.optionalKey(Schema.Array(Schema.String)),
+  retry: Schema.optionalKey(Schema.Struct({
+    limit: Schema.optionalKey(Schema.Finite),
+    backoff: Schema.optionalKey(Schema.Struct({
+      duration: Schema.optionalKey(Schema.String),
+      factor: Schema.optionalKey(Schema.Finite),
+      maxDuration: Schema.optionalKey(Schema.String)
+    }))
+  }))
+})
+
+export type SyncPolicy = typeof SyncPolicy.Type
+
+export const Application = Schema.Struct({
+  name: Schema.String,
+  namespace: Schema.String,
+  manifests: Schema.Array(Schema.Unknown),
+  source: ArgoSource,
+  project: Schema.optionalKey(Schema.String),
+  syncPolicy: Schema.optionalKey(SyncPolicy),
+  annotations: Schema.optionalKey(Schema.Record(Schema.String, Schema.String))
+})
+
+export type Application = typeof Application.Type
 
 export type Any = Application
 
@@ -90,7 +96,7 @@ export interface ExtraCallArgs {
   readonly source: ArgoSource
 }
 
-export interface ApplicationDefineOptions<Name extends string, Ns extends string, R, Extra>
+interface ApplicationDefineOptions<Name extends string, Ns extends string, R, Extra>
   extends Module.DefineBaseArgs<Name, Ns, R, Extra>, ExtraConfig, ExtraCallArgs
 {}
 
