@@ -1,7 +1,16 @@
-import { Effect, Exit } from "effect"
+import { Console, Effect, Exit } from "effect"
+import fc from "fast-check"
 import { describe, expect, it } from "vitest"
+import { REPO_ROOT } from "../lib/repo"
+import { makeStubLayer } from "../lib/stubFs"
 import type { DepRecord } from "./rewriteWorkspaceDeps"
-import { caretRange, rewriteRecord } from "./rewriteWorkspaceDeps"
+import {
+  _isWorkspaceSpec,
+  _resolveCatalogSpec,
+  _rewritePackage,
+  caretRange,
+  rewriteRecord
+} from "./rewriteWorkspaceDeps"
 
 const _base = {
   catalog: { yaml: "2.9.0" } satisfies DepRecord,
@@ -90,5 +99,65 @@ describe("rewriteRecord", () => {
     const rec: DepRecord = { missing: "catalog:" }
     const exit = Effect.runSyncExit(rewriteRecord({ ..._base, rec, version: "1.0.0" }))
     expect(Exit.isFailure(exit)).toBe(true)
+  })
+})
+
+describe("_isWorkspaceSpec", () => {
+  it("accepts only @konfig.ts names with workspace:* ^ ~", () => {
+    fc.assert(fc.property(fc.string(), fc.constantFrom("*", "^", "~", "1.0.0"), (suffix, tail) => {
+      const spec = `workspace:${tail}`
+      expect(_isWorkspaceSpec({ name: `@konfig.ts/${suffix}`, spec })).toBe(tail !== "1.0.0")
+      expect(_isWorkspaceSpec({ name: `other/${suffix}`, spec })).toBe(false)
+    }))
+  })
+})
+
+describe("_resolveCatalogSpec", () => {
+  const input = (name: string, spec: string) => ({
+    ..._base,
+    catalog: { effect: "4.0.5", yaml: "2.9.0" },
+    rec: undefined,
+    version: "1.0.0",
+    name,
+    spec
+  })
+  it("resolves default, named, and effect-family caret", () => {
+    expect(Effect.runSync(_resolveCatalogSpec(input("yaml", "catalog:")))).toBe("2.9.0")
+    expect(Effect.runSync(_resolveCatalogSpec(input("vitest", "catalog:test")))).toBe("4.1.10")
+    expect(Effect.runSync(_resolveCatalogSpec(input("effect", "catalog:")))).toBe("^4.0.5")
+  })
+  it("fails on missing default and missing named catalogs", () => {
+    expect(Exit.isFailure(Effect.runSyncExit(_resolveCatalogSpec(input("nope", "catalog:"))))).toBe(true)
+    expect(Exit.isFailure(Effect.runSyncExit(_resolveCatalogSpec(input("yaml", "catalog:ghost"))))).toBe(true)
+  })
+})
+
+describe("_rewritePackage", () => {
+  const dir = `${REPO_ROOT}packages/a`
+  const file = `${dir}/package.json`
+  const run = (pkg: Record<string, unknown>) => {
+    const files = new Map([[file, JSON.stringify(pkg)]])
+    const logs: Array<string> = []
+    const logger = { ...console, log: (m: string) => void logs.push(m) }
+    Effect.runSync(
+      _rewritePackage({ dir, version: "3.0.0", catalog: { yaml: "2.9.0" }, namedCatalogs: {} }).pipe(
+        Effect.provide(makeStubLayer(files)),
+        Effect.provideService(Console.Console, logger as Console.Console)
+      )
+    )
+    return { logs, written: files.get(file) ?? "" }
+  }
+  it("writes tab-indented JSON and logs when a dep changed", () => {
+    const r = run({ name: "a", dependencies: { "@konfig.ts/core": "workspace:*", yaml: "catalog:" } })
+    expect(JSON.parse(r.written).dependencies).toEqual({ "@konfig.ts/core": "3.0.0", yaml: "2.9.0" })
+    expect(r.written).toMatch(/^\{\n\t"name"/)
+    expect(r.written.endsWith("}\n")).toBe(true)
+    expect(r.logs).toEqual(["rewrote packages/a/package.json"])
+  })
+  it("leaves the file untouched when nothing changes", () => {
+    const original = JSON.stringify({ name: "a", dependencies: { x: "^1.0.0" } })
+    const r = run({ name: "a", dependencies: { x: "^1.0.0" } })
+    expect(r.written).toBe(original)
+    expect(r.logs).toEqual([])
   })
 })

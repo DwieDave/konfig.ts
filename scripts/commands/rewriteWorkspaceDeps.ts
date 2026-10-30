@@ -31,86 +31,110 @@ const EFFECT_FAMILY: Record<string, true> = {
 export const caretRange = (version: string) =>
   /^(?:\^|~)?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version) ? `^${version.replace(/^(?:\^|~)/, "")}` : version
 
+export const _isWorkspaceSpec = (input: { readonly name: string; readonly spec: string }) =>
+  input.name.startsWith("@konfig.ts/")
+  && (input.spec === "workspace:*" || input.spec === "workspace:^" || input.spec === "workspace:~")
+
+export const _resolveCatalogSpec = (input: _RewriteInput & { readonly name: string; readonly spec: string }) =>
+  Effect.gen(function*() {
+    const { catalog, name, namedCatalogs, pkgJsonPath, spec } = input
+    const group = spec.slice("catalog:".length)
+    const table = group === "" ? catalog : namedCatalogs[group] ?? {}
+    const resolved = table[name]
+    if (resolved === undefined) {
+      return yield* new RepoScriptError({
+        message: `${pkgJsonPath}: no catalog entry for "${name}" (spec "${spec}")`
+      })
+    }
+    return EFFECT_FAMILY[name] === true ? caretRange(resolved) : resolved
+  })
+
 export const rewriteRecord = (input: _RewriteInput) =>
   Effect.gen(function*() {
-    const { catalog, namedCatalogs, pkgJsonPath, rec, version } = input
+    const { rec, version } = input
     if (rec === undefined) return false
     let changed = false
     for (const [name, spec] of Object.entries(rec)) {
       if (typeof spec !== "string") continue
-      if (
-        name.startsWith("@konfig.ts/")
-        && (spec === "workspace:*" || spec === "workspace:^" || spec === "workspace:~")
-      ) {
+      if (_isWorkspaceSpec({ name, spec })) {
         rec[name] = version
         changed = true
       } else if (spec.startsWith("catalog:")) {
-        const group = spec.slice("catalog:".length)
-        const table = group === "" ? catalog : namedCatalogs[group] ?? {}
-        const resolved = table[name]
-        if (resolved === undefined) {
-          return yield* new RepoScriptError({
-            message: `${pkgJsonPath}: no catalog entry for "${name}" (spec "${spec}")`
-          })
-        }
-        rec[name] = EFFECT_FAMILY[name] === true ? caretRange(resolved) : resolved
+        rec[name] = yield* _resolveCatalogSpec({ ...input, name, spec })
         changed = true
       }
     }
     return changed
   })
 
-export const rewriteWorkspaceDepsCommand = Command.make(
-  "rewrite-workspace-deps",
-  {},
-  () =>
-    Effect.gen(function*() {
-      const fs = yield* FileSystem
-      const path = yield* Path
+const _DEP_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]
 
-      const rootPkg = yield* readJson(path.join(REPO_ROOT, "package.json"))
-      const catalog = (yield* decodeField({
-        schema: Schema.UndefinedOr(StringRecord),
-        value: rootPkg.catalog,
-        what: "root catalog"
-      })) ?? {}
-      const namedCatalogs = (yield* decodeField({
-        schema: Schema.UndefinedOr(Schema.Record(Schema.String, StringRecord)),
-        value: rootPkg.catalogs,
-        what: "root catalogs"
-      })) ?? {}
+const _readCatalogs = Effect.gen(function*() {
+  const path = yield* Path
+  const rootPkg = yield* readJson(path.join(REPO_ROOT, "package.json"))
+  const catalog = (yield* decodeField({
+    schema: Schema.UndefinedOr(StringRecord),
+    value: rootPkg.catalog,
+    what: "root catalog"
+  })) ?? {}
+  const namedCatalogs = (yield* decodeField({
+    schema: Schema.UndefinedOr(Schema.Record(Schema.String, StringRecord)),
+    value: rootPkg.catalogs,
+    what: "root catalogs"
+  })) ?? {}
+  return { catalog, namedCatalogs }
+})
 
-      const core = yield* readJson(path.join(REPO_ROOT, "packages", "core", "package.json"))
-      const version = typeof core.version === "string" ? core.version : "0.0.0"
-      if (version === "0.0.0") {
-        return yield* new RepoScriptError({
-          message: `refusing to rewrite — @konfig.ts/core version is "${version}"`
-        })
-      }
-
-      for (const dir of yield* packageDirs) {
-        const pkgJsonPath = path.join(dir, "package.json")
-        const pkg = { ...(yield* readJson(pkgJsonPath)) }
-        let touched = false
-        for (const field of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
-          const rec = yield* decodeField({
-            schema: Schema.UndefinedOr(StringRecord),
-            value: pkg[field],
-            what: `${pkgJsonPath} ${field}`
-          })
-          const changed = yield* rewriteRecord({ rec, version, catalog, namedCatalogs, pkgJsonPath })
-          if (changed) pkg[field] = rec
-          touched = changed || touched
-        }
-        if (touched) {
-          yield* fs
-            .writeFileString(pkgJsonPath, `${JSON.stringify(pkg, null, "\t")}\n`)
-            .pipe(mapRepoError(`cannot write ${pkgJsonPath}`))
-          yield* Console.log(`rewrote ${path.relative(REPO_ROOT, pkgJsonPath)}`)
-        }
-      }
-      yield* Console.log(`done — resolved workspace:* and catalog: deps to concrete versions (v${version})`)
+const _readVersion = Effect.gen(function*() {
+  const path = yield* Path
+  const core = yield* readJson(path.join(REPO_ROOT, "packages", "core", "package.json"))
+  const version = typeof core.version === "string" ? core.version : "0.0.0"
+  if (version === "0.0.0") {
+    return yield* new RepoScriptError({
+      message: `refusing to rewrite — @konfig.ts/core version is "${version}"`
     })
-).pipe(
+  }
+  return version
+})
+
+export const _rewritePackage = (input: {
+  readonly dir: string
+  readonly version: string
+  readonly catalog: DepRecord
+  readonly namedCatalogs: Catalogs
+}) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const pkgJsonPath = path.join(input.dir, "package.json")
+    const pkg = { ...(yield* readJson(pkgJsonPath)) }
+    let touched = false
+    for (const field of _DEP_FIELDS) {
+      const rec = yield* decodeField({
+        schema: Schema.UndefinedOr(StringRecord),
+        value: pkg[field],
+        what: `${pkgJsonPath} ${field}`
+      })
+      const changed = yield* rewriteRecord({ ...input, rec, pkgJsonPath })
+      if (changed) pkg[field] = rec
+      touched = changed || touched
+    }
+    if (!touched) return
+    yield* fs
+      .writeFileString(pkgJsonPath, `${JSON.stringify(pkg, null, "\t")}\n`)
+      .pipe(mapRepoError(`cannot write ${pkgJsonPath}`))
+    yield* Console.log(`rewrote ${path.relative(REPO_ROOT, pkgJsonPath)}`)
+  })
+
+const _runRewrite = Effect.gen(function*() {
+  const { catalog, namedCatalogs } = yield* _readCatalogs
+  const version = yield* _readVersion
+  for (const dir of yield* packageDirs) {
+    yield* _rewritePackage({ dir, version, catalog, namedCatalogs })
+  }
+  yield* Console.log(`done — resolved workspace:* and catalog: deps to concrete versions (v${version})`)
+})
+
+export const rewriteWorkspaceDepsCommand = Command.make("rewrite-workspace-deps", {}, () => _runRewrite).pipe(
   Command.withDescription("Resolve workspace:* and catalog: protocol deps to concrete versions before npm publish")
 )

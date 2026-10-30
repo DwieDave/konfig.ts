@@ -69,6 +69,40 @@ const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFi
       .pipe(mapRepoError(`cannot append to ${summaryFile}`))
   })
 
+const _labelFor = (pkg: string) => pkg === _SCRIPTS_PSEUDO_PACKAGE ? pkg : `@konfig.ts/${pkg}`
+
+const _runOne = (input: { readonly pkg: string; readonly tmpDir: string | undefined }) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    const { pkg, tmpDir } = input
+    const summaryFile = tmpDir === undefined ? undefined : path.join(tmpDir, `${pkg}.md`)
+    const result = yield* _run({ pkg, summaryFile })
+    yield* Console.log(`\n📦 ${_labelFor(pkg)}\n${result.output}`)
+    return { ...result, summaryFile }
+  })
+
+export const _summaryTmpDir = Effect.gen(function*() {
+  if (process.env.GITHUB_STEP_SUMMARY === undefined) return undefined
+  const fs = yield* FileSystem
+  return yield* fs
+    .makeTempDirectoryScoped({ prefix: "konfig-test-summaries-" })
+    .pipe(mapRepoError("cannot create summary temp dir"))
+})
+
+const _runAll = (concurrency: number) =>
+  Effect.gen(function*() {
+    const packages = [...(yield* testPackageNames), _SCRIPTS_PSEUDO_PACKAGE]
+    const tmpDir = yield* _summaryTmpDir
+    const results = yield* Effect.forEach(packages, (pkg) => _runOne({ pkg, tmpDir }), { concurrency })
+    yield* _stitchSummary(results)
+    const failed = results.filter((r) => r.code !== 0)
+    if (failed.length > 0) {
+      return yield* new RepoScriptError({
+        message: `test suites failed: ${failed.map((r) => r.pkg).join(", ")}`
+      })
+    }
+  }).pipe(Effect.scoped)
+
 export const testCommand = Command.make(
   "test",
   {
@@ -77,41 +111,7 @@ export const testCommand = Command.make(
       Flag.withDescription("How many package suites run at once (each already parallelizes internally)")
     )
   },
-  ({ concurrency }) =>
-    Effect.gen(function*() {
-      const fs = yield* FileSystem
-      const path = yield* Path
-      const packages = [...(yield* testPackageNames), _SCRIPTS_PSEUDO_PACKAGE]
-      const inCi = process.env.GITHUB_STEP_SUMMARY !== undefined
-
-      const tmpDir = inCi
-        ? yield* fs
-          .makeTempDirectoryScoped({ prefix: "konfig-test-summaries-" })
-          .pipe(mapRepoError("cannot create summary temp dir"))
-        : undefined
-
-      const results = yield* Effect.forEach(
-        packages,
-        (pkg) =>
-          Effect.gen(function*() {
-            const summaryFile = tmpDir === undefined ? undefined : path.join(tmpDir, `${pkg}.md`)
-            const result = yield* _run({ pkg, summaryFile })
-            const label = pkg === _SCRIPTS_PSEUDO_PACKAGE ? pkg : `@konfig.ts/${pkg}`
-            yield* Console.log(`\n📦 ${label}\n${result.output}`)
-            return { ...result, summaryFile }
-          }),
-        { concurrency }
-      )
-
-      yield* _stitchSummary(results)
-
-      const failed = results.filter((r) => r.code !== 0)
-      if (failed.length > 0) {
-        return yield* new RepoScriptError({
-          message: `test suites failed: ${failed.map((r) => r.pkg).join(", ")}`
-        })
-      }
-    }).pipe(Effect.scoped)
+  ({ concurrency }) => _runAll(concurrency)
 ).pipe(
   Command.withDescription(
     "Run every test-carrying package's suite concurrently; on GitHub Actions each Vitest report lands under its package heading"
