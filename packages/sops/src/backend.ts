@@ -34,9 +34,8 @@ class SopsUnencryptedValueError extends Data.TaggedError("SopsUnencryptedValueEr
   }
 }
 
-const _assertEncrypted = (
-  secret: SopsSecret,
-  label: string
+export const _assertEncrypted = (
+  { secret, label }: { readonly secret: SopsSecret; readonly label: string }
 ): Effect.Effect<void, RenderError> =>
   Effect.gen(function*() {
     const policy = yield* compilePolicy({ sops: secret.sops, label })
@@ -69,42 +68,52 @@ const _parseVerified = (
       onError: (cause) => new RenderError({ message: `${label}: output was not valid YAML`, cause })
     })
     const decoded = yield* _decodeSopsSecret(parsed)
-    yield* _assertEncrypted(decoded, label)
+    yield* _assertEncrypted({ secret: decoded, label })
     return decoded
   })
 
-// Restamping namespace/name is only safe when mac_only_encrypted; otherwise the MAC covers them.
-const _restampIdentity = (
-  decoded: SopsSecret,
-  namespace: string,
-  name: string,
-  label: string
-): Effect.Effect<SopsSecret, RenderError> => {
-  const namespaceMismatch = decoded.metadata.namespace !== namespace
-  const nameMismatch = decoded.metadata.name !== name
-    || decoded.spec.secretTemplates.some((template) => template.name !== name)
-  if (!namespaceMismatch && !nameMismatch) return Effect.succeed(decoded)
+interface _RestampInput {
+  readonly decoded: SopsSecret
+  readonly namespace: string
+  readonly name: string
+  readonly label: string
+}
 
-  if (decoded.sops.mac_only_encrypted !== true) {
-    const targets = [
-      namespaceMismatch ? `metadata.namespace to "${namespace}"` : undefined,
-      nameMismatch ? `metadata.name/spec.secretTemplates[].name to "${name}"` : undefined
-    ].filter((target): target is string => target !== undefined).join(" and ")
+const _mismatches = ({ decoded, namespace, name }: _RestampInput) => ({
+  namespace: decoded.metadata.namespace !== namespace,
+  name: decoded.metadata.name !== name
+    || decoded.spec.secretTemplates.some((template) => template.name !== name)
+})
+
+const _describeTargets = (input: _RestampInput, mismatch: { namespace: boolean; name: boolean }): string =>
+  [
+    mismatch.namespace ? `metadata.namespace to "${input.namespace}"` : undefined,
+    mismatch.name ? `metadata.name/spec.secretTemplates[].name to "${input.name}"` : undefined
+  ].filter((target): target is string => target !== undefined).join(" and ")
+
+const _applyIdentity = ({ decoded, namespace, name }: _RestampInput): SopsSecret => ({
+  ...decoded,
+  metadata: { ...decoded.metadata, namespace, name },
+  spec: {
+    ...decoded.spec,
+    secretTemplates: decoded.spec.secretTemplates.map((template) => ({ ...template, name }))
+  }
+})
+
+// Restamping namespace/name is only safe when mac_only_encrypted; otherwise the MAC covers them.
+export const _restampIdentity = (input: _RestampInput): Effect.Effect<SopsSecret, RenderError> => {
+  const mismatch = _mismatches(input)
+  if (!mismatch.namespace && !mismatch.name) return Effect.succeed(input.decoded)
+  if (input.decoded.sops.mac_only_encrypted !== true) {
     return Effect.fail(
       new RenderError({
-        message:
-          `${label}: refusing to restamp ${targets} — file is fully MAC'd (mac_only_encrypted is not true), so it is protected by the MAC`
+        message: `${input.label}: refusing to restamp ${
+          _describeTargets(input, mismatch)
+        } — file is fully MAC'd (mac_only_encrypted is not true), so it is protected by the MAC`
       })
     )
   }
-  return Effect.succeed({
-    ...decoded,
-    metadata: { ...decoded.metadata, namespace, name },
-    spec: {
-      ...decoded.spec,
-      secretTemplates: decoded.spec.secretTemplates.map((template) => ({ ...template, name }))
-    }
-  })
+  return Effect.succeed(_applyIdentity(input))
 }
 
 export interface SopsBackendOptions {
@@ -185,7 +194,7 @@ const _passthrough = <N extends string, K extends string>(
           )
         )
       const decoded = yield* _parseVerified(contents, label)
-      return yield* _restampIdentity(decoded, input.base.namespace, input.base.name, label)
+      return yield* _restampIdentity({ decoded, namespace: input.base.namespace, name: input.base.name, label })
     })
   )
 

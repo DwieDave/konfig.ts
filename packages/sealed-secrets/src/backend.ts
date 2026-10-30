@@ -20,6 +20,22 @@ const _toRenderError = <C = unknown>(
     cause
   })
 
+const _plainSecret = <N extends string, K extends string>(
+  input: EmitInput<N, K, SealedSecretsBackendOptions>,
+  stringData: Record<string, string>
+) => ({
+  apiVersion: "v1" as const,
+  kind: "Secret" as const,
+  metadata: {
+    name: input.base.name,
+    namespace: input.base.namespace,
+    labels: input.base.labels,
+    annotations: input.base.annotations
+  },
+  type: input.opts.type ?? "Opaque",
+  stringData
+})
+
 const _emit = <N extends string, K extends string>(
   input: EmitInput<N, K, SealedSecretsBackendOptions>
 ): Manifest.Manifest<SealedSecret> =>
@@ -32,26 +48,11 @@ const _emit = <N extends string, K extends string>(
         base: input.base,
         label: `SealedSecrets(${input.base.namespace}/${input.base.name})`
       })
-      const plainSecret = {
-        apiVersion: "v1" as const,
-        kind: "Secret" as const,
-        metadata: {
-          name: input.base.name,
-          namespace: input.base.namespace,
-          labels: input.base.labels,
-          annotations: input.base.annotations
-        },
-        type: input.opts.type ?? "Opaque",
-        stringData
-      }
-      const plainSecretYaml = Yaml.serialize({ value: plainSecret })
       return yield* runKubeseal({
-        plainSecretYaml,
+        plainSecretYaml: Yaml.serialize({ value: _plainSecret(input, stringData) }),
         certPath,
         scope: input.opts.scope ?? "strict"
-      }).pipe(
-        Effect.mapError(_toRenderError(input.base, "kubeseal failed"))
-      )
+      }).pipe(Effect.mapError(_toRenderError(input.base, "kubeseal failed")))
     })
   )
 

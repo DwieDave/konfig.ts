@@ -10,4 +10,4 @@ export {
   type SecretStoreKind,
   type SecretStoreRef
 } from "./crd"
-export { type GoDuration, type GoDurationUnit, InvalidRefreshIntervalError, isGoDuration } from "./duration"
+export { type GoDuration } from "./duration"

@@ -13,6 +13,7 @@ import type { ContainerInput, ContainerSpec } from "./container"
 import { ServiceAccount } from "./identity"
 import { Ingress, type IngressTLSInput, Service } from "./network"
 import type { ServicePortSpec } from "./ports"
+import { _reloaderAnnotations, type ReloaderOption } from "./reloader"
 import type { Volume } from "./volume"
 import { CronJob, Deployment } from "./workload"
 
@@ -20,36 +21,7 @@ type _PortNamesOfContainers<Cs extends ReadonlyArray<ContainerInput>> = {
   readonly [K in keyof Cs]: Cs[K] extends ContainerSpec<infer P, string> ? P : never
 }[number]
 
-// See packages/k8s/README.md for the build-time-hash vs runtime-reloader trade-off.
-export type ReloaderOption =
-  | "off"
-  | "stakater"
-  | "stakater-strict"
-  | {
-    readonly secrets?: ReadonlyArray<string>
-    readonly configMaps?: ReadonlyArray<string>
-  }
-
-const _reloaderAnnotations = (
-  opt: ReloaderOption | undefined
-): Readonly<Record<string, string>> => {
-  if (opt === undefined || opt === "off") return {}
-  if (opt === "stakater") return { "reloader.stakater.com/auto": "true" }
-  if (opt === "stakater-strict") {
-    return {
-      "reloader.stakater.com/auto": "true",
-      "reloader.stakater.com/match": "true"
-    }
-  }
-  const out: Record<string, string> = {}
-  if (opt.secrets && opt.secrets.length > 0) {
-    out["secret.reloader.stakater.com/reload"] = opt.secrets.join(",")
-  }
-  if (opt.configMaps && opt.configMaps.length > 0) {
-    out["configmap.reloader.stakater.com/reload"] = opt.configMaps.join(",")
-  }
-  return out
-}
+export type { ReloaderOption } from "./reloader"
 
 interface WebInput<Cs extends ReadonlyArray<ContainerInput>> {
   readonly name: string
@@ -170,42 +142,39 @@ interface CronInput {
   readonly restartPolicy?: "OnFailure" | "Never"
 }
 
-export const cron = (
-  input: CronInput
-): Manifest.Manifest<readonly [K8sServiceAccount, K8sCronJob]> => {
-  const selectorLabels = { app: input.name }
+const _cronPodSpec = (input: CronInput) => ({
+  containers: input.containers,
+  volumes: input.volumes,
+  imagePullSecrets: input.imagePullSecrets,
+  serviceAccountName: input.name,
+  restartPolicy: input.restartPolicy ?? "OnFailure"
+})
 
-  const sa = ServiceAccount.make({
+const _cronJob = (input: CronInput, labels: Readonly<Record<string, string>>) =>
+  CronJob.make({
     name: input.name,
     namespace: input.namespace,
-    labels: { ...selectorLabels, ...input.labels },
-    annotations: input.annotations
-  })
-
-  const cronJob = CronJob.make({
-    name: input.name,
-    namespace: input.namespace,
-    labels: { ...selectorLabels, ...input.labels },
+    labels,
     annotations: input.annotations,
     schedule: input.schedule,
     concurrencyPolicy: input.concurrencyPolicy,
     successfulJobsHistoryLimit: input.successfulJobsHistoryLimit,
     failedJobsHistoryLimit: input.failedJobsHistoryLimit,
     jobTemplate: {
-      spec: {
-        template: {
-          metadata: { labels: selectorLabels },
-          spec: {
-            containers: input.containers,
-            volumes: input.volumes,
-            imagePullSecrets: input.imagePullSecrets,
-            serviceAccountName: input.name,
-            restartPolicy: input.restartPolicy ?? "OnFailure"
-          }
-        }
-      }
+      spec: { template: { metadata: { labels: { app: input.name } }, spec: _cronPodSpec(input) } }
     }
   })
 
+export const cron = (
+  input: CronInput
+): Manifest.Manifest<readonly [K8sServiceAccount, K8sCronJob]> => {
+  const labels = { app: input.name, ...input.labels }
+  const sa = ServiceAccount.make({
+    name: input.name,
+    namespace: input.namespace,
+    labels,
+    annotations: input.annotations
+  })
+  const cronJob = _cronJob(input, labels)
   return M.make((ctx) => Effect.all([sa.render(ctx), cronJob.render(ctx)], { concurrency: "unbounded" }))
 }

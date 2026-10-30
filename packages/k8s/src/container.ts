@@ -139,8 +139,5 @@ export const Pod = {
     volumes: input.volumes,
     containers: input.containers,
     initContainers: input.initContainers
-  }),
-  imagePullSecret: (ref: SecretRef<string>): { readonly name: SecretRef<string> } => ({
-    name: ref
   })
 }

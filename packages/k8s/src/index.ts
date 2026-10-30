@@ -6,7 +6,6 @@ export {
   objectMetaSchema,
   parseYamlWith,
   resolvePlaintext,
-  resolveSource,
   type SecretBackend,
   stringRecordSchema
 } from "./backend"
@@ -40,7 +39,6 @@ export {
   type ConfigMapEnvInput,
   EnvVar,
   type EnvVarSource,
-  type RawEnvInput,
   type SecretEnvForPodInput,
   type SecretEnvInput,
   type ValueEnvInput

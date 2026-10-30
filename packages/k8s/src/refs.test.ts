@@ -126,15 +126,6 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
       expect(v.configMap?.name).toBe("cfg")
     }))
 
-  it.effect("Pod.imagePullSecret rejects raw string", () =>
-    Effect.gen(function*() {
-      const { Pod } = yield* Effect.promise(() => import("./container"))
-      // @ts-expect-error — raw string is not assignable to SecretRef.
-      Pod.imagePullSecret("raw-string")
-      const ips = Pod.imagePullSecret(SecretRef.of("ghcr-pull"))
-      expect(ips.name).toBe("ghcr-pull")
-    }))
-
   it.effect("Ingress.tls rejects raw string", () =>
     Effect.gen(function*() {
       const { Ingress } = yield* Effect.promise(() => import("./network"))

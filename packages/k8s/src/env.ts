@@ -1,10 +1,4 @@
-import type {
-  ConfigMapRef,
-  ConfigMapRefKeys,
-  SecretRef,
-  SecretRefKeys,
-  SecretRefNamespace
-} from "@konfig.ts/core"
+import type { ConfigMapRef, ConfigMapRefKeys, SecretRef, SecretRefKeys, SecretRefNamespace } from "@konfig.ts/core"
 import { _entriesOf } from "./_lower"
 
 export interface EnvVarSource {
@@ -74,12 +68,6 @@ export interface ConfigMapEnvOptions {
 // Container.define's duplicate-name check.
 export type EnvKeyMap<K extends string> = Readonly<Record<string, K>>
 
-export interface RawEnvInput<N extends string> {
-  readonly name: N
-  readonly value?: string
-  readonly valueFrom?: EnvVarSource
-}
-
 const _secretEnvVar = <EnvName extends string>(input: {
   readonly name: EnvName
   readonly ref: SecretRef<string>
@@ -141,8 +129,7 @@ export const EnvVar = {
     valueFrom: {
       configMapKeyRef: { name: input.ref, key: input.key, optional: input.optional }
     }
-  }),
-  raw: <const N extends string>(input: RawEnvInput<N>): EnvVar<N> => input
+  })
 }
 
 export type EnvVar<N extends string = string> = EnvVarShape<N>

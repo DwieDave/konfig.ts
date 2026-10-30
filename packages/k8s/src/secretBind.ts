@@ -84,6 +84,30 @@ const _missingSourceManifest = (backend: { readonly _tag: string }, name: string
     )
   )
 
+interface _BackendManifestInput<N extends string, K extends string, E extends Readonly<Record<K, string>>> {
+  readonly input: BindSecretInput<N, K, E, string>
+  readonly source: SecretSource<K, Manifest.RenderServices> | undefined
+  readonly namespace: string
+}
+
+const _backendManifest = <N extends string, K extends string, E extends Readonly<Record<K, string>>>(
+  { input, source, namespace }: _BackendManifestInput<N, K, E>
+): Manifest.Manifest<unknown> | undefined => {
+  const { backend, secret } = input
+  if (backend === undefined) return undefined
+  if (backend.requiresSource && source === undefined) {
+    return _missingSourceManifest(backend, secret.name, namespace)
+  }
+  return backend.emit({
+    name: secret.name,
+    namespace,
+    keys: secret.keys,
+    labels: input.labels,
+    annotations: input.annotations,
+    source
+  })
+}
+
 // Overloaded so the namespace type parameter `Ns` only narrows when an explicit
 // `namespace` override is passed; without one, the fallback is the secret's own
 // namespace, which is only known to be `string`.
@@ -110,18 +134,7 @@ export const bindSecret: {
   const source = input.source === undefined ? undefined : _memoizeSource(input.source)
   const namespace = input.namespace ?? secret.namespace
   const ref = SecretRefValue.of<N, K, string>(secret.name)
-  const manifest = input.backend === undefined
-    ? undefined
-    : input.backend.requiresSource && source === undefined
-    ? _missingSourceManifest(input.backend, secret.name, namespace)
-    : input.backend.emit({
-      name: secret.name,
-      namespace,
-      keys: secret.keys,
-      labels: input.labels,
-      annotations: input.annotations,
-      source
-    })
+  const manifest = _backendManifest({ input, source, namespace })
 
   const out: DeclaredSecret<N, K, string> = {
     ref,
