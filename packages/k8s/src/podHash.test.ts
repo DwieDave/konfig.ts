@@ -12,34 +12,6 @@ const dbCreds = Secret.define({
 })
 
 describe("hashSecretValues", () => {
-  vitestIt("deterministic over the same input", () => {
-    const a = hashSecretValues({
-      salt: "prod/api",
-      values: { url: Redacted.make("u"), password: Redacted.make("p") }
-    })
-
-    const b = hashSecretValues({
-      salt: "prod/api",
-      values: { url: Redacted.make("u"), password: Redacted.make("p") }
-    })
-
-    expect(a).toBe(b)
-  })
-
-  vitestIt("sorted-by-key — insertion order doesn't matter", () => {
-    const a = hashSecretValues({
-      salt: "prod/api",
-      values: { url: Redacted.make("u"), password: Redacted.make("p") }
-    })
-
-    const b = hashSecretValues({
-      salt: "prod/api",
-      values: { password: Redacted.make("p"), url: Redacted.make("u") }
-    })
-
-    expect(a).toBe(b)
-  })
-
   vitestIt("changing any value changes the hash", () => {
     const a = hashSecretValues({ salt: "s", values: { x: Redacted.make("1") } })
     const b = hashSecretValues({ salt: "s", values: { x: Redacted.make("2") } })

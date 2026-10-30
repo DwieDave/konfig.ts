@@ -3,14 +3,8 @@ import { it } from "@effect/vitest"
 import { unsafeCoerce } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
-import type {
-  CronJob as K8sCronJob,
-  Deployment as K8sDeployment,
-  Ingress as K8sIngress,
-  Service as K8sService,
-  ServiceAccount as K8sServiceAccount
-} from "./.generated/k8s-types"
-import { cron, web } from "./workloadHelpers"
+import type { Deployment as K8sDeployment, Ingress as K8sIngress, Service as K8sService } from "./.generated/k8s-types"
+import { web } from "./workloadHelpers"
 
 const coerce = <T, V = unknown>(value: V): T =>
   unsafeCoerce<T, V>(value, "the rendered manifest is the K8s resource its builder emits")
@@ -182,48 +176,17 @@ describe("Workload.web with ingress", () => {
     }).pipe(Effect.provide(NodeServices.layer)))
 })
 
-describe("cron", () => {
-  it.effect("renders a ServiceAccount + CronJob with the SA name bound as serviceAccountName", () =>
+describe("Workload.web annotations", () => {
+  it.effect("omits metadata.annotations when none are supplied", () =>
     Effect.gen(function*() {
-      const manifest = cron({
-        name: "nightly-job",
+      const manifest = web({
+        name: "api",
         namespace: "prod",
-        schedule: "0 0 * * *",
-        labels: { team: "data" },
-        annotations: { owner: "data-team" },
-        containers: [{ name: "job", image: "worker:latest" }]
+        deployment: { containers: [{ name: "app", image: "nginx" }] },
+        service: { ports: [{ port: 80, targetPort: 80 }] }
       })
 
-      const [sa, cronJob] = yield* manifest.render(ctx)
-      const account = coerce<K8sServiceAccount>(sa)
-      const job = coerce<K8sCronJob>(cronJob)
-      expect(account.kind).toBe("ServiceAccount")
-      expect(account.metadata?.name).toBe("nightly-job")
-      expect(account.metadata?.labels).toEqual({ app: "nightly-job", team: "data" })
-      expect(job.kind).toBe("CronJob")
-      expect(job.spec?.schedule).toBe("0 0 * * *")
-      expect(job.spec?.jobTemplate.spec?.template.spec?.serviceAccountName).toBe("nightly-job")
-      expect(job.spec?.jobTemplate.spec?.template.spec?.restartPolicy).toBe("OnFailure")
-    }).pipe(Effect.provide(NodeServices.layer)))
-
-  it.effect("honors explicit concurrencyPolicy, history limits, and restartPolicy", () =>
-    Effect.gen(function*() {
-      const manifest = cron({
-        name: "nightly-job",
-        namespace: "prod",
-        schedule: "*/5 * * * *",
-        concurrencyPolicy: "Forbid",
-        successfulJobsHistoryLimit: 3,
-        failedJobsHistoryLimit: 1,
-        restartPolicy: "Never",
-        containers: [{ name: "job", image: "worker:latest" }]
-      })
-
-      const [, cronJob] = yield* manifest.render(ctx)
-      const job = coerce<K8sCronJob>(cronJob)
-      expect(job.spec?.concurrencyPolicy).toBe("Forbid")
-      expect(job.spec?.successfulJobsHistoryLimit).toBe(3)
-      expect(job.spec?.failedJobsHistoryLimit).toBe(1)
-      expect(job.spec?.jobTemplate.spec?.template.spec?.restartPolicy).toBe("Never")
+      const [deployment] = yield* manifest.render(ctx)
+      expect(coerce<K8sDeployment>(deployment).metadata?.annotations).toBeUndefined()
     }).pipe(Effect.provide(NodeServices.layer)))
 })

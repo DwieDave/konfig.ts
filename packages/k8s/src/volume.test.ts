@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest"
 import { Container, Pod } from "./container"
 import { Port } from "./ports"
+import { PvcRef } from "./refs"
 import { Volume } from "./volume"
 
-describe("Volume.empty / Volume.mountRef", () => {
+const claim = PvcRef.of("data-claim")
+
+describe("Volume.fromPvc / Volume.mountRef", () => {
   it("brands the volume name; underlying value is the literal string", () => {
-    const v = Volume.empty({ name: "config" })
+    const v = Volume.fromPvc({ name: "config", claim })
     expect(v.name).toBe("config")
-    expect(v.emptyDir).toBeDefined()
+    expect(v.persistentVolumeClaim?.claimName).toBe("data-claim")
   })
 
   it("Volume.mountRef returns the bare string at runtime", () => {
@@ -18,7 +21,7 @@ describe("Volume.empty / Volume.mountRef", () => {
 describe("Pod", () => {
   it("wires container volumeMounts to declared volumes by name", () => {
     const pod = Pod.define({
-      volumes: [Volume.empty({ name: "config" }), Volume.empty({ name: "data" })],
+      volumes: [Volume.fromPvc({ name: "config", claim }), Volume.fromPvc({ name: "data", claim })],
       containers: [
         Container.define({
           name: "app",
@@ -58,7 +61,7 @@ describe("Pod", () => {
 
   it("supports initContainers under the same mount-name constraint", () => {
     const pod = Pod.define({
-      volumes: [Volume.empty({ name: "data" })],
+      volumes: [Volume.fromPvc({ name: "data", claim })],
       initContainers: [
         Container.define({
           name: "init",

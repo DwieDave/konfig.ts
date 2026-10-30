@@ -1,6 +1,6 @@
 import fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { toLabelsMeta, toObjectMeta } from "./meta"
+import { nonEmpty, toLabelsMeta, toObjectMeta } from "./meta"
 
 const map = fc.option(fc.dictionary(fc.string(), fc.string()), { nil: undefined })
 
@@ -40,6 +40,14 @@ describe("toLabelsMeta", () => {
       if (labels !== undefined) expect(out?.labels).not.toBe(labels)
 
       if (annotations !== undefined) expect(out?.annotations).not.toBe(annotations)
+    }))
+  })
+})
+
+describe("nonEmpty", () => {
+  it("is undefined for an empty map and the map itself otherwise", () => {
+    fc.assert(fc.property(fc.dictionary(fc.string(), fc.string()), (m) => {
+      expect(nonEmpty(m)).toBe(Object.keys(m).length === 0 ? undefined : m)
     }))
   })
 })

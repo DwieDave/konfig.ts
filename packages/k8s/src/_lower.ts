@@ -1,7 +1,6 @@
 // Explicit, type-checked lowering from konfig's readonly/branded input shapes to the plain
 // kubernetes-types shapes. Bodies deep-copy their input (so emitted manifests never alias
 // caller-owned objects or arrays) and let branded strings widen to `string` structurally.
-import { unsafeCoerce } from "@konfig.ts/core"
 import type {
   Container as K8sContainer,
   PodSpec as K8sPodSpec,
@@ -88,14 +87,3 @@ export const _lowerPodTemplate = (template: PodTemplateInput): K8sPodTemplateSpe
 export const _lowerServicePorts = (
   ports: ReadonlyArray<K8sServicePort | ServicePortSpec<string>>
 ): Array<K8sServicePort> => ports.map((p) => ({ ...p }))
-
-// Typed key/value entries of an object with statically known keys. The single coercion narrows
-// Object.entries' `[string, V][]` to O's own keys — sound for objects without excess properties,
-// which `const`-inferred literal maps are.
-export const _entriesOf = <O extends object>(
-  obj: O
-): ReadonlyArray<readonly [keyof O & string, O[keyof O]]> =>
-  unsafeCoerce<ReadonlyArray<readonly [keyof O & string, O[keyof O]]>>(
-    Object.entries(obj),
-    "Object.entries yields the object's own enumerable string keys and their values"
-  )

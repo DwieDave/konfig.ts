@@ -1,5 +1,5 @@
-import type { Selector as SelectorT, SelectorLabels } from "@konfig.ts/k8s"
-import { Deployment, PodSet, Selector, Service } from "@konfig.ts/k8s"
+import { Deployment, Selector } from "@konfig.ts/k8s"
+import type { Selector as SelectorT, SelectorLabels } from "../src/selector"
 
 type Expect<T extends true> = T
 
@@ -28,37 +28,10 @@ const _okDep = Deployment.fromPodSet({
   template: { spec: { containers: [{ name: "api", image: "x" }] } }
 })
 
-const _okSvc = Service.fromPodSet({
-  name: "api",
-  namespace: "default",
-  podSet: apiPods,
-  ports: [{ port: 80 }]
-})
-
-const _okTrio = PodSet.define({
-  podSet: apiPods,
-  deployment: {
-    name: "api",
-    namespace: "default",
-    replicas: 2,
-    template: { spec: { containers: [{ name: "api", image: "x" }] } }
-  },
-  service: { name: "api", namespace: "default", ports: [{ port: 80 }] },
-  netPol: {
-    name: "api-ingress",
-    namespace: "default",
-    ingress: [{ from: [{ podSet: dbPods }] }]
-  }
-})
-
 // @ts-expect-error - Selector<{app:"postgres"}> not assignable to Selector<{app:"api",tier:"web"}>.
 const _wrongAssign: typeof apiPods = dbPods
 
 void _okDep
-
-void _okSvc
-
-void _okTrio
 
 void _wrongAssign
 

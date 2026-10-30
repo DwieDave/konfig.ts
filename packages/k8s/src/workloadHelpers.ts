@@ -1,21 +1,17 @@
-import type { Manifest, SecretRef } from "@konfig.ts/core"
-import { Manifest as M } from "@konfig.ts/core"
-import { Effect } from "effect"
+import { Manifest, type SecretRef } from "@konfig.ts/core"
 import type {
-  CronJob as K8sCronJob,
   Deployment as K8sDeployment,
   Ingress as K8sIngress,
   IngressRule as K8sIngressRule,
-  Service as K8sService,
-  ServiceAccount as K8sServiceAccount
+  Service as K8sService
 } from "./.generated/k8s-types"
 import type { ContainerInput, ContainerSpec } from "./container"
-import { ServiceAccount } from "./identity"
+import { nonEmpty, type StringMap } from "./meta"
 import { Ingress, type IngressTLSInput, Service } from "./network"
 import type { ServicePortSpec } from "./ports"
 import { _reloaderAnnotations, type ReloaderOption } from "./reloader"
 import type { Volume } from "./volume"
-import { CronJob, Deployment } from "./workload"
+import { Deployment } from "./workload"
 
 type _PortNamesOfContainers<Cs extends ReadonlyArray<ContainerInput>> = {
   readonly [K in keyof Cs]: Cs[K] extends ContainerSpec<infer P, string> ? P : never
@@ -26,8 +22,8 @@ export type { ReloaderOption } from "./reloader"
 interface WebInput<Cs extends ReadonlyArray<ContainerInput>> {
   readonly name: string
   readonly namespace: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+  readonly labels?: StringMap
+  readonly annotations?: StringMap
   readonly reloader?: ReloaderOption
   readonly deployment: {
     readonly replicas?: number
@@ -35,8 +31,8 @@ interface WebInput<Cs extends ReadonlyArray<ContainerInput>> {
     readonly volumes?: ReadonlyArray<Volume>
     readonly imagePullSecrets?: ReadonlyArray<{ readonly name: SecretRef<string> }>
     readonly serviceAccountName?: string
-    readonly podLabels?: Readonly<Record<string, string>>
-    readonly podAnnotations?: Readonly<Record<string, string>>
+    readonly podLabels?: StringMap
+    readonly podAnnotations?: StringMap
   }
   readonly service: {
     readonly ports: ReadonlyArray<ServicePortSpec<NoInfer<_PortNamesOfContainers<Cs>>>>
@@ -46,13 +42,13 @@ interface WebInput<Cs extends ReadonlyArray<ContainerInput>> {
     readonly ingressClassName?: string
     readonly rules?: ReadonlyArray<K8sIngressRule>
     readonly tls?: ReadonlyArray<IngressTLSInput>
-    readonly annotations?: Readonly<Record<string, string>>
+    readonly annotations?: StringMap
   }
 }
 
 interface _WebPartInput<Cs extends ReadonlyArray<ContainerInput>> {
   readonly input: WebInput<Cs>
-  readonly selectorLabels: Readonly<Record<string, string>>
+  readonly selectorLabels: StringMap
 }
 
 const _webDeployment = <Cs extends ReadonlyArray<ContainerInput>>(
@@ -60,13 +56,12 @@ const _webDeployment = <Cs extends ReadonlyArray<ContainerInput>>(
 ): Manifest.Manifest<K8sDeployment> => {
   // selectorLabels spread LAST so a colliding pod label can't desync spec.selector (zero endpoints).
   const podLabels = { ...input.deployment.podLabels, ...selectorLabels }
-  const reloaderAnns = _reloaderAnnotations(input.reloader)
 
   return Deployment.make({
     name: input.name,
     namespace: input.namespace,
     labels: { ...selectorLabels, ...input.labels },
-    annotations: { ...input.annotations, ...reloaderAnns },
+    annotations: nonEmpty({ ...input.annotations, ..._reloaderAnnotations(input.reloader) }),
     replicas: input.deployment.replicas,
     selector: { matchLabels: selectorLabels },
     template: {
@@ -101,85 +96,23 @@ const _webIngress = <Cs extends ReadonlyArray<ContainerInput>>(
     name: input.name,
     namespace: input.namespace,
     labels: { ...selectorLabels, ...input.labels },
-    annotations: { ...input.annotations, ...ingress.annotations },
+    annotations: nonEmpty({ ...input.annotations, ...ingress.annotations }),
     ingressClassName: ingress.ingressClassName,
     rules: ingress.rules,
     tls: ingress.tls
   })
 
+type WebOutput = K8sDeployment | K8sService | K8sIngress
+
 export const web = <const Cs extends ReadonlyArray<ContainerInput>>(
   input: WebInput<Cs>
-): Manifest.Manifest<
-  readonly [K8sDeployment, K8sService] | readonly [K8sDeployment, K8sService, K8sIngress]
-> => {
+): Manifest.Manifest<Array<WebOutput>> => {
   const selectorLabels = { app: input.name }
-  const deployment = _webDeployment({ input, selectorLabels })
-  const service = _webService({ input, selectorLabels })
+  const { ingress } = input
 
-  if (input.ingress === undefined) {
-    return M.make((ctx) => Effect.all([deployment.render(ctx), service.render(ctx)], { concurrency: "unbounded" }))
-  }
-
-  const ingress = _webIngress({ input, selectorLabels, ingress: input.ingress })
-
-  return M.make((ctx) =>
-    Effect.all([deployment.render(ctx), service.render(ctx), ingress.render(ctx)], {
-      concurrency: "unbounded"
-    })
+  return Manifest.concat<WebOutput>(
+    _webDeployment({ input, selectorLabels }),
+    _webService({ input, selectorLabels }),
+    ...(ingress === undefined ? [] : [_webIngress({ input, selectorLabels, ingress })])
   )
-}
-
-interface CronInput {
-  readonly name: string
-  readonly namespace: string
-  readonly schedule: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
-  readonly concurrencyPolicy?: "Allow" | "Forbid" | "Replace"
-  readonly successfulJobsHistoryLimit?: number
-  readonly failedJobsHistoryLimit?: number
-  readonly containers: ReadonlyArray<ContainerInput>
-  readonly volumes?: ReadonlyArray<Volume>
-  readonly imagePullSecrets?: ReadonlyArray<{ readonly name: SecretRef<string> }>
-  readonly restartPolicy?: "OnFailure" | "Never"
-}
-
-const _cronPodSpec = (input: CronInput) => ({
-  containers: input.containers,
-  volumes: input.volumes,
-  imagePullSecrets: input.imagePullSecrets,
-  serviceAccountName: input.name,
-  restartPolicy: input.restartPolicy ?? "OnFailure"
-})
-
-const _cronJob = (input: CronInput, labels: Readonly<Record<string, string>>) =>
-  CronJob.make({
-    name: input.name,
-    namespace: input.namespace,
-    labels,
-    annotations: input.annotations,
-    schedule: input.schedule,
-    concurrencyPolicy: input.concurrencyPolicy,
-    successfulJobsHistoryLimit: input.successfulJobsHistoryLimit,
-    failedJobsHistoryLimit: input.failedJobsHistoryLimit,
-    jobTemplate: {
-      spec: { template: { metadata: { labels: { app: input.name } }, spec: _cronPodSpec(input) } }
-    }
-  })
-
-export const cron = (
-  input: CronInput
-): Manifest.Manifest<readonly [K8sServiceAccount, K8sCronJob]> => {
-  const labels = { app: input.name, ...input.labels }
-
-  const sa = ServiceAccount.make({
-    name: input.name,
-    namespace: input.namespace,
-    labels,
-    annotations: input.annotations
-  })
-
-  const cronJob = _cronJob(input, labels)
-
-  return M.make((ctx) => Effect.all([sa.render(ctx), cronJob.render(ctx)], { concurrency: "unbounded" }))
 }

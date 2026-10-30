@@ -1,18 +1,16 @@
-import type { ConfigMapRef, SecretRef, ServiceAccountRef } from "@konfig.ts/core"
+import type { ConfigMapRef, SecretRef } from "@konfig.ts/core"
 import { Manifest } from "@konfig.ts/core"
-import { Effect } from "effect"
-import type {
-  ConfigMap as K8sConfigMap,
-  Namespace as K8sNamespace,
-  Secret as K8sSecret,
-  ServiceAccount as K8sServiceAccount
-} from "./.generated/k8s-types"
-import { type MetaLabels, toObjectMeta } from "./meta"
-import {
-  ConfigMapRef as ConfigMapRefValue,
-  SecretRef as SecretRefValue,
-  ServiceAccountRef as ServiceAccountRefValue
-} from "./refs"
+import type { ConfigMap as K8sConfigMap, Namespace as K8sNamespace, Secret as K8sSecret } from "./.generated/k8s-types"
+import { copyMap, type MetaLabels, toObjectMeta } from "./meta"
+import { ConfigMapRef as ConfigMapRefValue, SecretRef as SecretRefValue } from "./refs"
+
+interface WithRefInput<A, R> {
+  readonly manifest: Manifest.Manifest<A>
+  readonly ref: R
+}
+
+const _withRef = <A, R>(input: WithRefInput<A, R>): Manifest.Manifest<A> & { readonly ref: R } =>
+  Object.assign(input.manifest, { ref: input.ref })
 
 export interface NamespaceInput<N extends string> extends MetaLabels {
   readonly name: N
@@ -23,44 +21,15 @@ export interface NamespaceManifest<N extends string> extends Manifest.Manifest<K
 }
 
 export const Namespace = {
-  make: <N extends string>(input: NamespaceInput<N>): NamespaceManifest<N> => {
-    const resource: K8sNamespace = {
-      apiVersion: "v1",
-      kind: "Namespace",
-      metadata: toObjectMeta(input)
-    }
-
-    const m = Manifest.make<K8sNamespace>(() => Effect.succeed(resource))
-
-    return Object.assign(m, { ref: input.name })
-  }
-}
-
-export interface ServiceAccountInput<N extends string> extends MetaLabels {
-  readonly name: N
-  readonly namespace: string
-  readonly automountServiceAccountToken?: boolean
-  readonly imagePullSecrets?: ReadonlyArray<{ readonly name: SecretRef<string> }>
-}
-
-export interface ServiceAccountManifest<N extends string> extends Manifest.Manifest<K8sServiceAccount> {
-  readonly ref: ServiceAccountRef<N>
-}
-
-export const ServiceAccount = {
-  make: <N extends string>(input: ServiceAccountInput<N>): ServiceAccountManifest<N> => {
-    const resource: K8sServiceAccount = {
-      apiVersion: "v1",
-      kind: "ServiceAccount",
-      metadata: toObjectMeta(input),
-      automountServiceAccountToken: input.automountServiceAccountToken,
-      imagePullSecrets: input.imagePullSecrets?.map((s) => ({ name: s.name }))
-    }
-
-    const m = Manifest.make<K8sServiceAccount>(() => Effect.succeed(resource))
-
-    return Object.assign(m, { ref: ServiceAccountRefValue.of(input.name) })
-  }
+  make: <N extends string>(input: NamespaceInput<N>): NamespaceManifest<N> =>
+    _withRef({
+      manifest: Manifest.make<K8sNamespace>(() => ({
+        apiVersion: "v1",
+        kind: "Namespace",
+        metadata: toObjectMeta(input)
+      })),
+      ref: input.name
+    })
 }
 
 export interface ConfigMapInput<N extends string, K extends string = string> extends MetaLabels {
@@ -77,23 +46,23 @@ export interface ConfigMapManifest<N extends string, K extends string = string>
   readonly ref: ConfigMapRef<N, K>
 }
 
+const _buildConfigMap = (input: ConfigMapInput<string, string>): K8sConfigMap => ({
+  apiVersion: "v1",
+  kind: "ConfigMap",
+  metadata: toObjectMeta(input),
+  data: copyMap(input.data),
+  binaryData: copyMap(input.binaryData),
+  immutable: input.immutable
+})
+
 export const ConfigMap = {
   make: <const N extends string, const K extends string = string>(
     input: ConfigMapInput<N, K>
-  ): ConfigMapManifest<N, K> => {
-    const resource: K8sConfigMap = {
-      apiVersion: "v1",
-      kind: "ConfigMap",
-      metadata: toObjectMeta(input),
-      data: input.data,
-      binaryData: input.binaryData,
-      immutable: input.immutable
-    }
-
-    const m = Manifest.make<K8sConfigMap>(() => Effect.succeed(resource))
-
-    return Object.assign(m, { ref: ConfigMapRefValue.of<N, K>(input.name) })
-  }
+  ): ConfigMapManifest<N, K> =>
+    _withRef({
+      manifest: Manifest.make(() => _buildConfigMap(input)),
+      ref: ConfigMapRefValue.of<N, K>(input.name)
+    })
 }
 
 export interface SecretInput<
@@ -117,6 +86,16 @@ export interface SecretManifest<
   readonly ref: SecretRef<N, K, Ns>
 }
 
+const _buildSecret = (input: SecretInput<string, string, string>): K8sSecret => ({
+  apiVersion: "v1",
+  kind: "Secret",
+  metadata: toObjectMeta(input),
+  type: input.type,
+  data: copyMap(input.data),
+  stringData: copyMap(input.stringData),
+  immutable: input.immutable
+})
+
 export const Secret = {
   make: <
     const N extends string,
@@ -124,19 +103,9 @@ export const Secret = {
     const K extends string = string
   >(
     input: SecretInput<N, Ns, K>
-  ): SecretManifest<N, Ns, K> => {
-    const resource: K8sSecret = {
-      apiVersion: "v1",
-      kind: "Secret",
-      metadata: toObjectMeta(input),
-      type: input.type,
-      data: input.data,
-      stringData: input.stringData,
-      immutable: input.immutable
-    }
-
-    const m = Manifest.make<K8sSecret>(() => Effect.succeed(resource))
-
-    return Object.assign(m, { ref: SecretRefValue.of<N, K, Ns>(input.name) })
-  }
+  ): SecretManifest<N, Ns, K> =>
+    _withRef({
+      manifest: Manifest.make(() => _buildSecret(input)),
+      ref: SecretRefValue.of<N, K, Ns>(input.name)
+    })
 }

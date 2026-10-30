@@ -1,4 +1,4 @@
-type StringMap = Readonly<Record<string, string>>
+export type StringMap = Readonly<Record<string, string>>
 
 export interface MetaLabels {
   readonly labels?: StringMap
@@ -22,15 +22,20 @@ export interface ObjectMetaOutput {
   annotations?: Record<string, string>
 }
 
-const _copyMap = (map: StringMap | undefined): Record<string, string> | undefined =>
+export const copyMap = (map: StringMap | undefined): Record<string, string> | undefined =>
   map === undefined ? undefined : { ...map }
+
+export const cloneList = <T>(items: ReadonlyArray<T> | undefined): Array<T> | undefined =>
+  items === undefined ? undefined : structuredClone([...items])
+
+export const nonEmpty = (map: StringMap): StringMap | undefined => Object.keys(map).length === 0 ? undefined : map
 
 export const toLabelsMeta = (
   input: MetaLabels | undefined
 ): { labels?: Record<string, string>; annotations?: Record<string, string> } | undefined =>
   input === undefined
     ? undefined
-    : { labels: _copyMap(input.labels), annotations: _copyMap(input.annotations) }
+    : { labels: copyMap(input.labels), annotations: copyMap(input.annotations) }
 
 const _named = (input: ClusterMetaInput & { readonly namespace?: string }) =>
   input.namespace === undefined ? { name: input.name } : { name: input.name, namespace: input.namespace }
@@ -39,6 +44,6 @@ export const toObjectMeta = (
   input: ClusterMetaInput & { readonly namespace?: string }
 ): ObjectMetaOutput => ({
   ..._named(input),
-  labels: _copyMap(input.labels),
-  annotations: _copyMap(input.annotations)
+  labels: copyMap(input.labels),
+  annotations: copyMap(input.annotations)
 })

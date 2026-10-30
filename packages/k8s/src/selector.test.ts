@@ -2,8 +2,6 @@ import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
 import { RenderContext, renderManifest } from "@konfig.ts/core"
 import { Effect } from "effect"
-import { Service } from "./network"
-import { PodSet } from "./podSet"
 import { NetworkPolicy } from "./policy"
 import { Selector } from "./selector"
 import { Deployment } from "./workload"
@@ -55,24 +53,6 @@ layer(NodeServices.layer)("Deployment.fromPodSet", (it) => {
     }))
 })
 
-layer(NodeServices.layer)("Service.fromPodSet", (it) => {
-  it.effect("uses the selector's labels as spec.selector", () =>
-    Effect.gen(function*() {
-      const apiPods = Selector.make({ app: "api" })
-
-      const svc = Service.fromPodSet({
-        name: "api",
-        namespace: "default",
-        podSet: apiPods,
-        ports: [{ port: 80, targetPort: 8080 }]
-      })
-
-      const out = yield* renderManifest({ manifest: svc, ctx })
-      expect(out.spec?.selector).toEqual({ app: "api" })
-      expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: 8080 })
-    }))
-})
-
 layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
   it.effect("uses the selector's labels as spec.podSelector and lowers ingress peers", () =>
     Effect.gen(function*() {
@@ -90,45 +70,6 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
       const out = yield* renderManifest({ manifest: np, ctx })
       expect(out.spec?.podSelector.matchLabels).toEqual({ app: "api" })
       expect(out.spec?.ingress?.[0]?.from?.[0]?.podSelector?.matchLabels).toEqual({
-        app: "postgres"
-      })
-    }))
-})
-
-layer(NodeServices.layer)("PodSet", (it) => {
-  it.effect("emits a coherent Deployment + Service + NetworkPolicy from one selector", () =>
-    Effect.gen(function*() {
-      const apiPods = Selector.make({ app: "api", tier: "web" })
-      const dbPods = Selector.make({ app: "postgres" })
-
-      const trio = PodSet.define({
-        podSet: apiPods,
-        deployment: {
-          name: "api",
-          namespace: "default",
-          replicas: 2,
-          template: { spec: { containers: [{ name: "api", image: "x" }] } }
-        },
-        service: { name: "api", namespace: "default", ports: [{ port: 80 }] },
-        netPol: {
-          name: "api-ingress",
-          namespace: "default",
-          ingress: [{ from: [{ podSet: dbPods }] }]
-        }
-      })
-
-      const out = yield* renderManifest({ manifest: trio, ctx })
-      expect(out).toHaveLength(3)
-      const [dep, svc, np] = out
-      expect(dep.spec?.selector.matchLabels).toEqual({ app: "api", tier: "web" })
-      expect(svc?.kind).toBe("Service")
-
-      if (svc?.kind === "Service") {
-        expect(svc.spec?.selector).toEqual({ app: "api", tier: "web" })
-      }
-
-      expect(np?.spec?.podSelector.matchLabels).toEqual({ app: "api", tier: "web" })
-      expect(np?.spec?.ingress?.[0]?.from?.[0]?.podSelector?.matchLabels).toEqual({
         app: "postgres"
       })
     }))

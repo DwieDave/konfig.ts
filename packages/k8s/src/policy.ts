@@ -1,129 +1,34 @@
 import { Manifest } from "@konfig.ts/core"
-import { Effect } from "effect"
 import type {
-  ClusterRole as K8sClusterRole,
-  ClusterRoleBinding as K8sClusterRoleBinding,
   NetworkPolicy as K8sNetworkPolicy,
   NetworkPolicyEgressRule as K8sNetworkPolicyEgressRule,
   NetworkPolicyIngressRule as K8sNetworkPolicyIngressRule,
-  NetworkPolicyPeer as K8sNetworkPolicyPeer,
-  PersistentVolume as K8sPersistentVolume,
-  PersistentVolumeClaim as K8sPersistentVolumeClaim,
-  PersistentVolumeSpec as K8sPersistentVolumeSpec,
-  Role as K8sRole,
-  RoleBinding as K8sRoleBinding
+  NetworkPolicyPeer as K8sNetworkPolicyPeer
 } from "./.generated/k8s-types"
-import { type ClusterMetaInput, type NamespacedMetaInput, toObjectMeta } from "./meta"
+import { type NamespacedMetaInput, type StringMap, toObjectMeta } from "./meta"
 import type { Selector } from "./selector"
-
-type PersistentVolumeAccessMode =
-  | "ReadWriteOnce"
-  | "ReadOnlyMany"
-  | "ReadWriteMany"
-  | "ReadWriteOncePod"
-
-type PersistentVolumeReclaimPolicy = "Retain" | "Recycle" | "Delete"
-
-type PersistentVolumeMode = "Filesystem" | "Block"
-
-// "At least one volume source" isn't enforced statically (20+ variants); kube-apiserver rejects a spec with none.
-interface PersistentVolumeSpecInput extends
-  Omit<
-    K8sPersistentVolumeSpec,
-    "capacity" | "accessModes" | "persistentVolumeReclaimPolicy" | "volumeMode" | "claimRef"
-  >
-{
-  readonly capacity: { readonly storage: string }
-  readonly accessModes: ReadonlyArray<PersistentVolumeAccessMode>
-  readonly persistentVolumeReclaimPolicy?: PersistentVolumeReclaimPolicy
-  readonly volumeMode?: PersistentVolumeMode
-  readonly claimRef?: { readonly namespace: string; readonly name: string }
-}
-
-export interface PersistentVolumeInput extends ClusterMetaInput {
-  readonly spec: PersistentVolumeSpecInput
-}
-
-const _lowerPvSpec = (spec: PersistentVolumeSpecInput): K8sPersistentVolume["spec"] => ({
-  ...spec,
-  capacity: { storage: spec.capacity.storage },
-  accessModes: [...spec.accessModes],
-  persistentVolumeReclaimPolicy: spec.persistentVolumeReclaimPolicy,
-  volumeMode: spec.volumeMode,
-  claimRef: spec.claimRef === undefined
-    ? undefined
-    : { namespace: spec.claimRef.namespace, name: spec.claimRef.name }
-})
-
-export const PersistentVolume = {
-  make: (input: PersistentVolumeInput): Manifest.Manifest<K8sPersistentVolume> =>
-    Manifest.make<K8sPersistentVolume>(() =>
-      Effect.succeed({
-        apiVersion: "v1",
-        kind: "PersistentVolume",
-        metadata: toObjectMeta(input),
-        spec: _lowerPvSpec(input.spec)
-      })
-    )
-}
-
-interface PersistentVolumeClaimSpecInput {
-  readonly accessModes: ReadonlyArray<PersistentVolumeAccessMode>
-  readonly resources: { readonly requests: { readonly storage: string } }
-  readonly storageClassName?: string
-  readonly volumeMode?: PersistentVolumeMode
-  readonly volumeName?: string
-  readonly selector?: { readonly matchLabels?: Readonly<Record<string, string>> }
-}
-
-export interface PersistentVolumeClaimInput extends NamespacedMetaInput {
-  readonly spec: PersistentVolumeClaimSpecInput
-}
-
-const _lowerPvcSpec = (spec: PersistentVolumeClaimSpecInput): K8sPersistentVolumeClaim["spec"] => ({
-  accessModes: [...spec.accessModes],
-  resources: { requests: { storage: spec.resources.requests.storage } },
-  storageClassName: spec.storageClassName,
-  volumeMode: spec.volumeMode,
-  volumeName: spec.volumeName,
-  selector: spec.selector === undefined ? undefined : {
-    matchLabels: spec.selector.matchLabels === undefined ? undefined : { ...spec.selector.matchLabels }
-  }
-})
-
-export const PersistentVolumeClaim = {
-  make: (input: PersistentVolumeClaimInput): Manifest.Manifest<K8sPersistentVolumeClaim> =>
-    Manifest.make<K8sPersistentVolumeClaim>(() =>
-      Effect.succeed({
-        apiVersion: "v1",
-        kind: "PersistentVolumeClaim",
-        metadata: toObjectMeta(input),
-        spec: _lowerPvcSpec(input.spec)
-      })
-    )
-}
 
 export interface NetworkPolicyInput extends NamespacedMetaInput {
   readonly spec: K8sNetworkPolicy["spec"]
 }
 
-export interface NetworkPolicyPeer {
-  readonly podSet?: Selector<Readonly<Record<string, string>>>
-  readonly namespaceSelector?: { readonly matchLabels?: Readonly<Record<string, string>> }
+interface NetworkPolicyPeer {
+  readonly podSet?: Selector<StringMap>
+  readonly namespaceSelector?: { readonly matchLabels?: StringMap }
   readonly ipBlock?: { readonly cidr: string; readonly except?: ReadonlyArray<string> }
 }
 
-export interface NetworkPolicyIngressRule {
+interface NetworkPolicyIngressRule {
   readonly from?: ReadonlyArray<NetworkPolicyPeer>
   readonly ports?: K8sNetworkPolicyIngressRule["ports"]
 }
 
-export interface NetworkPolicyEgressRule {
+interface NetworkPolicyEgressRule {
   readonly to?: ReadonlyArray<NetworkPolicyPeer>
   readonly ports?: K8sNetworkPolicyEgressRule["ports"]
 }
 
-export interface NetworkPolicyFromPodSetInput<L extends Readonly<Record<string, string>>> extends NamespacedMetaInput {
+export interface NetworkPolicyFromPodSetInput<L extends StringMap> extends NamespacedMetaInput {
   readonly podSet: Selector<L>
   readonly policyTypes?: ReadonlyArray<"Ingress" | "Egress">
   readonly ingress?: ReadonlyArray<NetworkPolicyIngressRule>
@@ -158,15 +63,13 @@ const _lowerPeer = (peer: NetworkPolicyPeer): K8sNetworkPolicyPeer => ({
 
 export const NetworkPolicy = {
   make: (input: NetworkPolicyInput): Manifest.Manifest<K8sNetworkPolicy> =>
-    Manifest.make<K8sNetworkPolicy>(() =>
-      Effect.succeed({
-        apiVersion: "networking.k8s.io/v1",
-        kind: "NetworkPolicy",
-        metadata: toObjectMeta(input),
-        spec: structuredClone(input.spec)
-      })
-    ),
-  fromPodSet: <L extends Readonly<Record<string, string>>>(
+    Manifest.make<K8sNetworkPolicy>(() => ({
+      apiVersion: "networking.k8s.io/v1",
+      kind: "NetworkPolicy",
+      metadata: toObjectMeta(input),
+      spec: structuredClone(input.spec)
+    })),
+  fromPodSet: <L extends StringMap>(
     input: NetworkPolicyFromPodSetInput<L>
   ): Manifest.Manifest<K8sNetworkPolicy> => {
     const ingress = input.ingress?.map((rule): K8sNetworkPolicyIngressRule => ({
@@ -192,74 +95,4 @@ export const NetworkPolicy = {
       }
     })
   }
-}
-
-export interface ClusterRoleInput extends ClusterMetaInput {
-  readonly rules?: K8sClusterRole["rules"]
-  readonly aggregationRule?: K8sClusterRole["aggregationRule"]
-}
-
-export const ClusterRole = {
-  make: (input: ClusterRoleInput): Manifest.Manifest<K8sClusterRole> =>
-    Manifest.make<K8sClusterRole>(() =>
-      Effect.succeed({
-        apiVersion: "rbac.authorization.k8s.io/v1",
-        kind: "ClusterRole",
-        metadata: toObjectMeta(input),
-        rules: input.rules,
-        aggregationRule: input.aggregationRule
-      })
-    )
-}
-
-export interface ClusterRoleBindingInput extends ClusterMetaInput {
-  readonly roleRef: K8sClusterRoleBinding["roleRef"]
-  readonly subjects?: K8sClusterRoleBinding["subjects"]
-}
-
-export const ClusterRoleBinding = {
-  make: (input: ClusterRoleBindingInput): Manifest.Manifest<K8sClusterRoleBinding> =>
-    Manifest.make<K8sClusterRoleBinding>(() =>
-      Effect.succeed({
-        apiVersion: "rbac.authorization.k8s.io/v1",
-        kind: "ClusterRoleBinding",
-        metadata: toObjectMeta(input),
-        roleRef: input.roleRef,
-        subjects: input.subjects
-      })
-    )
-}
-
-export interface RoleInput extends NamespacedMetaInput {
-  readonly rules?: K8sRole["rules"]
-}
-
-export const Role = {
-  make: (input: RoleInput): Manifest.Manifest<K8sRole> =>
-    Manifest.make<K8sRole>(() =>
-      Effect.succeed({
-        apiVersion: "rbac.authorization.k8s.io/v1",
-        kind: "Role",
-        metadata: toObjectMeta(input),
-        rules: input.rules
-      })
-    )
-}
-
-export interface RoleBindingInput extends NamespacedMetaInput {
-  readonly roleRef: K8sRoleBinding["roleRef"]
-  readonly subjects?: K8sRoleBinding["subjects"]
-}
-
-export const RoleBinding = {
-  make: (input: RoleBindingInput): Manifest.Manifest<K8sRoleBinding> =>
-    Manifest.make<K8sRoleBinding>(() =>
-      Effect.succeed({
-        apiVersion: "rbac.authorization.k8s.io/v1",
-        kind: "RoleBinding",
-        metadata: toObjectMeta(input),
-        roleRef: input.roleRef,
-        subjects: input.subjects
-      })
-    )
 }

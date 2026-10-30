@@ -1,11 +1,14 @@
-import type { DefinedPod, Volume as VolumeT, VolumeNamesOf } from "@konfig.ts/k8s"
-import { Container, Pod, Port, Volume } from "@konfig.ts/k8s"
+import { Container, Pod, Port, PvcRef, Volume } from "@konfig.ts/k8s"
+import type { DefinedPod } from "../src/container"
+import type { Volume as VolumeT, VolumeNamesOf } from "../src/volume"
 
 type Expect<T extends true> = T
 
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
-const cfg = Volume.empty({ name: "config" })
+const claim = PvcRef.of("data-claim")
+
+const cfg = Volume.fromPvc({ name: "config", claim })
 
 type _CfgN = Expect<Equal<typeof cfg, VolumeT<"config">>>
 
@@ -14,7 +17,7 @@ type Vs = readonly [VolumeT<"config">, VolumeT<"data">]
 type _Names = Expect<Equal<VolumeNamesOf<Vs>, "config" | "data">>
 
 const goodPod = Pod.define({
-  volumes: [Volume.empty({ name: "config" }), Volume.empty({ name: "data" })],
+  volumes: [Volume.fromPvc({ name: "config", claim }), Volume.fromPvc({ name: "data", claim })],
   containers: [
     Container.define({
       name: "app",
@@ -31,7 +34,7 @@ const goodPod = Pod.define({
 type _PodNames = Expect<Equal<typeof goodPod, DefinedPod<"config" | "data">>>
 
 const _typo = Pod.define({
-  volumes: [Volume.empty({ name: "config" })],
+  volumes: [Volume.fromPvc({ name: "config", claim })],
   containers: [
     // @ts-expect-error - "cnofig" is not in declared volume names ("config").
     Container.define({
@@ -44,7 +47,7 @@ const _typo = Pod.define({
 })
 
 const _otherPod = Pod.define({
-  volumes: [Volume.empty({ name: "logs" })],
+  volumes: [Volume.fromPvc({ name: "logs", claim })],
   containers: [
     Container.define({
       name: "log",
@@ -56,7 +59,7 @@ const _otherPod = Pod.define({
 })
 
 const _crossPod = Pod.define({
-  volumes: [Volume.empty({ name: "config" })],
+  volumes: [Volume.fromPvc({ name: "config", claim })],
   containers: [
     // @ts-expect-error - "logs" was declared on _otherPod, not this one.
     Container.define({

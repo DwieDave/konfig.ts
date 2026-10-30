@@ -1,5 +1,6 @@
-import type { ContainerSpec, NamesOf } from "@konfig.ts/k8s"
 import { Container, Port, Service, Workload } from "@konfig.ts/k8s"
+import type { ContainerSpec } from "../src/container"
+import type { NamesOf } from "../src/ports"
 
 type Expect<T extends true> = T
 

@@ -1,12 +1,14 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { type AnyRenderError, brand, type Manifest, type PvcRef, RenderContext } from "@konfig.ts/core"
+import { type AnyRenderError, brand, type Manifest, type PvcRef, RenderContext, type SecretRef } from "@konfig.ts/core"
 import { Effect, Predicate } from "effect"
 import * as fc from "fast-check"
 import type { PodSpecInput } from "./container"
+import { ConfigMap, Namespace, Secret } from "./identity"
+import { Ingress, Service } from "./network"
 import { NetworkPolicy } from "./policy"
 import type { VolumeName } from "./volume"
-import { CronJob, Deployment, Job, StatefulSet } from "./workload"
+import { Deployment } from "./workload"
 
 const volName = (n: string) => brand<VolumeName<string>>(n)
 const ctx = RenderContext.make("test")
@@ -65,12 +67,12 @@ type Labels = Record<string, string>
 
 interface Case {
   readonly input: object
-  readonly run: Effect.Effect<object, AnyRenderError, Manifest.RenderServices>
+  readonly run: () => Effect.Effect<object, AnyRenderError, Manifest.RenderServices>
 }
 
 const rendered = <I extends object>(input: I, manifest: Manifest.Manifest<object>): Case => ({
   input,
-  run: manifest.render(ctx)
+  run: () => manifest.render(ctx)
 })
 
 const cases = {
@@ -84,31 +86,6 @@ const cases = {
 
     return rendered(input, Deployment.make(input))
   },
-  StatefulSet: (l, w) => {
-    const input = {
-      ...meta(l),
-      selector: { matchLabels: l },
-      serviceName: w,
-      template: template(l, w),
-      volumeClaimTemplates: [{ metadata: { name: w, labels: l } }]
-    }
-
-    return rendered(input, StatefulSet.make(input))
-  },
-  Job: (l, w) => {
-    const input = { ...meta(l), template: template(l, w) }
-
-    return rendered(input, Job.make(input))
-  },
-  CronJob: (l, w) => {
-    const input = {
-      ...meta(l),
-      schedule: "* * * * *",
-      jobTemplate: { metadata: { labels: l }, spec: { template: template(l, w) } }
-    }
-
-    return rendered(input, CronJob.make(input))
-  },
   NetworkPolicy: (l, w) => {
     const input = {
       ...meta(l),
@@ -116,18 +93,61 @@ const cases = {
     }
 
     return rendered(input, NetworkPolicy.make(input))
+  },
+  Service: (l, w) => {
+    const input = { ...meta(l), selector: l, ports: [{ port: 80, name: w }] }
+
+    return rendered(input, Service.make(input))
+  },
+  Ingress: (l, w) => {
+    const input = {
+      ...meta(l),
+      ingressClassName: w,
+      rules: [{ host: w, http: { paths: [{ path: "/", pathType: "Prefix", backend: { service: { name: w } } }] } }],
+      tls: [{ hosts: [w], secretName: brand<SecretRef<string>>(w) }],
+      defaultBackend: { service: { name: w } }
+    }
+
+    return rendered(input, Ingress.make(input))
+  },
+  ConfigMap: (l, w) => {
+    const input = { ...meta(l), data: l, binaryData: { [w]: w } }
+
+    return rendered(input, ConfigMap.make(input))
+  },
+  Secret: (l, w) => {
+    const input = { ...meta(l), data: l, stringData: { [w]: w } }
+
+    return rendered(input, Secret.make(input))
+  },
+  Namespace: (l) => {
+    const input = { name: "n", labels: l, annotations: l }
+
+    return rendered(input, Namespace.make(input))
   }
 } satisfies Record<string, (l: Labels, w: string) => Case>
+
+const runOnce = (run: Case["run"]) => Effect.runPromise(run().pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
 const noAlias = (build: (l: Labels, w: string) => Case) =>
   fc.asyncProperty(labels, word, async (l, w) => {
     const { input, run } = build(l, w)
     const before = JSON.stringify(input)
-    scribble(await Effect.runPromise(run.pipe(Effect.scoped, Effect.provide(NodeServices.layer))))
+    scribble(await runOnce(run))
 
     return JSON.stringify(input) === before
   })
 
+const rendersStable = (build: (l: Labels, w: string) => Case) =>
+  fc.asyncProperty(labels, word, async (l, w) => {
+    const { run } = build(l, w)
+    const first = JSON.stringify(await runOnce(run))
+    scribble(await runOnce(run))
+
+    return JSON.stringify(await runOnce(run)) === first
+  })
+
 Object.entries(cases).forEach(([name, build]) => {
   it(`${name}.make output never aliases its input`, () => fc.assert(noAlias(build)))
+  it(`${name}.make renders are independent of earlier renders`, () => fc.assert(rendersStable(build)))
 })
