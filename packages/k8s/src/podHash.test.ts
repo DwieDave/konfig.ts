@@ -2,6 +2,7 @@ import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { SecretSource } from "@konfig.ts/env"
 import { Effect, Layer, Redacted } from "effect"
+import * as fc from "fast-check"
 import { describe, expect, it as vitestIt } from "vitest"
 import { Environment, hashSecretValues, Secret } from "./index"
 
@@ -126,4 +127,51 @@ describe("Environment.bind valuesLayer", () => {
         }).valuesLayer.pipe(Layer.provideMerge(NodeServices.layer))
       )
     ))
+})
+
+describe("hashSecretValues properties", () => {
+  const record = fc.dictionary(fc.string({ minLength: 1 }), fc.string(), { minKeys: 1, maxKeys: 5 })
+
+  const toValues = (r: Record<string, string>) =>
+    Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Redacted.make(v)]))
+
+  const hash = (r: Record<string, string>, salt: string) => hashSecretValues({ values: toValues(r), salt })
+
+  vitestIt("is invariant under key permutation", () => {
+    fc.assert(
+      fc.property(record, fc.string(), (r, salt) => {
+        const reversed = Object.fromEntries(Object.entries(r).reverse())
+        expect(hash(reversed, salt)).toBe(hash(r, salt))
+      })
+    )
+  })
+
+  vitestIt("changing any single value changes the hash", () => {
+    fc.assert(
+      fc.property(record, fc.string(), fc.string(), fc.nat(), (r, salt, next, pick) => {
+        const keys = Object.keys(r)
+        const key = keys[pick % keys.length]!
+        fc.pre(r[key] !== next)
+        expect(hash({ ...r, [key]: next }, salt)).not.toBe(hash(r, salt))
+      })
+    )
+  })
+
+  vitestIt("changing the salt changes the hash", () => {
+    fc.assert(
+      fc.property(record, fc.string(), fc.string(), (r, a, b) => {
+        fc.pre(a !== b)
+        expect(hash(r, a)).not.toBe(hash(r, b))
+      })
+    )
+  })
+
+  vitestIt("records with the same concatenated key=value text but a different split never collide", () => {
+    fc.assert(
+      fc.property(fc.string(), fc.string(), fc.string(), fc.string(), (a, b, c, salt) => {
+        fc.pre(a !== `${a}=${b}`)
+        expect(hash({ [a]: `${b}=${c}` }, salt)).not.toBe(hash({ [`${a}=${b}`]: c }, salt))
+      })
+    )
+  })
 })

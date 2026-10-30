@@ -246,19 +246,21 @@ const _normalizeSecretMember = (
 const _lookup = (input: { readonly node: _Node | undefined; readonly key: string }): _NodeValue | undefined =>
   input.node === undefined ? undefined : Object.entries(input.node).find(([k]) => k === input.key)?.[1]
 
-const _isSecretMemberInput = (value: _NodeValue | undefined): value is SecretMemberInput<string, string> =>
-  Predicate.isObject(value) && ("backend" in value || "source" in value || "_tag" in value)
-
-const _isLiteralOverride = (value: _NodeValue | undefined): value is _LiteralOverride => value !== undefined
+const _asSecretInput = (value: _NodeValue | undefined): SecretMemberInput<string, string> | undefined =>
+  value === undefined ? undefined : unsafeCoerce<SecretMemberInput<string, string>>({
+    value,
+    reason: "the member's _kind is Secret, so the value at its key is a SecretMemberInput"
+  })
 
 const _asNode = (value: _NodeValue | undefined): _Node | undefined =>
-  Predicate.isObject(value) && !_isSecretMemberInput(value) ? value : undefined
+  Predicate.isObject(value)
+    ? unsafeCoerce<_Node>({ value, reason: "the member's _kind is Environment, so an object at its key is a node" })
+    : undefined
 
 const _handleSecret = (
   { entry, input }: { readonly entry: AnySecretEntry; readonly input: _DispatchInput }
 ): _Fragment => {
-  const raw = _lookup({ node: input.secretsOpts, key: input.memberKey })
-  const memberOpts = _normalizeSecretMember(_isSecretMemberInput(raw) ? raw : undefined)
+  const memberOpts = _normalizeSecretMember(_asSecretInput(_lookup({ node: input.secretsOpts, key: input.memberKey })))
 
   const d = bindSecret({
     secret: entry,
@@ -281,7 +283,7 @@ const _handleLiteral = (
   { entry, input }: { readonly entry: AnyLiteralEntry; readonly input: _DispatchInput }
 ): _Fragment => {
   const override = _lookup({ node: input.literalsOpts, key: input.memberKey })
-  const d = _bindLiteral({ entry, override: _isLiteralOverride(override) ? override : undefined })
+  const d = _bindLiteral({ entry, override })
 
   return { ..._emptyFragment, declared: { [input.memberKey]: d }, envVars: [d.envVar] }
 }

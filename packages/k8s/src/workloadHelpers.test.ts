@@ -59,16 +59,11 @@ describe("Workload.web reloader annotations", () => {
       expect(dep.metadata?.annotations).toEqual({ "reloader.stakater.com/auto": "true" })
     }).pipe(Effect.provide(NodeServices.layer)))
 
-  it.effect("reloader 'stakater-strict' adds auto + match annotations", () =>
-    Effect.gen(function*() {
-      const manifest = web({ ...baseInput, reloader: "stakater-strict" })
-      const [deployment] = yield* manifest.render(ctx)
-      const dep = coerce<K8sDeployment>(deployment)
-      expect(dep.metadata?.annotations).toEqual({
-        "reloader.stakater.com/auto": "true",
-        "reloader.stakater.com/match": "true"
-      })
-    }).pipe(Effect.provide(NodeServices.layer)))
+  it("reloader 'stakater-strict' is no longer accepted", () => {
+    // @ts-expect-error removed option
+    const manifest = web({ ...baseInput, reloader: "stakater-strict" })
+    expect(manifest).toBeDefined()
+  })
 
   it.effect("reloader explicit secrets/configMaps are comma-joined into distinct annotation keys", () =>
     Effect.gen(function*() {

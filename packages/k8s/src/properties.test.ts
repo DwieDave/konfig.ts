@@ -9,7 +9,7 @@ const stringMap = fc.dictionary(fc.string({ minLength: 1 }), fc.string())
 const names = fc.array(fc.string({ minLength: 1 }), { maxLength: 4 })
 
 const reloaderOption: fc.Arbitrary<ReloaderOption | undefined> = fc.oneof(
-  fc.constantFrom<ReloaderOption | undefined>(undefined, "off", "stakater", "stakater-strict"),
+  fc.constantFrom<ReloaderOption | undefined>(undefined, "off", "stakater"),
   fc.record({ secrets: fc.option(names, { nil: undefined }), configMaps: fc.option(names, { nil: undefined }) })
 )
 
