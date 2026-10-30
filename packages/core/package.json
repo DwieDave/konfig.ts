@@ -64,11 +64,11 @@
     "test:coverage": "bun ../../scripts/cli.ts pkg test:coverage"
   },
   "dependencies": {
-    "@effect/platform-node": "^4.0.0",
+    "@effect/platform-node": "^4.1.0",
     "yaml": "catalog:"
   },
   "peerDependencies": {
-    "effect": "^4.0.0"
+    "effect": "^4.1.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

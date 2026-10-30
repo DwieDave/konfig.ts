@@ -125,7 +125,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
     "packages/cli": {
@@ -135,7 +135,7 @@
         "konfig": "./dist/main.mjs",
       },
       "dependencies": {
-        "@effect/platform-node": "^4.0.0",
+        "@effect/platform-node": "^4.1.0",
         "@konfig.ts/argocd": "workspace:*",
         "@konfig.ts/core": "workspace:*",
         "@konfig.ts/docker": "workspace:*",
@@ -151,14 +151,14 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
     "packages/core": {
       "name": "@konfig.ts/core",
       "version": "0.4.0",
       "dependencies": {
-        "@effect/platform-node": "^4.0.0",
+        "@effect/platform-node": "^4.1.0",
         "yaml": "catalog:",
       },
       "devDependencies": {
@@ -170,7 +170,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
     "packages/docker": {
@@ -189,7 +189,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
     "packages/env": {
@@ -207,7 +207,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
     "packages/external-secrets": {
@@ -227,7 +227,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
     "packages/k8s": {
@@ -248,7 +248,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
     "packages/oxc": {
@@ -283,7 +283,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
     "packages/sops": {
@@ -304,7 +304,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "^4.0.0",
+        "effect": "^4.1.0",
       },
     },
   },

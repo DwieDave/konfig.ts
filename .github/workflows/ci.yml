@@ -40,7 +40,7 @@ jobs:
         run: bun run knip
 
   peer-floor:
-    name: peer floor (effect 4.0.0)
+    name: peer floor (effect 4.1.0)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -48,10 +48,10 @@ jobs:
 
       - name: Pin the effect family to the declared peer floor
         run: |
-          jq '.catalog.effect = "4.0.0" | .catalog["@effect/vitest"] = "4.0.0" | .catalog["@effect/platform-node"] = "~4.0.0"' package.json > package.floor.json
+          jq '.catalog.effect = "4.1.0" | .catalog["@effect/vitest"] = "4.1.0" | .catalog["@effect/platform-node"] = "~4.1.0"' package.json > package.floor.json
           mv package.floor.json package.json
           for f in packages/core/package.json packages/cli/package.json; do
-            jq '.dependencies["@effect/platform-node"] = "~4.0.0"' "$f" > "$f.floor"
+            jq '.dependencies["@effect/platform-node"] = "~4.1.0"' "$f" > "$f.floor"
             mv "$f.floor" "$f"
           done
 
@@ -61,9 +61,9 @@ jobs:
 
       - name: Assert the floor versions were installed
         run: |
-          bun pm ls --all | grep -E ' effect@4\.0\.0$'
-          bun pm ls --all | grep -E ' @effect/platform-node@4\.0\.'
-          ! bun pm ls --all | grep -E ' @effect/platform-node@4\.[1-9]'
+          bun pm ls --all | grep -E ' effect@4\.1\.0$'
+          bun pm ls --all | grep -E ' @effect/platform-node@4\.1\.'
+          ! bun pm ls --all | grep -E ' @effect/platform-node@4\.[2-9]'
 
       - name: Typecheck and test every effect-peer package at the floor
         run: |

@@ -64,7 +64,7 @@
     "kubernetes-types": "~1.30.0"
   },
   "peerDependencies": {
-    "effect": "^4.0.0"
+    "effect": "^4.1.0"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

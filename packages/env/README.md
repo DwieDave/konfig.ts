@@ -74,10 +74,10 @@ bundle is a `Config` over the whole tree.
 
 ## Requirements
 
-konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.0.0 on
+konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.1.0 on
 is supported:
 
-- **`effect@^4.0.0`** — peer dependency of every package.
-- **`@effect/platform-node@^4.0.0`** — a regular dependency of `@konfig.ts/core`,
+- **`effect@^4.1.0`** — peer dependency of every package.
+- **`@effect/platform-node@^4.1.0`** — a regular dependency of `@konfig.ts/core`,
   whose `renderAllYaml()` needs the Node filesystem/subprocess services.
   It is installed automatically with core.

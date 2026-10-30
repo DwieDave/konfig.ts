@@ -43,14 +43,14 @@
     "test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
   },
   "dependencies": {
-    "@effect/platform-node": "^4.0.0",
+    "@effect/platform-node": "^4.1.0",
     "@konfig.ts/argocd": "workspace:*",
     "@konfig.ts/core": "workspace:*",
     "@konfig.ts/docker": "workspace:*",
     "json-schema-to-typescript": "^15.0.4"
   },
   "peerDependencies": {
-    "effect": "^4.0.0"
+    "effect": "^4.1.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

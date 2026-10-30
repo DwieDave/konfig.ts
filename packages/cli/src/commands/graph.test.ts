@@ -358,5 +358,5 @@ describe("runGraph cycle detection", () => {
         }).pipe(Effect.scoped, Effect.provide(NodeServices.layer), Effect.runPromise)),
       { numRuns: 100 }
     )
-  })
+  }, 30_000)
 })

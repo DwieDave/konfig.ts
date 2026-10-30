@@ -47,7 +47,7 @@ It does not replace Helm. It shells out to `helm template`. Charts you depend on
 ## Requirements
 
 <Aside type="caution" title="Effect rc range">
-Every `@konfig.ts/*` package is built against Effect 4 and declares a caret peer range, currently `effect@^4.0.0`: any stable 4.x build resolves; older builds, including the 4.0.0 beta and rc lines, fail.
+Every `@konfig.ts/*` package is built against Effect 4 and declares a caret peer range, currently `effect@^4.1.0`: any 4.x build from 4.1.0 on resolves; older builds, including 4.0.x and the 4.0.0 beta and rc lines, fail.
 </Aside>
 
 The `konfig` CLI imports your `.ts` sources at runtime, so it needs a TypeScript-capable runtime:

@@ -10,9 +10,9 @@ from `package.json`) and `bun install --frozen-lockfile`. Run
 
 The `check` job runs `bun run check`, `bun run build`,
 `bun run test:coverage` (coverage thresholds enforced), `bun run lint`
-and `bun run knip`. The `peer-floor` job pins `effect@4.0.0` and
-`@effect/platform-node@~4.0.0`, asserts they were installed, then runs
-check and test for core and env. All steps are blocking.
+and `bun run knip`. The `peer-floor` job pins `effect@4.1.0` and
+`@effect/platform-node@~4.1.0`, asserts they were installed, then runs
+check and test for every package with an `effect` peer. All steps are blocking.
 
 ## `release.yml` — on tag
 
