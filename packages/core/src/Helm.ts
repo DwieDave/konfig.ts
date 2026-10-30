@@ -1,4 +1,4 @@
-import { Cause, Config, Deferred, Duration, Effect, Exit, Option, Stream } from "effect"
+import { Cause, Config, Data, Deferred, Duration, Effect, Exit, Option, Schema, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
@@ -7,7 +7,6 @@ import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { createHash } from "node:crypto"
 import * as YAML from "yaml"
 import { parseYamlAll } from "./diff"
-import { isRecord } from "./guards"
 import {
   DEFAULT_HELM_CACHE_DIR,
   DEFAULT_HELM_TIMEOUT_SECONDS,
@@ -25,6 +24,7 @@ import {
 } from "./RenderError"
 import { compareSemver, parseSemver } from "./semver"
 import { type ProcessFailure, runProcessExit, runProcessString } from "./subprocess"
+import type { YamlRecord } from "./yaml/record"
 
 const CLUSTER_SCOPED_KINDS: ReadonlySet<string> = new Set([
   "APIService",
@@ -74,7 +74,7 @@ export interface HelmReleaseOptions {
   readonly version: string
   readonly digest: string
   readonly namespace?: string
-  readonly values: Record<string, unknown>
+  readonly values: YamlRecord
   readonly extraOpts?: readonly string[]
   // When set, runs a `helm version --short` preflight and fails HelmVersionTooLow if older.
   readonly minVersion?: string
@@ -90,31 +90,49 @@ interface _ParseHelmOutputInput {
   readonly clusterScopedKinds?: ReadonlyArray<string>
 }
 
-const _crdClusterKind = (doc: unknown): ReadonlyArray<string> => {
-  if (!isRecord(doc) || doc["kind"] !== "CustomResourceDefinition" || !isRecord(doc["spec"])) return []
-  const kind = isRecord(doc["spec"]["names"]) ? doc["spec"]["names"]["kind"] : undefined
-  return doc["spec"]["scope"] === "Cluster" && typeof kind === "string" ? [kind] : []
-}
+const _CrdSchema = Schema.Struct({
+  kind: Schema.Literal("CustomResourceDefinition"),
+  spec: Schema.Struct({
+    scope: Schema.Literal("Cluster"),
+    names: Schema.Struct({ kind: Schema.String })
+  })
+})
+
+const _isClusterCrd = Schema.is(_CrdSchema)
+
+const _crdClusterKinds = (docs: ReadonlyArray<unknown>): ReadonlyArray<string> =>
+  docs.flatMap((doc) => _isClusterCrd(doc) ? [doc.spec.names.kind] : [])
 
 interface _ScopedKindsInput {
   readonly docs: ReadonlyArray<unknown>
   readonly extra: ReadonlyArray<string>
 }
+
 const _scopedKinds = ({ docs, extra }: _ScopedKindsInput): ReadonlySet<string> =>
-  new Set([...CLUSTER_SCOPED_KINDS, ...extra, ...docs.flatMap(_crdClusterKind)])
+  new Set([...CLUSTER_SCOPED_KINDS, ...extra, ..._crdClusterKinds(docs)])
 
 interface _StampInput {
   readonly doc: unknown
   readonly namespace: string
   readonly clusterKinds: ReadonlySet<string>
 }
-const _stampNamespace = ({ doc, namespace, clusterKinds }: _StampInput): unknown => {
-  if (!isRecord(doc)) return doc
-  const kind = doc["kind"]
-  const metadata = isRecord(doc["metadata"]) ? doc["metadata"] : undefined
-  const ns = metadata?.["namespace"]
-  const needsNamespace = typeof kind === "string" && !clusterKinds.has(kind) && (ns === undefined || ns === "")
-  return needsNamespace ? { ...doc, metadata: { ...metadata, namespace } } : doc
+
+type _ParsedDocEnum = Data.TaggedEnum<{ ParsedDoc: Omit<ParsedDoc, "_tag"> }>
+
+const { ParsedDoc: _parsedDoc } = Data.taggedEnum<_ParsedDocEnum>()
+
+const _NamedDocSchema = Schema.Struct({
+  kind: Schema.String,
+  metadata: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)))
+})
+
+const _isNamedDoc = Schema.is(_NamedDocSchema)
+
+const _stampNamespace = ({ doc, namespace, clusterKinds }: _StampInput): ParsedDoc["value"] => {
+  if (!_isNamedDoc(doc) || clusterKinds.has(doc.kind)) return doc
+  const ns = doc.metadata?.["namespace"]
+
+  return ns === undefined || ns === "" ? { ...doc, metadata: { ...doc.metadata, namespace } } : doc
 }
 
 // Uses parseYamlAll (not a naive /^---$/m split) so a `---` inside a block scalar can't
@@ -127,11 +145,13 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<ParsedDoc
     const origin = `helm:${chart}@${version}`
     const docs = parseYamlAll(output)
     const clusterKinds = _scopedKinds({ docs, extra: input.clusterScopedKinds ?? [] })
-    return docs.map((doc): ParsedDoc => ({
-      _tag: "ParsedDoc",
-      value: namespace === undefined ? doc : _stampNamespace({ doc, namespace, clusterKinds }),
-      origin
-    }))
+
+    return docs.map((doc) =>
+      _parsedDoc({
+        value: namespace === undefined ? doc : _stampNamespace({ doc, namespace, clusterKinds }),
+        origin
+      })
+    )
   })
 
 // How long a network-bound helm call (`pull`, `template`) may run before konfig
@@ -154,6 +174,7 @@ type _HelmVersionProbe = Effect.Effect<string, ProcessFailure | Config.ConfigErr
 
 const _helmVersionProbe: _HelmVersionProbe = Effect.gen(function*() {
   const cmd = ChildProcess.make("helm", ["version", "--short"])
+
   return yield* versionTimeout.pipe(
     Effect.flatMap((t) => runProcessString(cmd, { allowEmptyStdout: false, timeout: t }))
   )
@@ -168,21 +189,26 @@ const _helmVersionProbe: _HelmVersionProbe = Effect.gen(function*() {
 interface _VersionSlot {
   value: string | undefined
 }
+
 const _helmVersionBySpawner = new WeakMap<ChildProcessSpawner["Service"], _VersionSlot>()
 
 const _slotFor = (spawner: ChildProcessSpawner["Service"]): _VersionSlot => {
   const existing = _helmVersionBySpawner.get(spawner)
+
   if (existing !== undefined) return existing
   const slot: _VersionSlot = { value: undefined }
   _helmVersionBySpawner.set(spawner, slot)
+
   return slot
 }
 
 const _memoizedHelmVersion: _HelmVersionProbe = Effect.gen(function*() {
   const slot = _slotFor(yield* ChildProcessSpawner)
+
   if (slot.value !== undefined) return slot.value
   const stdout = yield* _helmVersionProbe
   slot.value = stdout
+
   return stdout
 })
 
@@ -199,9 +225,11 @@ export const assertMinVersion = (
 > =>
   Effect.gen(function*() {
     const min = parseSemver(minVersion)
+
     if (min === null) return yield* new HelmMinVersionInvalid({ minVersion })
     const stdout = yield* _memoizedHelmVersion
     const found = parseSemver(stdout)
+
     if (found === null || compareSemver({ a: found, b: min }) < 0) {
       return yield* new HelmVersionTooLow({ required: minVersion, found: stdout.trim() })
     }
@@ -224,11 +252,13 @@ export interface CacheFileNameInput {
 export const cacheFileName = (input: CacheFileNameInput): string => {
   if (input.digest === undefined) return `${input.chart}-${input.version}.tgz`
   const digestSuffix = _normalizeDigest(input.digest).slice("sha256:".length, "sha256:".length + 12)
+
   return `${input.chart}-${input.version}-${digestSuffix}.tgz`
 }
 
 export const _normalizeDigest = (digest: string): string => {
   const lower = digest.trim().toLowerCase()
+
   return lower.startsWith("sha256:") ? lower : `sha256:${lower}`
 }
 
@@ -239,6 +269,7 @@ const _hashFile = (filePath: string) =>
     const fs = yield* FileSystem
     const hash = createHash("sha256")
     yield* Stream.runForEach(fs.stream(filePath), (chunk) => Effect.sync(() => hash.update(chunk)))
+
     return `sha256:${hash.digest("hex")}`
   })
 
@@ -258,11 +289,14 @@ const _hashFileCached = (filePath: string) =>
     const fs = yield* FileSystem
     const info = yield* fs.stat(filePath)
     const mtimeMs = Option.map(info.mtime, (d) => d.getTime())
+
     if (Option.isNone(mtimeMs)) return yield* _hashFile(filePath)
     const hit = _verifiedDigests.get(filePath)
+
     if (hit !== undefined && hit.mtimeMs === mtimeMs.value && hit.size === info.size) return hit.digest
     const digest = yield* _hashFile(filePath)
     _verifiedDigests.set(filePath, { mtimeMs: mtimeMs.value, size: info.size, digest })
+
     return digest
   })
 
@@ -282,9 +316,11 @@ export const verifyChartDigest = (input: VerifyChartDigestInput) =>
     const fs = yield* FileSystem
     const expected = _normalizeDigest(input.digest)
     const actual = yield* _hashFileCached(input.cachedTgz)
+
     if (expected !== actual) {
       _verifiedDigests.delete(input.cachedTgz)
       yield* fs.remove(input.cachedTgz).pipe(Effect.ignore)
+
       return yield* new HelmDigestMismatch({
         chart: input.chart,
         version: input.version,
@@ -326,7 +362,9 @@ export const pullArgs = (input: PullArgsInput): ReadonlyArray<string> => [
 interface _SlotInput extends EnsureChartTarballInput {
   readonly cachedTgz: string
 }
+
 type _PullError = HelmRenderError | HelmDigestMismatch | ProcessFailure | Config.ConfigError | PlatformError
+
 type _PullOnce = Effect.Effect<void, _PullError, FileSystem | Path | ChildProcessSpawner>
 
 // In-flight pulls keyed by cached tarball path. Renders run several releases
@@ -344,8 +382,10 @@ interface _Claim {
 const _claimPull = (input: { readonly key: string; readonly fresh: Deferred.Deferred<void, _PullError> }) =>
   Effect.sync((): _Claim => {
     const existing = _pullsInFlight.get(input.key)
+
     if (existing !== undefined) return { owner: false, deferred: existing }
     _pullsInFlight.set(input.key, input.fresh)
+
     return { owner: true, deferred: input.fresh }
   })
 
@@ -367,6 +407,7 @@ const _pullOnce = (input: { readonly cachedTgz: string; readonly pull: _PullOnce
     Effect.gen(function*() {
       const fresh = yield* Deferred.make<void, _PullError>()
       const claim = yield* _claimPull({ key: input.cachedTgz, fresh })
+
       if (!claim.owner) return yield* restore(_awaitOwner({ deferred: claim.deferred, retry: _pullOnce(input) }))
       yield* Effect.onExit(restore(input.pull), _settlePull({ key: input.cachedTgz, deferred: fresh }))
     })
@@ -385,6 +426,7 @@ const _verifyPinned = (input: _SlotInput) =>
 const _singleTarball = (input: _SlotInput & { readonly pullDir: string; readonly files: ReadonlyArray<string> }) => {
   const candidates = input.files.filter((f) => f.endsWith(".tgz") && f.startsWith(input.chart))
   const [pulled] = candidates
+
   return candidates.length === 1 && pulled !== undefined
     ? Effect.succeed(pulled)
     : Effect.fail(
@@ -434,8 +476,10 @@ export const ensureChartTarball = (input: EnsureChartTarballInput) =>
     yield* fs.makeDirectory(input.cacheDir, { recursive: true })
     const cachedTgz = path.join(input.cacheDir, cacheFileName(input))
     const slot = { ...input, cachedTgz }
+
     if (yield* fs.exists(cachedTgz)) yield* _verifyPinned(slot)
     else yield* _pullOnce({ cachedTgz, pull: _pullAndVerify(slot) })
+
     return cachedTgz
   })
 
@@ -467,6 +511,7 @@ const _inPhase =
 const _resolveCacheDir = (opts: HelmReleaseOptions) =>
   Effect.gen(function*() {
     const path = yield* Path
+
     return yield* Config.String(KONFIG_HELM_CACHE_ENV).pipe(
       Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR)),
       _inPhase(opts, "pull")
@@ -482,6 +527,7 @@ const _writeValues = (opts: HelmReleaseOptions) =>
     yield* fs.writeFileString(valuesFile, YAML.stringify(opts.values, { lineWidth: 0 })).pipe(
       _inPhase(opts, "template")
     )
+
     return valuesFile
   })
 
@@ -511,6 +557,7 @@ const _runTemplate = (
     const releaseName = opts.releaseName ?? opts.chart
     const template = _templateCommand({ ...input, releaseName })
     yield* Effect.logDebug(`helm: templating ${opts.chart}@${opts.version} as release ${releaseName}`)
+
     return yield* timeout.pipe(
       Effect.flatMap((t) => runProcessString(template, { allowEmptyStdout: false, timeout: t })),
       _inPhase(opts, "template")
@@ -529,6 +576,7 @@ const _releaseDocs = (opts: HelmReleaseOptions) =>
     const cachedTgz = yield* ensureChartTarball({ ...opts, cacheDir }).pipe(_inPhase(opts, "pull"))
     const valuesFile = yield* _writeValues(opts)
     const output = yield* _runTemplate({ opts, cachedTgz, valuesFile })
+
     return yield* _parseHelmOutput({
       output,
       chart: opts.chart,

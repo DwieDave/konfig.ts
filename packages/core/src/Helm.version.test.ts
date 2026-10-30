@@ -38,7 +38,7 @@ const _handle = (proc: FakeProc): ChildProcessHandle =>
       getInputFd: () => Sink.drain,
       getOutputFd: () => Stream.empty,
       unref: Effect.succeed(Effect.void)
-    } as Parameters<typeof makeHandle>[0]
+    }
   )
 
 const _spawnerFor = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
@@ -68,6 +68,7 @@ describe("Helm.release helm-version preflight", () => {
     Effect.gen(function*() {
       const exit = yield* _run("3.16.0", { stdout: "v3.10.0\n", exitCode: 0 })
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const pretty = Cause.pretty(exit.cause)
         expect(pretty).toContain("HelmVersionTooLow")
@@ -79,9 +80,11 @@ describe("Helm.release helm-version preflight", () => {
     Effect.gen(function*() {
       const exit = yield* _run("3.16.0", { stdout: "", stderr: "command not found", exitCode: 127 })
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
         expect(err).toBeInstanceOf(HelmRenderError)
+
         if (err instanceof HelmRenderError) {
           expect(err.phase).toBe("version-check")
           expect(err.cause).toBeInstanceOf(ProcessError)
@@ -89,6 +92,7 @@ describe("Helm.release helm-version preflight", () => {
           expect(err.message).toContain("exit 127")
           expect(err.message).toContain("command not found")
         }
+
         expect(Cause.pretty(exit.cause)).not.toContain("HelmVersionTooLow")
       }
     }))
@@ -115,9 +119,11 @@ describe("Helm.release helm-version preflight", () => {
           )
 
         expect(Exit.isFailure(exit)).toBe(true)
+
         if (Exit.isFailure(exit)) {
           expect(Cause.pretty(exit.cause)).toContain("HelmVersionTooLow")
         }
+
         // The preflight failed before any pull, so the resolved cacheDir was
         // created (Helm.ts creates it up front) but never populated.
         const files = yield* fs.readDirectory(cacheDir)
@@ -126,7 +132,7 @@ describe("Helm.release helm-version preflight", () => {
   )
 })
 
-const _errorOf = (exit: Exit.Exit<unknown, unknown>): unknown =>
+const _errorOf = <E>(exit: Exit.Exit<unknown, E>): E | undefined =>
   Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined
 
 describe("Helm.release minVersion semantics", () => {
@@ -151,16 +157,20 @@ describe("Helm.release minVersion semantics", () => {
   it.effect("retries the version probe after a failed probe instead of caching the failure", () =>
     Effect.gen(function*() {
       let calls = 0
+
       const spawner = Layer.succeed(
         ChildProcessSpawner,
         makeSpawner((_command: Command) => {
           calls += 1
+
           return Effect.succeed(_handle(calls === 1 ? { stderr: "boom", exitCode: 1 } : { stdout: "v3.10.0\n" }))
         })
       )
+
       const run = _release("3.16.0")
         .render(RenderContext.make("test"))
         .pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, spawner)), Effect.scoped, Effect.exit)
+
       expect(_errorOf(yield* run)).toBeInstanceOf(HelmRenderError)
       expect(_errorOf(yield* run)).toBeInstanceOf(HelmVersionTooLow)
       expect(calls).toBe(2)

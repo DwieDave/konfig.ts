@@ -1,7 +1,19 @@
+import { Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import * as YAML from "yaml"
+import { unsafeCoerce } from "../_cast"
 import { filenameFor, serialize } from "./serialize"
+
+type _ParseOptions = YAML.ParseOptions & YAML.DocumentOptions & YAML.SchemaOptions
+
+const _parse = <T>(text: string, options?: _ParseOptions): T => {
+  const parsed = YAML.parse(text, options ?? {})
+
+  return unsafeCoerce<T>(parsed, "tests assert the shape of YAML that serialize just emitted")
+}
+
+const _isString = Schema.is(Schema.String)
 
 describe("serialize — key order (FR-2.1 / FR-2.2)", () => {
   it("places apiVersion, kind, metadata, spec, status before alphabetical extras", () => {
@@ -14,11 +26,14 @@ describe("serialize — key order (FR-2.1 / FR-2.2)", () => {
       kind: "Pod",
       aaExtra: "a"
     }
+
     const out = serialize({ value: resource })
+
     const topKeys = out
       .split("\n")
       .filter((l) => /^[A-Za-z]/.test(l))
       .map((l) => l.split(":")[0])
+
     expect(topKeys).toEqual([
       "apiVersion",
       "kind",
@@ -43,12 +58,15 @@ describe("serialize — key order (FR-2.1 / FR-2.2)", () => {
         aaExtra: "a"
       }
     }
+
     const out = serialize({ value: resource })
     const metaBlock = out.split("metadata:\n")[1] ?? ""
+
     const metaKeys = metaBlock
       .split("\n")
       .filter((l) => /^ {2}[A-Za-z]/.test(l))
       .map((l) => l.trim().split(":")[0])
+
     expect(metaKeys).toEqual(["name", "namespace", "labels", "annotations", "aaExtra", "zzExtra"])
   })
 
@@ -66,6 +84,7 @@ describe("serialize — key order (FR-2.1 / FR-2.2)", () => {
         }
       }
     }
+
     const out = serialize({ value: resource })
     const idxAnn = out.indexOf("annotations:")
     const idxLab = out.indexOf("labels:")
@@ -80,7 +99,7 @@ describe("serialize — list order (FR-2.3)", () => {
     fc.assert(
       fc.property(fc.array(fc.string({ minLength: 1, maxLength: 5 }), { minLength: 1 }), (xs) => {
         const out = serialize({ value: { list: xs } })
-        const parsed = YAML.parse(out) as { list: string[] }
+        const parsed = _parse<{ list: string[] }>(out)
         expect(parsed.list).toEqual(xs)
       })
     )
@@ -88,6 +107,7 @@ describe("serialize — list order (FR-2.3)", () => {
 
   it("preserves container args (the load-bearing case)", () => {
     const args = ["-zap-time-encoding=iso8601", "-zap-stacktrace-level=error", "-leader-elect"]
+
     const out = serialize({
       value: {
         apiVersion: "apps/v1",
@@ -96,9 +116,9 @@ describe("serialize — list order (FR-2.3)", () => {
         spec: { template: { spec: { containers: [{ name: "c", args }] } } }
       }
     })
-    const parsed = YAML.parse(out) as {
-      spec: { template: { spec: { containers: { args: string[] }[] } } }
-    }
+
+    const parsed = _parse<{ spec: { template: { spec: { containers: { args: string[] }[] } } } }>(out)
+
     expect(parsed.spec.template.spec.containers[0]?.args).toEqual(args)
   })
 })
@@ -173,10 +193,13 @@ describe("serialize — YAML 1.1 reader safety (kubectl/go-yaml parity)", () => 
         }
       }
     }
+
     const out = serialize({ value })
-    const parsed = YAML.parse(out, { version: "1.1" }) as {
-      spec: { template: { spec: { containers: { args: unknown[] }[] } } }
-    }
+
+    const parsed = _parse<{ spec: { template: { spec: { containers: { args: string[] }[] } } } }>(out, {
+      version: "1.1"
+    })
+
     const args = parsed.spec.template.spec.containers[0]?.args
     expect(args).toEqual([
       "--save",
@@ -185,14 +208,15 @@ describe("serialize — YAML 1.1 reader safety (kubectl/go-yaml parity)", () => 
       "no",
       "--requirepass $(REDIS_PASSWORD)"
     ])
-    for (const a of args ?? []) expect(typeof a).toBe("string")
+
+    expect(args?.every(_isString)).toBe(true)
   })
 
   it("YAML 1.1 bool-coercible strings remain strings (Norway problem property)", () => {
     fc.assert(
       fc.property(fc.constantFrom(...norway), (s) => {
         const out = serialize({ value: { v: s, list: [s] } })
-        const back = YAML.parse(out, { version: "1.1" }) as { v: unknown; list: unknown[] }
+        const back = _parse<{ v: string; list: string[] }>(out, { version: "1.1" })
         expect(back.v).toBe(s)
         expect(back.list[0]).toBe(s)
       })
@@ -210,19 +234,20 @@ describe("serialize — null stripping (helm parity)", () => {
         annotations: null
       }
     })
-    const back = YAML.parse(out) as Record<string, unknown>
+
+    const back = _parse<{ annotations?: string }>(out)
     expect("annotations" in back).toBe(false)
   })
 
   it("preserves explicit null inside arrays (positional semantics)", () => {
     const out = serialize({ value: { list: [1, null, 3] } })
-    const back = YAML.parse(out) as { list: unknown[] }
+    const back = _parse<{ list: ReadonlyArray<number | null> }>(out)
     expect(back.list).toEqual([1, null, 3])
   })
 
   it("recursively strips nulls from nested objects", () => {
     const out = serialize({ value: { a: { b: null, c: 1 }, d: null } })
-    const back = YAML.parse(out) as { a: { c: number }; d?: unknown }
+    const back = _parse<{ a: { c: number }; d?: number }>(out)
     expect(back.a).toEqual({ c: 1 })
     expect("d" in back).toBe(false)
   })
@@ -244,6 +269,7 @@ describe("serialize — line endings (FR-2.6)", () => {
         metadata: { name: "n", labels: { a: "1" } }
       }
     })
+
     for (const line of out.split("\n")) {
       expect(line).toBe(line.trimEnd())
     }
@@ -267,6 +293,7 @@ describe("filenameFor (FR-2.5)", () => {
 })
 
 const _wsString = fc.string({ unit: fc.constantFrom("a", "b", " ", "\n", "\t", ":", "-"), maxLength: 12 })
+
 const _jsonLike: fc.Arbitrary<unknown> = fc.letrec((tie) => ({
   leaf: fc.oneof(_wsString, fc.integer(), fc.boolean()),
   node: fc.oneof(
@@ -291,5 +318,13 @@ describe("serialize — round trip", () => {
   it("keeps a value ending in two newlines intact", () => {
     const out = serialize({ value: { data: "x\n\n" } })
     expect(YAML.parse(out)).toEqual({ data: "x\n\n" })
+  })
+})
+
+describe("serialize — non-finite numbers", () => {
+  it("emits NaN and Infinity as YAML specials", () => {
+    expect(serialize({ value: { a: Number.NaN, b: Number.POSITIVE_INFINITY, c: Number.NEGATIVE_INFINITY } })).toBe(
+      "a: .nan\nb: .inf\nc: -.inf\n"
+    )
   })
 })

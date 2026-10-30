@@ -31,6 +31,7 @@ const _setupFixture: Effect.Effect<Fixture, never, FileSystem | Path> = Effect.g
   const digestSuffix = digest.replace(/^sha256:/, "").slice(0, 12)
   const cachedTgz = path.join(cacheDir, `${chart}-${version}-${digestSuffix}.tgz`)
   yield* fs.writeFile(cachedTgz, tarball).pipe(Effect.orDie)
+
   return { cacheDir, chart, version, tarball, digest, cachedTgz }
 })
 
@@ -80,7 +81,9 @@ describe("Helm.release digest verification", () => {
         Effect.scoped,
         Effect.exit
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const causeJson = Cause.pretty(exit.cause)
         expect(causeJson).toContain("HelmDigestMismatch")
@@ -95,6 +98,7 @@ describe("Helm.release digest verification", () => {
       expected: "sha256:aaa",
       actual: "sha256:bbb"
     })
+
     expect(err._tag).toBe("HelmDigestMismatch")
     expect(err.message).toContain("expected sha256:aaa")
     expect(err.message).toContain("got sha256:bbb")

@@ -42,12 +42,14 @@ const _spawner = (opts: { readonly files: ReadonlyArray<string>; readonly pulls:
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
+
       return makeSpawner((command: Command) =>
         Effect.gen(function*() {
           const args = isStandardCommand(command) ? command.args.map(String) : []
           opts.pulls.count += 1
           const dest = args[args.indexOf("--destination") + 1] ?? ""
           yield* Effect.forEach(opts.files, (f) => fs.writeFile(path.join(dest, f), _content))
+
           return makeHandle(
             {
               pid: ProcessId(1),
@@ -61,7 +63,7 @@ const _spawner = (opts: { readonly files: ReadonlyArray<string>; readonly pulls:
               getInputFd: () => Sink.drain,
               getOutputFd: () => Stream.empty,
               unref: Effect.succeed(Effect.void)
-            } as Parameters<typeof makeHandle>[0]
+            }
           )
         })
       )
@@ -76,15 +78,19 @@ const _run = (opts: { readonly files: ReadonlyArray<string>; readonly digest?: s
     const cacheDir = path.join(root, "cache")
     const pulls = { count: 0 }
     const input = { repo: "https://r", chart: "web", version: "1.0.0", cacheDir, digest: opts.digest }
+
     if (opts.seed === true) {
       yield* fs.makeDirectory(cacheDir, { recursive: true })
       yield* fs.writeFile(path.join(cacheDir, cacheFileName(input)), _content)
     }
+
     const exit = yield* Effect.exit(
       ensureChartTarball(input).pipe(Effect.provide(_spawner({ files: opts.files, pulls })))
     )
+
     const slot = path.join(cacheDir, cacheFileName(input))
     const entries = yield* fs.readDirectory(cacheDir)
+
     return { exit, pulls: pulls.count, slotExists: yield* fs.exists(slot), entries, slot }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
 
@@ -142,11 +148,13 @@ const _concurrent = (opts: { readonly files: ReadonlyArray<string>; readonly rou
     const cacheDir = path.join(yield* fs.makeTempDirectoryScoped(), "cache")
     const pulls = { count: 0 }
     const input = { repo: "https://r", chart: "web", version: "1.0.0", cacheDir }
+
     const exits = yield* Effect.forEach(
       Array.from({ length: opts.rounds }, () => ensureChartTarball(input)),
       Effect.exit,
       { concurrency: "unbounded" }
     ).pipe(Effect.provide(_spawner({ files: opts.files, pulls })))
+
     return { exits, pulls: pulls.count }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
 

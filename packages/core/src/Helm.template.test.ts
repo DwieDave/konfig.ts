@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { ConfigProvider, Effect, Layer, Redacted, Sink, Stream } from "effect"
+import { ConfigProvider, Effect, flow, Layer, Option, Redacted, Schema, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { Command, StandardCommand } from "effect/process/ChildProcess"
@@ -14,13 +14,16 @@ import {
   ProcessId
 } from "effect/process/ChildProcessSpawner"
 import * as crypto from "node:crypto"
+import { unsafeCoerce } from "./_cast"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
 
 const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
+const _isString = Schema.is(Schema.String)
+
 const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
-  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
+  command.args.map((arg) => (_isString(arg) ? arg : Redacted.value(arg)))
 
 const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
 
@@ -38,7 +41,7 @@ const _handle = (stdout: string, exitCode = 0): ChildProcessHandle =>
       getInputFd: () => Sink.drain,
       getOutputFd: () => Stream.empty,
       unref: Effect.succeed(Effect.void)
-    } as Parameters<typeof makeHandle>[0]
+    }
   )
 
 /**
@@ -56,33 +59,44 @@ const _spawnerFor = (input: { readonly tarball: Buffer; readonly templateStdout:
   Layer.succeed(
     ChildProcessSpawner,
     makeSpawner(
-      ((command: Command) =>
-        Effect.gen(function*() {
-          if (!isStandardCommand(command)) return _handle("")
-          const args = _plainArgs(command)
-          if (args[0] === "pull") {
-            const fs = yield* FileSystem
-            const path = yield* Path
-            const destIdx = args.indexOf("--destination")
-            const dest = args[destIdx + 1] ?? ""
-            const chart = args[3] ?? "chart"
-            const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
-            yield* fs.writeFile(path.join(dest, `${chart}-${version}.tgz`), input.tarball)
+      unsafeCoerce<Parameters<typeof makeSpawner>[0]>(
+        (command: Command) =>
+          Effect.gen(function*() {
+            if (!isStandardCommand(command)) return _handle("")
+            const args = _plainArgs(command)
+
+            if (args[0] === "pull") {
+              const fs = yield* FileSystem
+              const path = yield* Path
+              const destIdx = args.indexOf("--destination")
+              const dest = args[destIdx + 1] ?? ""
+              const chart = args[3] ?? "chart"
+              const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
+              yield* fs.writeFile(path.join(dest, `${chart}-${version}.tgz`), input.tarball)
+
+              return _handle("")
+            }
+
+            if (args[0] === "template") {
+              return _handle(input.templateStdout)
+            }
+
             return _handle("")
-          }
-          if (args[0] === "template") {
-            return _handle(input.templateStdout)
-          }
-          return _handle("")
-        })) as unknown as Parameters<typeof makeSpawner>[0]
+          }),
+        "fake spawner needs FileSystem and Path, supplied by NodeServices.layer at each call site"
+      )
     )
   )
 
-interface _DocShape {
-  readonly kind?: string
-  readonly metadata?: { readonly namespace?: string }
-}
-const _docOf = (value: unknown): _DocShape => value as _DocShape
+const _TemplatedDocSchema = Schema.Struct({
+  kind: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Struct({ namespace: Schema.optional(Schema.String) }))
+})
+
+const _docOf = flow(
+  Schema.decodeUnknownOption(_TemplatedDocSchema),
+  Option.getOrElse((): typeof _TemplatedDocSchema.Type => ({}))
+)
 
 const TEMPLATE_STDOUT = `---
 apiVersion: apps/v1
@@ -138,6 +152,7 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
 
       const byKind = (kind: string) => {
         const doc = docs.find((d) => _docOf(d.value).kind === kind)
+
         return doc === undefined ? undefined : { ..._docOf(doc.value), origin: doc.origin }
       }
 
@@ -174,13 +189,16 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
       yield* fs.writeFile(cachedTgz, tarball)
 
       let pullInvoked = false
+
       const spawnerLayer = Layer.succeed(
         ChildProcessSpawner,
         makeSpawner((command: Command) => {
           if (isStandardCommand(command) && command.args[0] === "pull") pullInvoked = true
+
           if (isStandardCommand(command) && command.args[0] === "template") {
             return Effect.succeed(_handle(TEMPLATE_STDOUT))
           }
+
           return Effect.succeed(_handle(""))
         })
       )
@@ -192,6 +210,7 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
         digest,
         values: {}
       })
+
       const configProvider = ConfigProvider.fromUnknown({ KONFIG_HELM_CACHE: cacheDir })
 
       const docs = yield* m.render(RenderContext.make("test")).pipe(
@@ -234,28 +253,36 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
         const spawnerLayer = Layer.succeed(
           ChildProcessSpawner,
           makeSpawner(
-            ((command: Command) =>
-              Effect.gen(function*() {
-                if (!isStandardCommand(command)) return _handle("")
-                const args = _plainArgs(command)
-                if (args[0] === "pull") {
-                  const fsInner = yield* FileSystem
-                  const pathInner = yield* Path
-                  const destIdx = args.indexOf("--destination")
-                  const dest = args[destIdx + 1] ?? ""
-                  const chart = args[3] ?? "chart"
-                  const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
-                  const tarball = version === "1.0.0" ? tarballA : tarballB
-                  pullDestinations.push(dest)
-                  if (version === "1.0.0") yield* Effect.sleep("30 millis")
-                  yield* fsInner.writeFile(pathInner.join(dest, `${chart}-${version}.tgz`), tarball)
+            unsafeCoerce<Parameters<typeof makeSpawner>[0]>(
+              (command: Command) =>
+                Effect.gen(function*() {
+                  if (!isStandardCommand(command)) return _handle("")
+                  const args = _plainArgs(command)
+
+                  if (args[0] === "pull") {
+                    const fsInner = yield* FileSystem
+                    const pathInner = yield* Path
+                    const destIdx = args.indexOf("--destination")
+                    const dest = args[destIdx + 1] ?? ""
+                    const chart = args[3] ?? "chart"
+                    const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
+                    const tarball = version === "1.0.0" ? tarballA : tarballB
+                    pullDestinations.push(dest)
+
+                    if (version === "1.0.0") yield* Effect.sleep("30 millis")
+                    yield* fsInner.writeFile(pathInner.join(dest, `${chart}-${version}.tgz`), tarball)
+
+                    return _handle("")
+                  }
+
+                  if (args[0] === "template") {
+                    return _handle(TEMPLATE_STDOUT)
+                  }
+
                   return _handle("")
-                }
-                if (args[0] === "template") {
-                  return _handle(TEMPLATE_STDOUT)
-                }
-                return _handle("")
-              })) as unknown as Parameters<typeof makeSpawner>[0]
+                }),
+              "fake spawner needs FileSystem and Path, supplied by NodeServices.layer at each call site"
+            )
           )
         )
 
@@ -268,6 +295,7 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
           digest: digestA,
           values: {}
         })
+
         const releaseB = Helm.release({
           repo: "https://example.com/charts",
           chart: "mychart",

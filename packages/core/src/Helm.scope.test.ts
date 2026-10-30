@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { ConfigProvider, Effect, Layer, Sink, Stream } from "effect"
+import { ConfigProvider, Effect, Layer, Schema, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { Command } from "effect/process/ChildProcess"
@@ -18,6 +18,8 @@ import { isRecord } from "./guards"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
 
+const _isString = Schema.is(Schema.String)
+
 const _handle = (stdout: string): ChildProcessHandle =>
   makeHandle(
     {
@@ -32,7 +34,7 @@ const _handle = (stdout: string): ChildProcessHandle =>
       getInputFd: () => Sink.drain,
       getOutputFd: () => Stream.empty,
       unref: Effect.succeed(Effect.void)
-    } as Parameters<typeof makeHandle>[0]
+    }
   )
 
 const _doc = (kind: string, extra = ""): string => `apiVersion: v1\nkind: ${kind}\nmetadata:\n  name: x\n${extra}`
@@ -44,6 +46,7 @@ interface _RenderInput {
   readonly stdout: string
   readonly clusterScopedKinds?: ReadonlyArray<string>
 }
+
 const _namespaces = (input: _RenderInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -52,6 +55,7 @@ const _namespaces = (input: _RenderInput) =>
     const tarball = Buffer.from("scope-tarball")
     const digest = `sha256:${crypto.createHash("sha256").update(tarball).digest("hex")}`
     yield* fs.writeFile(path.join(cacheDir, `c-1.0.0-${digest.slice(7, 19)}.tgz`), tarball)
+
     const spawner = Layer.succeed(
       ChildProcessSpawner,
       makeSpawner((command: Command) =>
@@ -60,6 +64,7 @@ const _namespaces = (input: _RenderInput) =>
         )
       )
     )
+
     const docs = yield* Helm.release({
       repo: "https://example.com",
       chart: "c",
@@ -73,9 +78,11 @@ const _namespaces = (input: _RenderInput) =>
       Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ KONFIG_HELM_CACHE: cacheDir })),
       Effect.scoped
     )
+
     return Object.fromEntries(docs.flatMap((d) => {
-      if (!isRecord(d.value) || typeof d.value["kind"] !== "string") return []
+      if (!isRecord(d.value) || !_isString(d.value["kind"])) return []
       const meta = isRecord(d.value["metadata"]) ? d.value["metadata"] : {}
+
       return [[d.value["kind"], meta["namespace"]]]
     }))
   }).pipe(Effect.provide(NodeServices.layer))
@@ -91,7 +98,9 @@ describe("Helm.release cluster-scoped kinds", () => {
         "CertificateSigningRequest",
         "ClusterTrustBundle"
       ]
+
       const out = yield* _namespaces({ stdout: kinds.map((k) => _doc(k)).join("---\n") })
+
       for (const k of kinds) expect(out[k]).toBeUndefined()
     }))
 
@@ -100,6 +109,7 @@ describe("Helm.release cluster-scoped kinds", () => {
       const out = yield* _namespaces({
         stdout: [_crd("Widget", "Cluster"), _doc("Widget"), _crd("Gadget", "Namespaced"), _doc("Gadget")].join("---\n")
       })
+
       expect(out["Widget"]).toBeUndefined()
       expect(out["Gadget"]).toBe("ns")
     }))
@@ -109,5 +119,17 @@ describe("Helm.release cluster-scoped kinds", () => {
       const out = yield* _namespaces({ stdout: [_doc("Foo"), _doc("Bar")].join("---\n"), clusterScopedKinds: ["Foo"] })
       expect(out["Foo"]).toBeUndefined()
       expect(out["Bar"]).toBe("ns")
+    }))
+
+  it.effect("stamps the namespace when metadata is null", () =>
+    Effect.gen(function*() {
+      const out = yield* _namespaces({ stdout: "apiVersion: v1\nkind: Thing\nmetadata:\n" })
+      expect(out["Thing"]).toBe("ns")
+    }))
+
+  it.effect("stamps the namespace when it is an empty string", () =>
+    Effect.gen(function*() {
+      const out = yield* _namespaces({ stdout: _doc("Thing", "  namespace: ''\n") })
+      expect(out["Thing"]).toBe("ns")
     }))
 })
