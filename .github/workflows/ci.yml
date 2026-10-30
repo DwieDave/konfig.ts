@@ -33,11 +33,29 @@ jobs:
       - name: Workspace tests with coverage thresholds
         run: bun run test:coverage
 
-      - name: Lint
+      - name: Lint (warnings fail)
         run: bun run lint
+
+      - name: Formatting (dprint)
+        run: bun run fmt:check
 
       - name: Dead code (knip)
         run: bun run knip
+
+  docker-e2e:
+    name: docker build e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Build every fixture's generated Dockerfile with real docker
+        working-directory: packages/docker
+        env:
+          KONFIG_E2E_DOCKER: "1"
+        run: bunx vitest run src/e2e/dockerBuild.e2e.test.ts --testTimeout=600000
 
   peer-floor:
     name: peer floor (effect 4.1.0)

@@ -236,10 +236,9 @@ export const _decodeConfigYaml = <S extends Schema.Codec<unknown, unknown>>(inpu
 }): Effect.Effect<S["Type"], WorkspaceConfigInvalid> => {
   const onError = (cause: unknown) => new WorkspaceConfigInvalid({ path: input.path, cause })
 
-  return parseYamlWith({ text: input.text, schema: Schema.NullOr(input.schema), onError }).pipe(
-    Effect.flatMap((doc) =>
-      doc === null ? Schema.decodeUnknownEffect(input.schema)({}).pipe(Effect.mapError(onError)) : Effect.succeed(doc)
-    )
+  return parseYamlWith({ text: input.text, schema: Schema.Unknown, onError }).pipe(
+    Effect.map((doc) => doc ?? {}),
+    Effect.flatMap((doc) => Schema.decodeEffect(input.schema)(doc).pipe(Effect.mapError(onError)))
   )
 }
 

@@ -1,5 +1,6 @@
 import { applicationCRFilename, type AppOfAppsResult, serializeApplicationCR } from "@konfig.ts/argocd"
 import {
+  type AnyRenderError,
   existsOrFalse,
   flattenDocs,
   KONFIG_HELM_CACHE_ENV,
@@ -133,7 +134,10 @@ const _importDefault = (entry: string): Effect.Effect<unknown, EnvLoadError> =>
 const _NOT_AN_EFFECT =
   "default export is not an Effect — env entries must default-export an AppOfApps or Bundle program Effect"
 
-const _isEnvProgram = (program: unknown): program is Effect.Effect<unknown, unknown, never> => Effect.isEffect(program)
+// SAFETY: env entries are documented to default-export an AppOfApps/Bundle program, whose error channel is
+// AnyRenderError; the success value is decoded with decodeEnvResult below, so only E is taken on trust.
+const _isEnvProgram = (program: unknown): program is Effect.Effect<unknown, AnyRenderError, never> =>
+  Effect.isEffect(program)
 
 const _asEnvProgram = (input: { readonly entry: string; readonly program: unknown }) =>
   _isEnvProgram(input.program)

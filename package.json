@@ -27,12 +27,13 @@
     "build": "bun scripts/cli.ts build",
     "check": "bun scripts/cli.ts check && bun run --cwd examples check && bun run --cwd examples/full-stack check && bun run --cwd apps/website check && tsc -p scripts/tsconfig.json --noEmit",
     "test": "bun scripts/cli.ts test",
-    "lint": "oxlint --report-unused-disable-directives",
+    "lint": "oxlint --report-unused-disable-directives --deny-warnings",
     "lint:apply": "oxlint --fix",
     "knip": "knip",
     "prepare": "effect-tsgo patch --no-typescript --oxlint",
     "test:coverage": "bun scripts/cli.ts coverage && bun scripts/cli.ts badges",
-    "repo": "bun scripts/cli.ts"
+    "repo": "bun scripts/cli.ts",
+    "fmt:check": "bunx dprint check"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

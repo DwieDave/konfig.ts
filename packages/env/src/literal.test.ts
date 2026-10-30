@@ -36,7 +36,7 @@ describe("Literal", () => {
       const port = Literal.define({
         envName: "PORT",
         value: 8080,
-        schema: Schema.NumberFromString
+        schema: Schema.FiniteFromString
       })
 
       const v = yield* port
@@ -51,7 +51,7 @@ describe("Literal", () => {
     Effect.promise(() =>
       fc.assert(
         fc.asyncProperty(fc.stringMatching(/^[A-Z][A-Z0-9_]{0,10}$/), fc.integer(), async (envName, n) => {
-          const entry = Literal.define({ envName, value: 0, schema: Schema.NumberFromString })
+          const entry = Literal.define({ envName, value: 0, schema: Schema.FiniteFromString })
 
           const read = await Effect.runPromise(
             entry.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { [envName]: String(n) } }))))

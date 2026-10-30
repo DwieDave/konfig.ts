@@ -27,4 +27,3 @@ export const SealedSecretSchema = Schema.Struct({
 })
 
 export type SealedSecretScope = "strict" | "namespace-wide" | "cluster-wide"
-
