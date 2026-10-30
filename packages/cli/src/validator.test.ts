@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
-import { fakeHandle, type FakeProc, plainArgs } from "@konfig.ts/core/testing"
+import { type FakeProc, plainArgs, stubSpawner } from "@konfig.ts/core/testing"
 import { Cause, Effect, Exit, Layer, Option } from "effect"
 import * as PlatformError from "effect/PlatformError"
-import { type Command, isStandardCommand } from "effect/process/ChildProcess"
+import type { Command } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
 import {
@@ -18,15 +18,7 @@ interface _CapturedArgs {
   args: ReadonlyArray<string> | undefined
 }
 
-const _spawnerFor = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(
-    ChildProcessSpawner,
-    makeSpawner((_command: Command) =>
-      Effect.succeed(
-        fakeHandle(proc)
-      )
-    )
-  )
+const _spawnerFor = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> => stubSpawner({ respond: () => proc })
 
 // Captures the args each spawned `Command` carried, so tests can assert on
 // what `runKubeconform` actually forwards (e.g. `-kubernetes-version`).
@@ -34,16 +26,10 @@ const _spawnerCapturing = (
   proc: FakeProc,
   captured: _CapturedArgs
 ): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(
-    ChildProcessSpawner,
-    makeSpawner((command: Command) => {
-      captured.args = isStandardCommand(command) ? plainArgs(command) : []
-
-      return Effect.succeed(
-        fakeHandle(proc)
-      )
-    })
-  )
+  stubSpawner({
+    respond: () => proc,
+    sink: (command) => Effect.sync(() => void (captured.args = plainArgs(command)))
+  })
 
 const _spawnFails = (): Layer.Layer<ChildProcessSpawner> =>
   Layer.succeed(

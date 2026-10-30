@@ -3,7 +3,13 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { ChartRegistryEntryDecodeError, ChartRegistryError, loadChartRegistryEffect } from "./chartRegistry"
+import fc from "fast-check"
+import {
+  _isRegistryFile,
+  ChartRegistryEntryDecodeError,
+  ChartRegistryError,
+  loadChartRegistryEffect
+} from "./chartRegistry"
 
 const _writeChartFile = (root: string, name: string, body: string) =>
   Effect.gen(function*() {
@@ -200,4 +206,36 @@ export const chart = {
       const entries = yield* loadChartRegistryEffect(root)
       expect(entries.map((e) => e.id).sort()).toEqual(["a", "b"])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("registry file filter", () => {
+  it.effect("ignores test, spec and declaration files", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-chartreg-filter-" })
+
+      yield* _writeChartFile(
+        root,
+        "pg.ts",
+        `export const chart = { _konfigHelmRelease: true, repo: "https://charts.example.com/r", chart: "pg", version: "1.0.0" }\n`
+      )
+      yield* _writeChartFile(root, "pg.test.ts", `import { describe } from "vitest"\ndescribe("x", () => {})\n`)
+      yield* _writeChartFile(root, "types.d.ts", "export {}\n")
+
+      const entries = yield* loadChartRegistryEffect(root)
+      expect(entries.map((e) => e.id)).toEqual(["pg"])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  const base = fc.stringMatching(/^[a-z][a-z0-9-]{0,8}$/)
+
+  it("accepts plain .ts basenames", () => fc.assert(fc.property(base, (name) => _isRegistryFile(`${name}.ts`))))
+
+  it("rejects reserved suffixes and underscore prefixes", () =>
+    fc.assert(
+      fc.property(
+        base,
+        fc.constantFrom(".d.ts", ".test.ts", ".spec.ts", ".js", ".json"),
+        (name, suffix) => !_isRegistryFile(`${name}${suffix}`) && !_isRegistryFile(`_${name}.ts`)
+      )
+    ))
 })

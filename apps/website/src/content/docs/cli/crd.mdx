@@ -36,7 +36,7 @@ Both subcommands need four locations: the chart registry, the tarball cache, the
 | Output directory | `KONFIG_CRD_OUT_DIR` | `crd.outDir` | `.generated/crd` |
 | Minimum Helm version | `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` |
 
-The chart registry is a directory of TypeScript files, one per chart. Every `.ts` file whose name does not start with `_` is imported and scanned for an export that carries the marker `_konfigHelmRelease: true`. That object becomes one registry entry with a repository URL, chart name, version, an optional id (defaulting to the file name without `.ts`), and an optional digest. Chart names, versions, and repository URLs (`http(s)` or `oci`) are checked against strict patterns so shell metacharacters never reach `helm`.
+The chart registry is a directory of TypeScript files, one per chart. Every `.ts` file whose name does not start with `_` and does not end in `.d.ts`, `.test.ts` or `.spec.ts` is imported and scanned for an export that carries the marker `_konfigHelmRelease: true`. That object becomes one registry entry with a repository URL, chart name, version, an optional id (defaulting to the file name without `.ts`), and an optional digest. Chart names, versions, and repository URLs (`http(s)` or `oci`) are checked against strict patterns so shell metacharacters never reach `helm`.
 
 ```ts title="infra/k8s-konfig/charts/postgres.ts"
 export const chart = {
@@ -51,7 +51,7 @@ export const chart = {
 
 ## Behaviour
 
-Both subcommands start by running `helm version --short`. When the version read is older than the minimum (or unparseable), the command fails with `HelmVersionTooLow`. A missing or failing `helm` binary surfaces as the raw `ProcessError`.
+`extract` validates its flags first and, when neither is given, fails with `MissingCrdFlags` before spawning anything. Both subcommands then run `helm version --short`. When the version read is older than the minimum (or unparseable), the command fails with `HelmVersionTooLow`. A missing or failing `helm` binary surfaces as the raw `ProcessError`.
 
 For each release, the command pulls the chart tarball into the cache (verifying the digest when one is recorded) and runs `helm template <chart> <tgz> --include-crds --no-hooks` on that tarball. `--include-crds` emits the chart's `crds/` content, so nothing is pulled or unpacked separately. The CRDs are parsed and de-duplicated by CRD name. The pulled tarball is located by listing the pull directory, so a chart whose file name differs from `<chart>-<version>.tgz` (for example `v1.2.3` versus `1.2.3`) works.
 

@@ -4,7 +4,7 @@ import { KonfigConfig } from "@konfig.ts/core"
 import { Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { readJsonFile } from "./fsUtil"
+import { readJsonFile, writeFileEnsuringDir } from "./fsUtil"
 
 describe("readJsonFile", () => {
   const schema = Schema.Struct({ a: Schema.Finite })
@@ -49,5 +49,20 @@ describe("readJsonFile", () => {
 
       expect(cause).toContain("extra")
       expect(cause).toMatch(/unexpected|excess/i)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("writeFileEnsuringDir", () => {
+  it.effect("creates missing parent dirs and writes content with the given mode", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-" })
+      const target = path.join(root, "a", "b", "c.txt")
+
+      yield* writeFileEnsuringDir({ path: target, content: "hello", mode: 0o600 })
+
+      expect(yield* fs.readFileString(target)).toBe("hello")
+      expect((yield* fs.stat(target)).mode & 0o777).toBe(0o600)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

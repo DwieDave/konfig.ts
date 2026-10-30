@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Helm, sha256Hex } from "@konfig.ts/core"
-import { fakeHandle, type FakeProc, plainArgs } from "@konfig.ts/core/testing"
+import { fakeHandle, type FakeProc, plainArgs, stubSpawner } from "@konfig.ts/core/testing"
 import { ConfigProvider, Effect, Exit, Layer, Predicate } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -350,4 +350,26 @@ describe("helmFetchEffect", () => {
         expect(Predicate.isTagged(err, "HelmVersionTooLow")).toBe(true)
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("helmFetchEffect flag validation precedes I/O", () => {
+  it.effect("MissingAllFlag fails before any process is spawned", () =>
+    Effect.gen(function*() {
+      const spawned: Array<string> = []
+
+      const spawner = stubSpawner({
+        respond: () => ({ stdout: "v3.99.0\n", exitCode: 0 }),
+        sink: (command) => Effect.sync(() => void spawned.push(command.command))
+      })
+
+      const err = yield* helmFetchEffect({ all: false }).pipe(
+        Effect.flip,
+        Effect.provide(
+          Layer.merge(spawner, _configFor({ chartsDir: "/nonexistent/charts", cacheDir: "/nonexistent/c" }))
+        )
+      )
+
+      expect(err).toBeInstanceOf(MissingAllFlag)
+      expect(spawned).toEqual([])
+    }).pipe(Effect.provide(NodeServices.layer)))
 })

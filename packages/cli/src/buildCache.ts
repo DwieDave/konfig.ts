@@ -14,6 +14,7 @@ import type { PlatformError } from "effect/PlatformError"
 import type { EnvTarget } from "./buildEnv"
 import { resolveCliPaths } from "./cliConfig"
 import { envEntryPath } from "./envEntry"
+import { writeFileEnsuringDir } from "./fsUtil"
 import { matchesGlob } from "./globMatch"
 import { walkFiles } from "./walkFiles"
 
@@ -60,13 +61,10 @@ const _envSignature = (env: NodeJS.ProcessEnv): string =>
     .sort()
     .join("\n")
 
-const _hashEntry = (input: { readonly entry: string }): Effect.Effect<string, PlatformError, FileSystem> =>
-  Effect.gen(function*() {
-    if (!(yield* existsOrFalse(input.entry))) return ""
-    const content = yield* readOrEmpty(input.entry)
+export const _hashEntry = (input: { readonly entry: string }): Effect.Effect<string, PlatformError, FileSystem> =>
+  readOrEmpty(input.entry).pipe(Effect.map((content) => _sha256([`entry:${input.entry}\n`, content, "\n"])))
 
-    return _sha256([`entry:${input.entry}\n`, content, "\n"])
-  })
+const _cacheError = (path: string) => (cause: unknown) => new BuildCacheError({ path, cause })
 
 const _toPosix = (input: { readonly value: string; readonly sep: string }): string =>
   input.value.split(input.sep).join("/")
@@ -104,7 +102,7 @@ const _collectFiles = (input: CollectFilesInput) =>
   walkFiles({
     dir: input.dir,
     skipDir: ({ full, name }) => _ALWAYS_SKIPPED_DIRS.has(name) || input.skipDirs.has(full)
-  }).pipe(Effect.mapError((cause) => new BuildCacheError({ path: input.dir, cause })))
+  }).pipe(Effect.mapError(_cacheError(input.dir)))
 
 const _outputDirs = (cfg: ResolvedKonfigConfig) =>
   Effect.gen(function*() {
@@ -174,7 +172,7 @@ const _lockfilesIn = (dir: string) =>
 
     return yield* Effect.filter(
       _LOCKFILES.map((name) => path.join(dir, name)),
-      (file) => existsOrFalse(file).pipe(Effect.mapError((cause) => new BuildCacheError({ path: file, cause })))
+      (file) => existsOrFalse(file).pipe(Effect.mapError(_cacheError(file)))
     )
   })
 
@@ -231,7 +229,7 @@ export const computeOnDiskOutputHash = (
 
     const files = yield* Effect.forEach(paths, (path) =>
       readOrEmpty(path).pipe(
-        Effect.mapError((cause) => new BuildCacheError({ path, cause })),
+        Effect.mapError(_cacheError(path)),
         Effect.map((content) => ({ path, content }))
       ))
 
@@ -253,10 +251,7 @@ export const readCacheEntry = (input: EnvTarget) =>
     const path = yield* Path
     const cacheFile = _cacheFilePath({ ...input, path })
 
-    const toError = (cause: PlatformError) => new BuildCacheError({ path: cacheFile, cause })
-
-    if (!(yield* existsOrFalse(cacheFile).pipe(Effect.mapError(toError)))) return undefined
-    const text = yield* readOrEmpty(cacheFile).pipe(Effect.mapError(toError))
+    const text = yield* readOrEmpty(cacheFile).pipe(Effect.mapError(_cacheError(cacheFile)))
 
     if (text === "") return undefined
 
@@ -270,14 +265,10 @@ const _formatCacheEntry = (entry: BuildCacheEntry): string => `${JSON.stringify(
 
 export const writeCacheEntry = (input: EnvTarget & { readonly entry: BuildCacheEntry }) =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
     const path = yield* Path
     const cacheFile = _cacheFilePath({ ...input, path })
-    const dir = path.dirname(cacheFile)
-    yield* fs
-      .makeDirectory(dir, { recursive: true })
-      .pipe(Effect.mapError((cause) => new BuildCacheError({ path: dir, cause })))
-    yield* fs
-      .writeFileString(cacheFile, _formatCacheEntry(input.entry))
-      .pipe(Effect.mapError((cause) => new BuildCacheError({ path: cacheFile, cause })))
+
+    yield* writeFileEnsuringDir({ path: cacheFile, content: _formatCacheEntry(input.entry) }).pipe(
+      Effect.mapError(_cacheError(cacheFile))
+    )
   })

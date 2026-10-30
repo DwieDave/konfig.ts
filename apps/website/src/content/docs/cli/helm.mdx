@@ -31,7 +31,7 @@ konfig helm fetch --all
 | Tarball cache | `KONFIG_HELM_CACHE` | `helm.cacheDir` | `.konfig/helm-cache` |
 | Minimum Helm version | `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` |
 
-The command first runs `helm version --short` and fails with `HelmVersionTooLow` when the version it reads is older than the minimum or cannot be parsed. A missing or failing `helm` binary surfaces as the raw `ProcessError`.
+Without `--all` the command fails with `MissingAllFlag` before any I/O. Otherwise it runs `helm version --short` and fails with `HelmVersionTooLow` when the version it reads is older than the minimum or cannot be parsed. A missing or failing `helm` binary surfaces as the raw `ProcessError`.
 
 It then walks the registry and prints `Fetching <chart>@<version>...` for every entry. What happens next depends on whether the entry records a digest:
 

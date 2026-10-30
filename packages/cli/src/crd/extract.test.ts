@@ -660,3 +660,32 @@ describe("driftOf properties", () => {
     )
   })
 })
+
+describe("verifyCrdsEffect without check-then-read", () => {
+  it.effect("reports (missing) when exists is true but the committed read fails NotFound", () =>
+    Effect.gen(function*() {
+      const real = yield* FileSystem
+      const path = yield* Path
+      const committedDir = yield* real.makeTempDirectoryScoped({ prefix: "konfig-crd-race-" })
+      const cacheDir = yield* real.makeTempDirectoryScoped({ prefix: "konfig-crd-race-cache-" })
+      const committedFile = path.join(committedDir, `${validOpts.id}.ts`)
+
+      const absent = path.join(committedDir, "__absent__")
+
+      const racy = Layer.succeed(FileSystem, {
+        ...real,
+        exists: () => Effect.succeed(true),
+        readFileString: (target: string, encoding?: string) =>
+          real.readFileString(target === committedFile ? absent : target, encoding),
+        readDirectory: (target: string, options?: { readonly recursive?: boolean }) =>
+          real.readDirectory(target === committedDir ? absent : target, options)
+      })
+
+      const drifted = yield* verifyCrdsEffect({
+        releases: [{ ...validOpts, outDir: committedDir, cacheDir }],
+        committedDir
+      }).pipe(Effect.provide(Layer.merge(_helmSpawner(_validCrdYaml), racy)))
+
+      expect(drifted).toEqual([`${validOpts.id}.ts (missing)`])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})

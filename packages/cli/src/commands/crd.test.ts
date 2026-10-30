@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { fakeHandle } from "@konfig.ts/core/testing"
+import { fakeHandle, stubSpawner } from "@konfig.ts/core/testing"
 import { ConfigProvider, Effect, Exit, Layer, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -321,4 +321,24 @@ describe("crdExtractEffect failure encoding", () => {
         expect(text).toContain("ReleaseNotFound")
       }
     }).pipe(Effect.scoped, Effect.provide(_testLayer)))
+})
+
+describe("crdExtractEffect flag validation precedes I/O", () => {
+  it.effect("MissingCrdFlags fails before any process is spawned or the registry is read", () =>
+    Effect.gen(function*() {
+      const spawned: Array<string> = []
+
+      const spawner = stubSpawner({
+        respond: () => ({ stdout: "v3.16.0\n", exitCode: 0 }),
+        sink: (command) => Effect.sync(() => void spawned.push(command.command))
+      })
+
+      const failure = yield* _withCliPathsEnv(
+        { chartsDir: "/nonexistent/konfig-charts", outDir: "/nonexistent/out", cacheDir: "/nonexistent/cache" },
+        Effect.flip(crdExtractEffect({ release: Option.none(), all: false }))
+      ).pipe(Effect.provide(spawner))
+
+      expect(failure).toBeInstanceOf(MissingCrdFlags)
+      expect(spawned).toEqual([])
+    }).pipe(Effect.provide(NodeServices.layer)))
 })

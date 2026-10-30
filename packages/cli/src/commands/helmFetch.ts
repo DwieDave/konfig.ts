@@ -27,10 +27,8 @@ interface HelmFetchFlags {
 
 export const helmFetchEffect = (flags: HelmFetchFlags) =>
   Effect.gen(function*() {
-    const { cacheDir, chartsDir } = yield* loadHelmPaths
-
     if (!flags.all) return yield* new MissingAllFlag()
-
+    const { cacheDir, chartsDir } = yield* loadHelmPaths
     const registry = yield* loadChartRegistryEffect(chartsDir)
     yield* forEachRegistryEntry({
       registry,

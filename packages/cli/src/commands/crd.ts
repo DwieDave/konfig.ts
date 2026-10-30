@@ -1,4 +1,4 @@
-import { Console, Data, Effect, Option, Path } from "effect"
+import { Console, Data, Effect, Match, Option, Path } from "effect"
 import { Command, Flag } from "effect/cli"
 import { type ChartRegistryEntry, loadChartRegistryEffect } from "../chartRegistry"
 import { extractCrdsEffect, verifyCrdsEffect } from "../crd/extract"
@@ -94,17 +94,27 @@ const _extractAll = (
     yield* Console.log(`Done. Generated files in ${outDir}`)
   })
 
+type ExtractTarget = Data.TaggedEnum<{ Release: { readonly id: string }; All: {} }>
+
+const ExtractTarget = Data.taggedEnum<ExtractTarget>()
+
+const _decodeTarget = (flags: CrdExtractFlags): Effect.Effect<ExtractTarget, MissingCrdFlags> =>
+  Option.match(flags.release, {
+    onSome: (id) => Effect.succeed(ExtractTarget.Release({ id })),
+    onNone: () => flags.all ? Effect.succeed(ExtractTarget.All()) : Effect.fail(new MissingCrdFlags())
+  })
+
 export const crdExtractEffect = (flags: CrdExtractFlags) =>
   Effect.gen(function*() {
+    const target = yield* _decodeTarget(flags)
     const paths = yield* loadHelmPaths
     const registry = yield* loadChartRegistryEffect(paths.chartsDir)
-    const releaseId = Option.getOrUndefined(flags.release)
 
-    if (releaseId !== undefined) return yield* _extractRelease({ ...paths, releaseId, registry })
-
-    if (flags.all) return yield* _extractAll({ ...paths, registry })
-
-    return yield* new MissingCrdFlags()
+    return yield* Match.value(target).pipe(
+      Match.tag("Release", ({ id }) => _extractRelease({ ...paths, releaseId: id, registry })),
+      Match.tag("All", () => _extractAll({ ...paths, registry })),
+      Match.exhaustive
+    )
   })
 
 const crdExtractCommand = Command.make("extract", _crdExtractFlags, crdExtractEffect).pipe(

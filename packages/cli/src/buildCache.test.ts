@@ -1,13 +1,15 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import * as PlatformError from "effect/PlatformError"
 import fc from "fast-check"
 import { createHash } from "node:crypto"
 import { chmodSync } from "node:fs"
 import {
+  _hashEntry,
   type BuildCacheEntry,
   computeInputHash,
   computeOnDiskOutputHash,
@@ -573,4 +575,33 @@ describe("input hash ordering invariance", () => {
         expect(yield* hashWithOrder(order)).toBe(baseline)
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+const _existsDenied = Layer.effect(
+  FileSystem,
+  Effect.map(FileSystem, (fs) => ({
+    ...fs,
+    exists: (target: string) =>
+      Effect.fail(
+        PlatformError.badArgument({ module: "FileSystem", method: "exists", description: `denied: ${target}` })
+      )
+  }))
+).pipe(Layer.provide(NodeServices.layer))
+
+describe("absent files are read without an exists probe", () => {
+  it.effect("readCacheEntry returns undefined when exists would fail", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-noexists-" })
+
+      const entry = yield* readCacheEntry({ cfg: _cfgFor(root), envName: "prod", ctx: RenderContext.make("prod") })
+      expect(entry).toBeUndefined()
+    }).pipe(Effect.scoped, Effect.provide(Layer.merge(NodeServices.layer, _existsDenied))))
+
+  it.effect("_hashEntry hashes empty content for an absent entry when exists would fail", () =>
+    Effect.gen(function*() {
+      const hash = yield* _hashEntry({ entry: "/nonexistent/konfig-entry.ts" })
+      const expected = createHash("sha256").update("entry:/nonexistent/konfig-entry.ts\n\n").digest("hex")
+      expect(hash).toBe(expected)
+    }).pipe(Effect.provide(_existsDenied)))
 })

@@ -83,6 +83,11 @@ const _loadOne = (
       : yield* _decodeEntry({ val: release.value, file, defaultId: file.replace(/\.ts$/, "") })
   })
 
+const _EXCLUDED_SUFFIXES = [".d.ts", ".test.ts", ".spec.ts"] as const
+
+export const _isRegistryFile = (name: string): boolean =>
+  name.endsWith(".ts") && !name.startsWith("_") && !_EXCLUDED_SUFFIXES.some((suffix) => name.endsWith(suffix))
+
 export const loadChartRegistryEffect = (
   chartsDir: string
 ): Effect.Effect<ChartRegistryEntry[], ChartRegistryError | ChartRegistryEntryDecodeError, FileSystem | Path> =>
@@ -94,7 +99,7 @@ export const loadChartRegistryEffect = (
       Effect.mapError((cause) => new ChartRegistryError({ chartsDir, cause }))
     )
 
-    const files = allFiles.filter((f) => f.endsWith(".ts") && !f.startsWith("_"))
+    const files = allFiles.filter(_isRegistryFile)
 
     const loaded = yield* Effect.forEach(
       files,
