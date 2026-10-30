@@ -13,50 +13,26 @@
 // `ContainerInput` in container.ts) accept a wider, branded shape
 // and lower into these types when emitting manifests.
 
-export type {
-  Deployment,
-  DeploymentSpec,
-  DeploymentStrategy,
-  StatefulSet,
-  StatefulSetSpec,
-  StatefulSetUpdateStrategy
-} from "kubernetes-types/apps/v1"
-
-export type { CronJob, Job, JobSpec } from "kubernetes-types/batch/v1"
+export type { Deployment, DeploymentStrategy } from "kubernetes-types/apps/v1"
 
 export type {
   ConfigMap,
   Container,
-  ContainerPort,
-  EnvVar,
-  EnvVarSource,
-  LocalObjectReference,
   Namespace,
-  PersistentVolume,
-  PersistentVolumeClaim,
-  PersistentVolumeSpec,
   PodSpec,
   PodTemplateSpec,
   Secret,
   Service,
-  ServiceAccount,
   ServicePort,
-  Volume,
-  VolumeMount
+  Volume
 } from "kubernetes-types/core/v1"
-
-export type { ObjectMeta } from "kubernetes-types/meta/v1"
 
 export type {
   Ingress,
   IngressBackend,
   IngressRule,
-  IngressSpec,
-  IngressTLS,
   NetworkPolicy,
   NetworkPolicyEgressRule,
   NetworkPolicyIngressRule,
   NetworkPolicyPeer
 } from "kubernetes-types/networking/v1"
-
-export type { ClusterRole, ClusterRoleBinding, Role, RoleBinding } from "kubernetes-types/rbac/v1"

@@ -1,5 +1,5 @@
 import { DEFAULT_HELM_CACHE_DIR, type RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Data, Effect, Schema } from "effect"
+import { Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
@@ -270,9 +270,9 @@ export const readCacheEntry = (input: ReadEntryInput) =>
     if (text === "") return undefined
 
     // A decode failure (stale/corrupt cache file) is just a cache miss.
-    return yield* _decodeCacheEntryJson(text).pipe(
-      Effect.orElseSucceed((): BuildCacheEntry | undefined => undefined)
-    )
+    const decoded = yield* Effect.option(_decodeCacheEntryJson(text))
+
+    return Option.getOrUndefined(decoded)
   })
 
 interface WriteEntryInput {
