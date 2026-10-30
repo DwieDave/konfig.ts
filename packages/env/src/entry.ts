@@ -38,4 +38,12 @@ export interface MakeEntryInput<C extends Config.Config<unknown>, M extends obje
 
 export const _makeEntry = <C extends Config.Config<unknown>, M extends object>(
   input: MakeEntryInput<C, M>
-): C & M => Object.assign(input.config, input.metadata)
+): C & M =>
+  Object.create(
+    Object.getPrototypeOf(input.config),
+    Object.assign(
+      {},
+      Object.getOwnPropertyDescriptors(input.config),
+      Object.getOwnPropertyDescriptors(input.metadata)
+    )
+  )

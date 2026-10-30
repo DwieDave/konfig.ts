@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { ConfigProvider, Context, Effect, Layer, Redacted } from "effect"
+import { Config, ConfigProvider, Context, Effect, Layer, Redacted } from "effect"
 import { describe, expect } from "vitest"
 import { Environment } from "./environment"
 import { environmentLayer, type EnvironmentShape } from "./layer"
@@ -29,6 +29,22 @@ const fakeEnv = ConfigProvider.layer(
 )
 
 describe("environmentLayer", () => {
+  it.effect("keeps ConfigError in the layer error channel", () =>
+    Effect.gen(function*() {
+      const exit = yield* Layer.build(
+        Layer.provide(
+          environmentLayer({ tag: ApiEnv, env: apiEnv }),
+          ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }))
+        )
+      ).pipe(Effect.scoped, Effect.flip)
+      expect(exit).toBeInstanceOf(Config.ConfigError)
+    }))
+
+  it("types the error channel as ConfigError", () => {
+    const layer: Layer.Layer<ApiEnv, Config.ConfigError> = environmentLayer({ tag: ApiEnv, env: apiEnv })
+    expect(layer).toBeDefined()
+  })
+
   it.effect("provides the yielded bundle as a Context service", () =>
     Effect.gen(function*() {
       const env = yield* ApiEnv
