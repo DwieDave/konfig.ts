@@ -1,3 +1,4 @@
+import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { Sync } from "./sync"
 
@@ -30,7 +31,20 @@ describe("Sync.options", () => {
     })
   })
 
-  it("returns empty string for empty opts", () => {
-    expect(Sync.options([])).toEqual({ "argocd.argoproj.io/sync-options": "" })
+  it("returns no annotation for empty opts", () => {
+    expect(Sync.options([])).toEqual({})
+  })
+})
+
+describe("Sync properties", () => {
+  it("wave accepts integers and stringifies them", () => {
+    fc.assert(fc.property(fc.integer(), (n) => {
+      expect(Sync.wave(n)["argocd.argoproj.io/sync-wave"]).toBe(String(n))
+    }))
+  })
+
+  it("wave rejects non-integers", () => {
+    expect(() => Sync.wave(1.5)).toThrow()
+    expect(() => Sync.wave(Number.NaN)).toThrow()
   })
 })

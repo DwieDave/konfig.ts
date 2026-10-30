@@ -29,14 +29,16 @@ The check in practice: if the `api` module needs the `ghcr-pull` secret (it yiel
 | Export | Purpose |
 | --- | --- |
 | `Application.define` | Build an `ApplicationHandle<Name, Out, In>`: a Context tag that also carries a `Layer<Out, _, In>` |
-| `Application.make` | Plain `Application` value constructor, no dependency graph |
 | `Application.target` | Adapter passed as `target` to `Module.fixedNs` / `Module.dynamicNs` |
 | `Application.LiteralName<T>`, `Application.ApplicationHandle`, `Application.HandleKind` | Types: reject a `string`-widened `name` at the call site; the handle and kind produced by `define` |
 | `AppOfApps.fromModules` | Compose handles into a sealed, directly renderable app-of-apps; the compile-time check fires here. `provides?: Layer` satisfies group-level needs |
-| `AppOfApps.make` | Plain `AppOfAppsResult` from already-built `Application`s |
-| `Sync.wave(n)`, `Sync.hook(phase)`, `Sync.options([...])` | `argocd.argoproj.io/*` annotation helpers to spread into `annotations` |
-| `buildCR`, `serializeApplicationCR`, `applicationCRFilename`, `emitApplicationCR` | Emit an Application CR as an object, YAML string, filename, or `Manifest<string>` |
-| `ArgoSource`, `SyncPolicy`, `HookPhase`, `AppOfAppsTarget`, `AppOfAppsDefaults`, `AppOfAppsResult` | Option and result types |
+| `Sync.wave(n)`, `Sync.hook(phase)`, `Sync.options([...])` | `argocd.argoproj.io/*` annotation helpers to spread into `annotations`. `wave` accepts integers only; `options([])` returns `{}` |
+| `serializeApplicationCR`, `applicationCRFilename` | Emit an Application CR as a YAML string or a filename |
+| `AppOfAppsResult` | Result type of `AppOfApps.fromModules` |
+
+## Sync policy merge
+
+An app's `syncPolicy` is merged over `defaults.syncPolicy` field by field. `undefined` values in the app policy never overwrite a default. `automated` flags merge individually; set `automated: { enabled: false }` to opt out of a default `automated` block entirely. `syncOptions` from the app replace the defaults. `retry` merges field by field, including `backoff`.
 
 ## Errors
 

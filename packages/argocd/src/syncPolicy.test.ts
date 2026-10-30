@@ -1,10 +1,12 @@
+import { omitUndefined } from "@konfig.ts/core"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import type { SyncPolicy } from "./Application"
-import { _mergeSyncPolicy } from "./emit"
+import { mergeSyncPolicy } from "./syncPolicy"
 
 const automated = fc.option(
   fc.record({
+    enabled: fc.option(fc.boolean(), { nil: undefined }),
     prune: fc.option(fc.boolean(), { nil: undefined }),
     selfHeal: fc.option(fc.boolean(), { nil: undefined }),
     allowEmpty: fc.option(fc.boolean(), { nil: undefined })
@@ -36,37 +38,63 @@ const policy: fc.Arbitrary<SyncPolicy | undefined> = fc.option(
 
 const definedPolicy = policy.filter((p): p is SyncPolicy => p !== undefined)
 
-describe("_mergeSyncPolicy properties", () => {
+describe("mergeSyncPolicy properties", () => {
   it("returns the other side when one side is undefined", () => {
     fc.assert(fc.property(policy, (p) => {
-      expect(_mergeSyncPolicy({ def: undefined, app: p })).toBe(p)
-      expect(_mergeSyncPolicy({ def: p, app: undefined })).toBe(p)
+      expect(mergeSyncPolicy({ def: undefined, app: p })).toBe(p)
+      expect(mergeSyncPolicy({ def: p, app: undefined })).toBe(p)
+    }))
+  })
+
+  it("enabled:false opts out of default automated", () => {
+    fc.assert(fc.property(definedPolicy, (def) => {
+      const merged = mergeSyncPolicy({
+        def: { ...def, automated: { prune: true } },
+        app: { automated: { enabled: false } }
+      })
+
+      expect(merged?.automated).toEqual({ enabled: false })
+    }))
+  })
+
+  it("undefined app flags keep default flags", () => {
+    fc.assert(fc.property(fc.boolean(), (prune) => {
+      const merged = mergeSyncPolicy({
+        def: { automated: { prune } },
+        app: { automated: { prune: undefined, selfHeal: true } }
+      })
+
+      expect(merged?.automated).toEqual({ prune, selfHeal: true })
     }))
   })
 
   it("syncOptions prefer app over defaults", () => {
     fc.assert(fc.property(definedPolicy, definedPolicy, (def, app) => {
-      expect(_mergeSyncPolicy({ def, app })?.syncOptions).toEqual(app.syncOptions ?? def.syncOptions)
+      expect(mergeSyncPolicy({ def, app })?.syncOptions).toEqual(app.syncOptions ?? def.syncOptions)
     }))
   })
 
   it("automated flags: app wins, defaults fill the gaps", () => {
     fc.assert(fc.property(definedPolicy, definedPolicy, (def, app) => {
-      const merged = _mergeSyncPolicy({ def, app })?.automated
+      const merged = mergeSyncPolicy({ def, app })?.automated
 
-      const expected = def.automated === undefined
-        ? app.automated
-        : app.automated === undefined
-        ? def.automated
-        : { ...def.automated, ...app.automated }
+      if (def.automated === undefined || app.automated === undefined) {
+        expect(merged).toEqual(def.automated ?? app.automated)
 
-      expect(merged).toEqual(expected)
+        return
+      }
+
+      expect(merged).toEqual(
+        app.automated.enabled === false
+          ? omitUndefined(app.automated)
+          : { ...def.automated, ...omitUndefined(app.automated) }
+      )
     }))
   })
 
   it("retry backoff is merged, undefined only when both are", () => {
     fc.assert(fc.property(definedPolicy, definedPolicy, (def, app) => {
-      const merged = _mergeSyncPolicy({ def, app })?.retry
+      const merged = mergeSyncPolicy({ def, app })?.retry
 
       if (def.retry === undefined || app.retry === undefined) {
         expect(merged).toBe(def.retry ?? app.retry)

@@ -15,7 +15,6 @@ The workflow has three parts. You define one Application per module, you compose
 
 - `Application.define(opts)` builds one Application. You give it a name, a namespace, where its manifests live in git, and a build function that produces the manifests. The name and namespace must be string literals rather than values typed as `string`; that restriction is what lets the dependency graph reason about names at the type level.
 - `Application.target` is what you pass as the target when you wrap a reusable module with `Module.fixedNs` or `Module.dynamicNs`. It makes the git source a per-call argument and lets the module set project, sync policy, and annotations.
-- `Application.make(opts)` builds the plain Application value without any dependency tracking. `Application.define` calls it once the build function has produced the manifests.
 - `AppOfApps.fromModules({ target, defaults, modules, provides?, name? })` composes the modules, resolves every dependency between them, and is the compile-time gate: it compiles only when no dependency is left unsatisfied, and returns a sealed, directly renderable program. A `provides:` layer satisfies group-level needs that no listed module covers. The result carries the composed name, target, defaults, and the list of Applications. The name defaults to `"apps"` and becomes the directory of Application CRs. See [Dependency graph](/konfig.ts/docs/concepts/dependency-graph/).
 
 The options of `Application.define`:
@@ -93,7 +92,7 @@ The controller namespace from the target sets `metadata.namespace` of every CR a
 
 A build writes two kinds of output. Each Application's manifests go into `<root>/<outDir.manifests>/<env>/<app name>/`. One Application CR per module goes into `<root>/<outDir.manifests>/<env>/<result name>/`, which is `apps/` unless you named the app-of-apps. The whole environment directory is replaced on every build, so removing a module from the list removes its files from the output.
 
-Each CR file is named `Application-<name>.yaml`, with `.` and `/` in the name replaced by `-`. If you generate CRs yourself, `applicationCRFilename` gives that name, `serializeApplicationCR` gives the YAML, and `emitApplicationCR` wraps the same YAML in a manifest you can compose further.
+Each CR file is named `Application-<name>.yaml`, with `.` and `/` in the name replaced by `-`. If you generate CRs yourself, `applicationCRFilename` gives that name, `serializeApplicationCR` gives the YAML.
 
 For the example above the tree looks like this:
 

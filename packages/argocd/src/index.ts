@@ -1,13 +1,9 @@
-export type { ArgoSource, SyncPolicy } from "./Application"
-
 export * as Application from "./Application"
 
-export type { AppOfAppsDefaults, AppOfAppsResult, AppOfAppsTarget } from "./AppOfApps"
+export type { AppOfAppsResult } from "./AppOfApps"
 
 export * as AppOfApps from "./AppOfApps"
 
-export { applicationCRFilename, buildCR, emitApplicationCR, serializeApplicationCR } from "./emit"
-
-export type { HookPhase } from "./sync"
+export { applicationCRFilename, serializeApplicationCR } from "./emit"
 
 export { Sync } from "./sync"

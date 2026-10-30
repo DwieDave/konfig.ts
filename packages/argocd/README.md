@@ -49,23 +49,20 @@ provides it, `fromModules` refuses to compile:
 
 ## Surface
 
-| Export                                                                   | Purpose                                                                                                                                                    |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Application.define`                                                     | build an `ApplicationHandle<Name, Out, In>` — an Effect Context tag that also carries a `Layer<Out, _, In>`                                                |
-| `Application.make`                                                       | plain `Application` value constructor (no dep graph)                                                                                                       |
-| `Application.target`                                                     | adapter passed to `Module.fixedNs` / `Module.dynamicNs`                                                                                                    |
-| `Application.LiteralName<T>`                                             | rejects a `string`-widened `name` at the call site                                                                                                         |
-| `AppOfApps.fromModules`                                                  | compose module handles into a sealed, renderable app-of-apps; the compile-time dep check fires here (group-level `provides?: Layer` fills remaining needs) |
-| `AppOfApps.make`                                                         | plain `AppOfAppsResult` constructor from already-built `Application`s                                                                                      |
-| `Sync.wave` / `Sync.hook` / `Sync.options`                               | ArgoCD annotation helpers — spread into `annotations`                                                                                                      |
-| `serializeApplicationCR` / `applicationCRFilename` / `emitApplicationCR` | emit an Application CR as a YAML string, a filename, or a `Manifest<string>`                                                                               |
+| Export                                             | Purpose                                                                                                                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Application.define`                               | build an `ApplicationHandle<Name, Out, In>` — an Effect Context tag that also carries a `Layer<Out, _, In>`                                                |
+| `Application.target`                               | adapter passed to `Module.fixedNs` / `Module.dynamicNs`                                                                                                    |
+| `Application.LiteralName<T>`                       | rejects a `string`-widened `name` at the call site                                                                                                         |
+| `AppOfApps.fromModules`                            | compose module handles into a sealed, renderable app-of-apps; the compile-time dep check fires here (group-level `provides?: Layer` fills remaining needs) |
+| `Sync.wave` / `Sync.hook` / `Sync.options`         | ArgoCD annotation helpers — spread into `annotations`                                                                                                      |
+| `serializeApplicationCR` / `applicationCRFilename` | emit an Application CR as a YAML string or a filename                                                                                                      |
 
 ## Internals
 
 `Application.define`'s return type is the algebra: the `Out` channel lists every
 `Dep.Provide` the Application emits, the `In` channel every unmet `Dep.Need`.
 Composing modules shrinks `In`; `fromModules` requires it to reduce to the render services.
-See [`.docs/architecture.md`](../../.docs/architecture.md).
 
 ## Requirements
 

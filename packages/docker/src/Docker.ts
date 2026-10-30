@@ -1,4 +1,4 @@
-import { isRecord, unsafeCoerce } from "@konfig.ts/core"
+import { isRecord, omitUndefined } from "@konfig.ts/core"
 import type { YarnVariant } from "./services/PackageManager"
 import { BuildAtom, CopyAtom, HealthcheckAtom, PackageManagerAtom, PlatformAtom, RuntimeAtom, UserAtom } from "./spec"
 import type { DockerSpec } from "./spec"
@@ -12,9 +12,6 @@ export interface DockerApp {
 
 export const isDockerApp = (u: unknown): u is DockerApp => isRecord(u) && DockerAppTypeId in u
 
-const _omitUndef = <T extends object>(o: T): T =>
-  unsafeCoerce(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)), "fromEntries widens T")
-
 export const Docker = {
   app: (spec: DockerSpec): DockerApp => ({ [DockerAppTypeId]: true, spec }),
   pm: {
@@ -22,13 +19,13 @@ export const Docker = {
     npm: (): PackageManagerAtom => PackageManagerAtom.cases.NpmPm.make({}),
     pnpm: (): PackageManagerAtom => PackageManagerAtom.cases.PnpmPm.make({}),
     yarn: (opts?: { variant?: YarnVariant }): PackageManagerAtom =>
-      PackageManagerAtom.cases.YarnPm.make(_omitUndef({ variant: opts?.variant }))
+      PackageManagerAtom.cases.YarnPm.make(omitUndefined({ variant: opts?.variant }))
   },
   runtime: {
     bun: (opts?: { alpine?: boolean }): RuntimeAtom =>
-      RuntimeAtom.cases.BunRuntime.make(_omitUndef({ alpine: opts?.alpine })),
+      RuntimeAtom.cases.BunRuntime.make(omitUndefined({ alpine: opts?.alpine })),
     node: (opts?: { alpine?: boolean }): RuntimeAtom =>
-      RuntimeAtom.cases.NodeRuntime.make(_omitUndef({ alpine: opts?.alpine }))
+      RuntimeAtom.cases.NodeRuntime.make(omitUndefined({ alpine: opts?.alpine }))
   },
   build: {
     script: (script: string): BuildAtom => BuildAtom.cases.BuildScript.make({ script }),
@@ -37,7 +34,7 @@ export const Docker = {
   },
   copy: {
     builderArtifact: (input: { readonly src: string; readonly dst: string; readonly chown?: string }): CopyAtom =>
-      CopyAtom.cases.BuilderArtifact.make(_omitUndef({ src: input.src, dst: input.dst, chown: input.chown })),
+      CopyAtom.cases.BuilderArtifact.make({ src: input.src, dst: input.dst, ...omitUndefined({ chown: input.chown }) }),
     workspaceSource: (name: string): CopyAtom => CopyAtom.cases.WorkspaceSource.make({ name }),
     workspaceSourceAll: (): CopyAtom => CopyAtom.cases.WorkspaceSourceAll.make({}),
     path: (input: {
@@ -46,7 +43,11 @@ export const Docker = {
       readonly from?: string
       readonly chown?: string
     }): CopyAtom =>
-      CopyAtom.cases.CopyPath.make(_omitUndef({ src: input.src, dst: input.dst, from: input.from, chown: input.chown }))
+      CopyAtom.cases.CopyPath.make({
+        src: input.src,
+        dst: input.dst,
+        ...omitUndefined({ from: input.from, chown: input.chown })
+      })
   },
   healthcheck: {
     httpGet: (input: {
@@ -56,18 +57,27 @@ export const Docker = {
       timeout?: string
       retries?: number
       startPeriod?: string
-    }): HealthcheckAtom => HealthcheckAtom.cases.HealthcheckHttpGet.make(_omitUndef({ ...input })),
+    }): HealthcheckAtom =>
+      HealthcheckAtom.cases.HealthcheckHttpGet.make({
+        path: input.path,
+        port: input.port,
+        ...omitUndefined({ ...input, path: undefined, port: undefined })
+      }),
     command: (input: {
       readonly argv: ReadonlyArray<string>
       readonly interval?: string
       readonly timeout?: string
       readonly retries?: number
       readonly startPeriod?: string
-    }): HealthcheckAtom => HealthcheckAtom.cases.HealthcheckCommand.make(_omitUndef({ ...input }))
+    }): HealthcheckAtom =>
+      HealthcheckAtom.cases.HealthcheckCommand.make({
+        argv: input.argv,
+        ...omitUndefined({ ...input, argv: undefined })
+      })
   },
   user: {
     nonRoot: (opts?: { uid?: number; gid?: number; name?: string }): UserAtom =>
-      UserAtom.cases.UserNonRoot.make(_omitUndef({ ...opts })),
+      UserAtom.cases.UserNonRoot.make(omitUndefined({ ...opts })),
     root: (): UserAtom => UserAtom.cases.UserRoot.make({})
   },
   platform: {

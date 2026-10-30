@@ -1,7 +1,9 @@
 import { Dep, Module } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { describe, expect, expectTypeOf, it } from "vitest"
-import { Application, AppOfApps, Sync } from "./index"
+import * as Application from "./Application"
+import * as AppOfApps from "./AppOfApps"
+import { Sync } from "./sync"
 
 const source: Application.ArgoSource = {
   repoURL: "ssh://git@github.com/example/infra.git",

@@ -1,9 +1,9 @@
 import {
   type AnyRenderError,
   attachLayerToTag,
+  Compose,
   Dep,
   Module,
-  moduleLayer,
   omitUndefined,
   unsafeCoerce
 } from "@konfig.ts/core"
@@ -17,6 +17,7 @@ export interface ArgoSource {
 
 export interface SyncPolicy {
   readonly automated?: {
+    readonly enabled?: boolean
     readonly prune?: boolean
     readonly selfHeal?: boolean
     readonly allowEmpty?: boolean
@@ -131,7 +132,7 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
 ): DefinedHandle<Name, Ns, R, Extra> => {
   const tag = Dep.App<Name, Application>(opts.name)
 
-  const layer = moduleLayer({
+  const layer = Compose.moduleLayer({
     tag,
     build: opts.build,
     toValue: _appOf(opts),

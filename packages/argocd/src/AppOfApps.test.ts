@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { Application, AppOfApps, Sync } from "./index"
+import * as Application from "./Application"
+import * as AppOfApps from "./AppOfApps"
+import { Sync } from "./sync"
 
 const target: AppOfApps.AppOfAppsTarget = {
   repoURL: "ssh://git@github.com/example/infra.git",
