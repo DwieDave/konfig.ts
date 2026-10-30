@@ -1,4 +1,4 @@
-import type { DiffFormat } from "@konfig.ts/core"
+import { type DiffFormat, existsOrFalse, readOrEmpty } from "@konfig.ts/core"
 import {
   type AnyDockerError,
   type DockerApp,
@@ -12,7 +12,6 @@ import { Console, Data, Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { existsOrFalse, readOrEmpty } from "../fsUtil"
 import { moduleDefault } from "../moduleDefault"
 import { formatFlag } from "../renderContextFlags"
 

@@ -1,4 +1,12 @@
-import { type RenderContext, type ResolvedKonfigConfig, sha256Hex } from "@konfig.ts/core"
+import {
+  existsOrFalse,
+  findUp,
+  orElseIfNotFound,
+  readOrEmpty,
+  type RenderContext,
+  type ResolvedKonfigConfig,
+  sha256Hex
+} from "@konfig.ts/core"
 import { Array as Arr, Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -6,7 +14,6 @@ import type { PlatformError } from "effect/PlatformError"
 import type { EnvTarget } from "./buildEnv"
 import { resolveCliPaths } from "./cliConfig"
 import { envEntryPath } from "./envEntry"
-import { existsOrFalse, findUp, readOrEmpty } from "./fsUtil"
 import { matchesGlob } from "./globMatch"
 import { walkFiles } from "./walkFiles"
 
@@ -14,18 +21,6 @@ class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
   readonly path: string
   readonly cause: unknown
 }> {}
-
-interface OrAbsentInput<A, R> {
-  readonly effect: Effect.Effect<A, PlatformError, R>
-  readonly onAbsent: () => A
-}
-
-// Only NotFound falls back to `onAbsent`; other I/O errors must propagate or an
-// unreadable file could silently hash as absent and produce a false cache hit.
-const _orAbsentIfNotFound = <A, R>(input: OrAbsentInput<A, R>): Effect.Effect<A, PlatformError, R> =>
-  input.effect.pipe(
-    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(input.onAbsent()))
-  )
 
 const _sha256 = (chunks: ReadonlyArray<string | Uint8Array>): string =>
   sha256Hex(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))))
@@ -67,11 +62,8 @@ const _envSignature = (env: NodeJS.ProcessEnv): string =>
 
 const _hashEntry = (input: { readonly entry: string }): Effect.Effect<string, PlatformError, FileSystem> =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
-    const exists = yield* _orAbsentIfNotFound({ effect: fs.exists(input.entry), onAbsent: () => false })
-
-    if (!exists) return ""
-    const content = yield* _orAbsentIfNotFound({ effect: fs.readFileString(input.entry), onAbsent: () => "" })
+    if (!(yield* existsOrFalse(input.entry))) return ""
+    const content = yield* readOrEmpty(input.entry)
 
     return _sha256([`entry:${input.entry}\n`, content, "\n"])
   })
@@ -112,7 +104,7 @@ const _collectFiles = (input: CollectFilesInput) =>
   walkFiles({
     dir: input.dir,
     skipDir: ({ full, name }) => _ALWAYS_SKIPPED_DIRS.has(name) || input.skipDirs.has(full)
-  })
+  }).pipe(Effect.mapError((cause) => new BuildCacheError({ path: input.dir, cause })))
 
 const _outputDirs = (cfg: ResolvedKonfigConfig) =>
   Effect.gen(function*() {
@@ -131,7 +123,7 @@ interface IncludeInput {
 const _literalIncludeFiles = (input: { readonly abs: string; readonly skipDirs: ReadonlySet<string> }) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
-    const stat = yield* _orAbsentIfNotFound({ effect: fs.stat(input.abs), onAbsent: () => null })
+    const stat = yield* orElseIfNotFound({ effect: fs.stat(input.abs), fallback: null })
 
     if (stat?.type === "Directory") return yield* _collectFiles({ dir: input.abs, skipDirs: input.skipDirs })
 
@@ -167,12 +159,10 @@ const _hashFiles = (files: ReadonlyArray<string>) =>
     const fs = yield* FileSystem
 
     return yield* Effect.forEach(Arr.sort(files, (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)), (file) =>
-      _orAbsentIfNotFound({
-        effect: fs.readFile(file),
-        onAbsent: () =>
-          new Uint8Array()
-      }).pipe(
-        Effect.map((content) => _sha256([`file:${file}\n`, content, "\n"]))
+      orElseIfNotFound({ effect: fs.readFile(file), fallback: new Uint8Array() }).pipe(
+        Effect.map((content) =>
+          _sha256([`file:${file}\n`, content, "\n"])
+        )
       ))
   })
 
@@ -184,7 +174,7 @@ const _lockfilesIn = (dir: string) =>
 
     return yield* Effect.filter(
       _LOCKFILES.map((name) => path.join(dir, name)),
-      (file) => existsOrFalse(file).pipe(Effect.orDie)
+      (file) => existsOrFalse(file).pipe(Effect.mapError((cause) => new BuildCacheError({ path: file, cause })))
     )
   })
 
@@ -235,13 +225,13 @@ export const computeOutputHash = (
 
 export const computeOnDiskOutputHash = (
   outDirAbs: string
-): Effect.Effect<string, never, FileSystem | Path> =>
+): Effect.Effect<string, BuildCacheError, FileSystem | Path> =>
   Effect.gen(function*() {
-    const paths = yield* walkFiles({ dir: outDirAbs })
+    const paths = yield* _collectFiles({ dir: outDirAbs, skipDirs: new Set() })
 
     const files = yield* Effect.forEach(paths, (path) =>
       readOrEmpty(path).pipe(
-        Effect.orDie,
+        Effect.mapError((cause) => new BuildCacheError({ path, cause })),
         Effect.map((content) => ({ path, content }))
       ))
 
@@ -263,8 +253,10 @@ export const readCacheEntry = (input: EnvTarget) =>
     const path = yield* Path
     const cacheFile = _cacheFilePath({ ...input, path })
 
-    if (!(yield* existsOrFalse(cacheFile))) return undefined
-    const text = yield* readOrEmpty(cacheFile).pipe(Effect.orDie)
+    const toError = (cause: PlatformError) => new BuildCacheError({ path: cacheFile, cause })
+
+    if (!(yield* existsOrFalse(cacheFile).pipe(Effect.mapError(toError)))) return undefined
+    const text = yield* readOrEmpty(cacheFile).pipe(Effect.mapError(toError))
 
     if (text === "") return undefined
 

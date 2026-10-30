@@ -1,5 +1,4 @@
 import { Effect, Schema } from "effect"
-import { strictDecoderOf } from "./decode"
 import {
   DEFAULT_CHARTS_DIR,
   DEFAULT_CRD_OUT_DIR,
@@ -74,8 +73,3 @@ export interface ResolvedKonfigConfig {
   readonly configDir: string
   readonly config: KonfigConfig
 }
-
-const _konfigConfigDecoder = strictDecoderOf(KonfigConfig)
-
-export const decodeKonfigConfigSync = _konfigConfigDecoder.sync
-export const decodeKonfigConfigEffect = _konfigConfigDecoder.effect

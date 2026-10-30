@@ -1,4 +1,4 @@
-import { brand, existsOrFalse, findUp, readOrEmpty } from "@konfig.ts/core"
+import { brand, existsOrFalse, findUp, orElseIfNotFound, readOrEmpty } from "@konfig.ts/core"
 import { Effect, Match, Option, type PlatformError, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -49,17 +49,11 @@ export interface Workspace {
   readonly hasBuildScript: boolean
 }
 
-const _recoverNotFound = <B>(fallback: B) =>
-<A, R>(
-  effect: Effect.Effect<A, PlatformError.PlatformError, R>
-): Effect.Effect<A | B, PlatformError.PlatformError, R> =>
-  effect.pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(fallback)))
-
 const _readStringIfExists = (input: {
   readonly fs: FileSystem
   readonly path: string
 }): Effect.Effect<string | undefined, PlatformError.PlatformError> =>
-  input.fs.readFileString(input.path).pipe(_recoverNotFound(undefined))
+  orElseIfNotFound({ effect: input.fs.readFileString(input.path), fallback: undefined })
 
 interface GraphEnv {
   readonly fs: FileSystem
@@ -143,14 +137,14 @@ const _descendantsIfDir = (input: {
   readonly env: GraphEnv
   readonly rel: string
 }): Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError, FileSystem> =>
-  input.env.fs.stat(input.env.p.join(input.env.root, input.rel)).pipe(
-    _recoverNotFound(undefined),
-    Effect.flatMap((stat) =>
-      stat?.type === "Directory"
-        ? _collectDescendantDirs({ env: input.env, dir: input.rel })
-        : Effect.succeed([])
+  orElseIfNotFound({ effect: input.env.fs.stat(input.env.p.join(input.env.root, input.rel)), fallback: undefined })
+    .pipe(
+      Effect.flatMap((stat) =>
+        stat?.type === "Directory"
+          ? _collectDescendantDirs({ env: input.env, dir: input.rel })
+          : Effect.succeed([])
+      )
     )
-  )
 
 const _collectDescendantDirs = (input: {
   readonly env: GraphEnv
@@ -169,7 +163,7 @@ const _collectDescendantDirs = (input: {
 type Listing = Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError, FileSystem>
 
 const _listChildren = (input: { readonly env: GraphEnv; readonly dir: string }): Listing =>
-  input.env.fs.readDirectory(input.env.p.join(input.env.root, input.dir)).pipe(_recoverNotFound([]))
+  orElseIfNotFound({ effect: input.env.fs.readDirectory(input.env.p.join(input.env.root, input.dir)), fallback: [] })
 
 const _wildcardChildren = ({ env, step }: StepInput): Listing =>
   _listChildren({ env, dir: step.cur }).pipe(

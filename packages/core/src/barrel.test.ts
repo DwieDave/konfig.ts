@@ -4,13 +4,23 @@ import * as Core from "./index"
 import type { PvcRefName } from "./index"
 
 describe("core barrel", () => {
-  it.each(["render", "parseYaml", "ProcessInvocationError"])("does not export %s", (name) => {
+  it.each([
+    "render",
+    "parseYaml",
+    "ProcessInvocationError",
+    "decodeKonfigConfigEffect",
+    "decodeKonfigConfigSync",
+    "helmCacheDirConfig"
+  ])("does not export %s", (name) => {
     expect(name in Core).toBe(false)
   })
 
-  it.each(["existsOrFalse", "readOrEmpty", "findUp", "sha256Hex"])("exports %s", (name) => {
-    expect(name in Core).toBe(true)
-  })
+  it.each(["existsOrFalse", "readOrEmpty", "findUp", "orElseIfNotFound", "strictParseOptions", "sha256Hex"])(
+    "exports %s",
+    (name) => {
+      expect(name in Core).toBe(true)
+    }
+  )
 
   it("does not export the PvcRefName type", () => {
     const probe: PvcRefName<string> = "x"

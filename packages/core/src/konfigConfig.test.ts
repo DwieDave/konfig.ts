@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { decodeKonfigConfigSync } from "./konfigConfig"
+import { strictDecoderOf } from "./decode"
+import { KonfigConfig } from "./konfigConfig"
 
-const decode = decodeKonfigConfigSync
+const decode = strictDecoderOf(KonfigConfig).sync
 
 describe("konfig.json schema (T4.1)", () => {
   it("decodes a minimal config with defaults filled in", () => {

@@ -31,7 +31,12 @@ export const readBaselineDir = (baselineDir: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
-    const paths = (yield* walkFiles({ dir: baselineDir })).filter((p) => p.endsWith(".yaml"))
+
+    const all = yield* walkFiles({ dir: baselineDir }).pipe(
+      Effect.mapError((cause) => new DiffBaselineInvalid({ path: baselineDir, cause }))
+    )
+
+    const paths = all.filter((p) => p.endsWith(".yaml"))
 
     const entries = yield* Effect.forEach(paths, (full) =>
       fs.readFileString(full).pipe(

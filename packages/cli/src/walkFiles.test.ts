@@ -69,3 +69,23 @@ describe("walkFiles symlink handling", () => {
     expect(found.sort()).toEqual(["alias", "d/x", "real"].map((f) => nodePath.join(root, f)).sort())
   })
 })
+
+describe("walkFiles unreadable directory", () => {
+  it("fails with a typed PlatformError instead of dying", async () => {
+    const root = fsNode.mkdtempSync(nodePath.join(os.tmpdir(), "walk-"))
+    const locked = nodePath.join(root, "locked")
+    fsNode.mkdirSync(locked)
+    fsNode.chmodSync(locked, 0o000)
+
+    const error = await Effect.runPromise(
+      Effect.flip(walkFiles({ dir: root }).pipe(Effect.provide(NodeServices.layer))).pipe(
+        Effect.ensuring(Effect.sync(() => {
+          fsNode.chmodSync(locked, 0o700)
+          fsNode.rmSync(root, { recursive: true })
+        }))
+      )
+    )
+
+    expect(error._tag).toBe("PlatformError")
+  })
+})

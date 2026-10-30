@@ -24,7 +24,7 @@ describe("resolveConfig", () => {
       expect(resolved.configDir).toBe(path.resolve(root))
       expect(resolved.config.root).toBe("infra")
       expect(resolved.config.envs.prod?.entry).toBe("infra/env/prod.ts")
-      // defaults filled in by decodeKonfigConfigEffect
+      // defaults filled in by the KonfigConfig schema
       expect(resolved.config.cluster).toBe("cluster.ts")
       expect(resolved.config.helm?.minVersion).toBe("3.16.0")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))

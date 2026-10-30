@@ -43,21 +43,22 @@ export {
   requireImage
 } from "./images"
 
-export { decodeKonfigConfigEffect, KonfigConfig, type ResolvedKonfigConfig } from "./konfigConfig"
+export { KonfigConfig, type ResolvedKonfigConfig } from "./konfigConfig"
 
 export {
   DEFAULT_CHARTS_DIR,
   DEFAULT_CRD_OUT_DIR,
   DEFAULT_HELM_CACHE_DIR,
   DEFAULT_HELM_MIN_VERSION,
-  helmCacheDirConfig,
   KONFIG_CHARTS_DIR_ENV,
   KONFIG_CRD_OUT_DIR_ENV,
   KONFIG_HELM_CACHE_ENV,
   KONFIG_HELM_MIN_VERSION_ENV
 } from "./konfigDefaults"
 
-export { existsOrFalse, findUp, readOrEmpty } from "./fs"
+export { existsOrFalse, findUp, orElseIfNotFound, readOrEmpty } from "./fs"
+
+export { strictParseOptions } from "./decode"
 
 export { sha256Hex } from "./hash"
 

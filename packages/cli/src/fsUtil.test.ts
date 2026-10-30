@@ -1,48 +1,10 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
+import { KonfigConfig } from "@konfig.ts/core"
 import { Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { existsOrFalse, findUp, readJsonFile } from "./fsUtil"
-
-const _hasMarker = (dir: string) =>
-  Effect.gen(function*() {
-    const path = yield* Path
-
-    return yield* existsOrFalse(path.join(dir, "marker")).pipe(Effect.orDie)
-  })
-
-describe("existsOrFalse", () => {
-  it.effect("is false for a missing path and true for an existing one", () =>
-    Effect.gen(function*() {
-      const fs = yield* FileSystem
-      const path = yield* Path
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-exists-" })
-      expect(yield* existsOrFalse(path.join(root, "nope"))).toBe(false)
-      expect(yield* existsOrFalse(root)).toBe(true)
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
-})
-
-describe("findUp", () => {
-  it.effect("returns the nearest ancestor (or self) that passes the test", () =>
-    Effect.gen(function*() {
-      const fs = yield* FileSystem
-      const path = yield* Path
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-findup-" })
-      const deep = path.join(root, "a", "b")
-      yield* fs.makeDirectory(deep, { recursive: true })
-      yield* fs.writeFileString(path.join(root, "marker"), "")
-      expect(yield* findUp({ from: deep, test: _hasMarker })).toEqual(Option.some(root))
-      yield* fs.writeFileString(path.join(deep, "marker"), "")
-      expect(yield* findUp({ from: deep, test: _hasMarker })).toEqual(Option.some(deep))
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
-
-  it.effect("is none when nothing up to the filesystem root passes", () =>
-    Effect.gen(function*() {
-      const found = yield* findUp({ from: "/", test: () => Effect.succeed(false) })
-      expect(Option.isNone(found)).toBe(true)
-    }).pipe(Effect.provide(NodeServices.layer)))
-})
+import { readJsonFile } from "./fsUtil"
 
 describe("readJsonFile", () => {
   const schema = Schema.Struct({ a: Schema.Finite })
@@ -72,4 +34,20 @@ describe("readJsonFile", () => {
       expect(yield* read("{\"a\":\"x\"}")).toEqual(Option.some("failed"))
       expect(yield* read("{\"a\":1,\"b\":2}")).toEqual(Option.some("failed"))
     }))
+
+  it.effect("rejects excess keys on KonfigConfig with an excess-property issue", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-json-" })
+      const file = path.join(root, "konfig.json")
+      yield* fs.writeFileString(file, "{\"root\":\".\",\"extra\":1}")
+
+      const cause = yield* readJsonFile({ path: file, schema: KonfigConfig, onError: (c): string => String(c) }).pipe(
+        Effect.flip
+      )
+
+      expect(cause).toContain("extra")
+      expect(cause).toMatch(/unexpected|excess/i)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

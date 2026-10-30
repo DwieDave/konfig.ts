@@ -1,8 +1,8 @@
-import { KonfigConfig, type ResolvedKonfigConfig } from "@konfig.ts/core"
+import { existsOrFalse, findUp, KonfigConfig, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Data, Effect, Option } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { existsOrFalse, findUp, readJsonFile } from "./fsUtil"
+import { readJsonFile } from "./fsUtil"
 
 export class ConfigNotFound extends Data.TaggedError("ConfigNotFound")<{
   readonly startedFrom: string

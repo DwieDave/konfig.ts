@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 
-const strict = { onExcessProperty: "error" } as const
+export const strictParseOptions = { onExcessProperty: "error" } as const
 
 /**
  * Build a sync/effect decoder pair for `schema` that rejects unknown keys
@@ -12,7 +12,7 @@ export const strictDecoderOf = <S extends Schema.Codec<unknown, unknown, never>>
   const decodeEff = Schema.decodeUnknownEffect(schema)
 
   return {
-    sync: <I>(input: I): S["Type"] => Effect.runSync(decodeEff(input, strict)),
-    effect: <I>(input: I) => decodeEff(input, strict)
+    sync: <I>(input: I): S["Type"] => Effect.runSync(decodeEff(input, strictParseOptions)),
+    effect: <I>(input: I) => decodeEff(input, strictParseOptions)
   }
 }

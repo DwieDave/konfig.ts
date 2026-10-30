@@ -6,6 +6,7 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import fc from "fast-check"
 import { createHash } from "node:crypto"
+import { chmodSync } from "node:fs"
 import {
   type BuildCacheEntry,
   computeInputHash,
@@ -513,6 +514,20 @@ describe("build cache lifecycle: miss / hit / stale transitions", () => {
       const after = yield* computeOnDiskOutputHash(outDirAbs)
 
       expect(before).not.toBe(after)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("computeOnDiskOutputHash maps an unreadable subdirectory to BuildCacheError", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-lifecycle-locked-" })
+      const locked = path.join(root, "locked")
+      yield* fs.makeDirectory(locked)
+      chmodSync(locked, 0o000)
+      yield* Effect.addFinalizer(() => Effect.sync(() => chmodSync(locked, 0o700)))
+      const error = yield* Effect.flip(computeOnDiskOutputHash(root))
+
+      expect(error._tag).toBe("BuildCacheError")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 

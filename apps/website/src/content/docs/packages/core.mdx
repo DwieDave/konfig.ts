@@ -46,7 +46,7 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 | `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template`; `cacheFileName`, `ensureChartTarball`, `assertMinVersion`, `timeout` for the CLI's shared cache |
 | `Yaml` | `serialize` (stable key order) and `filenameFor` |
 | `diffFiles`, `formatDiff`, `hasDifferences`, `parseYamlAll`, `parseYamlWith`, `decodeYamlOutput` | Structural YAML diff |
-| `KonfigConfig`, `decodeKonfigConfigEffect` | Schemas and decoders for `konfig.json`; `ResolvedKonfigConfig` pairs the decoded config with its directory |
+| `KonfigConfig` | Schema for `konfig.json`; `ResolvedKonfigConfig` pairs the decoded config with its directory |
 | `ImagesConfig`, `decodeImagesSync`, `decodeImagesEffect`, `imagesFor`, `requireImage` | Schema and lookups for `images.json` |
 | `boundary`, `brand`, `unsafeCoerce` | Schema decode at boundaries; annotated escape hatches |
 | `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin`, `runCliWithStdin` | Subprocess helpers used by Helm and the secret backends |

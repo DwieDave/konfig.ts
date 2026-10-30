@@ -1,3 +1,4 @@
+import { orElseIfNotFound } from "@konfig.ts/core"
 import { Effect, Option } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -10,16 +11,12 @@ interface WalkFilesInput {
 
 type WalkEnv = FileSystem | Path
 
-const _orIfNotFound = <A, B, R>(input: { readonly effect: Effect.Effect<A, PlatformError, R>; readonly value: B }) =>
-  input.effect.pipe(
-    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(input.value)),
-    Effect.orDie
-  )
-
 const _statOrNull = ({ full, fs }: { readonly fs: FileSystem; readonly full: string }) =>
-  _orIfNotFound({ effect: fs.stat(full), value: null })
+  orElseIfNotFound({ effect: fs.stat(full), fallback: null })
 
-const _walkEntry = (input: WalkFilesInput & { readonly name: string }): Effect.Effect<string[], never, WalkEnv> =>
+const _walkEntry = (
+  input: WalkFilesInput & { readonly name: string }
+): Effect.Effect<string[], PlatformError, WalkEnv> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
@@ -29,15 +26,17 @@ const _walkEntry = (input: WalkFilesInput & { readonly name: string }): Effect.E
 
     if (stat?.type === "File") return [full]
 
-    if (Option.isSome(link) || stat?.type !== "Directory" || input.skipDir?.({ name: input.name, full }) === true) return []
+    if (
+      Option.isSome(link) || stat?.type !== "Directory" || input.skipDir?.({ name: input.name, full }) === true
+    ) return []
 
     return yield* walkFiles({ dir: full, skipDir: input.skipDir })
   })
 
-export const walkFiles = (input: WalkFilesInput): Effect.Effect<string[], never, WalkEnv> =>
+export const walkFiles = (input: WalkFilesInput): Effect.Effect<string[], PlatformError, WalkEnv> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
-    const names = yield* _orIfNotFound({ effect: fs.readDirectory(input.dir), value: [] })
+    const names = yield* orElseIfNotFound({ effect: fs.readDirectory(input.dir), fallback: [] })
     const groups = yield* Effect.forEach(names, (name) => _walkEntry({ ...input, name }))
 
     return groups.flat()

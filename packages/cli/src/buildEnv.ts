@@ -1,6 +1,7 @@
 import { applicationCRFilename, type AppOfAppsResult, serializeApplicationCR } from "@konfig.ts/argocd"
 import {
   type AnyRenderError,
+  existsOrFalse,
   isParsedDoc,
   isRawYaml,
   KONFIG_HELM_CACHE_ENV,
@@ -17,7 +18,6 @@ import { Path } from "effect/Path"
 import { resolveCliPaths } from "./cliConfig"
 import { envEntryPath } from "./envEntry"
 import { decodeEnvResult, type EnvResult } from "./envResult"
-import { existsOrFalse } from "./fsUtil"
 import { moduleDefault } from "./moduleDefault"
 
 export interface EnvTarget {

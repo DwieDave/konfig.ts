@@ -1,8 +1,6 @@
-import { existsOrFalse, findUp, readOrEmpty } from "@konfig.ts/core"
+import { strictParseOptions } from "@konfig.ts/core"
 import { Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
-
-export { existsOrFalse, findUp, readOrEmpty }
 
 interface ReadJsonFileInput<A, E> {
   readonly path: string
@@ -10,12 +8,10 @@ interface ReadJsonFileInput<A, E> {
   readonly onError: (cause: unknown) => E
 }
 
-const _STRICT = { onExcessProperty: "error" } as const
-
 export const readJsonFile = <A, E>(input: ReadJsonFileInput<A, E>): Effect.Effect<A, E, FileSystem> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const text = yield* fs.readFileString(input.path)
 
-    return yield* Schema.decodeEffect(Schema.fromJsonString(input.schema))(text, _STRICT)
+    return yield* Schema.decodeEffect(Schema.fromJsonString(input.schema))(text, strictParseOptions)
   }).pipe(Effect.mapError(input.onError))

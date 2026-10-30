@@ -1,3 +1,4 @@
+import { existsOrFalse } from "@konfig.ts/core"
 import { Clock, Console, DateTime, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import {
@@ -8,7 +9,6 @@ import {
   writeCacheEntry
 } from "../buildCache"
 import { envOutDir, type EnvTarget, type RenderedEnv, renderEnv, writeFiles } from "../buildEnv"
-import { existsOrFalse } from "../fsUtil"
 import { renderContextFlags, withRenderContext } from "../renderContextFlags"
 
 interface Timing {

@@ -3,14 +3,41 @@ import { it } from "@effect/vitest"
 import { Effect, Option } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import { systemError, type SystemErrorTag } from "effect/PlatformError"
+import * as fc from "fast-check"
 import { chmodSync } from "node:fs"
 import { describe, expect } from "vitest"
-import { existsOrFalse, findUp, readOrEmpty } from "./fs"
+import { existsOrFalse, findUp, orElseIfNotFound, readOrEmpty } from "./fs"
 
 const _tmp = Effect.gen(function*() {
   const fs = yield* FileSystem
 
   return yield* fs.makeTempDirectoryScoped()
+})
+
+const _reasons = ["PermissionDenied", "BadResource", "Busy", "InvalidData", "AlreadyExists"] as const
+
+const _failWith = (reason: SystemErrorTag) =>
+  Effect.fail(systemError({ _tag: reason, module: "FileSystem", method: "x" }))
+
+describe("orElseIfNotFound", () => {
+  it("NotFound yields the fallback", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.string(), async (fallback) => {
+        const value = await Effect.runPromise(orElseIfNotFound({ effect: _failWith("NotFound"), fallback }))
+        expect(value).toBe(fallback)
+      })
+    )
+  })
+
+  it("any other reason propagates unchanged", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.constantFrom(..._reasons), async (reason) => {
+        const error = await Effect.runPromise(Effect.flip(orElseIfNotFound({ effect: _failWith(reason), fallback: 0 })))
+        expect(error.reason._tag).toBe(reason)
+      })
+    )
+  })
 })
 
 describe("fs helpers", () => {
