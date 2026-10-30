@@ -63,14 +63,8 @@ export const KonfigConfig = Schema.Struct({
   charts: _stringWithKeyDefault(DEFAULT_CHARTS_DIR),
   envs: Schema.Record(Schema.String, EnvEntry),
   outDir: OutDir,
-  crd: Schema.optionalKey(CrdConfig).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed({ outDir: DEFAULT_CRD_OUT_DIR }))
-  ),
-  helm: Schema.optionalKey(HelmConfig).pipe(
-    Schema.withDecodingDefaultKey(
-      Effect.succeed({ cacheDir: DEFAULT_HELM_CACHE_DIR, minVersion: DEFAULT_HELM_MIN_VERSION })
-    )
-  ),
+  crd: Schema.optionalKey(CrdConfig).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
+  helm: Schema.optionalKey(HelmConfig).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
   // Extra files/directories/glob patterns (relative to konfig.json)
   // hashed into the build cache input on top of everything under
   // `root` — for inputs that feed a render but live outside the

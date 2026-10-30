@@ -29,19 +29,13 @@ export const lookupEnv = (input: LookupEnvInput): EnvImages | undefined => _own(
 
 export const lookupEnvEffect = (
   input: LookupEnvInput
-): Effect.Effect<EnvImages, ImagesEnvMissing> => {
-  const e = _own(input.cfg.envs, input.env)
-  return e === undefined ? Effect.fail(new ImagesEnvMissing({ env: input.env })) : Effect.succeed(e)
-}
+): Effect.Effect<EnvImages, ImagesEnvMissing> =>
+  Effect.fromNullishOr(_own(input.cfg.envs, input.env)).pipe(
+    Effect.mapError(() => new ImagesEnvMissing({ env: input.env }))
+  )
 
 /** @throws {ImagesEnvMissing} Use `lookupEnvEffect` for a typed error channel instead. */
-export const imagesFor = (input: LookupEnvInput): EnvImages => {
-  const e = _own(input.cfg.envs, input.env)
-  if (e === undefined) {
-    throw new ImagesEnvMissing({ env: input.env })
-  }
-  return e
-}
+export const imagesFor = (input: LookupEnvInput): EnvImages => Effect.runSync(lookupEnvEffect(input))
 
 export class ImagesAppMissing extends Data.TaggedError("ImagesAppMissing")<{
   readonly env: string
@@ -53,20 +47,12 @@ export interface RequireImageInput {
   readonly app: string
   readonly envName: string
 }
-/** @throws {ImagesAppMissing} Use `requireImageEffect` for a typed error channel instead. */
-export const requireImage = (input: RequireImageInput): string => {
-  const v = _own(input.e, input.app)
-  if (v === undefined) {
-    throw new ImagesAppMissing({ env: input.envName, app: input.app })
-  }
-  return v
-}
-
 export const requireImageEffect = (
   input: RequireImageInput
-): Effect.Effect<string, ImagesAppMissing> => {
-  const v = _own(input.e, input.app)
-  return v === undefined
-    ? Effect.fail(new ImagesAppMissing({ env: input.envName, app: input.app }))
-    : Effect.succeed(v)
-}
+): Effect.Effect<string, ImagesAppMissing> =>
+  Effect.fromNullishOr(_own(input.e, input.app)).pipe(
+    Effect.mapError(() => new ImagesAppMissing({ env: input.envName, app: input.app }))
+  )
+
+/** @throws {ImagesAppMissing} Use `requireImageEffect` for a typed error channel instead. */
+export const requireImage = (input: RequireImageInput): string => Effect.runSync(requireImageEffect(input))

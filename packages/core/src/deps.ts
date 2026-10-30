@@ -52,6 +52,17 @@ export type ConfigMapRefName<R> = R extends ConfigMapRef<infer N, infer _K> ? N 
 export type ConfigMapRefKeys<R> = R extends ConfigMapRef<infer _N, infer K> ? K : never
 export type PvcRefName<R> = R extends PvcRef<infer N> ? N : never
 
+const _service = <K extends string, N extends string, S>(input: {
+  readonly kind: K
+  readonly name: N
+}): Context.Service<Need<K, N>, S> => Context.Service<Need<K, N>, S>(`${input.kind}:${input.name}`)
+
+const _provide = <K extends string, N extends string, S>(input: {
+  readonly kind: K
+  readonly name: N
+  readonly value: S
+}): Layer.Layer<Provide<K, N>> => Layer.succeed(_service<K, N, S>(input))(input.value)
+
 export const Secret = <
   N extends string,
   K extends string = string,
@@ -59,7 +70,7 @@ export const Secret = <
 >(
   name: N
 ): Context.Service<Need<"Secret", N>, SecretRef<N, K, Ns>> =>
-  Context.Service<Need<"Secret", N>, SecretRef<N, K, Ns>>(`Secret:${name}`)
+  _service<"Secret", N, SecretRef<N, K, Ns>>({ kind: "Secret", name })
 
 export type SecretValuesRecord<K extends string> = {
   readonly [P in K]: Redacted.Redacted<string>
@@ -68,35 +79,35 @@ export type SecretValuesRecord<K extends string> = {
 export const SecretValues = <N extends string, K extends string = string>(
   name: N
 ): Context.Service<Need<"SecretValues", N>, SecretValuesRecord<K>> =>
-  Context.Service<Need<"SecretValues", N>, SecretValuesRecord<K>>(`SecretValues:${name}`)
+  _service<"SecretValues", N, SecretValuesRecord<K>>({ kind: "SecretValues", name })
 
 export const ConfigMap = <N extends string, K extends string = string>(
   name: N
 ): Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N, K>> =>
-  Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N, K>>(`ConfigMap:${name}`)
+  _service<"ConfigMap", N, ConfigMapRef<N, K>>({ kind: "ConfigMap", name })
 
 export const Namespace = <N extends string>(name: N): Context.Service<Need<"Namespace", N>, N> =>
-  Context.Service<Need<"Namespace", N>, N>(`Namespace:${name}`)
+  _service<"Namespace", N, N>({ kind: "Namespace", name })
 
 export const ServiceAccount = <N extends string>(
   name: N
 ): Context.Service<Need<"ServiceAccount", N>, ServiceAccountRef<N>> =>
-  Context.Service<Need<"ServiceAccount", N>, ServiceAccountRef<N>>(`ServiceAccount:${name}`)
+  _service<"ServiceAccount", N, ServiceAccountRef<N>>({ kind: "ServiceAccount", name })
 
 export const Application = <N extends string>(
   name: N
-): Context.Service<Need<"Application", N>, N> => Context.Service<Need<"Application", N>, N>(`Application:${name}`)
+): Context.Service<Need<"Application", N>, N> => _service<"Application", N, N>({ kind: "Application", name })
 
 export const Pvc = <N extends string>(name: N): Context.Service<Need<"Pvc", N>, PvcRef<N>> =>
-  Context.Service<Need<"Pvc", N>, PvcRef<N>>(`Pvc:${name}`)
+  _service<"Pvc", N, PvcRef<N>>({ kind: "Pvc", name })
 
 export const App = <N extends string, S = unknown>(name: N): Context.Service<Need<"App", N>, S> =>
-  Context.Service<Need<"App", N>, S>(`App:${name}`)
+  _service<"App", N, S>({ kind: "App", name })
 
 export const Image = <N extends string>(
   name: N
 ): Context.Service<Need<"Image", N>, BuiltImageRef<N>> =>
-  Context.Service<Need<"Image", N>, BuiltImageRef<N>>(`Image:${name}`)
+  _service<"Image", N, BuiltImageRef<N>>({ kind: "Image", name })
 
 interface _ImageRefInput<App extends string> {
   readonly app: App
@@ -113,7 +124,8 @@ export const BuiltImageRef = {
 
 export const provideImage = <const App extends string>(
   input: _ImageRefInput<App>
-): Layer.Layer<Provide<"Image", App>> => Layer.succeed(Image(input.app))(_fullRef(input))
+): Layer.Layer<Provide<"Image", App>> =>
+  _provide<"Image", App, BuiltImageRef<App>>({ kind: "Image", name: input.app, value: _fullRef(input) })
 
 export const provideSecret = <
   const N extends string,
@@ -121,23 +133,30 @@ export const provideSecret = <
   const Ns extends string = string
 >(
   name: N
-): Layer.Layer<Provide<"Secret", N>> => Layer.succeed(Secret<N, K, Ns>(name))(brand<SecretRef<N, K, Ns>>(name))
+): Layer.Layer<Provide<"Secret", N>> =>
+  _provide<"Secret", N, SecretRef<N, K, Ns>>({ kind: "Secret", name, value: brand<SecretRef<N, K, Ns>>(name) })
 
 export const provideConfigMap = <const N extends string, const K extends string = string>(
   name: N
-): Layer.Layer<Provide<"ConfigMap", N>> => Layer.succeed(ConfigMap<N, K>(name))(brand<ConfigMapRef<N, K>>(name))
+): Layer.Layer<Provide<"ConfigMap", N>> =>
+  _provide<"ConfigMap", N, ConfigMapRef<N, K>>({ kind: "ConfigMap", name, value: brand<ConfigMapRef<N, K>>(name) })
 
 export const provideNamespace = <const N extends string>(
   name: N
-): Layer.Layer<Provide<"Namespace", N>> => Layer.succeed(Namespace(name))(name)
+): Layer.Layer<Provide<"Namespace", N>> => _provide<"Namespace", N, N>({ kind: "Namespace", name, value: name })
 
 export const provideServiceAccount = <const N extends string>(
   name: N
-): Layer.Layer<Provide<"ServiceAccount", N>> => Layer.succeed(ServiceAccount(name))(brand<ServiceAccountRef<N>>(name))
+): Layer.Layer<Provide<"ServiceAccount", N>> =>
+  _provide<"ServiceAccount", N, ServiceAccountRef<N>>({
+    kind: "ServiceAccount",
+    name,
+    value: brand<ServiceAccountRef<N>>(name)
+  })
 
 export const provideApplication = <const N extends string>(
   name: N
-): Layer.Layer<Provide<"Application", N>> => Layer.succeed(Application(name))(name)
+): Layer.Layer<Provide<"Application", N>> => _provide<"Application", N, N>({ kind: "Application", name, value: name })
 
 export const providePvc = <const N extends string>(name: N): Layer.Layer<Provide<"Pvc", N>> =>
-  Layer.succeed(Pvc(name))(brand<PvcRef<N>>(name))
+  _provide<"Pvc", N, PvcRef<N>>({ kind: "Pvc", name, value: brand<PvcRef<N>>(name) })

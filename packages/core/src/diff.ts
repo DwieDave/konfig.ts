@@ -8,24 +8,20 @@ const IGNORED_ANNOTATION_KEYS = new Set([
 ])
 const MANAGED_BY_HELM_LABEL = "app.kubernetes.io/managed-by"
 
-const _redactLabelMap = (labels: Record<string, unknown>): Record<string, unknown> => {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(labels)) {
-    if (IGNORED_LABEL_KEYS.has(k)) continue
-    if (k === MANAGED_BY_HELM_LABEL && v === "Helm") continue
-    out[k] = v
-  }
-  return out
-}
+const _labelKept = (k: string, v: unknown): boolean =>
+  !IGNORED_LABEL_KEYS.has(k) && !(k === MANAGED_BY_HELM_LABEL && v === "Helm")
 
-const _redactAnnotationMap = (annotations: Record<string, unknown>): Record<string, unknown> => {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(annotations)) {
-    if (IGNORED_ANNOTATION_KEYS.has(k)) continue
-    out[k] = v
-  }
-  return out
-}
+const _annotationKept = (k: string): boolean => !IGNORED_ANNOTATION_KEYS.has(k)
+
+const _filterMap = (
+  map: Record<string, unknown>,
+  keep: (k: string, v: unknown) => boolean
+): Record<string, unknown> => Object.fromEntries(Object.entries(map).filter(([k, v]) => keep(k, v)))
+
+const _redactLabelMap = (labels: Record<string, unknown>): Record<string, unknown> => _filterMap(labels, _labelKept)
+
+const _redactAnnotationMap = (annotations: Record<string, unknown>): Record<string, unknown> =>
+  _filterMap(annotations, _annotationKept)
 const _redactSecretDataMap = (data: Record<string, unknown>): Record<string, unknown> => {
   const out: Record<string, unknown> = {}
   for (const k of Object.keys(data)) out[k] = "<redacted>"
@@ -121,11 +117,6 @@ export const deepEqual = (input: DeepEqualInput): boolean => {
 const _isPresent = (v: unknown): boolean => v !== null && v !== undefined
 
 const _isObjectLike = (v: unknown): v is Record<string, unknown> => isRecord(v)
-
-const _labelKept = (k: string, v: unknown): boolean =>
-  !IGNORED_LABEL_KEYS.has(k) && !(k === MANAGED_BY_HELM_LABEL && v === "Helm")
-
-const _annotationKept = (k: string): boolean => !IGNORED_ANNOTATION_KEYS.has(k)
 
 // Mirrors deepEqual(_redactLabelMap(a), _redactLabelMap(b)) / the annotation variant.
 const _filteredMapEqual = (
@@ -370,6 +361,11 @@ export interface FormatDiffInput {
   readonly result: DiffResult
   readonly format?: DiffFormat
 }
+const _indentYaml = (input: { readonly value: unknown; readonly pad: string }): string[] =>
+  YAML.stringify(input.value, { lineWidth: 0 })
+    .split("\n")
+    .map((l) => `${input.pad}${l}`)
+
 export const formatDiff = (input: FormatDiffInput): string => {
   const { result } = input
   const format = input.format ?? "summary"
@@ -391,30 +387,22 @@ export const formatDiff = (input: FormatDiffInput): string => {
           if (d._tag === "Changed") {
             lines.push("    left:")
             lines.push(
-              ...YAML.stringify(d.left, { lineWidth: 0 })
-                .split("\n")
-                .map((l) => `      ${l}`)
+              ..._indentYaml({ value: d.left, pad: "      " })
             )
             lines.push("    right:")
             lines.push(
-              ...YAML.stringify(d.right, { lineWidth: 0 })
-                .split("\n")
-                .map((l) => `      ${l}`)
+              ..._indentYaml({ value: d.right, pad: "      " })
             )
           }
         }
       } else {
         lines.push("  left:")
         lines.push(
-          ...YAML.stringify(e.left, { lineWidth: 0 })
-            .split("\n")
-            .map((l) => `    ${l}`)
+          ..._indentYaml({ value: e.left, pad: "    " })
         )
         lines.push("  right:")
         lines.push(
-          ...YAML.stringify(e.right, { lineWidth: 0 })
-            .split("\n")
-            .map((l) => `    ${l}`)
+          ..._indentYaml({ value: e.right, pad: "    " })
         )
       }
     }

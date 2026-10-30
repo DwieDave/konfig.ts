@@ -149,6 +149,20 @@ export interface RunProcessStringOptions extends ProcessOptions {
   readonly allowEmptyStdout?: boolean
 }
 
+const _failOnNonZero = (
+  command: ChildProcess.Command,
+  result: { readonly exitCode: number; readonly stderr: string }
+): Effect.Effect<void, ProcessError> =>
+  result.exitCode === 0
+    ? Effect.void
+    : Effect.fail(
+      new ProcessError({
+        command: _commandLabel(command),
+        exitCode: result.exitCode,
+        stderrTail: _tail(result.stderr)
+      })
+    )
+
 // oxlint-disable-next-line app/no-multiple-function-params
 export const runProcessString = (
   command: ChildProcess.Command,
@@ -156,13 +170,7 @@ export const runProcessString = (
 ): Effect.Effect<string, ProcessFailure, ChildProcessSpawner> =>
   Effect.gen(function*() {
     const result = yield* _spawnCollect(command, options)
-    if (result.exitCode !== 0) {
-      return yield* new ProcessError({
-        command: _commandLabel(command),
-        exitCode: result.exitCode,
-        stderrTail: _tail(result.stderr)
-      })
-    }
+    yield* _failOnNonZero(command, result)
     if (options?.allowEmptyStdout !== true && result.stdout.trim().length === 0) {
       return yield* new ProcessError({
         command: _commandLabel(command),
@@ -181,11 +189,5 @@ export const runProcessExit = (
 ): Effect.Effect<void, ProcessFailure, ChildProcessSpawner> =>
   Effect.gen(function*() {
     const result = yield* _spawnCollect(command, options)
-    if (result.exitCode !== 0) {
-      return yield* new ProcessError({
-        command: _commandLabel(command),
-        exitCode: result.exitCode,
-        stderrTail: _tail(result.stderr)
-      })
-    }
+    yield* _failOnNonZero(command, result)
   })

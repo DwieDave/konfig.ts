@@ -7,16 +7,9 @@ export interface RenderContext {
   readonly flags?: ReadonlyMap<string, unknown>
 }
 
-interface RenderContextFullInput {
-  readonly env: string
-  readonly cluster?: string
-  readonly k8sVersion?: string
-  readonly flags?: ReadonlyMap<string, unknown>
-}
-
 export const RenderContext = {
   make: (env: string): RenderContext => ({ env }),
-  makeFull: (input: RenderContextFullInput): RenderContext => ({
+  makeFull: (input: RenderContext): RenderContext => ({
     env: input.env,
     ...(input.cluster !== undefined ? { cluster: input.cluster } : {}),
     ...(input.k8sVersion !== undefined ? { k8sVersion: input.k8sVersion } : {}),
