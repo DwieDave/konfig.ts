@@ -1,123 +1,66 @@
-import { Predicate } from "effect"
-import { isFunctionLike } from "../types.ts"
-import type { AstNode, Rule, RuleContext } from "../types.ts"
-
-const MESSAGE = "Functions with more than one parameter must take a single object parameter (named-args)."
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
+import { Option, Predicate } from "effect"
+import { ancestorsOf, effectMemberName } from "../ast.ts"
 
 type Scope = "all" | "exports"
 
-const _isScope = (value: unknown): value is Scope => value === "all" || value === "exports"
+type FunctionNode = ESTree.Function | ESTree.ArrowFunctionExpression
 
-const _isInsideExport = (context: RuleContext, node: AstNode): boolean => {
-  for (const ancestor of context.sourceCode.getAncestors(node)) {
-    const t = ancestor.type
+const MESSAGE = "Functions with more than one parameter must take a single object parameter (named-args)."
+const EXPORT_TYPES = new Set(["ExportNamedDeclaration", "ExportDefaultDeclaration", "ExportAllDeclaration"])
+const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"])
+const CONTAINER_TYPES = new Set(["ArrayExpression", "ObjectExpression", "Property"])
+const EFFECT_FN_MEMBERS = new Set(["fn", "fnUntraced"])
 
-    if (
-      t === "ExportNamedDeclaration" ||
-      t === "ExportDefaultDeclaration" ||
-      t === "ExportAllDeclaration"
-    ) {
-      return true
-    }
-  }
+const _scopeFrom = (options: ReadonlyArray<unknown>): Scope => {
+  const option = options[0]
 
-  return false
+  return Predicate.hasProperty(option, "scope") && option.scope === "all" ? "all" : "exports"
 }
 
-const _hasScope = (value: unknown): value is { readonly scope: Scope } =>
-  Predicate.hasProperty(value, "scope") && _isScope(value.scope)
+const _isEffectFnCallee = (callee: ESTree.Node): boolean =>
+  Option.exists(effectMemberName(callee), (name) => EFFECT_FN_MEMBERS.has(name)) ||
+  (callee.type === "CallExpression" && _isEffectFnCallee(callee.callee))
 
-const _scopeFrom = (context: RuleContext): Scope => {
-  const opt = context.options[0]
+const _isEffectFnWrapper = (node: FunctionNode): boolean =>
+  node.parent.type === "CallExpression" && _isEffectFnCallee(node.parent.callee)
 
-  return _hasScope(opt) ? opt.scope : "exports"
+const _isInlineCallback = (ancestors: ReadonlyArray<ESTree.Node>): boolean => {
+  const nearest = [...ancestors].reverse().find((ancestor) => !CONTAINER_TYPES.has(ancestor.type))
+
+  return nearest?.type === "CallExpression" || nearest?.type === "NewExpression"
 }
 
-const FUNCTION_LIKE = new Set<string>([
-  "FunctionDeclaration",
-  "FunctionExpression",
-  "ArrowFunctionExpression"
-])
-
-const _isInlineCallback = (
-  context: RuleContext,
-  node: AstNode
+const _shouldReport = (
+  input: { readonly node: FunctionNode; readonly ancestors: ReadonlyArray<ESTree.Node>; readonly scope: Scope }
 ): boolean => {
-  // Exempt if nested only under Call/New, ArrayExpression, ObjectExpression, or Property.
-  const ancestors = context.sourceCode.getAncestors(node)
+  const { ancestors, node, scope } = input
+  const isExported = ancestors.some((ancestor) => EXPORT_TYPES.has(ancestor.type))
+  const isCallback = _isInlineCallback(ancestors) && !_isEffectFnWrapper(node)
+  const isNested = ancestors.some((ancestor) => FUNCTION_TYPES.has(ancestor.type))
 
-  for (let i = ancestors.length - 1; i >= 0; i--) {
-    const p = ancestors[i]
-
-    if (!p) return false
-    const t = p.type
-
-    if (t === "CallExpression" || t === "NewExpression") return true
-
-    if (t === "ArrayExpression") continue
-
-    if (t === "ObjectExpression" || t === "Property") continue
-
-    return false
-  }
-
-  return false
+  return node.params.length > 1 && !isCallback && !isNested && (scope === "all" || isExported)
 }
 
-const _isNestedInsideFunction = (
-  context: RuleContext,
-  node: AstNode
-): boolean => {
-  for (const ancestor of context.sourceCode.getAncestors(node)) {
-    if (FUNCTION_LIKE.has(ancestor.type)) return true
-  }
-
-  return false
-}
-
-function _check(context: RuleContext, node: AstNode, scope: Scope) {
-  if (!isFunctionLike(node)) return
-
-  if (node.params.length <= 1) return
-
-  if (_isInlineCallback(context, node)) return
-
-  if (_isNestedInsideFunction(context, node)) return
-
-  if (scope === "exports" && !_isInsideExport(context, node)) return
-  context.report({ node, message: MESSAGE })
-}
-
-export const noMultipleFunctionParams: Rule = {
+export const noMultipleFunctionParams = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Multi-arg functions must accept a single object parameter. Default scope: 'exports' — internal helpers may take positional args. Callback TYPE annotations (TSFunctionType) and TS declare-function are exempt: a multi-arg callback contract is the caller's choice."
+        "Multi-arg functions must accept a single object parameter. Default scope: 'exports' — internal helpers may take positional args. Exported Effect.fn wrappers count as exports. Callback TYPE annotations (TSFunctionType) and TS declare-function are exempt: a multi-arg callback contract is the caller's choice."
     },
-    schema: [
-      {
-        type: "object",
-        properties: {
-          scope: { enum: ["all", "exports"] }
-        },
-        additionalProperties: false
-      }
-    ]
+    schema: [{ type: "object", properties: { scope: { enum: ["all", "exports"] } }, additionalProperties: false }]
   },
   create(context) {
-    const scope = _scopeFrom(context)
+    const scope = _scopeFrom(context.options)
 
-    return {
-      FunctionDeclaration(node) {
-        _check(context, node, scope)
-      },
-      FunctionExpression(node) {
-        _check(context, node, scope)
-      },
-      ArrowFunctionExpression(node) {
-        _check(context, node, scope)
+    const check = (node: FunctionNode) => {
+      if (_shouldReport({ node, ancestors: ancestorsOf(node), scope })) {
+        context.report({ node, message: MESSAGE })
       }
     }
+
+    return { FunctionDeclaration: check, FunctionExpression: check, ArrowFunctionExpression: check }
   }
-}
+})

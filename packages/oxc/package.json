@@ -11,7 +11,14 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@konfig.ts/core": "workspace:*",
+    "@oxlint/plugins": "1.88.0",
     "@types/bun": "catalog:",
+    "fast-check": "catalog:",
+    "oxc-parser": "0.147.0",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "effect": "catalog:"
   }
 }

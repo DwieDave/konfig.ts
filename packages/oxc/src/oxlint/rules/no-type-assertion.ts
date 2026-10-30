@@ -1,33 +1,24 @@
-import { isIdentifier, isTSTypeCast, isTSTypeReference } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
 
-function _isAsConst(node: AstNode): boolean {
-  if (!isTSTypeCast(node)) return false
-  const ann = node.typeAnnotation
+type Assertion = ESTree.TSAsExpression | ESTree.TSTypeAssertion
 
-  if (!isTSTypeReference(ann)) return false
-  const typeName = ann.typeName
+const _isAsConst = (node: Assertion): boolean =>
+  node.typeAnnotation.type === "TSTypeReference" &&
+  node.typeAnnotation.typeName.type === "Identifier" &&
+  node.typeAnnotation.typeName.name === "const"
 
-  return isIdentifier(typeName) && typeName.name === "const"
-}
-
-export const noTypeAssertion: Rule = {
+export const noTypeAssertion = defineRule({
   meta: {
     type: "suggestion",
     docs: { description: "Discourage `as` type assertions — prefer schemas / narrowing." }
   },
   create(context) {
-    function report(node: AstNode) {
+    const check = (node: Assertion) => {
       if (_isAsConst(node)) return
-      context.report({
-        node,
-        message: "Avoid `as` type assertions. Prefer schema decoding or proper narrowing."
-      })
+      context.report({ node, message: "Avoid `as` type assertions. Prefer schema decoding or proper narrowing." })
     }
 
-    return {
-      TSAsExpression: report,
-      TSTypeAssertion: report
-    }
+    return { TSAsExpression: check, TSTypeAssertion: check }
   }
-}
+})

@@ -157,7 +157,7 @@
       "name": "@konfig.ts/core",
       "version": "0.4.0",
       "dependencies": {
-        "@effect/platform-node": "catalog:",
+        "@effect/platform-node": "^4.0.0",
         "yaml": "catalog:",
       },
       "devDependencies": {
@@ -254,8 +254,15 @@
     "packages/oxc": {
       "name": "@konfig.ts/oxc",
       "version": "0.0.0",
+      "dependencies": {
+        "effect": "catalog:",
+      },
       "devDependencies": {
+        "@konfig.ts/core": "workspace:*",
+        "@oxlint/plugins": "1.88.0",
         "@types/bun": "catalog:",
+        "fast-check": "catalog:",
+        "oxc-parser": "0.147.0",
         "vitest": "catalog:",
       },
     },

@@ -1,28 +1,19 @@
-import { isCallExpression, isIdentifier, isMemberExpression } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
+import { Option } from "effect"
+import { memberNames } from "../ast.ts"
 
 const PARSE_METHODS = new Set(["parse", "parseAllDocuments", "parseAll"])
+const PARSE_NAMESPACES = new Set(["YAML", "JSON"])
 
-function _isParseCall(node: AstNode): boolean {
-  if (!isCallExpression(node)) return false
-  const callee = node.callee
+const _isParseCall = (node: ESTree.Node): boolean =>
+  node.type === "CallExpression" &&
+  Option.exists(
+    memberNames(node.callee),
+    ({ object, property }) => PARSE_NAMESPACES.has(object) && PARSE_METHODS.has(property)
+  )
 
-  if (!isMemberExpression(callee)) return false
-  const obj = callee.object
-
-  if (!isIdentifier(obj)) return false
-
-  if (obj.name !== "YAML" && obj.name !== "JSON") return false
-  const prop = callee.property
-
-  return isIdentifier(prop) && PARSE_METHODS.has(prop.name)
-}
-
-function _isUnsafeCoerce(node: AstNode): boolean {
-  return isIdentifier(node) && node.name === "unsafeCoerce"
-}
-
-export const noParseCoercion: Rule = {
+export const noParseCoercion = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -32,13 +23,11 @@ export const noParseCoercion: Rule = {
   },
   create(context) {
     return {
-      CallExpression(node: AstNode) {
-        if (!isCallExpression(node)) return
-
-        if (!_isUnsafeCoerce(node.callee)) return
+      CallExpression(node) {
+        const isCoerce = node.callee.type === "Identifier" && node.callee.name === "unsafeCoerce"
         const firstArg = node.arguments[0]
 
-        if (firstArg !== undefined && _isParseCall(firstArg)) {
+        if (isCoerce && firstArg !== undefined && _isParseCall(firstArg)) {
           context.report({
             node,
             message: "Parse results are untrusted — decode with Effect Schema (`boundary`) instead of coercing."
@@ -47,4 +36,4 @@ export const noParseCoercion: Rule = {
       }
     }
   }
-}
+})

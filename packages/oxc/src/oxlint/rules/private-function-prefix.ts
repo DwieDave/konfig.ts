@@ -1,80 +1,66 @@
-import { isFunctionLike, isIdentifier, isVariableDeclaration } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
 
-function _isExportedDeclaration(node: AstNode): boolean {
+type Reportable = ESTree.Function | ESTree.VariableDeclarator
+
+const _isExportWrapper = (node: ESTree.Node): boolean =>
+  node.type === "ExportNamedDeclaration" || node.type === "ExportDefaultDeclaration"
+
+const _isTopLevel = (node: ESTree.Node): boolean => {
   const parent = node.parent
 
-  if (!parent) return false
-
-  return parent.type === "ExportNamedDeclaration" || parent.type === "ExportDefaultDeclaration"
+  return parent?.type === "Program" ||
+    (parent !== null && _isExportWrapper(parent) && parent.parent?.type === "Program")
 }
 
-function _isTopLevelDeclaration(node: AstNode): boolean {
-  const parent = node.parent
+const _localExportNames = (program: ESTree.Program): ReadonlySet<string> =>
+  new Set(
+    program.body.flatMap((statement) => {
+      if (statement.type === "ExportNamedDeclaration" && statement.source === null) {
+        return statement.specifiers.flatMap((specifier) =>
+          specifier.local.type === "Identifier" ? [specifier.local.name] : []
+        )
+      }
 
-  if (!parent) return false
+      return statement.type === "ExportDefaultDeclaration" && statement.declaration.type === "Identifier"
+        ? [statement.declaration.name]
+        : []
+    })
+  )
 
-  if (parent.type === "Program") return true
+const _isFunctionInit = (declarator: ESTree.VariableDeclarator): boolean =>
+  declarator.init?.type === "ArrowFunctionExpression" || declarator.init?.type === "FunctionExpression"
 
-  if (parent.type === "ExportNamedDeclaration" || parent.type === "ExportDefaultDeclaration") {
-    return parent.parent?.type === "Program"
-  }
+const _message = (name: string): string =>
+  `Private function \`${name}\` must be prefixed with \`_\` (e.g. \`_${name}\`).`
 
-  return false
-}
-
-function _reportIfBare(
-  context: Parameters<Rule["create"]>[0],
-  node: AstNode,
-  name: string | undefined
-) {
-  if (!name) return
-
-  if (name.startsWith("_")) return
-  context.report({
-    node,
-    message: `Private function \`${name}\` must be prefixed with \`_\` (e.g. \`_${name}\`).`
-  })
-}
-
-export const privateFunctionPrefix: Rule = {
+export const privateFunctionPrefix = defineRule({
   meta: {
     type: "suggestion",
     docs: { description: "Non-exported top-level functions must be prefixed with `_`." }
   },
   create(context) {
+    const exported = _localExportNames(context.sourceCode.ast)
+
+    const check = (input: { readonly node: Reportable; readonly name: string }) => {
+      if (input.name.startsWith("_") || exported.has(input.name)) return
+      context.report({ node: input.node, message: _message(input.name) })
+    }
+
     return {
       FunctionDeclaration(node) {
-        if (!_isTopLevelDeclaration(node)) return
-
-        if (_isExportedDeclaration(node)) return
-
-        if (!isFunctionLike(node)) return
-        const id = node.id
-        _reportIfBare(context, node, id && isIdentifier(id) ? id.name : undefined)
+        if (_isTopLevel(node) && node.parent !== null && !_isExportWrapper(node.parent) && node.id !== null) {
+          check({ node, name: node.id.name })
+        }
       },
       VariableDeclaration(node) {
-        if (!_isTopLevelDeclaration(node)) return
-
-        if (_isExportedDeclaration(node)) return
-
-        if (!isVariableDeclaration(node)) return
-
-        for (const decl of node.declarations) {
-          const init = decl.init
-
-          if (!init) continue
-
-          if (init.type !== "ArrowFunctionExpression" && init.type !== "FunctionExpression") {
-            continue
+        if (!_isTopLevel(node) || (node.parent !== null && _isExportWrapper(node.parent))) return
+        node.declarations.forEach((declarator) => {
+          if (_isFunctionInit(declarator) && declarator.id.type === "Identifier") {
+            check({ node: declarator, name: declarator.id.name })
           }
-
-          const id = decl.id
-
-          if (!isIdentifier(id)) continue
-          _reportIfBare(context, decl, id.name)
-        }
+        })
       }
     }
   }
-}
+})

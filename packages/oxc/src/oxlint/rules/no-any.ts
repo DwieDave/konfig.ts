@@ -1,18 +1,14 @@
-import type { AstNode, Rule, RuleContext } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import { ancestorsOf } from "../ast.ts"
 
-const TYPE_LEVEL_ANCESTORS = new Set(["TSTypeAliasDeclaration", "TSInterfaceDeclaration"])
+const EXEMPT_ANCESTORS = new Set([
+  "TSTypeAliasDeclaration",
+  "TSInterfaceDeclaration",
+  "TSAsExpression",
+  "TSTypeAssertion"
+])
 
-function _isInTypeLevel(node: AstNode, context: RuleContext): boolean {
-  return context.sourceCode.getAncestors(node).some((a) => TYPE_LEVEL_ANCESTORS.has(a.type))
-}
-
-function _isAssertionPosition(node: AstNode, context: RuleContext): boolean {
-  return context.sourceCode
-    .getAncestors(node)
-    .some((a) => a.type === "TSAsExpression" || a.type === "TSTypeAssertion")
-}
-
-export const noAny: Rule = {
+export const noAny = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -22,8 +18,8 @@ export const noAny: Rule = {
   },
   create(context) {
     return {
-      TSAnyKeyword(node: AstNode) {
-        if (_isInTypeLevel(node, context) || _isAssertionPosition(node, context)) return
+      TSAnyKeyword(node) {
+        if (ancestorsOf(node).some((ancestor) => EXEMPT_ANCESTORS.has(ancestor.type))) return
         context.report({
           node,
           message: "`any` is banned — use `unknown`, an Effect Schema, or a precise type."
@@ -31,4 +27,4 @@ export const noAny: Rule = {
       }
     }
   }
-}
+})

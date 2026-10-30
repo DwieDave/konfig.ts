@@ -1,17 +1,6 @@
-import { isAstNode, isIdentifier } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
 
-function _calleeName(node: AstNode): string | null {
-  if (node.type !== "NewExpression") return null
-
-  return isAstNode(node.callee) && isIdentifier(node.callee) ? node.callee.name : null
-}
-
-function _isThrown(node: AstNode): boolean {
-  return node.parent?.type === "ThrowStatement"
-}
-
-export const noBareError: Rule = {
+export const noBareError = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -21,8 +10,10 @@ export const noBareError: Rule = {
   },
   create(context) {
     return {
-      NewExpression(node: AstNode) {
-        if (_calleeName(node) === "Error" && !_isThrown(node)) {
+      NewExpression(node) {
+        const isError = node.callee.type === "Identifier" && node.callee.name === "Error"
+
+        if (isError && node.parent.type !== "ThrowStatement") {
           context.report({
             node,
             message:
@@ -32,4 +23,4 @@ export const noBareError: Rule = {
       }
     }
   }
-}
+})

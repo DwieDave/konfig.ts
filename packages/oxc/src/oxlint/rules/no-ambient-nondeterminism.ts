@@ -1,15 +1,25 @@
-import { isAstNode, isIdentifier, isMemberExpression, isNodeList } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
+import { Option } from "effect"
+import { memberNames } from "../ast.ts"
 
-function _memberParts(node: AstNode): { object: string; property: string } | null {
-  if (!isMemberExpression(node)) return null
+const MEMBER_MESSAGES = new Map([
+  ["Math.random", "Do not use ambient Math.random. Use Effect's Random capability instead."],
+  ["Date.now", "Do not use ambient Date.now. Use Effect's Clock capability instead."]
+])
 
-  if (!isIdentifier(node.object) || !isIdentifier(node.property)) return null
+const NEW_DATE_MESSAGE =
+  "Do not construct an ambient Date for the current time. Use Effect's Clock/DateTime capability instead."
 
-  return { object: node.object.name, property: node.property.name }
-}
+const _memberMessage = (node: ESTree.MemberExpression): Option.Option<string> =>
+  memberNames(node).pipe(
+    Option.flatMap(({ object, property }) => Option.fromNullishOr(MEMBER_MESSAGES.get(`${object}.${property}`)))
+  )
 
-export const noAmbientNondeterminism: Rule = {
+const _isBareNewDate = (node: ESTree.NewExpression): boolean =>
+  node.callee.type === "Identifier" && node.callee.name === "Date" && node.arguments.length === 0
+
+export const noAmbientNondeterminism = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -19,34 +29,12 @@ export const noAmbientNondeterminism: Rule = {
   },
   create(context) {
     return {
-      MemberExpression(node: AstNode) {
-        const m = _memberParts(node)
-
-        if (m === null) return
-
-        if (m.object === "Math" && m.property === "random") {
-          context.report({ node, message: "Do not use ambient Math.random. Use Effect's Random capability instead." })
-
-          return
-        }
-
-        if (m.object === "Date" && m.property === "now") {
-          context.report({ node, message: "Do not use ambient Date.now. Use Effect's Clock capability instead." })
-        }
+      MemberExpression(node) {
+        Option.map(_memberMessage(node), (message) => context.report({ node, message }))
       },
-      NewExpression(node: AstNode) {
-        const callee = node.callee
-
-        if (!isAstNode(callee) || !isIdentifier(callee) || callee.name !== "Date") return
-
-        if (isNodeList(node.arguments) && node.arguments.length === 0) {
-          context.report({
-            node,
-            message:
-              "Do not construct an ambient Date for the current time. Use Effect's Clock/DateTime capability instead."
-          })
-        }
+      NewExpression(node) {
+        if (_isBareNewDate(node)) context.report({ node, message: NEW_DATE_MESSAGE })
       }
     }
   }
-}
+})

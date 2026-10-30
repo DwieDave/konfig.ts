@@ -1,16 +1,8 @@
-import { isAstNode, isString } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
 
 const BANNED_MODULES = new Set(["node:child_process"])
 
-function _importSource(node: AstNode): string | null {
-  if (node.type !== "ImportDeclaration" || !isAstNode(node.source)) return null
-  const value = node.source.value
-
-  return isString(value) ? value : null
-}
-
-export const noNodeChildProcess: Rule = {
+export const noNodeChildProcess = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -20,10 +12,8 @@ export const noNodeChildProcess: Rule = {
   },
   create(context) {
     return {
-      ImportDeclaration(node: AstNode) {
-        const source = _importSource(node)
-
-        if (source !== null && BANNED_MODULES.has(source)) {
+      ImportDeclaration(node) {
+        if (BANNED_MODULES.has(node.source.value)) {
           context.report({
             node,
             message:
@@ -33,4 +23,4 @@ export const noNodeChildProcess: Rule = {
       }
     }
   }
-}
+})

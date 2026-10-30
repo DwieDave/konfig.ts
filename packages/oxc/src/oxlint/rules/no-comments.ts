@@ -1,54 +1,39 @@
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
+import { Option } from "effect"
 
-// Bans non-JSDoc block comments and caps line-comment length; JSDoc, directives
-// (eslint/oxlint/biome/prettier/@ts-), `// konfig: WHY ...` and `// SAFETY: ...` (anti-slop assertion
-// justification) are exempt.
-const DIRECTIVE_PREFIX = /^\s*(eslint|oxlint|biome|prettier|@ts-)/
-const WHY_PREFIX = /^\s*konfig:\s*WHY\b/
-const SAFETY_PREFIX = /^\s*SAFETY:/
+const EXEMPT_PREFIXES = [/^\s*(eslint|oxlint|biome|prettier|@ts-)/, /^\s*konfig:\s*WHY\b/, /^\s*SAFETY:/]
 const MAX_COMMENT_LENGTH = 150
 
-const _isJsDoc = (value: string): boolean => value.startsWith("*")
+const BLOCK_MESSAGE =
+  "Non-JSDoc block comments are not allowed — use a `//` line comment, a `/** ... */` JSDoc block on a declaration, or `// konfig: WHY ...` for intentional rationale."
 
-export const noComments: Rule = {
+const _lengthMessage = (length: number): string =>
+  `Comment exceeds ${MAX_COMMENT_LENGTH} chars (${length}). Split, shorten, or convert to a \`// konfig: WHY ...\` rationale comment.`
+
+const _violation = (comment: ESTree.Comment): Option.Option<string> => {
+  if (EXEMPT_PREFIXES.some((prefix) => prefix.test(comment.value))) return Option.none()
+
+  if (comment.type === "Block") return comment.value.startsWith("*") ? Option.none() : Option.some(BLOCK_MESSAGE)
+
+  return comment.value.length > MAX_COMMENT_LENGTH ? Option.some(_lengthMessage(comment.value.length)) : Option.none()
+}
+
+export const noComments = defineRule({
   meta: {
     type: "suggestion",
     docs: {
       description:
-        "No non-JSDoc block comments; single-line comments must be < 150 chars. JSDoc `/** ... */` blocks and `// konfig: WHY ...` are exempt."
+        "No non-JSDoc block comments; single-line comments must be at most 150 chars. JSDoc `/** ... */` blocks and `// konfig: WHY ...` are exempt."
     }
   },
   create(context) {
     return {
-      Program(node: AstNode) {
-        for (const comment of context.sourceCode.getAllComments()) {
-          if (DIRECTIVE_PREFIX.test(comment.value)) continue
-
-          if (WHY_PREFIX.test(comment.value)) continue
-
-          if (SAFETY_PREFIX.test(comment.value)) continue
-
-          if (comment.type === "Block") {
-            if (_isJsDoc(comment.value)) continue
-            context.report({
-              loc: comment.loc,
-              node,
-              message:
-                "Non-JSDoc block comments are not allowed — use a `//` line comment, a `/** ... */` JSDoc block on a declaration, or `// konfig: WHY ...` for intentional rationale."
-            })
-            continue
-          }
-
-          if (comment.value.length > MAX_COMMENT_LENGTH) {
-            context.report({
-              loc: comment.loc,
-              node,
-              message:
-                `Comment exceeds ${MAX_COMMENT_LENGTH} chars (${comment.value.length}). Split, shorten, or convert to a \`// konfig: WHY ...\` rationale comment.`
-            })
-          }
-        }
+      Program(node) {
+        context.sourceCode.getAllComments().forEach((comment) => {
+          Option.map(_violation(comment), (message) => context.report({ node, loc: comment.loc, message }))
+        })
       }
     }
   }
-}
+})

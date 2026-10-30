@@ -1,6 +1,6 @@
-import type { Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
 
-export const noSwitch: Rule = {
+export const noSwitch = defineRule({
   meta: {
     type: "problem",
     docs: { description: "Forbid `switch` statements; use `Match` from effect instead." }
@@ -15,4 +15,4 @@ export const noSwitch: Rule = {
       }
     }
   }
-}
+})

@@ -1,35 +1,29 @@
-import { childNodes, isTSTypeCast } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
+import { Option } from "effect"
+import { childNodes } from "../ast.ts"
+
+type Assertion = ESTree.TSAsExpression | ESTree.TSTypeAssertion
 
 const TOP_LEVEL_BANNED = new Set(["TSAnyKeyword", "TSUnknownKeyword", "TSNeverKeyword"])
 
-function _keywordName(type: string): string {
-  return type.replace(/^TS|Keyword$/g, "").toLowerCase()
+const _keywordName = (type: string): string => type.replace(/^TS|Keyword$/g, "").toLowerCase()
+
+const _containsAny = (node: ESTree.Node): boolean =>
+  childNodes(node).some((child) => child.type === "TSAnyKeyword" || _containsAny(child))
+
+const _bannedTargetKind = (node: Assertion): Option.Option<string> => {
+  const annotation = node.typeAnnotation
+
+  if (TOP_LEVEL_BANNED.has(annotation.type)) return Option.some(_keywordName(annotation.type))
+
+  return _containsAny(annotation) ? Option.some("any") : Option.none()
 }
 
-// `any` is banned anywhere; nested `unknown`/`never` stay legal (Record<string, unknown>, Effect<A, E, never>).
-function _findNestedAny(node: AstNode): string | null {
-  return childNodes(node).some((child) => child.type === "TSAnyKeyword" || _findNestedAny(child) !== null)
-    ? "any"
-    : null
-}
+const _isDoubleAssertion = (node: Assertion): boolean =>
+  node.expression.type === "TSAsExpression" || node.expression.type === "TSTypeAssertion"
 
-function _bannedTargetKind(node: AstNode): string | null {
-  if (!isTSTypeCast(node)) return null
-  const ann = node.typeAnnotation
-
-  if (TOP_LEVEL_BANNED.has(ann.type)) return _keywordName(ann.type)
-
-  return _findNestedAny(ann)
-}
-
-function _isDoubleAssertion(node: AstNode): boolean {
-  if (!isTSTypeCast(node)) return false
-
-  return isTSTypeCast(node.expression)
-}
-
-export const noBannedTypeAssertions: Rule = {
+export const noBannedTypeAssertions = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -38,29 +32,16 @@ export const noBannedTypeAssertions: Rule = {
     }
   },
   create(context) {
-    function report(node: AstNode) {
+    const check = (node: Assertion) => {
       const banned = _bannedTargetKind(node)
 
-      if (banned) {
-        context.report({
-          node,
-          message: `\`as ${banned}\` is banned — silently disables the type checker.`
-        })
-
-        return
-      }
-
-      if (_isDoubleAssertion(node)) {
-        context.report({
-          node,
-          message: "Double type assertions (`x as A as B`) are banned."
-        })
+      if (Option.isSome(banned)) {
+        context.report({ node, message: `\`as ${banned.value}\` is banned — silently disables the type checker.` })
+      } else if (_isDoubleAssertion(node)) {
+        context.report({ node, message: "Double type assertions (`x as A as B`) are banned." })
       }
     }
 
-    return {
-      TSAsExpression: report,
-      TSTypeAssertion: report
-    }
+    return { TSAsExpression: check, TSTypeAssertion: check }
   }
-}
+})

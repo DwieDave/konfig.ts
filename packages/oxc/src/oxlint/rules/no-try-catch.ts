@@ -1,6 +1,6 @@
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
 
-export const noTryCatch: Rule = {
+export const noTryCatch = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -9,7 +9,7 @@ export const noTryCatch: Rule = {
   },
   create(context) {
     return {
-      TryStatement(node: AstNode) {
+      TryStatement(node) {
         context.report({
           node,
           message: "Do not use try/catch. Use Effect.try, Effect.tryPromise, or an explicit error channel instead."
@@ -17,4 +17,4 @@ export const noTryCatch: Rule = {
       }
     }
   }
-}
+})

@@ -1,3 +1,4 @@
+import { definePlugin } from "@oxlint/plugins"
 import { noAmbientNondeterminism } from "./rules/no-ambient-nondeterminism.ts"
 import { noAny } from "./rules/no-any.ts"
 import { noBannedTypeAssertions } from "./rules/no-banned-type-assertions.ts"
@@ -14,12 +15,10 @@ import { noSwitch } from "./rules/no-switch.ts"
 import { noSyncSchemaApis } from "./rules/no-sync-schema-apis.ts"
 import { noTryCatch } from "./rules/no-try-catch.ts"
 import { noTypeAssertion } from "./rules/no-type-assertion.ts"
-import { noTypeofObject } from "./rules/no-typeof-object.ts"
 import { noYieldlessEffectGen } from "./rules/no-yieldless-effect-gen.ts"
 import { privateFunctionPrefix } from "./rules/private-function-prefix.ts"
-import type { Plugin } from "./types.ts"
 
-const plugin: Plugin = {
+const plugin = definePlugin({
   meta: { name: "app" },
   rules: {
     "no-ambient-nondeterminism": noAmbientNondeterminism,
@@ -38,10 +37,9 @@ const plugin: Plugin = {
     "no-sync-schema-apis": noSyncSchemaApis,
     "no-try-catch": noTryCatch,
     "no-type-assertion": noTypeAssertion,
-    "no-typeof-object": noTypeofObject,
     "no-yieldless-effect-gen": noYieldlessEffectGen,
     "private-function-prefix": privateFunctionPrefix
   }
-}
+})
 
 export default plugin

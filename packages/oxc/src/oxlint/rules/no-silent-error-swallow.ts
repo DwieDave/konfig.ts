@@ -1,69 +1,63 @@
-import { isAstNode, isCallExpression, isIdentifier, isMemberExpression, isNodeList } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
+import { Option } from "effect"
+import { effectMemberName } from "../ast.ts"
 
-const CATCH_METHODS = new Set(["catchAll", "catch", "catchTag", "catchTags"])
-const VOID_METHODS = new Set(["void", "unit"])
+type Matcher = (node: ESTree.Node) => boolean
 
-function _effectMemberName(node: AstNode): string | null {
-  if (!isMemberExpression(node)) return null
+const MESSAGE =
+  "Do not silently swallow Effect errors with Effect.void/Effect.ignore/undefined. Recover meaningfully, transform the error, or let it propagate."
 
-  if (!isIdentifier(node.object) || node.object.name !== "Effect") return null
+const _isVoidEffect: Matcher = (node) => Option.exists(effectMemberName(node), (name) => name === "void")
 
-  return isIdentifier(node.property) ? node.property.name : null
+const _isUndefined: Matcher = (node) => node.type === "Identifier" && node.name === "undefined"
+
+const _returnedExpression = (fn: ESTree.Node): Option.Option<ESTree.Node> => {
+  if (fn.type !== "ArrowFunctionExpression" && fn.type !== "FunctionExpression") return Option.none()
+
+  if (fn.body === null || fn.body.type !== "BlockStatement") return Option.fromNullishOr(fn.body)
+  const [statement] = fn.body.body
+
+  return fn.body.body.length === 1 && statement?.type === "ReturnStatement"
+    ? Option.fromNullishOr(statement.argument)
+    : Option.none()
 }
 
-function _isVoidEffect(node: AstNode): boolean {
-  const name = _effectMemberName(node)
+const _matchesOrReturns = (input: { readonly node: ESTree.Node; readonly matcher: Matcher }): boolean =>
+  input.matcher(input.node) || Option.exists(_returnedExpression(input.node), input.matcher)
 
-  return name !== null && VOID_METHODS.has(name)
-}
+const HANDLER_MATCHERS = new Map<string, Matcher>([
+  ["catch", _isVoidEffect],
+  ["catchCause", _isVoidEffect],
+  ["catchTag", _isVoidEffect],
+  ["catchTags", _isVoidEffect],
+  ["orElseSucceed", _isUndefined]
+])
 
-// An arrow/function whose body is `Effect.void` (expression or single `return Effect.void`).
-function _returnsVoidEffect(node: AstNode): boolean {
-  const body = node.body
-
-  if (!isAstNode(body)) return false
-
-  if (_isVoidEffect(body)) return true
-
-  if (body.type !== "BlockStatement" || !isNodeList(body.body) || body.body.length !== 1) return false
-  const statement = body.body[0]
-
-  return (
-    statement?.type === "ReturnStatement" && isAstNode(statement.argument) && _isVoidEffect(statement.argument)
+const _swallowsViaHandler = (node: ESTree.CallExpression): boolean =>
+  effectMemberName(node.callee).pipe(
+    Option.flatMap((name) => Option.fromNullishOr(HANDLER_MATCHERS.get(name))),
+    Option.exists((matcher) => node.arguments.some((argument) => _matchesOrReturns({ node: argument, matcher })))
   )
-}
 
-export const noSilentErrorSwallow: Rule = {
+export const noSilentErrorSwallow = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Do not silently swallow Effect errors with Effect.void/Effect.unit in catch handlers. Recover meaningfully, transform the error, or let it propagate."
+        "Do not silently swallow Effect errors with Effect.ignore, Effect.void or undefined recoveries in catch handlers. Recover meaningfully, transform the error, or let it propagate."
     }
   },
   create(context) {
     return {
-      CallExpression(node: AstNode) {
-        if (!isCallExpression(node)) return
-
-        if (_effectMemberName(node.callee) === null) return
-        const name = _effectMemberName(node.callee)
-
-        if (name === null || !CATCH_METHODS.has(name)) return
-
-        for (const argument of node.arguments) {
-          if (_isVoidEffect(argument) || _returnsVoidEffect(argument)) {
-            context.report({
-              node,
-              message:
-                "Do not silently swallow Effect errors with Effect.void/Effect.unit. Recover meaningfully, transform the error, or let it propagate."
-            })
-
-            return
-          }
+      CallExpression(node) {
+        if (_swallowsViaHandler(node)) context.report({ node, message: MESSAGE })
+      },
+      MemberExpression(node) {
+        if (Option.exists(effectMemberName(node), (name) => name === "ignore")) {
+          context.report({ node, message: MESSAGE })
         }
       }
     }
   }
-}
+})

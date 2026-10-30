@@ -1,24 +1,19 @@
-import { isAstNode, isNodeList, isTSTypeReference } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
 
-function _typeArguments(node: AstNode): readonly AstNode[] | null {
-  const args = node.typeArguments ?? node.typeParameters
+const _isRecordStringUndefined = (node: ESTree.TSTypeReference): boolean => {
+  const params = node.typeArguments?.params
 
-  return isAstNode(args) && isNodeList(args.params) ? args.params : null
+  return (
+    node.typeName.type === "Identifier" &&
+    node.typeName.name === "Record" &&
+    params?.length === 2 &&
+    params[0]?.type === "TSStringKeyword" &&
+    params[1]?.type === "TSUndefinedKeyword"
+  )
 }
 
-function _isRecordStringUndefined(node: AstNode): boolean {
-  if (!isTSTypeReference(node)) return false
-
-  if (node.typeName.type !== "Identifier" || node.typeName.name !== "Record") return false
-  const params = _typeArguments(node)
-
-  if (params === null || params.length !== 2) return false
-
-  return params[0]?.type === "TSStringKeyword" && params[1]?.type === "TSUndefinedKeyword"
-}
-
-export const noRecordStringUndefined: Rule = {
+export const noRecordStringUndefined = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -38,4 +33,4 @@ export const noRecordStringUndefined: Rule = {
       }
     }
   }
-}
+})

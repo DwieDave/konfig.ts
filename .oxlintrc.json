@@ -53,7 +53,6 @@
     "app/no-sync-schema-apis": "error",
     "app/no-try-catch": "error",
     "app/no-type-assertion": "warn",
-    "app/no-typeof-object": "warn",
     "app/no-yieldless-effect-gen": "error",
     "app/private-function-prefix": "error",
     "effecttsgo/unstable-api-usage": "off",
@@ -88,8 +87,7 @@
         "packages/oxc/src/**/*.ts"
       ],
       "rules": {
-        "app/no-type-assertion": "off",
-        "app/no-typeof-object": "off"
+        "app/no-type-assertion": "off"
       }
     },
     {
@@ -100,7 +98,6 @@
       "rules": {
         "effecttsgo/floating-effect": "off",
         "app/no-bare-error": "off",
-        "app/no-typeof-object": "off",
         "app/no-effect-asvoid": "off",
         "app/no-try-catch": "off",
         "app/no-type-assertion": "off",
@@ -141,7 +138,6 @@
         "app/private-function-prefix": "off",
         "effecttsgo/node-builtin-import": "off",
         "app/no-try-catch": "off",
-        "app/no-typeof-object": "off",
         "app/no-type-assertion": "error"
       }
     }
