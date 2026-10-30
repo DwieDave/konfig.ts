@@ -30,7 +30,7 @@ konfig docker diff    <target> [--format summary|detail|json]
 | `preview`, `write` | `--only prod\|dev` | both | Only emit the production `Dockerfile` (`prod`) or `Dockerfile.dev` (`dev`). |
 | `write` | `--out-dir <dir>` | `<target>` | Destination directory, relative to the cwd. |
 | `write` | `--force` | `false` | Overwrite a destination file even if it is not konfig-managed. |
-| `diff` | `--format` | `summary` | `summary`, `detail`, or `json`, same formatter as `konfig diff`. |
+| `diff` | `--format` | `summary` | `summary` prints add/remove counts (`+1 -0`), `detail` prints each changed line (`- L2: old`, `+ L2: new`), `json` prints `{ changes: [{ op, line, text }] }`. |
 
 ## The spec
 
@@ -70,7 +70,7 @@ Every emitted file starts with a three-line header: `# konfig-managed: @konfig.t
 
 `preview` prints the production Dockerfile to stdout, followed by a `# ---- Dockerfile.dev ----` separator and the dev Dockerfile when the spec has `dev`.
 
-`diff` compares the files on disk with what would be emitted now. The on-disk content is compared with the emitted content, so an edited body fails even when the header is intact. A structural diff is printed and the command fails with `DiffDrift { target, kind }`. When nothing differs it prints an `OK` line: `<target> matches`.
+`diff` compares the files on disk with what would be emitted now. The on-disk content is compared with the emitted content, so an edited body fails even when the header is intact. A line diff (longest common subsequence, so an inserted line is one `+` entry) is printed in the chosen format and the command fails with `DiffDrift { target, kind }`. When nothing differs it prints an `OK` line: `<target> matches`.
 
 <Aside type="note">
 `docker` does not read `konfig.json`. It needs a TypeScript-capable runtime to import `docker.ts`, and it never builds, pushes, or tags images.

@@ -1,10 +1,19 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
+import { type DiffFormat } from "@konfig.ts/core"
 import { Console, Effect, Option, Predicate } from "effect"
-import { FileSystem } from "effect/FileSystem"
+import { FileSystem, makeNoop } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import { systemError } from "effect/PlatformError"
 import * as fc from "fast-check"
 import { diffEffect, diffOne, emitFor, loadSpec, previewEffect, writeAtomic, writeEffect, writeOne } from "./docker"
+import { changesOf, diffLines, renderDockerDiff } from "./dockerDiff"
+
+type Edits = ReturnType<typeof diffLines>
+
+const applyEdits = (edits: Edits): ReadonlyArray<string> => edits.flatMap((e) => e.op === "remove" ? [] : [e.text])
+
+const sourceLines = (edits: Edits): ReadonlyArray<string> => edits.flatMap((e) => e.op === "add" ? [] : [e.text])
 
 const minimalSpecBody = `
 import { Docker } from "@konfig.ts/docker"
@@ -163,6 +172,29 @@ describe("writeAtomic", () => {
       expect(failure._tag).toBe("DockerWriteError")
       expect(failure.path).toBe(dest)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("writeOne without check-then-read", () => {
+  it.effect("writes when exists would be denied but read reports NotFound", () =>
+    Effect.gen(function*() {
+      const written: Array<string> = []
+
+      const err = (_tag: "NotFound" | "PermissionDenied") => systemError({ _tag, module: "FileSystem", method: "x" })
+
+      const stub = makeNoop({
+        exists: () => Effect.fail(err("PermissionDenied")),
+        readFileString: () => Effect.fail(err("NotFound")),
+        writeFileString: (path) => Effect.sync(() => void written.push(path)),
+        rename: () => Effect.void
+      })
+
+      const r = yield* writeOne({ dest: "/x/Dockerfile", content: "FROM scratch\n", force: false }).pipe(
+        Effect.provideService(FileSystem, stub)
+      )
+
+      expect(r).toEqual({ written: true })
+      expect(written).toHaveLength(1)
+    }).pipe(Effect.provide(NodeServices.layer)))
 })
 
 describe("writeOne", () => {
@@ -616,7 +648,7 @@ describe("diffOne exact comparison", () => {
 })
 
 describe("diffOne printed line diff", () => {
-  it.effect("reports each differing line number, including reordered lines", () =>
+  it.effect("prints counts in summary format for reordered lines", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-diffone-" })
@@ -636,6 +668,61 @@ describe("diffOne printed line diff", () => {
         )
       )
 
-      expect(lines).toEqual(["- L2: B\n+ L2: C\n- L3: C\n+ L3: B"])
+      expect(lines).toEqual(["+1 -1"])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+const _printed = (input: { readonly left: string; readonly right: string; readonly format: DiffFormat }) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-diffone-" })
+    const dest = `${dir}/Dockerfile`
+    yield* fs.writeFileString(dest, input.left)
+    const lines: Array<string> = []
+    yield* Effect.flip(
+      diffOne({ dest, emitted: input.right, kind: "prod", target: "t", format: input.format }).pipe(
+        Effect.provideService(Console.Console, _capturingConsole(lines))
+      )
+    )
+
+    return lines
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+describe("docker line diff", () => {
+  const left = "a\nb\nc\nd\ne\n"
+  const right = "x\na\nb\nc\nd\ne\n"
+
+  it.effect("detail reports one inserted line", () =>
+    Effect.gen(function*() {
+      expect(yield* _printed({ left, right, format: "detail" })).toEqual(["+ L1: x"])
+    }))
+
+  it.effect("summary prints counts and differs from detail", () =>
+    Effect.gen(function*() {
+      const summary = yield* _printed({ left, right, format: "summary" })
+      expect(summary).toEqual(["+1 -0"])
+      expect(summary).not.toEqual(yield* _printed({ left, right, format: "detail" }))
+    }))
+
+  it("json keeps a structured change list", () => {
+    expect(JSON.parse(renderDockerDiff({ left, right, format: "json" }))).toEqual({
+      changes: [{ op: "add", line: 1, text: "x" }]
+    })
+  })
+
+  it("diff of identical text is empty", () => {
+    fc.assert(fc.property(fc.string(), (t) => {
+      expect(changesOf(diffLines({ left: t.split("\n"), right: t.split("\n") })))
+        .toEqual([])
+    }))
+  })
+
+  it("edit script reproduces both sides", () => {
+    const lines = fc.array(fc.constantFrom("a", "b", "c", ""), { maxLength: 12 })
+    fc.assert(fc.property(lines, lines, (l, r) => {
+      const edits = diffLines({ left: l, right: r })
+      expect(applyEdits(edits)).toEqual(r)
+      expect(sourceLines(edits)).toEqual(l)
+    }))
+  })
 })

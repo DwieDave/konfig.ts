@@ -1,4 +1,4 @@
-import { type DiffFormat, existsOrFalse, readOrEmpty } from "@konfig.ts/core"
+import { type DiffFormat, orElseIfNotFound, readOrEmpty } from "@konfig.ts/core"
 import {
   type AnyDockerError,
   type DockerApp,
@@ -14,6 +14,7 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { moduleDefault } from "../moduleDefault"
 import { formatFlag } from "../renderContextFlags"
+import { renderDockerDiff } from "./dockerDiff"
 
 export class SpecImportError extends Data.TaggedError("SpecImportError")<{
   readonly specPath: string
@@ -109,6 +110,8 @@ interface WriteAtomicInput {
   readonly content: string
 }
 
+const _dockerWriteError = (path: string) => (cause: unknown): DockerWriteError => new DockerWriteError({ path, cause })
+
 export const writeAtomic = (input: WriteAtomicInput): Effect.Effect<void, DockerWriteError, FileSystem> =>
   Effect.gen(function*() {
     const { content, path } = input
@@ -116,7 +119,7 @@ export const writeAtomic = (input: WriteAtomicInput): Effect.Effect<void, Docker
     const tmp = `${path}.tmp.${process.pid}`
     yield* fs.writeFileString(tmp, content)
     yield* fs.rename(tmp, path)
-  }).pipe(Effect.mapError((cause) => new DockerWriteError({ path: input.path, cause })))
+  }).pipe(Effect.mapError(_dockerWriteError(input.path)))
 
 interface WriteOneInput {
   readonly dest: string
@@ -130,15 +133,13 @@ export const writeOne = (
   Effect.gen(function*() {
     const { content, dest, force } = input
 
-    const existed = yield* existsOrFalse(dest).pipe(
-      Effect.mapError((cause) => new DockerWriteError({ path: dest, cause }))
+    const fs = yield* FileSystem
+
+    const existing = yield* orElseIfNotFound({ effect: fs.readFileString(dest), fallback: undefined }).pipe(
+      Effect.mapError(_dockerWriteError(dest))
     )
 
-    if (existed) {
-      const existing = yield* readOrEmpty(dest).pipe(
-        Effect.mapError((cause) => new DockerWriteError({ path: dest, cause }))
-      )
-
+    if (existing !== undefined) {
       const head = extractHeader(existing)
 
       if (!head.managed && !force) {
@@ -247,40 +248,13 @@ export interface DiffOneInput {
   readonly format: DiffFormat
 }
 
-interface LineChange {
-  readonly line: number
-  readonly removed: string | undefined
-  readonly added: string | undefined
-}
-
-const _lineChanges = (
-  { left, right }: { readonly left: string; readonly right: string }
-): ReadonlyArray<LineChange> => {
-  const l = left.split("\n")
-  const r = right.split("\n")
-
-  return Array.from({ length: Math.max(l.length, r.length) }, (_, i) => ({ line: i + 1, removed: l[i], added: r[i] }))
-    .filter((c) => c.removed !== c.added)
-}
-
-const _lineDiff = (input: { readonly left: string; readonly right: string; readonly format: DiffFormat }) => {
-  const changes = _lineChanges(input)
-
-  return input.format === "json"
-    ? JSON.stringify({ changes })
-    : changes.flatMap((c) => [
-      ...(c.removed === undefined ? [] : [`- L${c.line}: ${c.removed}`]),
-      ...(c.added === undefined ? [] : [`+ L${c.line}: ${c.added}`])
-    ]).join("\n")
-}
-
 export const diffOne = (input: DiffOneInput): Effect.Effect<void, DiffDrift, FileSystem | Path> =>
   Effect.gen(function*() {
     const { dest, emitted, format, kind, target } = input
     const onDisk = yield* readOrEmpty(dest).pipe(Effect.orDie)
 
     if (onDisk === emitted) return
-    yield* Console.log(_lineDiff({ left: onDisk, right: emitted, format }))
+    yield* Console.log(renderDockerDiff({ left: onDisk, right: emitted, format }))
 
     return yield* new DiffDrift({ target, kind })
   })
