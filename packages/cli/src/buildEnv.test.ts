@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Effect, Option, Predicate, Schema } from "effect"
+import { Cause, Effect, Exit, Option, Predicate, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import fc from "fast-check"
@@ -106,7 +106,7 @@ export default Bundle.fromModules({ modules: [raw] as const });
       expect(contents.some((c) => c.includes("name: two"))).toBe(true)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("skips a RawYaml document with neither string kind nor string metadata.name", () =>
+  it.effect("fails on a RawYaml document with neither string kind nor string metadata.name", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-rawyaml-skip-" })
@@ -128,9 +128,8 @@ export default Bundle.fromModules({ modules: [raw] as const });
       const cfg = _cfgFor(root)
       const ctx = RenderContext.make("test")
 
-      const rendered = yield* renderEnv({ cfg, envName: "test", ctx })
-      expect(rendered.files.length).toBe(1)
-      expect(rendered.files[0]?.content.includes("kept")).toBe(true)
+      const err = yield* renderEnv({ cfg, envName: "test", ctx }).pipe(Effect.flip)
+      expect(Predicate.isTagged(err, "InvalidOutputObject")).toBe(true)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 
@@ -343,22 +342,166 @@ describe("writeFiles: atomic staging", () => {
       expect(aContent).toBe("a: 1\n")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect(
-    "writing an empty file set fails to rename (staging dir is never created when there are no files)",
-    () =>
+  it.effect("writing an empty file set over an existing outDir leaves it existing and empty", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-empty-" })
+      const outDirAbs = path.join(root, "infra", "rendered", "test")
+      yield* fs.makeDirectory(outDirAbs, { recursive: true })
+      yield* fs.writeFileString(path.join(outDirAbs, "stale.yaml"), "x: 1\n")
+
+      yield* writeFiles({ rendered: { appsDirAbs: outDirAbs, outDirAbs, files: [] }, cfg: _cfgFor(root) })
+
+      expect(yield* fs.exists(outDirAbs)).toBe(true)
+      expect(yield* fs.readDirectory(outDirAbs)).toEqual([])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("writeFiles: output path containment", () => {
+  const _tryWrite = (name: string) =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-escape-" })
+      const outDirAbs = path.join(root, "infra", "rendered", "test")
+
+      const file = { path: path.join(outDirAbs, name, "a.yaml"), content: "a: 1\n" }
+
+      const exit = yield* writeFiles({
+        rendered: { appsDirAbs: outDirAbs, outDirAbs, files: [file] },
+        cfg: _cfgFor(root)
+      }).pipe(Effect.exit)
+
+      const all = yield* fs.readDirectory(root, { recursive: true })
+
+      return { exit, all, root, path }
+    })
+
+  it.effect("fails typed and writes nothing outside the env dir for an escaping name", () =>
+    Effect.gen(function*() {
+      const { all, exit } = yield* _tryWrite("../../escaped")
+
+      expect(exit._tag).toBe("Failure")
+      expect(all.filter((p) => p.includes("escaped"))).toEqual([])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it("property: every written path is strictly inside the env dir or the write fails typed", async () => {
+    const seg = fc.constantFrom("..", ".", "/", "a", "b")
+
+    const names = fc.oneof(
+      fc.constantFrom("..", "../a", "a/../../b", "/abs"),
+      fc.array(seg, { minLength: 1, maxLength: 5 }).map((parts) => parts.join("/")),
+      fc.string()
+    )
+
+    await fc.assert(
+      fc.asyncProperty(names, async (name) => {
+        const { all, exit, path, root } = await _tryWrite(name).pipe(
+          Effect.scoped,
+          Effect.provide(NodeServices.layer),
+          Effect.runPromise
+        )
+
+        const prefix = path.join("infra", "rendered", "test")
+        const outside = all.filter((p) => p.endsWith("a.yaml") && !p.startsWith(`${prefix}${path.sep}`))
+
+        expect(root.length).toBeGreaterThan(0)
+        expect(Exit.isFailure(exit) || outside.length === 0).toBe(true)
+        expect(outside).toEqual([])
+      }),
+      { numRuns: 30 }
+    )
+  })
+})
+
+describe("renderEnv then writeFiles: escaping names", () => {
+  const _renderAndWrite = (entry: string) =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-escape-e2e-" })
+      yield* _writeEnvFile(root, "infra/env/test.ts", entry)
+      const cfg = _cfgFor(root)
+
+      const exit = yield* renderEnv({ cfg, envName: "test", ctx: RenderContext.make("test") }).pipe(
+        Effect.flatMap((rendered) => writeFiles({ rendered, cfg })),
+        Effect.exit
+      )
+
+      const all = yield* fs.readDirectory(root, { recursive: true })
+
+      return { exit, outside: all.filter((p) => p.includes("escaped") || p.endsWith("x/ConfigMap-c.yaml")) }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+  const _failTag = (exit: Exit.Exit<unknown, unknown>) => Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+
+  it.effect("a Bundle named ../../escaped is rejected and writes nothing outside the env dir", () =>
+    Effect.gen(function*() {
+      const { exit, outside } = yield* _renderAndWrite(`
+import { Bundle, Manifest } from "@konfig.ts/core";
+const raw = Bundle.define({
+	name: "../../escaped",
+	namespace: "app",
+	build: () => [Manifest.embedYaml({ literal: "kind: ConfigMap\\nmetadata:\\n  name: c\\n" })],
+});
+export default Bundle.fromModules({ modules: [raw] as const });
+`)
+
+      expect(_failTag(exit)).toMatchObject({
+        _tag: expect.stringMatching(/^(UnsafeOutputPath|OutDirOutsideManifests)$/)
+      })
+      expect(outside).toEqual([])
+    }))
+
+  it.effect("an AppOfApps result named ../x is rejected and writes nothing outside the env dir", () =>
+    Effect.gen(function*() {
+      const { exit, outside } = yield* _renderAndWrite(`
+import { Application, AppOfApps } from "@konfig.ts/argocd";
+import { ConfigMap } from "@konfig.ts/k8s";
+const svc = Application.define({
+	name: "../x",
+	namespace: "app",
+	source: { repoURL: "https://example.com/repo", targetRevision: "main", path: "envs/test/svc" },
+	build: () => [ConfigMap.make({ name: "c", namespace: "app", data: { K: "v" } })],
+});
+export default AppOfApps.fromModules({
+	target: { repoURL: "https://example.com/repo", branch: "main", rootPath: "envs/test" },
+	defaults: { destination: { server: "https://kubernetes.default.svc" } },
+	modules: [svc] as const,
+});
+`)
+
+      expect(_failTag(exit)).toMatchObject({
+        _tag: expect.stringMatching(/^(UnsafeOutputPath|OutDirOutsideManifests)$/)
+      })
+      expect(outside).toEqual([])
+    }))
+})
+
+describe("renderEnv: non-manifest values", () => {
+  const _bodies = ["apiVersion: v1\\ndata:\\n  a: b\\n", "kind: 5\\nmetadata:\\n  name: x\\n"]
+
+  it.effect("fail with InvalidOutputObject through renderEnv", () =>
+    Effect.forEach(_bodies, (literal) =>
       Effect.gen(function*() {
         const fs = yield* FileSystem
-        const path = yield* Path
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-empty-" })
-        const outDirAbs = path.join(root, "infra", "rendered", "test")
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-nonmanifest-" })
+        yield* _writeEnvFile(
+          root,
+          "infra/env/test.ts",
+          `
+import { Bundle, Manifest } from "@konfig.ts/core";
+const raw = Bundle.define({ name: "raw", namespace: "app", build: () => [Manifest.embedYaml({ literal: "${literal}" })] });
+export default Bundle.fromModules({ modules: [raw] as const });
+`
+        )
 
-        const rendered = { appsDirAbs: outDirAbs, outDirAbs, files: [] }
-        const err = yield* writeFiles({ rendered, cfg: _cfgFor(root) }).pipe(Effect.flip)
+        const err = yield* renderEnv({ cfg: _cfgFor(root), envName: "test", ctx: RenderContext.make("test") }).pipe(
+          Effect.flip
+        )
 
-        expect(err._tag).toBe("WriteEnvError")
-        expect(err).toMatchObject({ path: outDirAbs })
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-  )
+        expect(err._tag).toBe("InvalidOutputObject")
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))))
 })
 
 describe("writeFiles: manifests-root guard", () => {
@@ -438,13 +581,16 @@ describe("envOutDir", () => {
 })
 
 describe("_collectOutputs: kind/name routing", () => {
-  interface Doc {
-    readonly kind?: string
-    readonly justAString?: boolean
-    readonly metadata?: { readonly name: string }
+  interface CandidateRecord {
+    readonly [key: string]: Candidate
   }
 
-  const _collect = (value: Doc) =>
+  type Candidate = string | number | boolean | null | undefined | CandidateRecord
+
+  const _tagOf = (error: { readonly _tag?: string; readonly error?: { readonly _tag?: string } }) =>
+    error.error?._tag ?? error._tag
+
+  const _collect = (value: Candidate) =>
     _collectOutputs({ value, appDir: "/out/app" }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise)
 
   it("property: an object with a kind yields exactly one file or an InvalidOutputObject error", async () => {
@@ -457,7 +603,7 @@ describe("_collectOutputs: kind/name routing", () => {
 
           const outcome = await _collect(doc).then(
             (files) => files.length,
-            (error) => error?.error?._tag ?? error?._tag
+            _tagOf
           )
 
           expect(outcome === 1 || outcome === "InvalidOutputObject").toBe(true)
@@ -468,7 +614,27 @@ describe("_collectOutputs: kind/name routing", () => {
     )
   })
 
-  it("skips only documents with neither kind nor metadata.name", async () => {
-    expect(await _collect({ justAString: true })).toEqual([])
+  it("skips null, undefined and empty documents", async () => {
+    expect(await _collect(null)).toEqual([])
+    expect(await _collect(undefined)).toEqual([])
+  })
+
+  it("fails on records without a string kind and metadata.name", async () => {
+    const values = [{ apiVersion: "v1", data: { a: "b" } }, { kind: 5, metadata: { name: "x" } }, { justAString: true }]
+
+    const tags = await Promise.all(values.map((v) => _collect(v).then(() => "ok", _tagOf)))
+    expect(tags).toEqual(values.map(() => "InvalidOutputObject"))
+  })
+
+  it("property: any record lacking a string kind and metadata.name fails", async () => {
+    const lacking = fc.dictionary(
+      fc.constantFrom("a", "b", "data", "apiVersion"),
+      fc.oneof(fc.string(), fc.integer(), fc.boolean(), fc.constant(null))
+    )
+
+    await fc.assert(fc.asyncProperty(lacking, async (value) => {
+      const outcome = await _collect(value).then(() => "ok", _tagOf)
+      expect(outcome).toBe("InvalidOutputObject")
+    }))
   })
 })

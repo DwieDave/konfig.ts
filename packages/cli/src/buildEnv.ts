@@ -11,7 +11,7 @@ import {
   unwrapDocs,
   Yaml
 } from "@konfig.ts/core"
-import { Array as Arr, ConfigProvider, Data, Effect, Option, Schema } from "effect"
+import { Array as Arr, ConfigProvider, Data, Effect, Option, Predicate, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { resolveCliPaths } from "./cliConfig"
@@ -62,6 +62,15 @@ class OutDirOutsideManifests extends Data.TaggedError("OutDirOutsideManifests")<
 }> {
   get message(): string {
     return `refusing to replace ${this.outDir}: it is not strictly inside the manifests root ${this.root}`
+  }
+}
+
+class UnsafeOutputPath extends Data.TaggedError("UnsafeOutputPath")<{
+  readonly path: string
+  readonly root: string
+}> {
+  get message(): string {
+    return `refusing to write ${this.path}: it is not strictly inside ${this.root}`
   }
 }
 
@@ -161,10 +170,17 @@ interface Routing {
   readonly namespace: string | undefined
 }
 
-const _routingOf = (parsed: typeof _KindNameSchema.Type): Option.Option<Routing> =>
-  parsed.kind === undefined && parsed.metadata?.name === undefined
-    ? Option.none()
-    : Option.some({ kind: parsed.kind ?? "", name: parsed.metadata?.name ?? "", namespace: parsed.metadata?.namespace })
+const _UNROUTABLE: Routing = { kind: "", name: "", namespace: undefined }
+
+const _routingOf = (decoded: Option.Option<typeof _KindNameSchema.Type>): Routing =>
+  Option.match(decoded, {
+    onNone: () => _UNROUTABLE,
+    onSome: (parsed) => ({
+      kind: parsed.kind ?? "",
+      name: parsed.metadata?.name ?? "",
+      namespace: parsed.metadata?.namespace
+    })
+  })
 
 const _describeObject = (routing: Routing): string =>
   `${routing.kind} ${routing.namespace === undefined ? "" : `${routing.namespace}/`}${routing.name}`
@@ -191,22 +207,16 @@ const _toOutputFile = (input: _ToOutputFileInput): Effect.Effect<OutputFile, Inv
     }
   })
 
-const _objectOutputs = (
-  input: Omit<_ToOutputFileInput, "routing"> & { readonly parsed: typeof _KindNameSchema.Type }
-): Effect.Effect<OutputFile[], InvalidOutputObject, Path> =>
-  Option.match(_routingOf(input.parsed), {
-    onNone: () => Effect.succeed<OutputFile[]>([]),
-    onSome: (routing) => Effect.map(_toOutputFile({ doc: input.doc, dir: input.dir, routing }), (file) => [file])
-  })
-
 interface _CollectOutputsInput {
   readonly value: unknown
   readonly appDir: string
 }
 
+type _UnwrapError = Effect.Error<ReturnType<typeof unwrapDocs>>
+
 export const _collectOutputs = (
   input: _CollectOutputsInput
-): Effect.Effect<OutputFile[], InvalidOutputObject, Path> => {
+): Effect.Effect<OutputFile[], InvalidOutputObject | _UnwrapError, Path> => {
   const { appDir, value } = input
 
   const flatten = (values: ReadonlyArray<unknown>) =>
@@ -214,12 +224,14 @@ export const _collectOutputs = (
 
   if (Array.isArray(value)) return flatten(value)
 
-  if (isRawYaml(value) || isParsedDoc(value)) return unwrapDocs(value).pipe(Effect.orDie, Effect.flatMap(flatten))
+  if (isRawYaml(value) || isParsedDoc(value)) return unwrapDocs(value).pipe(Effect.flatMap(flatten))
 
-  return Option.match(_decodeKindName(value), {
-    onNone: () => Effect.succeed<OutputFile[]>([]),
-    onSome: (parsed) => _objectOutputs({ doc: value, dir: appDir, parsed })
-  })
+  if (!Predicate.isObject(value)) return Effect.succeed([])
+
+  return Effect.map(
+    _toOutputFile({ doc: value, dir: appDir, routing: _routingOf(_decodeKindName(value)) }),
+    (file) => [file]
+  )
 }
 
 interface OutputCollision {
@@ -384,14 +396,33 @@ interface WriteFilesToDirInput {
   readonly targetDir: string
 }
 
-const _writeOne = (input: WriteFilesToDirInput & { readonly file: OutputFile }) =>
+const _isStrictlyInside = (input: { readonly path: Path; readonly root: string; readonly target: string }) => {
+  const rel = input.path.relative(input.root, input.target)
+
+  return !(rel === "" || rel === ".." || rel.startsWith(`..${input.path.sep}`) || input.path.isAbsolute(rel))
+}
+
+const _targetPathOf = (input: WriteFilesToDirInput & { readonly file: OutputFile }) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    const { file, rendered, targetDir } = input
+    const root = rendered.outDirAbs
+
+    if (!_isStrictlyInside({ path, root, target: file.path })) {
+      return yield* new UnsafeOutputPath({ path: file.path, root })
+    }
+
+    return path.join(targetDir, path.relative(root, file.path))
+  })
+
+const _writeOne = (input: { readonly targetPath: string; readonly content: string }) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
-    const targetPath = path.join(input.targetDir, path.relative(input.rendered.outDirAbs, input.file.path))
+    const { content, targetPath } = input
     const toError = (cause: unknown) => new WriteEnvError({ path: targetPath, cause })
     yield* fs.makeDirectory(path.dirname(targetPath), { recursive: true }).pipe(Effect.mapError(toError))
-    yield* fs.writeFileString(targetPath, input.file.content, { mode: 0o600 }).pipe(Effect.mapError(toError))
+    yield* fs.writeFileString(targetPath, content, { mode: 0o600 }).pipe(Effect.mapError(toError))
 
     return targetPath
   })
@@ -403,8 +434,13 @@ const _writeOne = (input: WriteFilesToDirInput & { readonly file: OutputFile }) 
 // so kubeconform sees the *current* render, not the last `build`'s output).
 export const writeFilesToDir = (
   input: WriteFilesToDirInput
-): Effect.Effect<ReadonlyArray<string>, WriteEnvError, FileSystem | Path> =>
-  Effect.forEach(input.rendered.files, (file) => _writeOne({ ...input, file }))
+): Effect.Effect<ReadonlyArray<string>, WriteEnvError | UnsafeOutputPath, FileSystem | Path> =>
+  Effect.gen(function*() {
+    const targets = yield* Effect.forEach(input.rendered.files, (file) =>
+      Effect.map(_targetPathOf({ ...input, file }), (targetPath) => ({ targetPath, content: file.content })))
+
+    return yield* Effect.forEach(targets, _writeOne)
+  })
 
 const _removeIfExists = (target: string) =>
   Effect.gen(function*() {
@@ -430,10 +466,10 @@ const _assertInsideManifests = (input: { readonly cfg: ResolvedKonfigConfig; rea
   Effect.gen(function*() {
     const path = yield* Path
     const root = yield* _manifestsRoot(input.cfg)
-    const rel = path.relative(root, input.outDirAbs)
-    const escapes = rel === "" || rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)
 
-    if (escapes) return yield* new OutDirOutsideManifests({ outDir: input.outDirAbs, root })
+    if (!_isStrictlyInside({ path, root, target: input.outDirAbs })) {
+      return yield* new OutDirOutsideManifests({ outDir: input.outDirAbs, root })
+    }
   })
 
 interface WriteFilesInput {
@@ -446,12 +482,16 @@ interface WriteFilesInput {
 // half-rewritten live tree.
 export const writeFiles = (
   input: WriteFilesInput
-): Effect.Effect<ReadonlyArray<string>, WriteEnvError | OutDirOutsideManifests, FileSystem | Path> =>
+): Effect.Effect<ReadonlyArray<string>, WriteEnvError | OutDirOutsideManifests | UnsafeOutputPath, FileSystem | Path> =>
   Effect.gen(function*() {
     const { cfg, rendered } = input
     yield* _assertInsideManifests({ cfg, outDirAbs: rendered.outDirAbs })
     const stagingDir = `${rendered.outDirAbs}.tmp`
     yield* _removeIfExists(stagingDir)
+    const fs = yield* FileSystem
+    yield* fs.makeDirectory(stagingDir, { recursive: true }).pipe(
+      Effect.mapError((cause) => new WriteEnvError({ path: stagingDir, cause }))
+    )
     yield* writeFilesToDir({ rendered, targetDir: stagingDir })
     yield* _promoteStaging({ stagingDir, outDirAbs: rendered.outDirAbs })
 
