@@ -17,11 +17,14 @@ const _coverageFor = (lines: number) => ({
   thresholds: { lines }
 })
 
+const _testFor = (lines: number | undefined) => {
+  const base = { exclude: ["dist/**", "node_modules/**"] }
+
+  return lines === undefined ? base : { ...base, coverage: _coverageFor(lines) }
+}
+
 export const packageVitestConfig = (input: PackageTestConfig = {}) =>
   defineConfig({
     resolve: { alias: Object.fromEntries((input.aliases ?? []).map(_aliasEntry)) },
-    test: {
-      exclude: ["dist/**", "node_modules/**"],
-      ...(input.lines === undefined ? {} : { coverage: _coverageFor(input.lines) })
-    }
+    test: _testFor(input.lines)
   })

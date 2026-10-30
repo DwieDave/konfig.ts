@@ -7,9 +7,11 @@ import path from "node:path"
  */
 const findRepoRoot = (from: string): string => {
   let dir = from
+
   for (;;) {
     if (existsSync(path.join(dir, "examples", "full-stack", "konfig.json"))) return dir
     const parent = path.dirname(dir)
+
     if (parent === dir) throw new Error(`could not find repo root (examples/full-stack/konfig.json) above ${from}`)
     dir = parent
   }
@@ -35,15 +37,26 @@ export interface ResolvedDiagnostic {
   readonly message: string
 }
 
+interface SnippetBounds {
+  readonly startAfter?: string | undefined
+  readonly startAt?: string | undefined
+  readonly endBefore?: string | undefined
+}
+
+export const boundsOf = (bounds: SnippetBounds): SnippetBounds | undefined =>
+  bounds.startAt === undefined && bounds.startAfter === undefined && bounds.endBefore === undefined
+    ? undefined
+    : bounds
+
 export interface SnippetSpec {
   readonly file: string
   /** 1-based inclusive line range, or `undefined` for the whole file. */
-  readonly lines?: readonly [number, number]
+  readonly lines?: readonly [number, number] | undefined
   /** Cut lines from `startAfter` (exclusive, first match) to `endBefore` (exclusive, first match after). */
-  readonly between?: { readonly startAfter?: string; readonly startAt?: string; readonly endBefore?: string }
+  readonly between?: SnippetBounds | undefined
   /** Drop `// @ts-expect-error …` and `// Demonstrates:` lines so the code reads like a real file. */
-  readonly stripMeta?: boolean
-  readonly diagnostics?: ReadonlyArray<DiagnosticAnchor>
+  readonly stripMeta?: boolean | undefined
+  readonly diagnostics?: ReadonlyArray<DiagnosticAnchor> | undefined
 }
 
 export interface Snippet {
@@ -53,6 +66,7 @@ export interface Snippet {
 }
 
 const META_LINE = /^\s*\/\/\s*(@ts-expect-error|Demonstrates:|probe)/
+
 // `void _x` lines only exist to satisfy unused-variable lint in the examples.
 const VOID_LINE = /^\s*void\s+_[a-zA-Z]\w*\s*$/
 
@@ -60,33 +74,43 @@ export const readExample = (file: string): string => readFileSync(path.join(EXAM
 
 export const sliceSnippet = (raw: string, spec: SnippetSpec): string => {
   let lines = raw.replace(/\s+$/u, "").split("\n")
+
   if (spec.lines !== undefined) {
     lines = lines.slice(spec.lines[0] - 1, spec.lines[1])
   }
+
   if (spec.between !== undefined) {
     const startMarker = spec.between.startAt ?? spec.between.startAfter
+
     if (startMarker === undefined) throw new Error(`snippet ${spec.file}: between needs startAt or startAfter`)
     const startHit = lines.findIndex((l) => l.includes(startMarker))
+
     if (startHit < 0) throw new Error(`snippet ${spec.file}: start marker ${JSON.stringify(startMarker)} not found`)
     const start = spec.between.startAt === undefined ? startHit : startHit - 1
     const endBefore = spec.between.endBefore
     const end = endBefore === undefined ? lines.length : lines.findIndex((l, i) => i > start && l.includes(endBefore))
+
     if (end < 0) throw new Error(`snippet ${spec.file}: endBefore ${JSON.stringify(endBefore)} not found`)
     lines = lines.slice(start + 1, end)
   }
+
   if (spec.stripMeta === true) {
     lines = lines
       .filter((l) => !META_LINE.test(l) && !VOID_LINE.test(l))
       .map((l) => l.replace(/\b_(?=[a-zA-Z])/g, ""))
   }
+
   while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
+
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
+
   return dedent(lines).join("\n")
 }
 
 const dedent = (lines: ReadonlyArray<string>): ReadonlyArray<string> => {
-  const indents = lines.filter((l) => l.trim() !== "").map((l) => l.match(/^\s*/)![0].length)
+  const indents = lines.flatMap((l) => l.trim() === "" ? [] : [l.match(/^\s*/)![0].length])
   const min = indents.length === 0 ? 0 : Math.min(...indents)
+
   return lines.map((l) => l.slice(min))
 }
 
@@ -96,17 +120,22 @@ export const resolveDiagnostics = (
   file: string
 ): ReadonlyArray<ResolvedDiagnostic> => {
   const lines = code.split("\n")
+
   return anchors.map((a) => {
     const marker = a.on ?? a.find
     const line = lines.findIndex((l) => l.includes(marker))
+
     if (line < 0) throw new Error(`diagnostic anchor ${JSON.stringify(marker)} not found in ${file}`)
     const colStart = lines[line]!.indexOf(a.find)
+
     if (colStart < 0) throw new Error(`diagnostic text ${JSON.stringify(a.find)} not on anchored line in ${file}`)
+
     return { line, colStart, colEnd: colStart + a.find.length, code: a.code, message: a.message }
   })
 }
 
 export const loadSnippet = (spec: SnippetSpec): Snippet => {
   const code = sliceSnippet(readExample(spec.file), spec)
+
   return { file: spec.file, code, diagnostics: resolveDiagnostics(code, spec.diagnostics ?? [], spec.file) }
 }

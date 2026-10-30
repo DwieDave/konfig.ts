@@ -1,3 +1,4 @@
+import { z } from "astro/zod"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { EXAMPLE_ROOT } from "./snippets"
@@ -7,34 +8,29 @@ import { EXAMPLE_ROOT } from "./snippets"
  * written by `bun run repo badges` (part of `bun run test:coverage`); the Pages
  * workflow regenerates it before building so the deployed numbers are current.
  */
-export interface RepoStats {
-  readonly tests: number
-  readonly lineCoverage: number
-  readonly effectVersion: string
-  readonly packages: number
-}
+const RepoStatsSchema = z.object({
+  tests: z.number(),
+  lineCoverage: z.number(),
+  effectVersion: z.string(),
+  packages: z.number()
+})
+
+type RepoStats = z.infer<typeof RepoStatsSchema>
+
+const CorePackageSchema = z.object({ version: z.string() })
 
 const REPO_ROOT = path.resolve(EXAMPLE_ROOT, "..", "..")
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null
+const parseFile = <S extends z.ZodType>(input: { readonly schema: S; readonly file: string }): z.infer<S> => {
+  const parsed = input.schema.safeParse(JSON.parse(readFileSync(input.file, "utf8")))
 
-const parseStats = (raw: unknown, file: string): RepoStats => {
-  if (!isRecord(raw)) throw new Error(`${file}: expected an object`)
-  const { tests, lineCoverage, effectVersion, packages } = raw
-  if (typeof tests !== "number" || typeof lineCoverage !== "number" || typeof effectVersion !== "string" || typeof packages !== "number") {
-    throw new Error(`${file}: expected { tests, lineCoverage, effectVersion, packages }`)
-  }
-  return { tests, lineCoverage, effectVersion, packages }
+  if (!parsed.success) throw new Error(`${input.file}: ${z.prettifyError(parsed.error)}`)
+
+  return parsed.data
 }
 
-export const readRepoStats = (): RepoStats => {
-  const file = path.join(REPO_ROOT, ".github", "badges", "stats.json")
-  return parseStats(JSON.parse(readFileSync(file, "utf8")), file)
-}
+export const readRepoStats = (): RepoStats =>
+  parseFile({ schema: RepoStatsSchema, file: path.join(REPO_ROOT, ".github", "badges", "stats.json") })
 
-export const readCoreVersion = (): string => {
-  const file = path.join(REPO_ROOT, "packages", "core", "package.json")
-  const raw: unknown = JSON.parse(readFileSync(file, "utf8"))
-  if (!isRecord(raw) || typeof raw["version"] !== "string") throw new Error(`${file}: missing version`)
-  return raw["version"]
-}
+export const readCoreVersion = (): string =>
+  parseFile({ schema: CorePackageSchema, file: path.join(REPO_ROOT, "packages", "core", "package.json") }).version

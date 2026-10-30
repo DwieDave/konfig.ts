@@ -52,27 +52,19 @@ import { base } from "@/lib/site"
     readonly excerpt: string
     readonly sub_results: ReadonlyArray<{ readonly title: string; readonly url: string; readonly excerpt: string }>
   }
+
   interface PagefindResult {
     readonly id: string
     readonly data: () => Promise<PagefindResultData>
   }
+
   interface Pagefind {
     readonly init: () => Promise<void>
     readonly debouncedSearch: (term: string) => Promise<{ readonly results: ReadonlyArray<PagefindResult> } | null>
   }
 
-  const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object"
-
-  const asPagefind = (mod: unknown): Pagefind | undefined => {
-    if (!isRecord(mod)) return undefined
-    const init = mod["init"]
-    const debouncedSearch = mod["debouncedSearch"]
-    if (typeof init !== "function" || typeof debouncedSearch !== "function") return undefined
-    return {
-      init: () => Promise.resolve(init()).then(() => undefined),
-      debouncedSearch: (term: string) => Promise.resolve(debouncedSearch(term))
-    }
-  }
+  const isPagefind = (mod: Partial<Pagefind>): mod is Pagefind =>
+    mod.init !== undefined && mod.debouncedSearch !== undefined
 
   class KonfigSearch extends HTMLElement {
     #pagefind: Pagefind | undefined
@@ -81,19 +73,21 @@ import { base } from "@/lib/site"
     async #load(): Promise<Pagefind | undefined> {
       if (this.#pagefind !== undefined || this.#loadFailed) return this.#pagefind
       const url = `${this.dataset["base"] ?? ""}/pagefind/pagefind.js`
+
       try {
         // Not `import(url)`: the bundler rewrites that and (with rolldown) leaves a
         // dangling preload helper behind. A plain dynamic import at runtime works.
         const importer = new Function("u", "return import(u)")
-        const mod: unknown = await importer(url)
-        const pf = asPagefind(mod)
-        if (pf !== undefined) {
-          await pf.init()
-          this.#pagefind = pf
+        const mod: Partial<Pagefind> = await importer(url)
+
+        if (isPagefind(mod)) {
+          await mod.init()
+          this.#pagefind = mod
         }
       } catch {
         this.#loadFailed = true
       }
+
       return this.#pagefind
     }
 
@@ -103,6 +97,7 @@ import { base } from "@/lib/site"
       const input = this.querySelector("[data-role='input']")
       const results = this.querySelector("[data-role='results']")
       const status = this.querySelector("[data-role='status']")
+
       if (
         !(open instanceof HTMLButtonElement) ||
         !(dialog instanceof HTMLDialogElement) ||
@@ -123,10 +118,12 @@ import { base } from "@/lib/site"
           if (pf === undefined) status.textContent = "Search index is built with `astro build`; not available in dev."
         })
       }
+
       open.addEventListener("click", show)
       document.addEventListener("keydown", (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
           e.preventDefault()
+
           if (dialog.open) dialog.close()
           else show()
         }
@@ -150,6 +147,7 @@ import { base } from "@/lib/site"
             excerpt.className = "mt-0.5 line-clamp-2 text-xs text-zinc-400 [&_mark]:bg-transparent [&_mark]:text-emerald-400"
             excerpt.innerHTML = item.excerpt
             a.append(title, excerpt)
+
             return a
           })
         )
@@ -157,14 +155,19 @@ import { base } from "@/lib/site"
 
       input.addEventListener("input", async () => {
         const term = input.value.trim()
+
         if (term.length === 0) {
           results.replaceChildren()
           status.textContent = "Type to search"
+
           return
         }
+
         const pf = await this.#load()
+
         if (pf === undefined) return
         const res = await pf.debouncedSearch(term)
+
         if (res === null) return
         const top = await Promise.all(res.results.slice(0, 10).map((r) => r.data()))
         render(top)
@@ -174,6 +177,7 @@ import { base } from "@/lib/site"
       input.addEventListener("keydown", (e) => {
         if (e.key === "ArrowDown") {
           const first = results.querySelector("a")
+
           if (first instanceof HTMLElement) {
             e.preventDefault()
             first.focus()
@@ -184,16 +188,19 @@ import { base } from "@/lib/site"
         if (!(document.activeElement instanceof HTMLAnchorElement)) return
         const links = Array.from(results.querySelectorAll("a"))
         const i = links.indexOf(document.activeElement)
+
         if (e.key === "ArrowDown" && links[i + 1]) {
           e.preventDefault()
           links[i + 1]?.focus()
         } else if (e.key === "ArrowUp") {
           e.preventDefault()
+
           if (i === 0) input.focus()
           else links[i - 1]?.focus()
         }
       })
     }
   }
+
   if (!customElements.get("konfig-search")) customElements.define("konfig-search", KonfigSearch)
 </script>

@@ -1,6 +1,7 @@
 ---
 import CodeBlock from "@/components/ui/CodeBlock.astro"
 import { load } from "@/lib/catalog"
+import { boundsOf } from "@/lib/snippets"
 import type { Lang } from "@/lib/highlight"
 
 /**
@@ -19,14 +20,8 @@ interface Props {
 }
 
 const { file, startAt, startAfter, endBefore, lines, title, lang, stripMeta = true } = Astro.props
-const between = startAt !== undefined || startAfter !== undefined || endBefore !== undefined
-  ? {
-    ...(startAt !== undefined ? { startAt } : {}),
-    ...(startAfter !== undefined ? { startAfter } : {}),
-    ...(endBefore !== undefined ? { endBefore } : {})
-  }
-  : undefined
-const snippet = load({ file, ...(between ? { between } : {}), ...(lines ? { lines } : {}), stripMeta })
+
+const snippet = load({ file, between: boundsOf({ startAt, startAfter, endBefore }), lines, stripMeta })
 const inferred: Lang = lang ?? (file.endsWith(".json") ? "json" : file.endsWith(".yaml") || file.endsWith(".yml") ? "yaml" : "ts")
 ---
 

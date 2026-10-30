@@ -122,6 +122,7 @@ const spec = { packages, dev }
   const readStoredPM = (): PackageManager => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
+
       return stored !== null && isPackageManager(stored) ? stored : DEFAULT_PACKAGE_MANAGER
     } catch {
       return DEFAULT_PACKAGE_MANAGER
@@ -146,6 +147,7 @@ const spec = { packages, dev }
       const status = this.querySelector("[data-role='status']")
       const idle = this.querySelector("[data-role='copy-icon-idle']")
       const done = this.querySelector("[data-role='copy-icon-copied']")
+
       if (
         !(chip instanceof HTMLButtonElement) ||
         !(popover instanceof HTMLElement) ||
@@ -157,6 +159,7 @@ const spec = { packages, dev }
       ) {
         return
       }
+
       const options = Array.from(this.querySelectorAll("[data-role='pm-option']")).filter(
         (el): el is HTMLButtonElement => el instanceof HTMLButtonElement
       )
@@ -172,10 +175,13 @@ const spec = { packages, dev }
         this.#pm = pm
         commandText.textContent = getInstallCommand(pm, this.#spec)
         label.textContent = pm
+
         for (const icon of this.querySelectorAll("[data-pm-icon]")) {
           icon.classList.toggle("hidden", icon.getAttribute("data-pm-icon") !== pm)
         }
+
         chip.setAttribute("aria-label", `Package manager: ${pm}`)
+
         for (const opt of options) {
           const selected = opt.dataset["pm"] === pm
           opt.setAttribute("aria-selected", String(selected))
@@ -185,21 +191,25 @@ const spec = { packages, dev }
         }
       }
 
+      const FEEDBACK_TEXT = { idle: "", copied: "Copied", error: "Could not copy" } as const
+
       const feedback = (state: "idle" | "copied" | "error") => {
         const copied = state === "copied"
         idle?.classList.toggle("hidden", copied)
         done?.classList.toggle("hidden", !copied)
-        status.textContent = state === "copied" ? "Copied" : state === "error" ? "Could not copy" : ""
+        status.textContent = FEEDBACK_TEXT[state]
       }
 
       const flash = (state: "copied" | "error") => {
         feedback(state)
+
         if (this.#timeout !== undefined) clearTimeout(this.#timeout)
         this.#timeout = setTimeout(() => feedback("idle"), COPY_RESET_TIMEOUT_MS)
       }
 
       const doCopy = () => {
         const clipboard = navigator.clipboard
+
         if (clipboard === undefined) return flash("error")
         clipboard.writeText(getInstallCommand(this.#pm, this.#spec)).then(
           () => flash("copied"),
@@ -211,22 +221,28 @@ const spec = { packages, dev }
         e.stopPropagation()
         setOpen(!this.#open)
       })
+
       for (const opt of options) {
         opt.addEventListener("click", (e) => {
           e.stopPropagation()
           const pm = opt.dataset["pm"]
+
           if (pm !== undefined && isPackageManager(pm)) {
             setPM(pm)
+
             try {
               localStorage.setItem(STORAGE_KEY, pm)
             } catch {
               // storage unavailable: selection stays per page
             }
+
             document.dispatchEvent(new CustomEvent(PM_EVENT, { detail: pm }))
           }
+
           setOpen(false)
         })
       }
+
       document.addEventListener("mousedown", (e) => {
         if (this.#open && e.target instanceof Node && !dropdown.contains(e.target)) setOpen(false)
       })
@@ -234,7 +250,7 @@ const spec = { packages, dev }
         if (e.key === "Escape") setOpen(false)
       })
       document.addEventListener(PM_EVENT, (e) => {
-        if (e instanceof CustomEvent && typeof e.detail === "string" && isPackageManager(e.detail) && e.detail !== this.#pm) {
+        if (e instanceof CustomEvent && isPackageManager(e.detail) && e.detail !== this.#pm) {
           setPM(e.detail)
         }
       })
@@ -249,5 +265,6 @@ const spec = { packages, dev }
       })
     }
   }
+
   if (!customElements.get("konfig-install-panel")) customElements.define("konfig-install-panel", KonfigInstallPanel)
 </script>

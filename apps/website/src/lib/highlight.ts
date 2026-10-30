@@ -11,6 +11,7 @@ const highlighter = await createHighlighter({
 })
 
 const text = (value: string): ElementContent => ({ type: "text", value })
+
 const el = (tagName: string, properties: Element["properties"], children: ReadonlyArray<ElementContent>): Element => ({
   type: "element",
   tagName,
@@ -38,7 +39,8 @@ const appendTooltips = (node: Root | Element, diagnostics: ReadonlyArray<Resolve
   for (const child of node.children) {
     if (child.type !== "element") continue
     const index = child.properties["data-diag"]
-    const d = typeof index === "string" ? diagnostics[Number(index)] : undefined
+    const d = index === undefined ? undefined : diagnostics[Number(index)]
+
     if (d !== undefined) child.children.push(tooltip(d))
     else appendTooltips(child, diagnostics)
   }
@@ -50,6 +52,7 @@ export const highlight = (
   diagnostics: ReadonlyArray<ResolvedDiagnostic> = []
 ): string => {
   const language: BundledLanguage | "text" = lang === "text" ? "text" : lang
+
   const hast = highlighter.codeToHast(code, {
     lang: language,
     theme: "github-dark",
@@ -63,11 +66,14 @@ export const highlight = (
         },
         line(node, line) {
           const hit = diagnostics.some((d) => d.line === line - 1)
+
           if (hit) node.properties["data-diag-line"] = ""
         }
       }
     ]
   })
+
   appendTooltips(hast, diagnostics)
+
   return toHtml(hast)
 }

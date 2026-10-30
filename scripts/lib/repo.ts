@@ -22,7 +22,7 @@ const PackageJson = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)]
 )
 
-type PackageJson = typeof PackageJson.Type
+export type PackageJson = typeof PackageJson.Type
 
 const _JsonPackage = Schema.fromJsonString(PackageJson)
 
@@ -44,9 +44,11 @@ export const decodeField = <S extends Schema.Decoder<unknown>>(
 export const readJson = (file: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
+
     const text = yield* fs
       .readFileString(file)
       .pipe(mapRepoError(`cannot read ${file}`))
+
     return yield* parseJson({ file, text })
   })
 
@@ -57,27 +59,34 @@ export const packageDirs = Effect.gen(function*() {
   const fs = yield* FileSystem
   const path = yield* Path
   const packagesDir = path.join(REPO_ROOT, "packages")
+
   const entries = yield* fs
     .readDirectory(packagesDir)
     .pipe(mapRepoError(`cannot list ${packagesDir}`))
+
   const dirs: Array<string> = []
+
   for (const entry of entries.slice().sort()) {
     const dir = path.join(packagesDir, entry)
     const pkgJson = path.join(dir, "package.json")
     const exists = yield* fs.exists(pkgJson).pipe(Effect.orElseSucceed(() => false))
+
     if (exists) dirs.push(dir)
   }
+
   return dirs
 })
 
 export const testPackageNames = Effect.gen(function*() {
   const path = yield* Path
   const dirs = yield* packageDirs
+
   return dirs.map((dir) => path.basename(dir))
 })
 
 export const coveragePackageNames = Effect.gen(function*() {
   const names = yield* testPackageNames
+
   return names.filter((name) => !COVERAGE_EXCLUDED_PACKAGES.has(name))
 })
 
@@ -116,6 +125,7 @@ const _toInfo = (input: { readonly dir: string; readonly raw: unknown }) =>
 export const packageInfos = Effect.gen(function*() {
   const path = yield* Path
   const dirs = yield* packageDirs
+
   return yield* Effect.forEach(
     dirs,
     (dir) => readJson(path.join(dir, "package.json")).pipe(Effect.flatMap((raw) => _toInfo({ dir, raw })))

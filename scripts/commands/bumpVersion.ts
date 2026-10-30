@@ -13,14 +13,18 @@ const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?
 const _setVersion = (file: string, version: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
+
     const raw = yield* fs
       .readFileString(file)
       .pipe(mapRepoError(`cannot read ${file}`))
+
     const next = raw.replace(/("version"\s*:\s*)"[^"]*"/, `$1"${version}"`)
+
     if (next === raw) return false
     yield* fs
       .writeFileString(file, next)
       .pipe(mapRepoError(`cannot write ${file}`))
+
     return true
   })
 
@@ -41,18 +45,23 @@ const _isBumpKind = (arg: string): arg is "major" | "minor" | "patch" =>
 export const resolveTarget = (input: { readonly arg: string; readonly current: string }) =>
   Effect.gen(function*() {
     const { arg, current } = input
+
     if (SEMVER_RE.test(arg)) return arg
+
     if (!_isBumpKind(arg)) {
       return yield* new RepoScriptError({
         message: `expected an explicit x.y.z version or one of major|minor|patch, got "${arg}"`
       })
     }
+
     const m = SEMVER_RE.exec(current)
+
     if (m === null) {
       return yield* new RepoScriptError({
         message: `current version "${current}" is not x.y.z; cannot ${arg}-bump`
       })
     }
+
     return _increment({ kind: arg, parts: [Number(m[1]), Number(m[2]), Number(m[3])] })
   })
 
@@ -62,12 +71,16 @@ export const _bumpPackage = (input: { readonly dir: string; readonly version: st
     const pkgJson = path.join(input.dir, "package.json")
     const rel = path.relative(REPO_ROOT, input.dir)
     const pkg = yield* readJson(pkgJson)
+
     if (pkg.private === true) {
       yield* Console.log(`  skip (private): ${rel}`)
+
       return "skipped" as const
     }
+
     const bumped = yield* _setVersion(pkgJson, input.version)
     yield* Console.log(bumped ? `  bumped ${rel} → ${input.version}` : `  already at target: ${rel}`)
+
     return bumped ? ("bumped" as const) : ("unchanged" as const)
   })
 
@@ -98,10 +111,11 @@ const _runBump = (target: string) =>
   Effect.gen(function*() {
     const path = yield* Path
     const core = yield* readJson(path.join(REPO_ROOT, "packages", "core", "package.json"))
-    const current = typeof core.version === "string" ? core.version : "0.0.0"
+    const current = core.version ?? "0.0.0"
     const resolved = yield* resolveTarget({ arg: target, current })
     yield* Console.log(`bumping ${current} → ${resolved}`)
     const rootBumped = yield* _setVersion(path.join(REPO_ROOT, "package.json"), resolved)
+
     if (rootBumped) yield* Console.log("  bumped package.json (root)")
     yield* _bumpAll(resolved)
     yield* _syncLockfile

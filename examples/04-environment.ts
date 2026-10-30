@@ -64,8 +64,11 @@ const api = Workload.web({
 const _dbRefString: string = apiEnvK8s.members.db.ref
 const _portValue: number = apiEnvK8s.members.port.value
 const _podFieldPath: string = apiEnvK8s.members.pod.fieldPath
+
 void _dbRefString
+
 void _portValue
+
 void _podFieldPath
 
 const renderManifests = Effect.gen(function*() {
@@ -81,15 +84,18 @@ const podMainBundle = Effect.gen(function*() {
   yield* Effect.log(`db.url is Redacted: ${dbUrlJson}`)
 })
 
-interface DbClientShape {
+interface DbClientService {
   readonly query: (sql: string) => Effect.Effect<string>
 }
-const DbClient = Context.Service<DbClientShape>("DbClient")
+
+const DbClient = Context.Service<DbClientService>("DbClient")
+
 const DbClientLive = Layer.effect(
   DbClient,
   Effect.gen(function*() {
     const creds = yield* dbCreds
     const fakeUrl = Redacted.value(creds.url)
+
     return {
       query: (sql: string) => Effect.succeed(`[${fakeUrl}] ran: ${sql}`)
     }

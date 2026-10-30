@@ -1,7 +1,7 @@
 import { Console, Effect, Exit } from "effect"
 import fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { REPO_ROOT } from "../lib/repo"
+import { type PackageJson, REPO_ROOT } from "../lib/repo"
 import { makeStubLayer } from "../lib/stubFs"
 import type { DepRecord } from "./rewriteWorkspaceDeps"
 import {
@@ -30,6 +30,7 @@ describe("rewriteRecord", () => {
       "@konfig.ts/k8s": "workspace:^",
       "@konfig.ts/env": "workspace:~"
     }
+
     const changed = Effect.runSync(rewriteRecord({ ..._base, rec, version: "1.2.3" }))
     expect(changed).toBe(true)
     expect(rec["@konfig.ts/core"]).toBe("1.2.3")
@@ -55,6 +56,7 @@ describe("rewriteRecord", () => {
       ..._base,
       catalog: { effect: "4.0.0-rc.111", "@effect/platform-node": "4.0.0-rc.111", yaml: "2.9.0" }
     }
+
     const rec: DepRecord = { effect: "catalog:", "@effect/platform-node": "catalog:", yaml: "catalog:" }
     const changed = Effect.runSync(rewriteRecord({ ...base, rec, version: "1.0.0" }))
     expect(changed).toBe(true)
@@ -121,6 +123,7 @@ describe("_resolveCatalogSpec", () => {
     name,
     spec
   })
+
   it("resolves default, named, and effect-family caret", () => {
     expect(Effect.runSync(_resolveCatalogSpec(input("yaml", "catalog:")))).toBe("2.9.0")
     expect(Effect.runSync(_resolveCatalogSpec(input("vitest", "catalog:test")))).toBe("4.1.10")
@@ -135,18 +138,21 @@ describe("_resolveCatalogSpec", () => {
 describe("_rewritePackage", () => {
   const dir = `${REPO_ROOT}packages/a`
   const file = `${dir}/package.json`
-  const run = (pkg: Record<string, unknown>) => {
+
+  const run = (pkg: PackageJson) => {
     const files = new Map([[file, JSON.stringify(pkg)]])
     const logs: Array<string> = []
-    const logger = { ...console, log: (m: string) => void logs.push(m) }
+    const logger: Console.Console = { ...console, log: (m: string) => void logs.push(m) }
     Effect.runSync(
       _rewritePackage({ dir, version: "3.0.0", catalog: { yaml: "2.9.0" }, namedCatalogs: {} }).pipe(
         Effect.provide(makeStubLayer(files)),
-        Effect.provideService(Console.Console, logger as Console.Console)
+        Effect.provideService(Console.Console, logger)
       )
     )
+
     return { logs, written: files.get(file) ?? "" }
   }
+
   it("writes tab-indented JSON and logs when a dep changed", () => {
     const r = run({ name: "a", dependencies: { "@konfig.ts/core": "workspace:*", yaml: "catalog:" } })
     expect(JSON.parse(r.written).dependencies).toEqual({ "@konfig.ts/core": "3.0.0", yaml: "2.9.0" })

@@ -14,6 +14,8 @@ const { syncKey } = Astro.props
 </docs-tabs>
 
 <script>
+  const KEY_DELTA: ReadonlyMap<string, number> = new Map([["ArrowRight", 1], ["ArrowLeft", -1]])
+
   const STORAGE_PREFIX = "docs-synced-tabs__"
 
   class DocsTabs extends HTMLElement {
@@ -45,7 +47,8 @@ const { syncKey } = Astro.props
 
         btn.addEventListener("click", () => this.selectTab(i, true))
         btn.addEventListener("keydown", (e: KeyboardEvent) => {
-          const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0
+          const dir = KEY_DELTA.get(e.key) ?? 0
+
           if (dir === 0) return
           e.preventDefault()
           this.selectTab((i + dir + this.tabs.length) % this.tabs.length, true)
@@ -63,12 +66,14 @@ const { syncKey } = Astro.props
         group.add(this)
         DocsTabs.synced.set(this.syncKey, group)
         const stored = localStorage.getItem(STORAGE_PREFIX + this.syncKey)
+
         const idx = stored
           ? Math.max(
               0,
               this.tabs.findIndex((t) => t.textContent === stored),
             )
           : 0
+
         this.selectTab(idx, false)
       } else {
         this.selectTab(0, false)
@@ -83,14 +88,17 @@ const { syncKey } = Astro.props
       this.panels.forEach((p, i) => {
         p.toggleAttribute("data-active", i === index)
       })
+
       if (sync) {
         this.tabs[index]?.focus()
         const label = this.tabs[index]?.textContent
+
         if (this.syncKey && label) {
           localStorage.setItem(STORAGE_PREFIX + this.syncKey, label)
           DocsTabs.synced.get(this.syncKey)?.forEach((other) => {
             if (other === this) return
             const idx = other.tabs.findIndex((t) => t.textContent === label)
+
             if (idx >= 0) other.selectTab(idx, false)
           })
         }

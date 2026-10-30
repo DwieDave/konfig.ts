@@ -13,14 +13,13 @@ export default Docker.app({
       // per-env values and secrets come from Environment.bind, not here
       LOG_LEVEL: "info"
     },
-    healthcheck: {
-      _tag: "HealthcheckHttpGet",
+    healthcheck: Docker.healthcheck.httpGet({
       path: "/healthz",
       port: 8080,
       interval: "15s",
       timeout: "3s",
       retries: 3
-    }
+    })
   },
   dev: {
     cmd: ["bun", "--watch", "src/main.ts"],

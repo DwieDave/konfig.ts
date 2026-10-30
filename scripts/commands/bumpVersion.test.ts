@@ -1,7 +1,7 @@
 import { Console, Effect, Exit } from "effect"
 import fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { REPO_ROOT } from "../lib/repo"
+import { type PackageJson, REPO_ROOT } from "../lib/repo"
 import { makeStubLayer } from "../lib/stubFs"
 import { _bumpPackage, _increment, resolveTarget } from "./bumpVersion"
 
@@ -48,6 +48,7 @@ describe("_increment", () => {
     minor: (p: readonly [number, number, number]) => `${p[0]}.${p[1] + 1}.0`,
     patch: (p: readonly [number, number, number]) => `${p[0]}.${p[1]}.${p[2] + 1}`
   }
+
   it("matches the major/minor/patch arithmetic and resolveTarget", () => {
     fc.assert(fc.property(
       fc.constantFrom("major", "minor", "patch" as const),
@@ -62,18 +63,21 @@ describe("_increment", () => {
 })
 
 describe("_bumpPackage", () => {
-  const run = (pkg: Record<string, unknown>) => {
+  const run = (pkg: PackageJson) => {
     const files = new Map([[`${REPO_ROOT}packages/a/package.json`, JSON.stringify(pkg)]])
     const logs: Array<string> = []
-    const logger = { ...console, log: (m: string) => void logs.push(m) }
+    const logger: Console.Console = { ...console, log: (m: string) => void logs.push(m) }
+
     const outcome = Effect.runSync(
       _bumpPackage({ dir: `${REPO_ROOT}packages/a`, version: "2.0.0" }).pipe(
         Effect.provide(makeStubLayer(files)),
-        Effect.provideService(Console.Console, logger as Console.Console)
+        Effect.provideService(Console.Console, logger)
       )
     )
+
     return { outcome, logs, files }
   }
+
   it("skips private packages", () => {
     const r = run({ name: "a", private: true, version: "1.0.0" })
     expect(r.outcome).toBe("skipped")
