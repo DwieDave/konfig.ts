@@ -42,20 +42,19 @@ const bound = Secret.bind({
 
 ## Options
 
-| Field                 | Default                    | Notes                                                 |
-| --------------------- | -------------------------- | ----------------------------------------------------- |
-| `secretStoreRef.name` | required                   | name of the `SecretStore` / `ClusterSecretStore`      |
-| `secretStoreRef.kind` | `"SecretStore"`            | use `"ClusterSecretStore"` for cluster-scoped stores  |
-| `refreshInterval`     | ESO default                | reconcile cadence, e.g. `"1h"`, `"1h30m"`, `"0"`      |
-| `remoteRef`           | identity (`key → { key }`) | map each contract key to its path in the store        |
-| `target`              | omitted                    | `ExternalSecret` `target` (template / creationPolicy) |
+| Field                 | Default                    | Notes                                                                                                          |
+| --------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `secretStoreRef.name` | required                   | name of the `SecretStore` / `ClusterSecretStore`                                                               |
+| `secretStoreRef.kind` | `"SecretStore"`            | use `"ClusterSecretStore"` for cluster-scoped stores                                                           |
+| `refreshInterval`     | ESO default                | reconcile cadence, e.g. `"1h"`, `"1h30m"`, `"0"`                                                               |
+| `remoteRef`           | identity (`key → { key }`) | map each contract key to its path in the store                                                                 |
+| `target`              | `name` only                | `creationPolicy` / `deletionPolicy` / `immutable`; `name` is always the secret name; `template` is not covered |
 
 ## Internals
 
 Backends implement the `SecretBackend<N, K, RequiresSource>` contract from
 `@konfig.ts/k8s`; this one declares `requiresSource: false`, so no plaintext
-source is needed at render time. See the `Environment` section of
-[`.docs/architecture.md`](../../.docs/architecture.md).
+source is needed at render time.
 
 ## Requirements
 

@@ -1,15 +1,1 @@
-export { ExternalSecrets, type ExternalSecretsBackendOptions } from "./backend"
-
-export {
-  type ExternalSecret,
-  type ExternalSecretCreationPolicy,
-  type ExternalSecretDataEntry,
-  type ExternalSecretDeletionPolicy,
-  type ExternalSecretRemoteRef,
-  type ExternalSecretSpec,
-  type ExternalSecretTarget,
-  type SecretStoreKind,
-  type SecretStoreRef
-} from "./crd"
-
-export { type GoDuration } from "./duration"
+export { ExternalSecrets } from "./backend"

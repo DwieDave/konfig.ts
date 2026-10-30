@@ -1,10 +1,11 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Yaml } from "@konfig.ts/core"
+import { RenderError, Yaml } from "@konfig.ts/core"
 import { Secret } from "@konfig.ts/k8s"
 import { Cause, Effect, Exit, Schema } from "effect"
+import fc from "fast-check"
 import { describe, expect, it as vitestIt } from "vitest"
-import { ExternalSecrets } from "./backend"
+import { _esoData, ExternalSecrets } from "./backend"
 import { type GoDuration, InvalidRefreshIntervalError } from "./duration"
 
 const _optionalString = Schema.optional(Schema.String)
@@ -15,6 +16,7 @@ const _ExternalSecretSchema = Schema.Struct({
   metadata: Schema.Struct({ name: Schema.String, namespace: Schema.String }),
   spec: Schema.Struct({
     refreshInterval: _optionalString,
+    target: Schema.optional(Schema.Struct({ name: Schema.String, creationPolicy: _optionalString })),
     secretStoreRef: Schema.Struct({ name: Schema.String, kind: _optionalString }),
     data: Schema.optional(
       Schema.Array(
@@ -169,12 +171,16 @@ describe("ExternalSecrets.backend refreshInterval", () => {
       expect(rendered.spec.refreshInterval).toBe("1h30m")
     }).pipe(Effect.provide(NodeServices.layer)))
 
-  it.effect("dies on an invalid refreshInterval", () =>
+  it.effect("fails with RenderError on an invalid refreshInterval", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(render("1sjunk"))
-      const defect = Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isDieReason)?.defect : undefined
-      expect(defect).toBeInstanceOf(InvalidRefreshIntervalError)
-      expect(defect).toMatchObject({ value: "1sjunk" })
+      const error = Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined
+      expect(error).toBeInstanceOf(RenderError)
+      expect(error).toMatchObject({
+        message: "ExternalSecrets(prod/db-creds): invalid refreshInterval",
+        cause: { value: "1sjunk" }
+      })
+      expect(error?.cause).toBeInstanceOf(InvalidRefreshIntervalError)
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("renders without refreshInterval", () =>
@@ -189,4 +195,38 @@ describe("ExternalSecrets.backend refreshInterval", () => {
       const ms = yield* _asExternalSecret(yield* render("500ms"))
       expect([zero.spec.refreshInterval, ms.spec.refreshInterval]).toEqual(["0", "500ms"])
     }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+describe("ExternalSecrets target", () => {
+  it.effect("forces target.name to the secret name", () =>
+    Effect.gen(function*() {
+      const target = { name: "other", creationPolicy: "Merge" } as const
+
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: ExternalSecrets.backend({ secretStoreRef: { name: "s" }, target })
+      })
+
+      const rendered = yield* _asExternalSecret(yield* bound.manifest!.render(ctx))
+      expect(rendered.spec.target).toEqual({ name: "db-creds", creationPolicy: "Merge" })
+    }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+describe("_esoData properties", () => {
+  const keys = fc.array(fc.string({ minLength: 1 }), { maxLength: 12 })
+
+  vitestIt(
+    "keeps length and order, secretKey equals key, remoteRef applied",
+    () =>
+      fc.assert(fc.property(keys, (ks) => {
+        const data = _esoData({ keys: ks, remoteRef: (key) => ({ key: `p/${key}`, property: key }) })
+        expect(data.map((d) => d.secretKey)).toEqual(ks)
+        expect(data.map((d) => d.remoteRef)).toEqual(ks.map((k) => ({ key: `p/${k}`, property: k })))
+      }))
+  )
+
+  vitestIt("defaults to identity remoteRef", () =>
+    fc.assert(fc.property(keys, (ks) => {
+      expect(_esoData({ keys: ks }).map((d) => d.remoteRef.key)).toEqual(ks)
+    })))
 })
