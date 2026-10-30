@@ -19,9 +19,10 @@ credentials come from each file's own `sops:` metadata block.
 ## Usage
 
 Bind a secret contract (`Secret.define`, from `@konfig.ts/env`) to a Sops
-backend. `Sops` offers three modes — pick by how you want plaintext to flow.
+backend. `Sops` offers two modes — pick by how you want plaintext to flow.
 
 ```ts
+import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
 import { Sops } from "@konfig.ts/sops"
 
@@ -37,7 +38,7 @@ Secret.bind({
 Secret.bind({
   secret: dbCreds,
   backend: Sops.backend({ recipients: { age: ["age1..."] } }),
-  source: Sops.source({ file: "infra/secrets/db-creds.enc.yaml", keys: ["url", "password"] })
+  source: SecretSource.fromConfig({ keys: ["url", "password"], envName: (k) => `DB_${k.toUpperCase()}` })
 })
 ```
 
@@ -47,24 +48,26 @@ whole env bundle, plug the same backend into
 
 ## Modes
 
-| Mode               | Signature                    | Source | Emits                                                                   |
-| ------------------ | ---------------------------- | ------ | ----------------------------------------------------------------------- |
-| `Sops.passthrough` | `({ file })`                 | no     | the encrypted file's `SopsSecret`, restamped to the bound namespace     |
-| `Sops.backend`     | `({ recipients, type? })`    | yes    | a `SopsSecret` re-encrypted to `recipients`                             |
-| `Sops.source`      | `({ file, keys, extract? })` | —      | a `SecretSource` that decrypts a file once and yields `Redacted` values |
+| Mode               | Signature                                            | Source | Emits                                                              |
+| ------------------ | ---------------------------------------------------- | ------ | ------------------------------------------------------------------ |
+| `Sops.passthrough` | `({ file })`                                         | no     | the encrypted file's `SopsSecret`, restamped to the bound identity |
+| `Sops.backend`     | `({ recipients, type?, encryptedRegex?, timeout? })` | yes    | a `SopsSecret` re-encrypted to `recipients`                        |
 
 `recipients` accepts `age` / `kms` / `gcpKms` / `azureKv` / `pgp` arrays.
-`Sops.source` composes with any backend (e.g. decrypt with SOPS, seal with
-`SealedSecrets.backend`). Every emitted value is checked for the `ENC[...]`
-marker first — konfig fails closed rather than emit plaintext dressed as a
-secret.
+Every emitted value selected by the file's encryption rules is checked for the
+`ENC[...]` marker first — konfig fails closed rather than emit plaintext
+dressed as a secret.
+
+`Sops.passthrough` accepts a file with exactly one `secretTemplates` entry that
+contains every key of the bound contract. Bound labels, annotations and a
+different name or namespace are merged into `metadata` only when the file was
+encrypted with `mac_only_encrypted: true`; otherwise the render fails.
 
 ## Internals
 
 Backends implement the `SecretBackend<N, K, RequiresSource>` contract from
 `@konfig.ts/k8s`; `requiresSource: true` makes `source` a compile-time
-requirement. See the `Environment` section of
-[`.docs/architecture.md`](../../.docs/architecture.md).
+requirement.
 
 ## Requirements
 

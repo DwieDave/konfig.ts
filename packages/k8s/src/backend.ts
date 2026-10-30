@@ -1,26 +1,10 @@
-import { type Manifest, parseYaml, RenderError } from "@konfig.ts/core"
+import { type Manifest, RenderError, Yaml } from "@konfig.ts/core"
 import type { ResolvedSecretValues, SecretSource } from "@konfig.ts/env"
-import { Effect, Redacted, Schema } from "effect"
+import { Effect, Redacted } from "effect"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
 import { toObjectMeta } from "./meta"
 
 export type BackendTag = string
-
-export const stringRecordSchema = Schema.Record(Schema.String, Schema.String)
-
-export const objectMetaSchema = Schema.Struct({
-  name: Schema.String,
-  namespace: Schema.String,
-  labels: Schema.optionalKey(stringRecordSchema),
-  annotations: Schema.optionalKey(stringRecordSchema)
-})
-
-type YamlDocument = ReturnType<typeof parseYaml>
-
-export const parseYamlWith = <E>(input: {
-  readonly text: string
-  readonly onError: (cause: unknown) => E
-}): Effect.Effect<YamlDocument, E> => Effect.try({ try: () => parseYaml(input.text), catch: input.onError })
 
 export interface EmitInput<N extends string, K extends string, Opts> {
   readonly base: BackendEmitInput<N, K, true>
@@ -115,3 +99,16 @@ export const plainSecret = <N extends string, K extends string>(input: {
   stringData: input.stringData,
   immutable: input.immutable
 })
+
+export const encryptVia = <N extends string, K extends string, P extends object, A, E, R, EE, RE>(input: {
+  readonly base: BackendEmitInput<N, K, true>
+  readonly label: string
+  readonly toPlain: (stringData: Record<string, string>) => P
+  readonly encrypt: (plainYaml: string) => Effect.Effect<string, EE, RE>
+  readonly verify: (output: string) => Effect.Effect<A, E, R>
+}): Effect.Effect<A, RenderError | EE | E, Manifest.RenderServices | RE | R> =>
+  resolvePlaintext({ base: input.base, label: input.label }).pipe(
+    Effect.map((stringData) => Yaml.serialize({ value: input.toPlain(stringData) })),
+    Effect.flatMap(input.encrypt),
+    Effect.flatMap(input.verify)
+  )

@@ -1,28 +1,20 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { runProcessString, Yaml } from "@konfig.ts/core"
+import { runProcessString } from "@konfig.ts/core"
+import { plainArgs, stdinAsString, stubSpawner } from "@konfig.ts/core/testing"
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
-import { SealedSecrets } from "@konfig.ts/sealed-secrets"
-import { Effect, Exit, Layer, Option, Predicate, Redacted, Schema, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { ChildProcess } from "effect/process"
-import { type Command, isStandardCommand, type StandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import type { StandardCommand } from "effect/process/ChildProcess"
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
+import { TestClock } from "effect/testing"
 import { describe, expect } from "vitest"
 import { Sops } from "./backend"
 import { SopsEncryptedSecretSchema } from "./schema"
 
 const _asSopsSecret = Schema.decodeUnknownEffect(SopsEncryptedSecretSchema)
-
-const _decodeChunks = Schema.decodeUnknownEffect(Schema.Array(Schema.Uint8Array))
 
 const SOPS_ENCRYPT_OUTPUT = `
 apiVersion: isindir.github.com/v1alpha3
@@ -46,79 +38,29 @@ sops:
         -----END AGE ENCRYPTED FILE-----
 `.trim()
 
-const KUBESEAL_OUTPUT = `
-apiVersion: bitnami.com/v1alpha1
-kind: SealedSecret
-metadata:
-  name: db-creds
-  namespace: prod
-spec:
-  template:
-    metadata: { name: db-creds, namespace: prod }
-    type: Opaque
-  encryptedData:
-    url: AgB7nF9CASE_A_STUB==
-    password: AgC4kL8CASE_A_STUB==
-`.trim()
-
 interface RecordedCall {
   readonly cmd: string
   readonly args: ReadonlyArray<string>
-  readonly stdin?: string
+  readonly stdin: string
 }
 
 interface CallSink {
   calls: RecordedCall[]
 }
 
-const _stdinAsString = (cmd: Command) =>
-  Effect.gen(function*() {
-    if (!isStandardCommand(cmd)) return undefined
-    const s = cmd.options.stdin
-
-    if (!Stream.isStream(s)) return undefined
-    const chunks = yield* _decodeChunks(yield* Stream.runCollect(s)).pipe(Effect.orDie)
-    const merged = Array.from(chunks).flatMap((c) => Array.from(c))
-
-    return new TextDecoder().decode(new Uint8Array(merged))
-  })
-
-const _handleForOutput = (output: string): ChildProcessHandle =>
-  makeHandle({
-    pid: ProcessId(1),
-    exitCode: Effect.succeed(ExitCode(0)),
-    isRunning: Effect.succeed(false),
-    kill: () => Effect.void,
-    stdin: Sink.drain,
-    stdout: Stream.make(new TextEncoder().encode(output)),
-    stderr: Stream.empty,
-    all: Stream.make(new TextEncoder().encode(output)),
-    getInputFd: () => Sink.drain,
-    getOutputFd: () => Stream.empty,
-    unref: Effect.succeed(Effect.void)
-  })
-
-const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
-  command.args.map((arg) => (Predicate.isString(arg) ? arg : Redacted.value(arg)))
-
 const _makeStubSpawner = (
   sink: CallSink,
-  respond: (cmd: Command) => string
+  respond: (cmd: StandardCommand) => string
 ): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(
-    ChildProcessSpawner,
-    makeSpawner((cmd: Command) =>
-      Effect.gen(function*() {
-        const stdin = yield* _stdinAsString(cmd)
-
-        if (isStandardCommand(cmd)) {
-          sink.calls.push({ cmd: cmd.command, args: _plainArgs(cmd), stdin })
-        }
-
-        return _handleForOutput(respond(cmd))
-      })
-    )
-  )
+  stubSpawner({
+    respond: (cmd) => ({ stdout: respond(cmd) }),
+    sink: (cmd) =>
+      stdinAsString(cmd).pipe(
+        Effect.map((stdin) => {
+          sink.calls.push({ cmd: cmd.command, args: plainArgs(cmd), stdin })
+        })
+      )
+  })
 
 const dbCreds = Secret.define({
   name: "db-creds",
@@ -301,6 +243,37 @@ sops:
       expect(Exit.isFailure(exit)).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
 
+  const _failureText = (exit: Exit.Exit<unknown, unknown>) =>
+    Exit.isFailure(exit)
+      ? Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
+      : Effect.succeed("")
+
+  it.effect("rejects a file that lacks a key required by the secret contract", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderPassthrough(partialFile(
+        `        url: ENC[AES256_GCM,data:STUB==,type:str]`,
+        "^(url)$"
+      ))
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(yield* _failureText(exit)).toContain("password")
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("rejects a file with more than one secretTemplates entry instead of renaming them all", () =>
+    Effect.gen(function*() {
+      const body = partialFile(
+        `        url: ENC[AES256_GCM,data:STUB==,type:str]\n        password: ENC[AES256_GCM,data:STUB==,type:str]`,
+        "^(url|password)$"
+      ).replace(
+        "sops:\n",
+        "    - name: cache\n      stringData:\n        url: ENC[AES256_GCM,data:STUB==,type:str]\nsops:\n"
+      )
+
+      const exit = yield* renderPassthrough(body)
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(yield* _failureText(exit)).toContain("exactly one")
+    }).pipe(Effect.provide(NodeServices.layer)))
+
   const namespaceMismatchFile = (macOnlyEncrypted: boolean | undefined) =>
     `
 apiVersion: isindir.github.com/v1alpha3
@@ -434,80 +407,71 @@ ${macOnlyEncrypted === undefined ? "" : `  mac_only_encrypted: ${macOnlyEncrypte
         expect(rendered.spec.secretTemplates[0]?.name).toBe("db-creds")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
-})
 
-describe("Sops.source (case A: sops source → SealedSecrets backend)", () => {
-  it.effect("decrypts the file once and plucks every requested key from the parsed plaintext", () =>
+  const metaFile = (macOnlyEncrypted: boolean | undefined) =>
+    `
+apiVersion: isindir.github.com/v1alpha3
+kind: SopsSecret
+metadata:
+  name: db-creds
+  namespace: prod
+  labels:
+    keep: "yes"
+spec:
+  secretTemplates:
+    - name: db-creds
+      type: Opaque
+      stringData:
+        url: ENC[AES256_GCM,data:STUBurl==,type:str]
+        password: ENC[AES256_GCM,data:STUBpassword==,type:str]
+sops:
+${macOnlyEncrypted === undefined ? "" : `  mac_only_encrypted: ${macOnlyEncrypted}\n`}  age:
+    - recipient: age1mockstub
+      enc: STUB
+`.trim()
+
+  const renderWithMeta = (contents: string) =>
     Effect.gen(function*() {
-      const sink: CallSink = { calls: [] }
+      const fs = yield* FileSystem
+      const tmpFile = `${process.cwd()}/.tmp-sops-passthrough-meta.yaml`
+      yield* fs.writeFileString(tmpFile, contents)
 
-      const respond = (cmd: Command): string => {
-        if (!isStandardCommand(cmd)) return ""
-
-        if (cmd.command === "sops") {
-          return "url: u-from-sops\npassword: p-from-sops\n"
-        }
-
-        if (cmd.command === "kubeseal") return KUBESEAL_OUTPUT
-
-        return ""
-      }
-
-      const bound = Secret.bind({
-        secret: dbCreds,
-        backend: SealedSecrets.backend({ scope: "strict", certPath: "/tmp/c.pem" }),
-        source: Sops.source({
-          file: "/tmp/db-creds.enc.yaml",
-          keys: ["url", "password"] as const
+      try {
+        const bound = Secret.bind({
+          secret: dbCreds,
+          backend: Sops.passthrough({ file: tmpFile }),
+          labels: { team: "core" },
+          annotations: { note: "x" }
         })
-      })
 
-      const rendered = yield* bound.manifest!.render(ctx).pipe(
-        Effect.provide(_makeStubSpawner(sink, respond))
-      )
-
-      const yaml = Yaml.serialize({ value: rendered })
-      expect(yaml).toContain("kind: SealedSecret")
-
-      const sopsCalls = sink.calls.filter((c) => c.cmd === "sops")
-      expect(sopsCalls).toHaveLength(1)
-      expect(sopsCalls[0]?.args).toContain("--decrypt")
-      expect(sopsCalls[0]?.args).not.toContain("--extract")
-      expect(sopsCalls[0]?.args).toContain("/tmp/db-creds.enc.yaml")
-
-      const kubesealCall = sink.calls.find((c) => c.cmd === "kubeseal")
-      expect(kubesealCall).toBeDefined()
-      expect(kubesealCall?.stdin).toContain("u-from-sops")
-      expect(kubesealCall?.stdin).toContain("p-from-sops")
-    }).pipe(Effect.provide(NodeServices.layer)))
-})
-
-describe("Sops.source error handling", () => {
-  it.effect("sops failure surfaces as SecretSourceError → RenderError", () =>
-    Effect.gen(function*() {
-      const sink: CallSink = { calls: [] }
-
-      const respond = (): never => {
-        throw new Error("sops not installed")
+        return yield* Effect.exit(bound.manifest!.render(ctx))
+      } finally {
+        yield* fs.remove(tmpFile)
       }
+    })
 
-      const oneKey = Secret.define({
-        name: "one-key",
-        namespace: "prod",
-        env: { url: "URL" }
-      })
+  it.effect("merges bound labels and annotations when the file is mac_only_encrypted", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderWithMeta(metaFile(true))
+      expect(Exit.isSuccess(exit)).toBe(true)
 
-      const bound = Secret.bind({
-        secret: oneKey,
-        backend: SealedSecrets.backend({ scope: "strict", certPath: "/tmp/c.pem" }),
-        source: Sops.source({ file: "/x.enc.yaml", keys: ["url"] as const })
-      })
+      if (Exit.isSuccess(exit)) {
+        const rendered = yield* _asSopsSecret(exit.value)
+        expect(rendered.metadata.labels).toEqual({ keep: "yes", team: "core" })
+        expect(rendered.metadata.annotations).toEqual({ note: "x" })
+      }
+    }).pipe(Effect.provide(NodeServices.layer)))
 
-      const exit = yield* Effect.exit(
-        bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink, respond)))
-      )
-
+  it.effect("refuses to merge bound labels and annotations when the file is not mac_only_encrypted", () =>
+    Effect.gen(function*() {
+      const exit = yield* renderWithMeta(metaFile(undefined))
       expect(Exit.isFailure(exit)).toBe(true)
+
+      if (Exit.isFailure(exit)) {
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
+        expect(text).toContain("metadata.labels")
+        expect(text).toContain("metadata.annotations")
+      }
     }).pipe(Effect.provide(NodeServices.layer)))
 })
 
@@ -723,5 +687,29 @@ describe("Sops.backend with real sops (skipped when sops/age-keygen are absent)"
       const rendered = yield* _asSopsSecret(yield* bound.manifest!.render(ctx))
       expect(rendered.metadata.name).toBe("db-creds")
       expect(rendered.spec.secretTemplates[0]?.stringData?.url).toContain("ENC[")
+    }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+describe("Sops.backend timeout option", () => {
+  it.effect("fails with ProcessTimeout when sops hangs past the configured timeout", () =>
+    Effect.gen(function*() {
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: Sops.backend({
+          recipients: { age: ["age1stub00000000000000000000000000000000000000000000000000ends"] },
+          timeout: "5 seconds"
+        }),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+
+      const fiber = yield* Effect.forkChild(
+        Effect.exit(bound.manifest!.render(ctx).pipe(Effect.provide(stubSpawner({ respond: () => ({ hang: true }) }))))
+      )
+
+      yield* TestClock.adjust("6 seconds")
+      const exit = yield* Fiber.join(fiber)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "").toContain("timed out after 5s")
     }).pipe(Effect.provide(NodeServices.layer)))
 })

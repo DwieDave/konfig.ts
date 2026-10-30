@@ -7,6 +7,7 @@ import { expect, it } from "vitest"
 import {
   type BackendEmitInput,
   backendLabel,
+  encryptVia,
   plainSecret,
   resolvePlaintext,
   SecretBackend,
@@ -74,3 +75,22 @@ it("backendLabel and plainSecret derive from the emit base", () => {
     })
   }))
 })
+
+it("encryptVia threads resolved plaintext through toPlain, encrypt and verify", () =>
+  fc.assert(
+    fc.asyncProperty(word, word, async (key, value) => {
+      const base = baseOf([key], Effect.succeed({ [key]: Redacted.make(`v-${value}`) }))
+
+      const out = await Effect.runPromise(
+        encryptVia({
+          base,
+          label: "l",
+          toPlain: (stringData) => ({ stringData }),
+          encrypt: (yaml) => Effect.succeed(`enc(${yaml})`),
+          verify: (output) => Effect.succeed(output)
+        }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+      )
+
+      return out.startsWith("enc(") && out.includes(`: v-${value}`)
+    })
+  ))

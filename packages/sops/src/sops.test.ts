@@ -1,52 +1,80 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Effect, Exit, Layer, Schema, Sink, Stream } from "effect"
-import { type Command } from "effect/process/ChildProcess"
-import {
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
-import { describe, expect } from "vitest"
-import { sopsEncryptStdin } from "./sops"
+import { stubSpawner } from "@konfig.ts/core/testing"
+import { Effect, Exit, Schema } from "effect"
+import * as fc from "fast-check"
+import { describe, expect, it as plainIt } from "vitest"
+import type { SopsRecipients } from "./crd"
+import { _recipientArgs, _sopsArgs, sopsEncrypt } from "./sops"
 
-// A spawner that would happily "succeed" if invoked — proves an invalid recipient never
-// reaches argv/spawn because sopsEncryptStdin validates before spawning sops.
-const _passthroughSpawner: Layer.Layer<ChildProcessSpawner> = Layer.succeed(
-  ChildProcessSpawner,
-  makeSpawner((_cmd: Command) =>
-    Effect.succeed(
-      makeHandle({
-        pid: ProcessId(1),
-        exitCode: Effect.succeed(ExitCode(0)),
-        isRunning: Effect.succeed(false),
-        kill: () => Effect.void,
-        stdin: Sink.drain,
-        stdout: Stream.make(new TextEncoder().encode("ok: yes\n")),
-        stderr: Stream.empty,
-        all: Stream.make(new TextEncoder().encode("ok: yes\n")),
-        getInputFd: () => Sink.drain,
-        getOutputFd: () => Stream.empty,
-        unref: Effect.succeed(Effect.void)
-      })
-    )
-  )
-)
+const _agePool = fc.stringMatching(/^age1[0-9a-z]{58}$/)
 
-describe("sopsEncryptStdin validates recipients itself (public API, not just via backend.ts)", () => {
+const _recipients = fc.record({
+  age: fc.option(fc.array(_agePool, { maxLength: 3 }), { nil: undefined })
+}, { requiredKeys: [] }).map((r): SopsRecipients => r.age === undefined ? {} : { age: r.age })
+
+describe("_recipientArgs properties", () => {
+  plainIt("emits the --age flag iff the list is non-empty", () => {
+    fc.assert(fc.property(_recipients, (recipients) => {
+      const args = _recipientArgs(recipients)
+      expect(args.includes("--age")).toBe((recipients.age?.length ?? 0) > 0)
+    }))
+  })
+
+  plainIt("joins accepted recipients with commas only and no shell metacharacters", () => {
+    fc.assert(fc.property(fc.array(_agePool, { minLength: 1, maxLength: 3 }), (age) => {
+      const [, value] = _recipientArgs({ age })
+      expect(value?.split(",")).toEqual(age)
+      expect(value).not.toMatch(/[;&|$`\s'"\\<>]/)
+    }))
+  })
+})
+
+describe("sopsEncrypt recipient rejection property", () => {
+  const _tainted = fc.tuple(_agePool, fc.constantFrom(",", ";", " ", "$", "`", "|"), fc.string({ minLength: 1 }))
+    .map(([age, sep, tail]) => `${age}${sep}${tail}`)
+
+  it.effect("rejects any recipient that is not a plain age key, without spawning sops", () =>
+    Effect.promise(() =>
+      fc.assert(fc.asyncProperty(_tainted, (bad) =>
+        Effect.runPromise(
+          Effect.gen(function*() {
+            const exit = yield* Effect.exit(
+              sopsEncrypt({ plainYaml: "url: u\n", label: "L", recipients: { age: [bad] } }).pipe(
+                Effect.provide(stubSpawner({ respond: () => ({ stdout: "ok: yes\n" }) }))
+              )
+            )
+
+            expect(Exit.isFailure(exit)).toBe(true)
+          }).pipe(Effect.provide(NodeServices.layer))
+        )))
+    ))
+})
+
+describe("_sopsArgs properties", () => {
+  plainIt("always ends with stdin, pins the regex and ignores ambient config", () => {
+    fc.assert(fc.property(_recipients, fc.option(fc.string(), { nil: undefined }), (recipients, regex) => {
+      const args = _sopsArgs({ recipients, encryptedRegex: regex })
+      expect(args.at(-1)).toBe("/dev/stdin")
+      expect(args[args.indexOf("--config") + 1]).toBe("/dev/null")
+      expect(args[args.indexOf("--encrypted-regex") + 1]).toBe(regex ?? "^(data|stringData)$")
+    }))
+  })
+})
+
+describe("sopsEncrypt validates recipients itself", () => {
   it.effect("rejects an unvalidated age recipient containing a comma, without spawning sops", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(
-        sopsEncryptStdin({
-          plaintextYaml: "url: u\n",
+        sopsEncrypt({
+          plainYaml: "url: u\n",
+          label: "L",
           recipients: {
             age: [
               "age1stub00000000000000000000000000000000000000000000000000ends,age1injected00000000000000000000000000000000000000000leak"
             ]
           }
-        }).pipe(Effect.provide(_passthroughSpawner))
+        }).pipe(Effect.provide(stubSpawner({ respond: () => ({ stdout: "ok: yes\n" }) })))
       )
 
       expect(Exit.isFailure(exit)).toBe(true)

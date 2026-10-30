@@ -1,7 +1,7 @@
 {
   "name": "@konfig.ts/sops",
   "version": "0.4.0",
-  "description": "sops integration for konfig.ts — Sops.source reads encrypted files at render time; Sops.backend emits SopsSecret CRs.",
+  "description": "sops integration for konfig.ts — Sops.backend re-encrypts to SopsSecret CRs; Sops.passthrough forwards encrypted files.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
   "homepage": "https://dwiedave.github.io/konfig.ts/",
@@ -61,7 +61,6 @@
   },
   "dependencies": {
     "@konfig.ts/core": "workspace:*",
-    "@konfig.ts/env": "workspace:*",
     "@konfig.ts/k8s": "workspace:*"
   },
   "peerDependencies": {
@@ -70,7 +69,7 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
-    "@konfig.ts/sealed-secrets": "workspace:*",
+    "@konfig.ts/env": "workspace:*",
     "@types/bun": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",

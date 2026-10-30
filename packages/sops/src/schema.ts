@@ -1,4 +1,4 @@
-import { objectMetaSchema, stringRecordSchema as _stringRecord } from "@konfig.ts/k8s"
+import { objectMetaSchema, stringRecordSchema as _stringRecord } from "@konfig.ts/core"
 import { Schema } from "effect"
 
 // Recipients flow into `sops --<kind> a,b,c` argv; must contain no comma or shell metachar.
@@ -28,7 +28,7 @@ export const SopsRecipientsSchema = Schema.Struct({
   pgp: Schema.optionalKey(_recipientArray(_PGP_FINGERPRINT, "PGP fingerprint"))
 })
 
-export const SopsSecretTemplateSchema = Schema.Struct({
+const SopsSecretTemplateSchema = Schema.Struct({
   name: Schema.String,
   type: Schema.optionalKey(Schema.String),
   stringData: Schema.optionalKey(_stringRecord),
@@ -37,7 +37,7 @@ export const SopsSecretTemplateSchema = Schema.Struct({
   annotations: Schema.optionalKey(_stringRecord)
 })
 
-export const SopsSecretSpecSchema = Schema.Struct({
+const SopsSecretSpecSchema = Schema.Struct({
   secretTemplates: Schema.Array(SopsSecretTemplateSchema),
   suspend: Schema.optionalKey(Schema.Boolean)
 })

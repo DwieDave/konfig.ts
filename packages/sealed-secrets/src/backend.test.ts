@@ -1,25 +1,19 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Yaml } from "@konfig.ts/core"
+import { plainArgs, stdinAsString, stubSpawner } from "@konfig.ts/core/testing"
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
-import { Cause, ConfigProvider, Effect, Exit, Layer, Predicate, Redacted, Schema, Sink, Stream } from "effect"
-import { type Command, isStandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
-import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
-import { describe, expect } from "vitest"
+import { Cause, ConfigProvider, Effect, Exit, Fiber, Layer, Schema } from "effect"
+import type { StandardCommand } from "effect/process/ChildProcess"
+import { TestClock } from "effect/testing"
+import * as fc from "fast-check"
+import { describe, expect, it as plainIt } from "vitest"
 import { SealedSecrets } from "./backend"
+import { _kubesealArgs } from "./kubeseal"
 import { SealedSecretSchema } from "./schema"
 
 const _asSealedSecret = Schema.decodeUnknownEffect(SealedSecretSchema)
-
-const _decodeChunks = Schema.decodeUnknownEffect(Schema.Array(Schema.Uint8Array))
 
 const STUB_SEALED_YAML = `
 apiVersion: bitnami.com/v1alpha1
@@ -39,47 +33,21 @@ spec:
 `.trim()
 
 interface SpawnerSink {
-  lastCmd?: Command
+  lastCmd?: StandardCommand
   lastStdin?: string
 }
 
-const _handleForOutput = (output: string): ChildProcessHandle =>
-  makeHandle({
-    pid: ProcessId(1),
-    exitCode: Effect.succeed(ExitCode(0)),
-    isRunning: Effect.succeed(false),
-    kill: () => Effect.void,
-    stdin: Sink.drain,
-    stdout: Stream.make(new TextEncoder().encode(output)),
-    stderr: Stream.empty,
-    all: Stream.make(new TextEncoder().encode(output)),
-    getInputFd: () => Sink.drain,
-    getOutputFd: () => Stream.empty,
-    unref: Effect.succeed(Effect.void)
-  })
-
 const _makeStubSpawner = (sink: SpawnerSink, output = STUB_SEALED_YAML) =>
-  Layer.succeed(
-    ChildProcessSpawner,
-    makeSpawner((cmd: Command) =>
-      Effect.gen(function*() {
-        sink.lastCmd = cmd
-
-        if (isStandardCommand(cmd)) {
-          const stdinCfg = cmd.options.stdin
-
-          if (Stream.isStream(stdinCfg)) {
-            const chunks = yield* _decodeChunks(yield* Stream.runCollect(stdinCfg)).pipe(Effect.orDie)
-
-            const merged = Array.from(chunks).flatMap((c) => Array.from(c))
-            sink.lastStdin = new TextDecoder().decode(new Uint8Array(merged))
-          }
-        }
-
-        return _handleForOutput(output)
-      })
-    )
-  )
+  stubSpawner({
+    respond: () => ({ stdout: output }),
+    sink: (cmd) =>
+      stdinAsString(cmd).pipe(
+        Effect.map((stdin) => {
+          sink.lastCmd = cmd
+          sink.lastStdin = stdin
+        })
+      )
+  })
 
 const dbCreds = Secret.define({
   name: "db-creds",
@@ -90,8 +58,8 @@ const dbCreds = Secret.define({
 const _lastCommand = (sink: SpawnerSink) => {
   const cmd = sink.lastCmd
 
-  return cmd !== undefined && isStandardCommand(cmd)
-    ? { command: cmd.command, args: cmd.args.map((arg) => (Predicate.isString(arg) ? arg : Redacted.value(arg))) }
+  return cmd !== undefined
+    ? { command: cmd.command, args: plainArgs(cmd) }
     : expect.unreachable("expected a standard command")
 }
 
@@ -116,7 +84,6 @@ describe("SealedSecrets.backend", () => {
       expect(rendered.kind).toBe("SealedSecret")
       expect(rendered.metadata.name).toBe("db-creds")
       expect(rendered.spec.encryptedData.url).toContain("AgB7nF9")
-      expect(isStandardCommand(sink.lastCmd!)).toBe(true)
       const std = _lastCommand(sink)
       expect(std.command).toBe("kubeseal")
       expect(std.args).toEqual([
@@ -246,7 +213,7 @@ describe("SealedSecrets.backend", () => {
       expect(yaml).toContain("encryptedData:")
     }).pipe(Effect.provide(NodeServices.layer)))
 
-  it.effect("KubesealParseError if kubeseal stdout isn't valid YAML", () =>
+  it.effect("RenderError if kubeseal stdout isn't valid YAML", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
       const garbage = "key: [1,2"
@@ -265,7 +232,7 @@ describe("SealedSecrets.backend", () => {
 
       if (Exit.isFailure(exit)) {
         const text = Cause.pretty(exit.cause)
-        expect(text).toContain("KubesealParseError")
+        expect(text).toContain("not valid YAML")
         expect(text).toContain("kubeseal failed")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -294,5 +261,40 @@ describe("SealedSecrets.backend", () => {
         expect(text).toContain("BoundaryDecodeError")
         expect(text).toContain("SealedSecret")
       }
+    }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+describe("_kubesealArgs properties", () => {
+  const scope = fc.constantFrom("strict", "namespace-wide", "cluster-wide" as const)
+
+  plainIt("always passes cert, scope and yaml format as flag/value pairs", () => {
+    fc.assert(fc.property(fc.string({ minLength: 1 }), scope, (certPath, scope) => {
+      const args = _kubesealArgs({ certPath, scope })
+      expect(args[args.indexOf("--cert") + 1]).toBe(certPath)
+      expect(args[args.indexOf("--scope") + 1]).toBe(scope)
+      expect(args[args.indexOf("--format") + 1]).toBe("yaml")
+      expect(args).toHaveLength(6)
+    }))
+  })
+})
+
+describe("SealedSecrets.backend timeout option", () => {
+  it.effect("fails with ProcessTimeout when kubeseal hangs past the configured timeout", () =>
+    Effect.gen(function*() {
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: SealedSecrets.backend({ certPath: "/tmp/cert.pem", timeout: "5 seconds" }),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+
+      const fiber = yield* Effect.forkChild(
+        Effect.exit(bound.manifest!.render(ctx).pipe(Effect.provide(stubSpawner({ respond: () => ({ hang: true }) }))))
+      )
+
+      yield* TestClock.adjust("6 seconds")
+      const exit = yield* Fiber.join(fiber)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "").toContain("timed out after 5s")
     }).pipe(Effect.provide(NodeServices.layer)))
 })

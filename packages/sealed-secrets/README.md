@@ -13,7 +13,7 @@ bun add @konfig.ts/sealed-secrets
 
 Needs the `kubeseal` CLI on the machine that runs `konfig build`, plus the
 controller's public cert — resolved from `certPath`, else `$KUBESEAL_CERT`.
-Missing cert fails fast with `KubesealCertMissing`.
+A missing cert fails the render with a `RenderError`.
 
 ## Usage
 
@@ -54,13 +54,13 @@ disk.
 | `scope`    | `"strict"`       | `strict` = same name + namespace; `namespace-wide` = rename within ns; `cluster-wide` = any ns |
 | `certPath` | `$KUBESEAL_CERT` | path to the sealed-secrets controller's public cert                                            |
 | `type`     | `"Opaque"`       | Secret `type` of the plain Secret, e.g. `kubernetes.io/dockerconfigjson`                       |
+| `timeout`  | 2 minutes        | how long `kubeseal` may run before the render fails                                            |
 
 ## Internals
 
 Backends implement the `SecretBackend<N, K, RequiresSource>` contract from
 `@konfig.ts/k8s`; `requiresSource: true` makes `source` a compile-time
-requirement. See the `Environment` section of
-[`.docs/architecture.md`](../../.docs/architecture.md).
+requirement.
 
 ## Requirements
 

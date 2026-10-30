@@ -1,7 +1,7 @@
-import { objectMetaSchema, stringRecordSchema as _stringRecord } from "@konfig.ts/k8s"
+import { objectMetaSchema, stringRecordSchema as _stringRecord } from "@konfig.ts/core"
 import { Schema } from "effect"
 
-export const SealedSecretTemplateSchema = Schema.Struct({
+const SealedSecretTemplateSchema = Schema.Struct({
   metadata: Schema.optionalKey(
     Schema.Struct({
       name: Schema.optionalKey(Schema.String),
@@ -14,7 +14,7 @@ export const SealedSecretTemplateSchema = Schema.Struct({
   immutable: Schema.optionalKey(Schema.Boolean)
 })
 
-export const SealedSecretSpecSchema = Schema.Struct({
+const SealedSecretSpecSchema = Schema.Struct({
   template: Schema.optionalKey(SealedSecretTemplateSchema),
   encryptedData: _stringRecord
 })

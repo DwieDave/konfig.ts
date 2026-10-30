@@ -7,13 +7,11 @@ export {
   type BackendEmitInput,
   backendLabel,
   type EmitInput,
-  objectMetaSchema,
-  parseYamlWith,
+  encryptVia,
   plainSecret,
   resolvePlaintext,
   SecretBackend,
-  secretMeta,
-  stringRecordSchema
+  secretMeta
 } from "./backend"
 
 export { Container, Pod } from "./container"
