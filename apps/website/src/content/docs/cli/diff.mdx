@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside } from "@/components/docs"
 
-`konfig diff <env>` shows what a render would change compared to a committed baseline, without writing anything. It renders the env in memory and compares it, file by file and document by document, against the YAML tree at `<root>/<diff.baseline>/<env>`. The comparison is structural: both sides are parsed as YAML and compared as values, so key order, quoting style, and whitespace never show up as changes.
+`konfig diff <env>` shows what a render would change compared to a committed baseline, without writing anything. It renders the env in memory and compares it, file by file and document by document, against the YAML tree at `<root>/<diff.baseline>/<env>`, or `<env>@<cluster>` when `--cluster` is passed. `--cluster` must be a DNS-1123 label. The comparison is structural: both sides are parsed as YAML and compared as values, so key order, quoting style, and whitespace never show up as changes.
 
 ## Usage
 

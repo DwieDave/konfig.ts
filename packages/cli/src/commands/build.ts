@@ -1,8 +1,5 @@
-import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Clock, Console, DateTime, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
-import { FileSystem } from "effect/FileSystem"
-import { Path } from "effect/Path"
 import {
   computeInputHash,
   computeOnDiskOutputHash,
@@ -10,7 +7,8 @@ import {
   readCacheEntry,
   writeCacheEntry
 } from "../buildCache"
-import { envOutDir, renderEnv, writeFiles } from "../buildEnv"
+import { envOutDir, type EnvTarget, type RenderedEnv, renderEnv, writeFiles } from "../buildEnv"
+import { existsOrFalse } from "../fsUtil"
 import { renderContextFlags, withRenderContext } from "../renderContextFlags"
 
 interface Timing {
@@ -49,31 +47,20 @@ const _formatReport = (input: {
   return `Wrote ${timing.files} file(s) to ${timing.outDir} — render ${timing.renderMs}ms, write ${timing.writeMs}ms`
 }
 
-export interface RunBuildInput {
-  readonly cfg: ResolvedKonfigConfig
-  readonly envName: string
-  readonly ctx: RenderContext
+interface RunBuildInput extends EnvTarget {
   readonly logFmt: LogFormat
-  readonly verbose: boolean
   readonly noCache: boolean
 }
 
-type BuildTarget = Pick<RunBuildInput, "cfg" | "envName" | "ctx">
-
-type Rendered = Effect.Success<ReturnType<typeof renderEnv>>
-
-const _validCacheHit = (input: BuildTarget & { readonly inputHash: string; readonly outDir: string }) =>
+const _validCacheHit = (input: EnvTarget & { readonly inputHash: string; readonly outDir: string }) =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
     const entry = yield* readCacheEntry(input)
 
     if (entry === undefined || entry.inputHash !== input.inputHash || entry.outDirAbs !== input.outDir) {
       return undefined
     }
 
-    const exists = yield* fs.exists(entry.outDirAbs).pipe(Effect.orElseSucceed(() => false))
-
-    if (!exists) return undefined
+    if (!(yield* existsOrFalse(entry.outDirAbs))) return undefined
     const onDiskHash = yield* computeOnDiskOutputHash(entry.outDirAbs)
 
     return onDiskHash === entry.outputHash ? entry : undefined
@@ -88,9 +75,9 @@ const _timed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   })
 
 const _persistCacheEntry = (
-  input: BuildTarget & {
+  input: EnvTarget & {
     readonly inputHash: string
-    readonly rendered: Rendered
+    readonly rendered: RenderedEnv
     readonly fileCount: number
   }
 ) =>
@@ -114,11 +101,8 @@ const _renderAndWrite = (input: RunBuildInput) => {
   const program = renderEnv(input)
 
   return Effect.gen(function*() {
-    const render = yield* _timed(
-      input.verbose ? program.pipe(Effect.withSpan(`konfig.render.${input.envName}`)) : program
-    )
-
-    const write = yield* _timed(writeFiles(render.value))
+    const render = yield* _timed(program)
+    const write = yield* _timed(writeFiles({ rendered: render.value, cfg: input.cfg }))
 
     return { rendered: render.value, written: write.value, renderMs: render.ms, writeMs: write.ms }
   })
@@ -146,8 +130,7 @@ const _reportCached = (input: RunBuildInput & { readonly fileCount: number; read
 
 export const runBuild = (input: RunBuildInput) =>
   Effect.gen(function*() {
-    const path = yield* Path
-    const outDir = envOutDir({ cfg: input.cfg, envName: input.envName, ctx: input.ctx, pathJoin: path.join })
+    const outDir = yield* envOutDir(input)
 
     if (input.noCache) return yield* _buildFresh({ ...input, inputHash: undefined })
     const inputHash = yield* computeInputHash(input)
@@ -166,10 +149,6 @@ export const buildCommand = Command.make(
       Flag.withDescription("Output format for log lines"),
       Flag.withDefault("text" as const)
     ),
-    verbose: Flag.Boolean("verbose").pipe(
-      Flag.withDescription("Enable Effect tracing for the render program"),
-      Flag.withDefault(false)
-    ),
     noCache: Flag.Boolean("no-cache").pipe(
       Flag.withDescription(
         "Skip the input-hash check and force a fresh render (debug / first-build use)."
@@ -187,7 +166,6 @@ export const buildCommand = Command.make(
           envName: args.env,
           ctx,
           logFmt: args.log,
-          verbose: args.verbose,
           noCache: args.noCache
         })
     })

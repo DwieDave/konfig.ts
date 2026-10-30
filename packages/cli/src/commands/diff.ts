@@ -10,7 +10,7 @@ import { Console, Data, Effect } from "effect"
 import { Argument, Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { renderEnv } from "../buildEnv"
+import { envDirName, renderEnv } from "../buildEnv"
 import { formatFlag, renderContextFlags, withRenderContext } from "../renderContextFlags"
 import { walkFiles } from "../walkFiles"
 
@@ -52,7 +52,14 @@ const _runDiff = ({ args, cfg, ctx }: RunDiffInput) =>
     }
 
     const rendered = yield* renderEnv({ cfg, envName: args.env, ctx })
-    const baselineDirAbs = path.join(cfg.configDir, cfg.config.root, cfg.config.diff.baseline, args.env)
+
+    const baselineDirAbs = path.join(
+      cfg.configDir,
+      cfg.config.root,
+      cfg.config.diff.baseline,
+      envDirName({ envName: args.env, ctx })
+    )
+
     const left = yield* readBaselineDir(baselineDirAbs)
 
     const right = Object.fromEntries(
@@ -78,4 +85,4 @@ export const diffCommand = Command.make(
     ...renderContextFlags
   },
   (args) => withRenderContext({ args, run: ({ cfg, ctx }) => _runDiff({ args, cfg, ctx }) })
-).pipe(Command.withDescription("Structural diff vs the nixidy baseline"))
+).pipe(Command.withDescription("Structural diff vs the configured diff.baseline"))

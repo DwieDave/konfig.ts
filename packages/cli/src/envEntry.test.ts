@@ -1,19 +1,23 @@
+import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { unsafeCoerce } from "@konfig.ts/core"
+import { Effect } from "effect"
 import { envEntryPath } from "./envEntry"
-
-const join = (...p: string[]) => p.join("/")
 
 const cfg = unsafeCoerce<Parameters<typeof envEntryPath>[0]["cfg"]>({
   configDir: "/c",
   config: { root: "r", envs: { prod: { entry: "x/prod.ts" } } }
 }, "minimal config fixture")
 
+const _entry = (envName: string) => envEntryPath({ cfg, envName }).pipe(Effect.provide(NodeServices.layer))
+
 describe("envEntryPath", () => {
-  it("uses the declared entry", () => {
-    expect(envEntryPath({ cfg, envName: "prod", pathJoin: join })).toBe("/c/r/x/prod.ts")
-  })
-  it("falls back to env/<name>.ts", () => {
-    expect(envEntryPath({ cfg, envName: "dev", pathJoin: join })).toBe("/c/r/env/dev.ts")
-  })
+  it.effect("uses the declared entry", () =>
+    Effect.gen(function*() {
+      expect(yield* _entry("prod")).toBe("/c/r/x/prod.ts")
+    }))
+  it.effect("falls back to env/<name>.ts", () =>
+    Effect.gen(function*() {
+      expect(yield* _entry("dev")).toBe("/c/r/env/dev.ts")
+    }))
 })

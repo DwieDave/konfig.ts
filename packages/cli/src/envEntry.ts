@@ -1,16 +1,14 @@
-import type { ResolvedKonfigConfig } from "@konfig.ts/core"
+import { Effect } from "effect"
+import { Path } from "effect/Path"
+import type { EnvTarget } from "./buildEnv"
 
-export interface EnvEntryPathInput {
-  readonly cfg: ResolvedKonfigConfig
-  readonly envName: string
-  readonly pathJoin: (...parts: string[]) => string
-}
+export const envEntryPath = (input: Pick<EnvTarget, "cfg" | "envName">) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    const { cfg, envName } = input
+    const envSpec = cfg.config.envs[envName]
 
-export const envEntryPath = (input: EnvEntryPathInput): string => {
-  const { cfg, envName, pathJoin } = input
-  const envSpec = cfg.config.envs[envName]
-
-  return envSpec === undefined
-    ? pathJoin(cfg.configDir, cfg.config.root, "env", `${envName}.ts`)
-    : pathJoin(cfg.configDir, cfg.config.root, envSpec.entry)
-}
+    return envSpec === undefined
+      ? path.join(cfg.configDir, cfg.config.root, "env", `${envName}.ts`)
+      : path.join(cfg.configDir, cfg.config.root, envSpec.entry)
+  })

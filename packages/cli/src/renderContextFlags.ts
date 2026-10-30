@@ -1,5 +1,5 @@
 import { type DiffFormat, RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Effect, Option } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Flag } from "effect/cli"
 import { resolveConfig } from "./configResolver"
 
@@ -17,6 +17,10 @@ export const renderContextFlags = {
     Flag.optional
   )
 } as const
+
+export const _clusterName = Schema.String.check(Schema.isPattern(/^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/))
+
+export const _envName = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9_-]*$/))
 
 interface RenderContextFlagValues {
   readonly cluster: Option.Option<string>
@@ -52,14 +56,24 @@ export const formatFlag = Flag.Literals(
     Flag.withDefault("summary" as const)
   )
 
-export interface WithRenderContextInput<A, E, R> {
+interface WithRenderContextInput<A, E, R> {
   readonly args: RenderContextFlagValues & { readonly env: string }
   readonly run: (input: { readonly cfg: ResolvedKonfigConfig; readonly ctx: RenderContext }) => Effect.Effect<A, E, R>
 }
 
+const _decodeFlags = (args: WithRenderContextInput<never, never, never>["args"]) =>
+  Effect.gen(function*() {
+    const env = yield* Schema.decodeEffect(_envName)(args.env)
+
+    const cluster = yield* Schema.decodeEffect(Schema.Option(_clusterName))(args.cluster)
+
+    return { ...args, env, cluster }
+  })
+
 export const withRenderContext = <A, E, R>({ args, run }: WithRenderContextInput<A, E, R>) =>
   Effect.gen(function*() {
+    const decoded = yield* _decodeFlags(args)
     const cfg = yield* resolveConfig()
 
-    return yield* run({ cfg, ctx: _renderContextFromFlags({ env: args.env, flags: args }) })
+    return yield* run({ cfg, ctx: _renderContextFromFlags({ env: decoded.env, flags: decoded }) })
   })

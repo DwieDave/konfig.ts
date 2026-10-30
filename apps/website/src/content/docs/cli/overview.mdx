@@ -67,7 +67,7 @@ The entry's default export must be an Effect program that produces the render. N
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `--cluster <name>` | unset | Target cluster name when one env spans several clusters. Available in your build as `ctx.cluster`; `build` writes into `<outDir>/<env>/<cluster>/`. |
+| `--cluster <name>` | unset | Target cluster name when one env spans several clusters. Available in your build as `ctx.cluster`; `build` writes into the sibling directory `<outDir>/<env>@<cluster>/`. It must be a DNS-1123 label. |
 | `--k8s-version <ver>` | unset | Target Kubernetes version (for example `1.31`). Available as `ctx.k8sVersion` for choosing an `apiVersion`. |
 | `--flag k=v` | unset | Free-form key/value pairs. Repeatable; merged into one map read via `ctx.flags.get(k)`. |
 

@@ -25,8 +25,7 @@ needs a **TypeScript-capable runtime**:
 - **Node 22.6–23.5** — pass `--experimental-strip-types`.
 - **`tsx`** — `tsx node_modules/.bin/konfig …`.
 
-Pure-YAML commands that don't load your sources (e.g. `konfig diff` against a
-baseline directory) run under plain Node.
+`konfig diff` also renders your TypeScript sources, so it needs the same runtime.
 
 ## Configuration — `konfig.json`
 
@@ -65,14 +64,14 @@ makes, via a `ConfigProvider` installed around the render (see
 
 An **env** is a named render target (`prod`, `staging`). Its entry file is
 `envs.NAME.entry`, else `<root>/env/NAME.ts`; that module's **default export**
-must be an `AppOfApps` program (see [`@konfig.ts/argocd`](../argocd)).
+must be an `AppOfApps` or `Bundle` program (see [`@konfig.ts/argocd`](../argocd)).
 
 ## Commands
 
 ```bash
 konfig build <env>       # render manifests to outDir (input-hashed; a no-op build rewrites nothing)
 konfig validate <env>    # render in-memory + structural checks; --strict adds kubeconform
-konfig diff <env>        # structural diff vs. the configured baseline (ignores key reordering)
+konfig diff <env>        # structural diff vs the configured diff.baseline (ignores key reordering)
 konfig set <env> <app> <imageRef> [--create]   # update one image tag in images.json; --create adds a new app key
 konfig crd extract|verify           # CRD TypeScript codegen from Helm charts
 konfig helm fetch --all             # pre-fetch chart tarballs into the cache
@@ -85,15 +84,12 @@ and repeatable `--flag k=v`, all readable from your program's `RenderContext`.
 
 `konfig helm fetch --all` and `konfig crd extract` cache tarballs under the
 _same_ filename `Helm.release` uses at render time: `<chart>-<version>.tgz`
-for a chart registry entry with no recorded digest, or
-`<chart>-<version>-<digest12>.tgz` once a digest is known (verified against
-the pulled bytes before the file is cached under that name). A chart with a
-digest that `helm fetch`d without one (before the digest was recorded)
-prints a warning that the plain-named tarball won't be reused by a render;
-re-run `konfig helm fetch --all` after adding the digest to warm the correct
-cache slot. `konfig crd extract` looks for the digest-suffixed tarball first
-when a digest is known, so a prior `helm fetch` (or a prior render) already
-warms its cache too.
+when no digest is recorded for the chart, or `<chart>-<version>-<digest12>.tgz`
+once one is (verified against the pulled bytes before the file is cached under
+that name). `helm fetch` warns whenever a chart has no recorded digest, because
+the plain-named tarball is not reused by a render that expects a digest-suffixed
+one. Record the digest, then re-run `konfig helm fetch --all` to warm the
+correct slot.
 
 ## Requirements
 

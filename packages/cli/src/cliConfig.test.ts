@@ -1,9 +1,16 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { DEFAULT_HELM_CACHE_DIR, DEFAULT_HELM_MIN_VERSION, type ResolvedKonfigConfig } from "@konfig.ts/core"
+import {
+  DEFAULT_CHARTS_DIR,
+  DEFAULT_CRD_OUT_DIR,
+  DEFAULT_HELM_MIN_VERSION,
+  type ResolvedKonfigConfig
+} from "@konfig.ts/core"
 import { ConfigProvider, Effect } from "effect"
 import { Path } from "effect/Path"
-import { DEFAULT_CHARTS_DIR, DEFAULT_CRD_OUT_DIR, resolveCliPaths } from "./cliConfig"
+import { resolveCliPaths } from "./cliConfig"
+
+const DEFAULT_HELM_CACHE_DIR = ".konfig/helm-cache"
 
 /**
  * Overrides are injected via a scoped ConfigProvider rather than mutating

@@ -4,7 +4,7 @@ import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { readCacheEntry } from "../buildCache"
+import { computeInputHash, readCacheEntry } from "../buildCache"
 import { runBuild } from "./build"
 
 /**
@@ -63,7 +63,6 @@ describe("runBuild", () => {
         envName: "prod",
         ctx,
         logFmt: "text",
-        verbose: false,
         noCache: false
       })
 
@@ -89,12 +88,12 @@ describe("runBuild", () => {
       const cfg = _cfgFor(root)
       const ctx = RenderContext.make("prod")
 
-      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", verbose: false, noCache: false })
+      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", noCache: false })
       const firstEntry = yield* readCacheEntry({ cfg, envName: "prod", ctx })
 
       // Second build: cache hit path returns without touching writeFiles/
       // writeCacheEntry again — the recorded timestamp must stay identical.
-      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", verbose: false, noCache: false })
+      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", noCache: false })
       const secondEntry = yield* readCacheEntry({ cfg, envName: "prod", ctx })
 
       expect(secondEntry).toEqual(firstEntry)
@@ -109,7 +108,7 @@ describe("runBuild", () => {
       const cfg = _cfgFor(root)
       const ctx = RenderContext.make("prod")
 
-      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", verbose: false, noCache: true })
+      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", noCache: true })
 
       const outDir = path.join(root, "rendered", "prod")
       const exists = yield* fs.exists(path.join(outDir, "api", "ConfigMap-api-conf.yaml"))
@@ -136,12 +135,12 @@ describe("runBuild", () => {
 
       const ctx = RenderContext.make("prod")
 
-      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", verbose: false, noCache: false })
+      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", noCache: false })
       const firstEntry = yield* readCacheEntry({ cfg, envName: "prod", ctx })
 
       // A second build with nothing changed is a genuine cache hit —
       // rewriting nothing, so the entry stays byte-identical.
-      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", verbose: false, noCache: false })
+      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", noCache: false })
       const unchangedEntry = yield* readCacheEntry({ cfg, envName: "prod", ctx })
       expect(unchangedEntry).toEqual(firstEntry)
 
@@ -149,26 +148,62 @@ describe("runBuild", () => {
       // the rendered output) still shifts the input hash and forces a
       // fresh writeCacheEntry with a new hash on the next build.
       yield* fs.writeFileString(sharedFile, "a: 2\n")
-      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", verbose: false, noCache: false })
+      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", noCache: false })
       const invalidatedEntry = yield* readCacheEntry({ cfg, envName: "prod", ctx })
 
       expect(invalidatedEntry?.inputHash).not.toBe(firstEntry?.inputHash)
       expect(invalidatedEntry?.outputHash).toBe(firstEntry?.outputHash)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("verbose: true still writes the same output tree (render program wrapped in a span)", () =>
+  it.effect("a changed KONFIG_* env var invalidates the cache", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
-      const path = yield* Path
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-build-" })
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-build-env-" })
       yield* _writeBundleEnv(root)
       const cfg = _cfgFor(root)
       const ctx = RenderContext.make("prod")
+      const probe = { cfg, envName: "prod", ctx }
+      const key = "KONFIG_CACHE_PROBE_TEST"
 
-      yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "json", verbose: true, noCache: true })
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          process.env[key] = "one"
+        }),
+        () =>
+          Effect.gen(function*() {
+            const first = yield* computeInputHash(probe)
+            expect(yield* computeInputHash(probe)).toBe(first)
+            process.env[key] = "two"
+            expect(yield* computeInputHash(probe)).not.toBe(first)
+          }),
+        () =>
+          Effect.sync(() => {
+            delete process.env[key]
+          })
+      )
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-      const outDir = path.join(root, "rendered", "prod")
-      const exists = yield* fs.exists(path.join(outDir, "api", "ConfigMap-api-conf.yaml"))
-      expect(exists).toBe(true)
+  it.effect("cluster output lands in a sibling <env>@<cluster> dir and never inside the cluster-less dir", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-build-cluster-" })
+      yield* _writeBundleEnv(root)
+      const cfg = _cfgFor(root)
+
+      yield* runBuild({ cfg, envName: "prod", ctx: RenderContext.make("prod"), logFmt: "text", noCache: true })
+
+      yield* runBuild({
+        cfg,
+        envName: "prod",
+        ctx: RenderContext.makeFull({ env: "prod", cluster: "eu1", k8sVersion: undefined, flags: undefined }),
+        logFmt: "text",
+        noCache: true
+      })
+
+      const base = path.join(root, "rendered")
+      expect(yield* fs.exists(path.join(base, "prod@eu1", "api", "ConfigMap-api-conf.yaml"))).toBe(true)
+      expect(yield* fs.exists(path.join(base, "prod", "api", "ConfigMap-api-conf.yaml"))).toBe(true)
+      expect(yield* fs.exists(path.join(base, "prod", "eu1"))).toBe(false)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

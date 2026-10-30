@@ -8,7 +8,6 @@ import {
   type RenderContext,
   renderManifest,
   type ResolvedKonfigConfig,
-  unsafeCoerce,
   unwrapDocs,
   Yaml
 } from "@konfig.ts/core"
@@ -18,23 +17,31 @@ import { Path } from "effect/Path"
 import { resolveCliPaths } from "./cliConfig"
 import { envEntryPath } from "./envEntry"
 import { decodeEnvResult, type EnvResult } from "./envResult"
+import { existsOrFalse } from "./fsUtil"
 import { moduleDefault } from "./moduleDefault"
 
-export interface EnvOutDirInput {
+export interface EnvTarget {
   readonly cfg: ResolvedKonfigConfig
   readonly envName: string
   readonly ctx: RenderContext
-  readonly pathJoin: (...parts: string[]) => string
 }
 
-export const envOutDir = (input: EnvOutDirInput): string =>
-  input.pathJoin(
-    input.cfg.configDir,
-    input.cfg.config.root,
-    input.cfg.config.outDir.manifests,
-    input.envName,
-    ...(input.ctx.cluster !== undefined ? [input.ctx.cluster] : [])
-  )
+export const envDirName = (input: Pick<EnvTarget, "envName" | "ctx">): string =>
+  input.ctx.cluster === undefined ? input.envName : `${input.envName}@${input.ctx.cluster}`
+
+const _manifestsRoot = (cfg: ResolvedKonfigConfig) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+
+    return path.join(cfg.configDir, cfg.config.root, cfg.config.outDir.manifests)
+  })
+
+export const envOutDir = (target: EnvTarget) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+
+    return path.join(yield* _manifestsRoot(target.cfg), envDirName(target))
+  })
 
 class EnvEntryNotFound extends Data.TaggedError("EnvEntryNotFound")<{
   readonly env: string
@@ -43,7 +50,20 @@ class EnvEntryNotFound extends Data.TaggedError("EnvEntryNotFound")<{
 
 class NonManifestChild extends Data.TaggedError("NonManifestChild")<{
   readonly child: string
-}> {}
+}> {
+  get message(): string {
+    return `child '${this.child}' lists a manifest that was not built with Manifest.make`
+  }
+}
+
+class OutDirOutsideManifests extends Data.TaggedError("OutDirOutsideManifests")<{
+  readonly outDir: string
+  readonly root: string
+}> {
+  get message(): string {
+    return `refusing to replace ${this.outDir}: it is not strictly inside the manifests root ${this.root}`
+  }
+}
 
 class EnvResultInvalid extends Data.TaggedError("EnvResultInvalid")<{
   readonly entry: string
@@ -67,14 +87,9 @@ interface _ResolveEnvEntryInput {
 const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
   Effect.gen(function*() {
     const { cfg, envName } = input
-    const path = yield* Path
-    const fs = yield* FileSystem
+    const entry = yield* envEntryPath({ cfg, envName })
 
-    const entry = envEntryPath({ cfg, envName, pathJoin: path.join })
-
-    const exists = yield* fs.exists(entry).pipe(Effect.orElseSucceed(() => false))
-
-    if (!exists) {
+    if (!(yield* existsOrFalse(entry))) {
       return yield* new EnvEntryNotFound({ env: envName, entry })
     }
 
@@ -83,7 +98,7 @@ const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
 
 const _isAppOfApps = (r: EnvResult): r is AppOfAppsResult => "apps" in r
 
-const _loadEnv = (entry: string) =>
+const _importDefault = (entry: string): Effect.Effect<unknown, EnvLoadError> =>
   Effect.gen(function*() {
     const mod = yield* Effect.tryPromise({
       try: () => import(entry),
@@ -92,23 +107,23 @@ const _loadEnv = (entry: string) =>
 
     const program = moduleDefault(mod)
 
-    if (program === undefined) {
-      return yield* new EnvLoadError({ entry, cause: "default export is missing" })
-    }
+    return program === undefined ? yield* new EnvLoadError({ entry, cause: "default export is missing" }) : program
+  })
 
-    const isEffectProgram: boolean = Effect.isEffect(program)
+const _NOT_AN_EFFECT =
+  "default export is not an Effect — env entries must default-export an AppOfApps or Bundle program Effect"
 
-    if (!isEffectProgram) {
-      return yield* new EnvLoadError({
-        entry,
-        cause: "default export is not an Effect — env entries must default-export an AppOfApps or Bundle program Effect"
-      })
-    }
+const _isEnvProgram = (program: unknown): program is Effect.Effect<unknown, AnyRenderError> => Effect.isEffect(program)
 
-    const result = yield* unsafeCoerce<Effect.Effect<unknown, AnyRenderError>>(
-      program,
-      "isEffectProgram confirmed above; only the R/E channels are narrowed, the result value is decoded below"
-    )
+const _asEnvProgram = (input: { readonly entry: string; readonly program: unknown }) =>
+  _isEnvProgram(input.program)
+    ? Effect.succeed(input.program)
+    : Effect.fail(new EnvLoadError({ entry: input.entry, cause: _NOT_AN_EFFECT }))
+
+const _loadEnv = (entry: string) =>
+  Effect.gen(function*() {
+    const program = yield* _asEnvProgram({ entry, program: yield* _importDefault(entry) })
+    const result = yield* program
 
     return yield* decodeEnvResult(result).pipe(
       Effect.mapError((cause) => new EnvResultInvalid({ entry, cause }))
@@ -127,7 +142,7 @@ class InvalidOutputObject extends Data.TaggedError("InvalidOutputObject")<{
   readonly dir: string
 }> {
   get message(): string {
-    return `rendered object in ${this.dir} has an empty kind ('${this.kind}') or metadata.name ('${this.objectName}')`
+    return `rendered object in ${this.dir} has a missing or empty kind ('${this.kind}') or metadata.name ('${this.objectName}')`
   }
 }
 
@@ -146,14 +161,10 @@ interface Routing {
   readonly namespace: string | undefined
 }
 
-const _routingOf = (parsed: typeof _KindNameSchema.Type): Routing | undefined => {
-  const kind = parsed.kind
-  const name = parsed.metadata?.name
-
-  return kind === undefined || name === undefined
-    ? undefined
-    : { kind, name, namespace: parsed.metadata?.namespace }
-}
+const _routingOf = (parsed: typeof _KindNameSchema.Type): Option.Option<Routing> =>
+  parsed.kind === undefined && parsed.metadata?.name === undefined
+    ? Option.none()
+    : Option.some({ kind: parsed.kind ?? "", name: parsed.metadata?.name ?? "", namespace: parsed.metadata?.namespace })
 
 const _describeObject = (routing: Routing): string =>
   `${routing.kind} ${routing.namespace === undefined ? "" : `${routing.namespace}/`}${routing.name}`
@@ -162,55 +173,56 @@ interface _ToOutputFileInput {
   readonly doc: unknown
   readonly routing: Routing
   readonly dir: string
-  readonly pathJoin: (...parts: string[]) => string
 }
 
-const _toOutputFile = (input: _ToOutputFileInput): Effect.Effect<OutputFile, InvalidOutputObject> => {
-  const { dir, doc, pathJoin, routing } = input
+const _toOutputFile = (input: _ToOutputFileInput): Effect.Effect<OutputFile, InvalidOutputObject, Path> =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    const { dir, doc, routing } = input
 
-  return routing.kind === "" || routing.name === ""
-    ? Effect.fail(new InvalidOutputObject({ kind: routing.kind, objectName: routing.name, dir }))
-    : Effect.succeed({
-      path: pathJoin(dir, Yaml.filenameFor({ kind: routing.kind, metadata: { name: routing.name } })),
+    if (routing.kind === "" || routing.name === "") {
+      return yield* new InvalidOutputObject({ kind: routing.kind, objectName: routing.name, dir })
+    }
+
+    return {
+      path: path.join(dir, Yaml.filenameFor({ kind: routing.kind, metadata: { name: routing.name } })),
       content: Yaml.serialize({ value: doc }),
       object: _describeObject(routing)
-    })
-}
+    }
+  })
 
 const _objectOutputs = (
   input: Omit<_ToOutputFileInput, "routing"> & { readonly parsed: typeof _KindNameSchema.Type }
-): Effect.Effect<OutputFile[], InvalidOutputObject> => {
-  const routing = _routingOf(input.parsed)
-
-  return routing === undefined
-    ? Effect.succeed([])
-    : Effect.map(_toOutputFile({ doc: input.doc, dir: input.dir, pathJoin: input.pathJoin, routing }), (file) => [file])
-}
+): Effect.Effect<OutputFile[], InvalidOutputObject, Path> =>
+  Option.match(_routingOf(input.parsed), {
+    onNone: () => Effect.succeed<OutputFile[]>([]),
+    onSome: (routing) => Effect.map(_toOutputFile({ doc: input.doc, dir: input.dir, routing }), (file) => [file])
+  })
 
 interface _CollectOutputsInput {
   readonly value: unknown
   readonly appDir: string
-  readonly pathJoin: (...parts: string[]) => string
 }
 
-const _collectOutputs = (input: _CollectOutputsInput): Effect.Effect<OutputFile[], InvalidOutputObject> => {
-  const { appDir, pathJoin, value } = input
-  const recurse = (v: _CollectOutputsInput["value"]) => _collectOutputs({ value: v, appDir, pathJoin })
+export const _collectOutputs = (
+  input: _CollectOutputsInput
+): Effect.Effect<OutputFile[], InvalidOutputObject, Path> => {
+  const { appDir, value } = input
 
   const flatten = (values: ReadonlyArray<unknown>) =>
-    Effect.forEach(values, recurse).pipe(Effect.map((groups) => groups.flat()))
+    Effect.forEach(values, (v) => _collectOutputs({ value: v, appDir })).pipe(Effect.map((groups) => groups.flat()))
 
   if (Array.isArray(value)) return flatten(value)
 
   if (isRawYaml(value) || isParsedDoc(value)) return unwrapDocs(value).pipe(Effect.orDie, Effect.flatMap(flatten))
 
   return Option.match(_decodeKindName(value), {
-    onNone: () => Effect.succeed([]),
-    onSome: (parsed) => _objectOutputs({ doc: value, dir: appDir, pathJoin, parsed })
+    onNone: () => Effect.succeed<OutputFile[]>([]),
+    onSome: (parsed) => _objectOutputs({ doc: value, dir: appDir, parsed })
   })
 }
 
-export interface OutputCollision {
+interface OutputCollision {
   readonly path: string
   readonly objects: ReadonlyArray<string>
 }
@@ -225,7 +237,7 @@ class OutputFileCollision extends Data.TaggedError("OutputFileCollision")<{
   }
 }
 
-export const findOutputCollisions = (files: ReadonlyArray<OutputFile>): OutputCollision[] =>
+export const _findOutputCollisions = (files: ReadonlyArray<OutputFile>): OutputCollision[] =>
   Object.entries(Arr.groupBy(files, (f) => f.path)).flatMap(([path, group]) =>
     Arr.dedupe(group.map((f) => f.content)).length > 1
       ? [{ path, objects: group.map((f) => f.object ?? "(unnamed document)") }]
@@ -233,7 +245,7 @@ export const findOutputCollisions = (files: ReadonlyArray<OutputFile>): OutputCo
   )
 
 const _failOnCollisions = (files: ReadonlyArray<OutputFile>) => {
-  const collisions = findOutputCollisions(files)
+  const collisions = _findOutputCollisions(files)
 
   return collisions.length === 0 ? Effect.void : Effect.fail(new OutputFileCollision({ collisions }))
 }
@@ -274,78 +286,70 @@ interface RenderChildInput {
   readonly outDirAbs: string
   readonly appsDirAbs: string
   readonly ctx: RenderContext
-  readonly path: Path
 }
+
+const _renderManifests = (input: Pick<RenderChildInput, "child" | "ctx">) =>
+  Effect.forEach(
+    input.child.manifests,
+    (m) =>
+      Effect.gen(function*() {
+        if (!M.isManifest(m)) return yield* new NonManifestChild({ child: input.child.name })
+
+        return yield* renderManifest({ manifest: m, ctx: input.ctx })
+      }),
+    { concurrency: "unbounded" }
+  )
+
+const _applicationFile = (input: { readonly argo: EnvChildArgo; readonly appsDirAbs: string }) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    const { app, defaults, target } = input.argo
+
+    return {
+      path: path.join(input.appsDirAbs, applicationCRFilename(app)),
+      content: serializeApplicationCR({ app, target, defaults })
+    } satisfies OutputFile
+  })
 
 const _renderChild = (input: RenderChildInput) =>
   Effect.gen(function*() {
-    const { appsDirAbs, child, ctx, outDirAbs, path } = input
+    const { appsDirAbs, child, ctx, outDirAbs } = input
+    const path = yield* Path
     const appDir = path.join(outDirAbs, child.name)
+    const rendered = yield* _renderManifests({ child, ctx })
+    const collected = yield* Effect.forEach(rendered, (value) => _collectOutputs({ value, appDir }))
+    const application = child.argo === undefined ? [] : [yield* _applicationFile({ argo: child.argo, appsDirAbs })]
 
-    const rendered = yield* Effect.forEach(
-      child.manifests,
-      (m) =>
-        M.isManifest(m)
-          ? renderManifest({ manifest: m, ctx })
-          : Effect.die(new NonManifestChild({ child: child.name })),
-      { concurrency: "unbounded" }
-    )
-
-    const collected = yield* Effect.forEach(
-      rendered,
-      (value) => _collectOutputs({ value, appDir, pathJoin: path.join })
-    )
-
-    const out: OutputFile[] = collected.flat()
-
-    if (child.argo !== undefined) {
-      out.push({
-        path: path.join(appsDirAbs, applicationCRFilename(child.argo.app)),
-        content: serializeApplicationCR({
-          app: child.argo.app,
-          target: child.argo.target,
-          defaults: child.argo.defaults
-        })
-      })
-    }
-
-    return out
+    return [...collected.flat(), ...application]
   })
 
-export interface RenderEnvInput {
-  readonly cfg: ResolvedKonfigConfig
-  readonly envName: string
-  readonly ctx: RenderContext
-}
-
-const _renderEnvBody = (input: RenderEnvInput) =>
+const _renderEnvBody = (input: EnvTarget) =>
   Effect.gen(function*() {
     const { cfg, envName, ctx } = input
     const path = yield* Path
     const entry = yield* _resolveEnvEntry({ cfg, envName })
     const result = yield* _loadEnv(entry)
 
-    const outDirAbs = envOutDir({ cfg, envName, ctx, pathJoin: path.join })
+    const outDirAbs = yield* envOutDir(input)
     const appsDirAbs = path.join(outDirAbs, result.name)
-
-    const children = _childrenOf(result)
 
     // Bounded at 4: keeps the helm/sops subprocess count manageable.
     const perAppFiles = yield* Effect.forEach(
-      children,
-      (child) => _renderChild({ appsDirAbs, child, ctx, outDirAbs, path }),
+      _childrenOf(result),
+      (child) => _renderChild({ appsDirAbs, child, ctx, outDirAbs }),
       { concurrency: 4 }
     )
 
-    const files: OutputFile[] = perAppFiles.flat()
-    yield* _failOnCollisions(files)
+    const all = perAppFiles.flat()
+    yield* _failOnCollisions(all)
 
+    const files = Arr.dedupeWith(all, (a, b) => a.path === b.path)
     const rendered: RenderedEnv = { appsDirAbs, outDirAbs, files }
 
     return rendered
   }).pipe(Effect.scoped)
 
-export const renderEnv = (input: RenderEnvInput) =>
+export const renderEnv = (input: EnvTarget) =>
   Effect.gen(function*() {
     // Chart definitions call `Helm.release` without a `cacheDir` option — it
     // reads `Config(KONFIG_HELM_CACHE)` itself (see core's Helm.ts) at
@@ -375,10 +379,22 @@ export class WriteEnvError extends Data.TaggedError("WriteEnvError")<{
   readonly cause: unknown
 }> {}
 
-export interface WriteFilesToDirInput {
+interface WriteFilesToDirInput {
   readonly rendered: RenderedEnv
   readonly targetDir: string
 }
+
+const _writeOne = (input: WriteFilesToDirInput & { readonly file: OutputFile }) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const targetPath = path.join(input.targetDir, path.relative(input.rendered.outDirAbs, input.file.path))
+    const toError = (cause: unknown) => new WriteEnvError({ path: targetPath, cause })
+    yield* fs.makeDirectory(path.dirname(targetPath), { recursive: true }).pipe(Effect.mapError(toError))
+    yield* fs.writeFileString(targetPath, input.file.content, { mode: 0o600 }).pipe(Effect.mapError(toError))
+
+    return targetPath
+  })
 
 // Re-homes `rendered.files` (keyed off `rendered.outDirAbs`) under an
 // arbitrary `targetDir`, preserving the per-app layout/naming that
@@ -388,34 +404,13 @@ export interface WriteFilesToDirInput {
 export const writeFilesToDir = (
   input: WriteFilesToDirInput
 ): Effect.Effect<ReadonlyArray<string>, WriteEnvError, FileSystem | Path> =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem
-    const path = yield* Path
-    const { rendered, targetDir } = input
-
-    const written: string[] = []
-
-    for (const file of rendered.files) {
-      const rel = path.relative(rendered.outDirAbs, file.path)
-      const targetPath = path.join(targetDir, rel)
-      yield* fs
-        .makeDirectory(path.dirname(targetPath), { recursive: true })
-        .pipe(Effect.mapError((cause) => new WriteEnvError({ path: targetPath, cause })))
-      yield* fs
-        .writeFileString(targetPath, file.content, { mode: 0o600 })
-        .pipe(Effect.mapError((cause) => new WriteEnvError({ path: targetPath, cause })))
-      written.push(targetPath)
-    }
-
-    return written
-  })
+  Effect.forEach(input.rendered.files, (file) => _writeOne({ ...input, file }))
 
 const _removeIfExists = (target: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
-    const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
 
-    if (!exists) return
+    if (!(yield* existsOrFalse(target))) return
     yield* fs
       .remove(target, { recursive: true })
       .pipe(Effect.mapError((cause) => new WriteEnvError({ path: target, cause })))
@@ -431,13 +426,30 @@ const _promoteStaging = (input: { readonly stagingDir: string; readonly outDirAb
     yield* fs.rename(input.stagingDir, input.outDirAbs).pipe(Effect.mapError(toError))
   })
 
+const _assertInsideManifests = (input: { readonly cfg: ResolvedKonfigConfig; readonly outDirAbs: string }) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    const root = yield* _manifestsRoot(input.cfg)
+    const rel = path.relative(root, input.outDirAbs)
+    const escapes = rel === "" || rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)
+
+    if (escapes) return yield* new OutDirOutsideManifests({ outDir: input.outDirAbs, root })
+  })
+
+interface WriteFilesInput {
+  readonly rendered: RenderedEnv
+  readonly cfg: ResolvedKonfigConfig
+}
+
 // Atomic write: stage all files under `<outDir>.tmp`, then remove the live
 // `<outDir>` and rename `.tmp` into place — a kill mid-write never leaves a
 // half-rewritten live tree.
 export const writeFiles = (
-  rendered: RenderedEnv
-): Effect.Effect<ReadonlyArray<string>, WriteEnvError, FileSystem | Path> =>
+  input: WriteFilesInput
+): Effect.Effect<ReadonlyArray<string>, WriteEnvError | OutDirOutsideManifests, FileSystem | Path> =>
   Effect.gen(function*() {
+    const { cfg, rendered } = input
+    yield* _assertInsideManifests({ cfg, outDirAbs: rendered.outDirAbs })
     const stagingDir = `${rendered.outDirAbs}.tmp`
     yield* _removeIfExists(stagingDir)
     yield* writeFilesToDir({ rendered, targetDir: stagingDir })

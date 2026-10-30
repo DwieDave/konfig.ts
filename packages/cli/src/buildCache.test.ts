@@ -6,11 +6,11 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import fc from "fast-check"
 import {
-  _ctxSignature,
   type BuildCacheEntry,
   computeInputHash,
   computeOnDiskOutputHash,
   computeOutputHash,
+  ctxSignature,
   readCacheEntry,
   writeCacheEntry
 } from "./buildCache"
@@ -507,7 +507,7 @@ describe("input hash ordering invariance", () => {
       fc.property(_flagEntries, (entries) => {
         const forward = RenderContext.makeFull({ env: "prod", flags: new Map(entries) })
         const reversed = RenderContext.makeFull({ env: "prod", flags: new Map([...entries].reverse()) })
-        expect(_ctxSignature(forward)).toBe(_ctxSignature(reversed))
+        expect(ctxSignature(forward)).toBe(ctxSignature(reversed))
       })
     )
   })

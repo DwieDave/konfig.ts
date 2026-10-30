@@ -1,11 +1,13 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Effect, Predicate } from "effect"
+import { Effect, Option, Predicate, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import fc from "fast-check"
-import { findOutputCollisions, renderEnv, writeFiles } from "./buildEnv"
+import { vi } from "vitest"
+import { _collectOutputs, _findOutputCollisions, envOutDir, renderEnv, writeFiles } from "./buildEnv"
+import { _clusterName, _envName, withRenderContext } from "./renderContextFlags"
 
 const _writeEnvFile = (root: string, entry: string, body: string) =>
   Effect.gen(function*() {
@@ -241,14 +243,14 @@ describe("renderEnv: output file safety", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 
-describe("findOutputCollisions", () => {
+describe("_findOutputCollisions", () => {
   const _seg = fc.stringMatching(/^[a-z]{1,6}$/)
 
   it("property: distinct paths never collide", () => {
     fc.assert(
       fc.property(fc.uniqueArray(_seg, { minLength: 1, maxLength: 6 }), (names) => {
         const files = names.map((n) => ({ path: `/o/${n}.yaml`, content: n }))
-        expect(findOutputCollisions(files)).toEqual([])
+        expect(_findOutputCollisions(files)).toEqual([])
       })
     )
   })
@@ -258,14 +260,14 @@ describe("findOutputCollisions", () => {
       fc.property(_seg, _seg, _seg, (name, a, b) => {
         const path = `/o/${name}.yaml`
 
-        const differing = findOutputCollisions([{ path, content: `${a}1`, object: "x" }, {
+        const differing = _findOutputCollisions([{ path, content: `${a}1`, object: "x" }, {
           path,
           content: `${a}2`,
           object: "y"
         }])
 
         expect(differing).toEqual([{ path, objects: ["x", "y"] }])
-        expect(findOutputCollisions([{ path, content: b }, { path, content: b }])).toEqual([])
+        expect(_findOutputCollisions([{ path, content: b }, { path, content: b }])).toEqual([])
       })
     )
   })
@@ -286,9 +288,9 @@ describe("writeFiles: atomic staging", () => {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-" })
-      const outDirAbs = path.join(root, "rendered", "test")
+      const outDirAbs = path.join(root, "infra", "rendered", "test")
 
-      const written = yield* writeFiles(_rendered(outDirAbs))
+      const written = yield* writeFiles({ rendered: _rendered(outDirAbs), cfg: _cfgFor(root) })
       expect(written.length).toBe(2)
 
       const aContent = yield* fs.readFileString(path.join(outDirAbs, "a.yaml"))
@@ -305,7 +307,7 @@ describe("writeFiles: atomic staging", () => {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-leftover-" })
-      const outDirAbs = path.join(root, "rendered", "test")
+      const outDirAbs = path.join(root, "infra", "rendered", "test")
       const stagingDir = `${outDirAbs}.tmp`
 
       // simulate a prior interrupted run: leftover staging dir with a stale file
@@ -313,7 +315,7 @@ describe("writeFiles: atomic staging", () => {
       yield* fs.makeDirectory(stagingDir, { recursive: true })
       yield* fs.writeFileString(path.join(stagingDir, "stale.yaml"), "stale: true\n")
 
-      yield* writeFiles(_rendered(outDirAbs))
+      yield* writeFiles({ rendered: _rendered(outDirAbs), cfg: _cfgFor(root) })
 
       const staleExists = yield* fs.exists(path.join(outDirAbs, "stale.yaml"))
       expect(staleExists).toBe(false)
@@ -326,14 +328,14 @@ describe("writeFiles: atomic staging", () => {
       const fs = yield* FileSystem
       const path = yield* Path
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-replace-" })
-      const outDirAbs = path.join(root, "rendered", "test")
+      const outDirAbs = path.join(root, "infra", "rendered", "test")
 
       // pre-existing live tree from a previous build, including a file that
       // the new render no longer produces
       yield* fs.makeDirectory(outDirAbs, { recursive: true })
       yield* fs.writeFileString(path.join(outDirAbs, "old.yaml"), "old: true\n")
 
-      yield* writeFiles(_rendered(outDirAbs))
+      yield* writeFiles({ rendered: _rendered(outDirAbs), cfg: _cfgFor(root) })
 
       const oldExists = yield* fs.exists(path.join(outDirAbs, "old.yaml"))
       expect(oldExists).toBe(false)
@@ -348,11 +350,125 @@ describe("writeFiles: atomic staging", () => {
         const fs = yield* FileSystem
         const path = yield* Path
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-empty-" })
-        const outDirAbs = path.join(root, "rendered", "test")
+        const outDirAbs = path.join(root, "infra", "rendered", "test")
 
-        const err = yield* writeFiles({ appsDirAbs: outDirAbs, outDirAbs, files: [] }).pipe(Effect.flip)
+        const rendered = { appsDirAbs: outDirAbs, outDirAbs, files: [] }
+        const err = yield* writeFiles({ rendered, cfg: _cfgFor(root) }).pipe(Effect.flip)
+
         expect(err._tag).toBe("WriteEnvError")
-        expect(err.path).toBe(outDirAbs)
+        expect(err).toMatchObject({ path: outDirAbs })
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
+})
+
+describe("writeFiles: manifests-root guard", () => {
+  it.effect("refuses an outDir that is not strictly inside the manifests root and removes nothing", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-write-guard-" })
+      const cfg = _cfgFor(root)
+      yield* fs.writeFileString(path.join(root, "konfig.json"), "{}")
+
+      const outsiders = [root, path.join(root, "infra"), path.join(root, "infra", "rendered"), path.dirname(root)]
+
+      yield* Effect.forEach(outsiders, (outDirAbs) =>
+        Effect.gen(function*() {
+          const err = yield* writeFiles({ rendered: { appsDirAbs: outDirAbs, outDirAbs, files: [] }, cfg }).pipe(
+            Effect.flip
+          )
+
+          expect(err._tag).toBe("OutDirOutsideManifests")
+        }))
+
+      expect(yield* fs.exists(path.join(root, "konfig.json"))).toBe(true)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("envOutDir", () => {
+  const _outDir = (input: { readonly envName: string; readonly cluster: string | undefined }) =>
+    envOutDir({
+      cfg: _cfgFor("/cfg"),
+      envName: input.envName,
+      ctx: RenderContext.makeFull({
+        env: input.envName,
+        cluster: input.cluster,
+        k8sVersion: undefined,
+        flags: undefined
+      })
+    }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise)
+
+  it("property: any accepted env/cluster pair stays strictly inside the manifests root", async () => {
+    const isEnv = Schema.is(_envName)
+    const isCluster = Schema.is(_clusterName)
+
+    await fc.assert(
+      fc.asyncProperty(fc.string(), fc.option(fc.string(), { nil: undefined }), async (envName, cluster) => {
+        fc.pre(isEnv(envName) && (cluster === undefined || isCluster(cluster)))
+        const out = await _outDir({ envName, cluster })
+        expect(out.startsWith("/cfg/infra/rendered/")).toBe(true)
+        expect(out.slice("/cfg/infra/rendered/".length)).not.toMatch(/[/\\]|^\.\.?$/)
+      }),
+      { numRuns: 300 }
+    )
+  })
+
+  it("rejects path-traversal cluster strings", () => {
+    const isCluster = Schema.is(_clusterName)
+    expect(["../../..", "..", ".", "a/b", "A", "-a", ""].some(isCluster)).toBe(false)
+    expect(isCluster("eu-west-1")).toBe(true)
+  })
+
+  it("withRenderContext rejects a traversal cluster without running", async () => {
+    const ran = vi.fn()
+
+    const exit = await withRenderContext({
+      args: { env: "prod", cluster: Option.some("../../.."), k8sVersion: Option.none(), flag: Option.none() },
+      run: () => Effect.sync(ran)
+    }).pipe(Effect.provide(NodeServices.layer), Effect.runPromiseExit)
+
+    expect(exit._tag).toBe("Failure")
+    expect(ran).not.toHaveBeenCalled()
+  })
+
+  it("places cluster output in a sibling <env>@<cluster> dir", async () => {
+    expect(await _outDir({ envName: "prod", cluster: "eu1" })).toBe("/cfg/infra/rendered/prod@eu1")
+    expect(await _outDir({ envName: "prod", cluster: undefined })).toBe("/cfg/infra/rendered/prod")
+  })
+})
+
+describe("_collectOutputs: kind/name routing", () => {
+  interface Doc {
+    readonly kind?: string
+    readonly justAString?: boolean
+    readonly metadata?: { readonly name: string }
+  }
+
+  const _collect = (value: Doc) =>
+    _collectOutputs({ value, appDir: "/out/app" }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise)
+
+  it("property: an object with a kind yields exactly one file or an InvalidOutputObject error", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.stringMatching(/^[A-Za-z]{1,8}$/),
+        fc.option(fc.stringMatching(/^[a-z]{1,8}$/), { nil: undefined }),
+        async (kind, name) => {
+          const doc = name === undefined ? { kind } : { kind, metadata: { name } }
+
+          const outcome = await _collect(doc).then(
+            (files) => files.length,
+            (error) => error?.error?._tag ?? error?._tag
+          )
+
+          expect(outcome === 1 || outcome === "InvalidOutputObject").toBe(true)
+          expect(outcome === 1).toBe(name !== undefined)
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+
+  it("skips only documents with neither kind nor metadata.name", async () => {
+    expect(await _collect({ justAString: true })).toEqual([])
+  })
 })

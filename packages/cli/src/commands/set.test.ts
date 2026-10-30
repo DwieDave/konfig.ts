@@ -35,7 +35,7 @@ describe("setImageEffect", () => {
       const fs = yield* FileSystem
       const { root, imagesPath } = yield* _setupConfigDir
 
-      yield* setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:new-sha", from: root })
+      yield* setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:new-sha", cwd: root })
 
       const written = yield* fs.readFileString(imagesPath)
 
@@ -65,7 +65,7 @@ describe("setImageEffect", () => {
         app: "worker",
         image: "ghcr.io/acme/worker:v3",
         create: true,
-        from: root
+        cwd: root
       })
 
       const written = yield* fs.readFileString(imagesPath)
@@ -95,7 +95,7 @@ describe("setImageEffect", () => {
       const before = yield* fs.readFileString(imagesPath)
 
       const failure = yield* Effect.flip(
-        setImageEffect({ env: "qa", app: "api", image: "ghcr.io/acme/api:v9", from: root })
+        setImageEffect({ env: "qa", app: "api", image: "ghcr.io/acme/api:v9", cwd: root })
       )
 
       expect(failure).toBeInstanceOf(SetUnknownEnv)
@@ -119,7 +119,7 @@ describe("setImageEffect", () => {
         const before = yield* fs.readFileString(imagesPath)
 
         const failure = yield* Effect.flip(
-          setImageEffect({ env: "staging", app: "worker", image: "ghcr.io/acme/worker:v3", from: root })
+          setImageEffect({ env: "staging", app: "worker", image: "ghcr.io/acme/worker:v3", cwd: root })
         )
 
         expect(failure).toBeInstanceOf(SetUnknownApp)
@@ -143,7 +143,7 @@ describe("setImageEffect", () => {
       const before = yield* fs.readFileString(imagesPath)
 
       const failure = yield* Effect.flip(
-        setImageEffect({ env: "prod", app: "worker", image: "ghcr.io/acme/worker:v3", from: root })
+        setImageEffect({ env: "prod", app: "worker", image: "ghcr.io/acme/worker:v3", cwd: root })
       )
 
       expect(failure).toBeInstanceOf(SetUnknownApp)
@@ -163,7 +163,7 @@ describe("setImageEffect", () => {
       const fs = yield* FileSystem
       const { root, imagesPath } = yield* _setupConfigDir
 
-      yield* setImageEffect({ env: "prod", app: "web", image: "ghcr.io/acme/web:v2", from: root })
+      yield* setImageEffect({ env: "prod", app: "web", image: "ghcr.io/acme/web:v2", cwd: root })
 
       const written = yield* fs.readFileString(imagesPath)
 
@@ -192,7 +192,7 @@ describe("setImageEffect", () => {
       yield* fs.writeFileString(path.join(root, "konfig.json"), _konfigJson)
 
       const failure = yield* Effect.flip(
-        setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:v9", from: root })
+        setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:v9", cwd: root })
       )
 
       expect(failure).toBeInstanceOf(ImagesFileError)
@@ -212,7 +212,7 @@ describe("setImageEffect", () => {
       )
 
       const failure = yield* Effect.flip(
-        setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:v9", from: root })
+        setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:v9", cwd: root })
       )
 
       expect(failure).toBeInstanceOf(ImagesFileError)
@@ -229,7 +229,7 @@ describe("setImageEffect", () => {
       yield* fs.writeFileString(path.join(root, "infra", "images.json"), "{ not valid json")
 
       const failure = yield* Effect.flip(
-        setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:v9", from: root })
+        setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:v9", cwd: root })
       )
 
       expect(failure).toBeInstanceOf(ImagesFileError)
@@ -246,7 +246,7 @@ describe("setImageEffect", () => {
       yield* fs.chmod(imagesPath, 0o444)
 
       const failure = yield* Effect.flip(
-        setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:v9", from: root })
+        setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:v9", cwd: root })
       ).pipe(Effect.ensuring(fs.chmod(imagesPath, 0o644).pipe(Effect.orDie)))
 
       expect(failure).toBeInstanceOf(ImagesFileError)

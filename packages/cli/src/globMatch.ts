@@ -94,7 +94,7 @@ const _parseAtom = (cursor: Cursor): Parsed => {
 const _globToRegExp = (pattern: string): RegExp =>
   new RegExp(`^${_parseSequence({ pattern, index: 0, inBrace: false }).source}$`)
 
-export interface MatchesGlobInput {
+interface MatchesGlobInput {
   readonly pattern: string
   readonly path: string
 }

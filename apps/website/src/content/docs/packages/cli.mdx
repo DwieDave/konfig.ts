@@ -32,7 +32,7 @@ Every command starts by walking up from the current directory until it finds a `
 
 | Command | Purpose |
 | --- | --- |
-| `konfig build <env>` | Render manifests to `outDir.manifests`; `--log text\|json`, `--verbose`, `--no-cache` |
+| `konfig build <env>` | Render manifests to `outDir.manifests`; `--log text\|json`, `--no-cache`; use the global `--log-level debug` for the full error cause |
 | `konfig validate <env>` | Render in memory and run structural checks; `--strict` adds kubeconform, `--ignore-missing-schemas` |
 | `konfig diff <env>` | Structural diff against `diff.baseline`; `--format summary\|detail\|json`; Secret data is redacted |
 | `konfig set <env> <app> <image>` | Update one image ref in `images.json` |

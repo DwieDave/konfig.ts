@@ -1,20 +1,29 @@
 import { decodeImagesEffect, ImagesConfig } from "@konfig.ts/core"
-import { Data, Effect, Schema } from "effect"
+import { Console, Data, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { resolveConfig } from "../configResolver"
+import { readJsonFile } from "../fsUtil"
 
 export class SetUnknownEnv extends Data.TaggedError("SetUnknownEnv")<{
   readonly env: string
   readonly known: ReadonlyArray<string>
-}> {}
+}> {
+  get message(): string {
+    return `unknown env '${this.env}'. Known: ${this.known.join(", ")}`
+  }
+}
 
 export class SetUnknownApp extends Data.TaggedError("SetUnknownApp")<{
   readonly env: string
   readonly app: string
   readonly known: ReadonlyArray<string>
-}> {}
+}> {
+  get message(): string {
+    return `unknown app '${this.app}' in env '${this.env}'. Known: ${this.known.join(", ")} (pass --create to add it)`
+  }
+}
 
 export class ImagesFileError extends Data.TaggedError("ImagesFileError")<{
   readonly path: string
@@ -24,50 +33,29 @@ export class ImagesFileError extends Data.TaggedError("ImagesFileError")<{
 // Tab-indented to match the repo's `images.json` formatting.
 const _formatImagesConfig = (decoded: ImagesConfig): string => `${JSON.stringify(decoded, null, "\t")}\n`
 
-export interface SetImageArgs {
+interface SetImageArgs {
   readonly env: string
   readonly app: string
   readonly image: string
   readonly create?: boolean
-  readonly from?: string
+  readonly cwd: string
 }
 
 const _imagesFileError = (file: string) => (cause: unknown) => new ImagesFileError({ path: file, cause })
 
 const _readImages = (file: string) =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem
-    const toError = _imagesFileError(file)
-    const text = yield* fs.readFileString(file).pipe(Effect.mapError(toError))
+  readJsonFile({ path: file, schema: ImagesConfig, onError: _imagesFileError(file) })
 
-    const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-      Effect.mapError(toError)
-    )
+const _assertTarget = (input: { readonly current: ImagesConfig } & Pick<SetImageArgs, "env" | "app" | "create">) => {
+  const { app, create, current, env } = input
+  const envApps = current.envs[env]
 
-    return yield* decodeImagesEffect(parsed).pipe(Effect.mapError(toError))
-  })
+  if (envApps === undefined) return Effect.fail(new SetUnknownEnv({ env, known: Object.keys(current.envs) }))
 
-const _assertTarget = (input: { readonly current: ImagesConfig } & Pick<SetImageArgs, "env" | "app" | "create">) =>
-  Effect.gen(function*() {
-    const { current, env, app } = input
-    const envApps = current.envs[env]
-
-    if (envApps === undefined || !(env in current.envs)) {
-      const known = Object.keys(current.envs)
-      yield* Effect.logError(`unknown env '${env}'. Known: ${known.join(", ")}`)
-
-      return yield* new SetUnknownEnv({ env, known })
-    }
-
-    if (!(app in envApps) && !(input.create ?? false)) {
-      const known = Object.keys(envApps)
-      yield* Effect.logError(
-        `unknown app '${app}' in env '${env}'. Known: ${known.join(", ")} (pass --create to add it)`
-      )
-
-      return yield* new SetUnknownApp({ env, app, known })
-    }
-  })
+  return app in envApps || (create ?? false)
+    ? Effect.void
+    : Effect.fail(new SetUnknownApp({ env, app, known: Object.keys(envApps) }))
+}
 
 const _withImage = (
   input: { readonly current: ImagesConfig } & Pick<SetImageArgs, "env" | "app" | "image">
@@ -82,7 +70,7 @@ export const setImageEffect = (args: SetImageArgs) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
-    const cfg = yield* resolveConfig(args.from)
+    const cfg = yield* resolveConfig(args.cwd)
     const file = path.join(cfg.configDir, cfg.config.root, "images.json")
     const current = yield* _readImages(file)
     yield* _assertTarget({ ...args, current })
@@ -92,7 +80,7 @@ export const setImageEffect = (args: SetImageArgs) =>
     )
 
     yield* fs.writeFileString(file, _formatImagesConfig(decoded)).pipe(Effect.mapError(_imagesFileError(file)))
-    yield* Effect.log(`set ${args.env}.${args.app} = ${args.image}`)
+    yield* Console.log(`set ${args.env}.${args.app} = ${args.image}`)
   })
 
 export const setCommand = Command.make(
@@ -112,7 +100,7 @@ export const setCommand = Command.make(
       Flag.withDefault(false)
     )
   },
-  (args) => setImageEffect(args)
+  (args) => setImageEffect({ ...args, cwd: process.cwd() })
 ).pipe(
   Command.withDescription(
     "Update an image tag in images.json (Schema-validated read + write). "

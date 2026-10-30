@@ -12,6 +12,7 @@ import { Console, Data, Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import { existsOrFalse } from "../fsUtil"
 import { moduleDefault } from "../moduleDefault"
 import { formatFlag } from "../renderContextFlags"
 
@@ -130,7 +131,7 @@ export const writeOne = (
   Effect.gen(function*() {
     const { content, dest, force } = input
     const fs = yield* FileSystem
-    const existed = yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false))
+    const existed = yield* existsOrFalse(dest)
 
     if (existed) {
       const existing = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))

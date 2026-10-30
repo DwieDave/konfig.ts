@@ -12,7 +12,7 @@ import { Aside } from "@/components/docs"
 ## Usage
 
 ```bash
-konfig build <env> [--log text|json] [--verbose] [--no-cache]
+konfig build <env> [--log text|json] [--no-cache]
                    [--cluster <name>] [--k8s-version <ver>] [--flag k=v ...]
 ```
 
@@ -27,15 +27,14 @@ konfig build <env> [--log text|json] [--verbose] [--no-cache]
 | Name | Default | Description |
 | --- | --- | --- |
 | `--log` | `text` | Output format for the report line: `text` or `json`. |
-| `--verbose` | `false` | Wrap the render in an Effect span named `konfig.render.<env>` so tracing output shows per-render timing. |
 | `--no-cache` | `false` | Skip the input-hash check and force a fresh render (debugging, first build). |
-| `--cluster` | unset | Shared render flag, see [CLI overview](/konfig.ts/docs/cli/overview/). Adds a `<cluster>` directory level to the output path. |
+| `--cluster` | unset | Shared render flag, see [CLI overview](/konfig.ts/docs/cli/overview/). Writes to a sibling `<env>@<cluster>` directory. Must be a DNS-1123 label. |
 | `--k8s-version` | unset | Shared render flag. |
 | `--flag k=v` | unset | Shared render flag, repeatable. |
 
 ## Output layout
 
-Files land under `<configDir>/<root>/<outDir.manifests>/<env>`, with an extra `/<cluster>` level when `--cluster` is set. That directory contains two kinds of subdirectories:
+Files land under `<configDir>/<root>/<outDir.manifests>/<env>`, or `<env>@<cluster>` when `--cluster` is set. That directory contains two kinds of subdirectories:
 
 - One directory per app, named after the app. It holds one file per rendered resource, named `<Kind>-<name>.yaml`. Dots and slashes in resource names are replaced with `-` in the filename. Output that arrives as raw YAML text (Helm releases, sops passthrough) is split on real YAML document boundaries, so it ends up in the same per-resource files as everything else.
 - One directory for the app-of-apps program itself, named `apps` unless you gave the program a name. It holds one `Application-<app>.yaml` for every child app.
@@ -67,7 +66,7 @@ The cache lets repeated builds finish without re-rendering. Before rendering, `b
 
 The input hash and a hash of the written output are stored in `<configDir>/.konfig/cache/<env>-<ctxKey>.json`. The context key is a digest of the render context, so `--cluster` and `--flag` combinations each get their own slot and never overwrite each other.
 
-A run counts as a cache hit only when all of the following hold: the input hash matches, the recorded output directory is the one this invocation would write to, that directory exists, and its on-disk contents still hash to the recorded output hash. Editing or deleting a generated file by hand therefore causes a miss, and the next build rewrites the tree. The hash is deliberately conservative: touching any file under `root` invalidates it.
+A run counts as a cache hit only when all of the following hold: the input hash matches, the recorded output directory is the one this invocation would write to, that directory exists, and its on-disk contents still hash to the recorded output hash. Editing or deleting a generated file by hand therefore causes a miss, and the next build rewrites the tree. The hash is deliberately conservative: touching any file under `root` invalidates it. It also folds in every `KONFIG_*` and `KUBESEAL_*` environment variable. Renders driven by other environment variables (for example secrets read through the env package) are not tracked: use `--no-cache` for those. For a full error cause, pass the global `--log-level debug`.
 
 <Aside type="tip">
 Add `.konfig/` to `.gitignore`. It holds only the build cache and the Helm tarball cache.

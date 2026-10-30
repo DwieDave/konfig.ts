@@ -15,8 +15,8 @@ import { Aside, Snippet } from "@/components/docs"
 | --- | --- | --- | --- |
 | `root` | `string` | required | Directory (relative to `konfig.json`) that holds your env entries, modules, and charts. `build` hashes everything under it for the cache. |
 | `envs` | `Record<string, { entry: string }>` | required (may be `{}`) | Env name to entry file, relative to `root`. Envs not listed fall back to `<root>/env/<name>.ts`. |
-| `outDir.manifests` | `string` | required | Where `build` writes, relative to `root`. Files land in `<root>/<outDir.manifests>/<env>[/<cluster>]/`. |
-| `diff.baseline` | `string` | unset | Baseline manifest tree for `konfig diff`, relative to `root`; the env name is appended. `diff` fails with `DiffBaselineMissing` when absent. |
+| `outDir.manifests` | `string` | required | Where `build` writes, relative to `root`. Files land in `<root>/<outDir.manifests>/<env>` or `<env>@<cluster>`. |
+| `diff.baseline` | `string` | unset | Baseline manifest tree for `konfig diff`, relative to `root`; the directory is `<env>` or `<env>@<cluster>`. `diff` fails with `DiffBaselineMissing` when absent. |
 | `cacheInclude` | `string[]` | `[]` | Extra files, directories, or glob patterns (relative to `konfig.json`) hashed into the build cache on top of `root`, for inputs that live outside the konfig root. Globs support `*`, `**`, `?`, `[...]`, and `{a,b}` alternatives. |
 | `cluster` | `string` | `"cluster.ts"` | Path of the cluster module, relative to `root`. |
 | `modules` | `string` | `"modules"` | Path of the modules directory, relative to `root`. |
@@ -44,6 +44,8 @@ This lets a project set these paths once in `konfig.json` without exporting envi
 | `KONFIG_HELM_CACHE` | `helm.cacheDir` | `.konfig/helm-cache` | `crd`, `helm fetch`, and `Helm.release` at render time |
 | `KONFIG_CRD_OUT_DIR` | `crd.outDir` | `.generated/crd` | `crd`: output directory for generated `.ts` files |
 | `KONFIG_HELM_MIN_VERSION` | `helm.minVersion` | `3.16.0` | `crd`, `helm fetch`: preflight `helm version` check |
+
+`build`'s input hash folds in every `KONFIG_*` and `KUBESEAL_*` environment variable, so changing one invalidates the cache. Renders driven by other variables need `--no-cache`.
 
 The tarball cache location is also honored at render time. When a chart definition calls `Helm.release()` during `build`, `validate`, or `diff`, the chart is cached in the directory given by `helm.cacheDir` (or its environment variable). A cache location set once in `konfig.json` is therefore used consistently by `helm fetch`, `crd extract`, and rendering.
 

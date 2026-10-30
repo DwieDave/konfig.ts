@@ -1,54 +1,47 @@
-import { decodeKonfigConfigEffect, type KonfigConfig, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Data, Effect, Schema } from "effect"
+import { KonfigConfig, type ResolvedKonfigConfig } from "@konfig.ts/core"
+import { Data, Effect, Option } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import { existsOrFalse, findUp, readJsonFile } from "./fsUtil"
 
 export class ConfigNotFound extends Data.TaggedError("ConfigNotFound")<{
   readonly startedFrom: string
-}> {}
+}> {
+  get message(): string {
+    return `no konfig.json found in ${this.startedFrom} or any parent directory`
+  }
+}
 
 export class ConfigParseError extends Data.TaggedError("ConfigParseError")<{
   readonly path: string
   readonly cause: unknown
 }> {}
 
-const _findConfig = (start: string) =>
+const _CONFIG_FILE = "konfig.json"
+
+const _hasConfig = (dir: string) =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
     const path = yield* Path
 
-    let current = path.resolve(start)
+    return yield* existsOrFalse(path.join(dir, _CONFIG_FILE))
+  })
 
-    while (true) {
-      const candidate = path.join(current, "konfig.json")
-      const exists = yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))
+const _findConfig = (start: string) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    const dir = yield* findUp({ from: start, test: _hasConfig })
 
-      if (exists) return candidate
-      const parent = path.dirname(current)
-
-      if (parent === current) {
-        return yield* new ConfigNotFound({ startedFrom: start })
-      }
-
-      current = parent
-    }
+    return yield* Option.match(dir, {
+      onNone: () => Effect.fail(new ConfigNotFound({ startedFrom: start })),
+      onSome: (found) => Effect.succeed(path.join(found, _CONFIG_FILE))
+    })
   })
 
 const _parseConfig = (configPath: string) =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem
-
-    const text = yield* fs
-      .readFileString(configPath)
-      .pipe(Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause })))
-
-    const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-      Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause }))
-    )
-
-    return yield* decodeKonfigConfigEffect(parsed).pipe(
-      Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause }))
-    )
+  readJsonFile({
+    path: configPath,
+    schema: KonfigConfig,
+    onError: (cause) => new ConfigParseError({ path: configPath, cause })
   })
 
 export const resolveConfig = (
@@ -56,10 +49,8 @@ export const resolveConfig = (
 ): Effect.Effect<ResolvedKonfigConfig, ConfigNotFound | ConfigParseError, FileSystem | Path> =>
   Effect.gen(function*() {
     const path = yield* Path
-    const start = from ?? process.cwd()
-    const configPath = yield* _findConfig(start)
-    const config: KonfigConfig = yield* _parseConfig(configPath)
-    const configDir = path.dirname(configPath)
+    const configPath = yield* _findConfig(from ?? process.cwd())
+    const config = yield* _parseConfig(configPath)
 
-    return { configDir, config }
+    return { configDir: path.dirname(configPath), config }
   })

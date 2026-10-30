@@ -41,10 +41,9 @@ const version = Option.match(Schema.decodeUnknownOption(Schema.Struct({ version:
 const _FULL_CAUSE_LOG_LEVELS: ReadonlySet<string> = new Set(["debug", "trace", "all"])
 
 // `--log-level` is a global flag Command.run installs *inside* the program, so
-// the failure hook below can't read it from context; argv is the one place
-// both it and `--verbose` are visible at the top level.
+// the failure hook below can't read it from context; argv is the one place it
+// is visible at the top level.
 const _wantsFullCause = (argv: readonly string[]): boolean => {
-  if (argv.includes("--verbose")) return true
   const at = argv.indexOf("--log-level")
 
   const level = at >= 0
@@ -76,8 +75,8 @@ const _errorLine = (error: Error): string => {
 
 // Replaces runMain's default reporter, which logs the whole Cause tree: a
 // tagged error's message already says what went wrong (chart, phase, exit
-// code, stderr tail). The tree is still available under --verbose or a debug
-// log level. Interrupts and errors the CLI has already rendered (help) stay silent.
+// code, stderr tail). The tree is still available under --log-level debug.
+// Interrupts and errors the CLI has already rendered (help) stay silent.
 const _reportFailure = (cause: Cause.Cause<unknown>): Effect.Effect<void> => {
   if (Cause.hasInterruptsOnly(cause)) return Effect.void
   const error = Cause.squash(cause)
