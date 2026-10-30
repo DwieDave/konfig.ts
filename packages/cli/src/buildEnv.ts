@@ -1,7 +1,6 @@
 import { applicationCRFilename, type AppOfAppsResult, serializeApplicationCR } from "@konfig.ts/argocd"
 import {
   type AnyRenderError,
-  type Bundle,
   KONFIG_HELM_CACHE_ENV,
   Manifest as M,
   type ParsedDoc,
@@ -13,10 +12,11 @@ import {
   unsafeCoerce,
   Yaml
 } from "@konfig.ts/core"
-import { ConfigProvider, Data, Effect, Option, Schema } from "effect"
+import { Array as Arr, ConfigProvider, Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { resolveCliPaths } from "./cliConfig"
+import { decodeEnvResult, type EnvResult } from "./envResult"
 import { moduleDefault } from "./moduleDefault"
 
 export interface EnvOutDirInput {
@@ -42,6 +42,15 @@ class EnvEntryNotFound extends Data.TaggedError("EnvEntryNotFound")<{
 class NonManifestChild extends Data.TaggedError("NonManifestChild")<{
   readonly child: string
 }> {}
+
+class EnvResultInvalid extends Data.TaggedError("EnvResultInvalid")<{
+  readonly entry: string
+  readonly cause: unknown
+}> {
+  get message(): string {
+    return `env entry ${this.entry} produced a result of the wrong shape: ${String(this.cause)}`
+  }
+}
 
 class EnvLoadError extends Data.TaggedError("EnvLoadError")<{
   readonly entry: string
@@ -70,8 +79,6 @@ const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
     return entry
   })
 
-type EnvResult = AppOfAppsResult | Bundle.BundleSetResult
-
 const _isAppOfApps = (r: EnvResult): r is AppOfAppsResult => "apps" in r
 
 const _loadEnv = (entry: string) =>
@@ -91,49 +98,93 @@ const _loadEnv = (entry: string) =>
         cause: "default export is not an Effect — env entries must default-export an AppOfApps or Bundle program Effect"
       })
     }
-    const result = yield* unsafeCoerce<Effect.Effect<EnvResult, AnyRenderError>>(
+    const result = yield* unsafeCoerce<Effect.Effect<unknown, AnyRenderError>>(
       program,
-      "isEffectProgram confirmed above; narrowing the proven Effect's A/E per the env entry contract"
+      "isEffectProgram confirmed above; only the R/E channels are narrowed, the result value is decoded below"
     )
-    return result
+    return yield* decodeEnvResult(result).pipe(
+      Effect.mapError((cause) => new EnvResultInvalid({ entry, cause }))
+    )
   })
 
 interface OutputFile {
   readonly path: string
   readonly content: string
+  readonly object?: string
 }
 
-// Extracts just the `kind`/`metadata.name` routing fields off a parsed doc;
-// excess properties are left alone (the original doc is what gets serialized).
+class InvalidOutputObject extends Data.TaggedError("InvalidOutputObject")<{
+  readonly kind: string
+  readonly objectName: string
+  readonly dir: string
+}> {
+  get message(): string {
+    return `rendered object in ${this.dir} has an empty kind ('${this.kind}') or metadata.name ('${this.objectName}')`
+  }
+}
+
 const _KindNameSchema = Schema.Struct({
   kind: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String) }))
+  metadata: Schema.optional(
+    Schema.Struct({ name: Schema.optional(Schema.String), namespace: Schema.optional(Schema.String) })
+  )
 })
 const _decodeKindName = Schema.decodeUnknownOption(_KindNameSchema)
+
+interface Routing {
+  readonly kind: string
+  readonly name: string
+  readonly namespace: string | undefined
+}
+
+const _routingOf = (doc: object): Routing | undefined => {
+  const parsed = Option.getOrUndefined(_decodeKindName(doc))
+  const kind = parsed?.kind
+  const name = parsed?.metadata?.name
+  return kind === undefined || name === undefined
+    ? undefined
+    : { kind, name, namespace: parsed?.metadata?.namespace }
+}
+
+const _describeObject = (routing: Routing): string =>
+  `${routing.kind} ${routing.namespace === undefined ? "" : `${routing.namespace}/`}${routing.name}`
+
+interface _ToOutputFileInput {
+  readonly doc: object
+  readonly routing: Routing
+  readonly dir: string
+  readonly pathJoin: (...parts: string[]) => string
+}
+const _toOutputFile = (input: _ToOutputFileInput): Effect.Effect<OutputFile, InvalidOutputObject> => {
+  const { dir, doc, pathJoin, routing } = input
+  return routing.kind === "" || routing.name === ""
+    ? Effect.fail(new InvalidOutputObject({ kind: routing.kind, objectName: routing.name, dir }))
+    : Effect.succeed({
+      path: pathJoin(dir, Yaml.filenameFor({ kind: routing.kind, metadata: { name: routing.name } })),
+      content: Yaml.serialize({ value: doc }),
+      object: _describeObject(routing)
+    })
+}
+
+const _objectOutputs = (
+  input: Omit<_ToOutputFileInput, "routing">
+): Effect.Effect<OutputFile[], InvalidOutputObject> => {
+  const routing = _routingOf(input.doc)
+  return routing === undefined
+    ? Effect.succeed([])
+    : Effect.map(_toOutputFile({ ...input, routing }), (file) => [file])
+}
 
 interface _SplitRawYamlInput {
   readonly content: string
   readonly dir: string
   readonly pathSep: (...parts: string[]) => string
 }
-const _splitRawYaml = (input: _SplitRawYamlInput): OutputFile[] => {
-  const { content, dir, pathSep } = input
-  const files: OutputFile[] = []
-  // parseYamlAll splits on real YAML doc boundaries, not a naive /^---$/m
-  // regex, so a literal `---` inside a block scalar isn't mis-split.
-  for (const doc of parseYamlAll(content)) {
-    if (doc === null || typeof doc !== "object") continue
-    const parsed = Option.getOrUndefined(_decodeKindName(doc))
-    const kind = parsed?.kind
-    const name = parsed?.metadata?.name
-    if (kind === undefined || name === undefined) continue
-    files.push({
-      path: pathSep(dir, Yaml.filenameFor({ kind, metadata: { name } })),
-      content: Yaml.serialize({ value: doc })
-    })
-  }
-  return files
-}
+const _splitRawYaml = (input: _SplitRawYamlInput): Effect.Effect<OutputFile[], InvalidOutputObject> =>
+  Effect.forEach(
+    parseYamlAll(input.content).filter((doc): doc is object => doc !== null && typeof doc === "object"),
+    (doc) => _objectOutputs({ doc, dir: input.dir, pathJoin: input.pathSep })
+  ).pipe(Effect.map((groups) => groups.flat()))
 
 const _isRawYaml = (v: object): v is RawYaml =>
   "_tag" in v && v._tag === "RawYaml" && "content" in v && typeof v.content === "string"
@@ -145,40 +196,44 @@ interface _CollectOutputsInput {
   readonly appDir: string
   readonly pathJoin: (...parts: string[]) => string
 }
-const _collectOutputs = (input: _CollectOutputsInput): OutputFile[] => {
-  const { value, appDir, pathJoin } = input
-  if (value === null || value === undefined) return []
-
-  if (typeof value === "object") {
-    if (_isRawYaml(value)) {
-      return _splitRawYaml({ content: value.content, dir: appDir, pathSep: pathJoin })
-    }
-    if (_isParsedDoc(value)) {
-      // Helm.release output: already parsed, so it goes straight to the
-      // object branch below (one serialize, no re-parse).
-      return _collectOutputs({ value: value.value, appDir, pathJoin })
-    }
-  }
-
+const _collectOutputs = (input: _CollectOutputsInput): Effect.Effect<OutputFile[], InvalidOutputObject> => {
+  const { appDir, pathJoin, value } = input
+  if (value === null || value === undefined) return Effect.succeed([])
   if (Array.isArray(value)) {
-    return value.flatMap((v) => _collectOutputs({ value: v, appDir, pathJoin }))
+    return Effect.forEach(value, (v) => _collectOutputs({ value: v, appDir, pathJoin })).pipe(
+      Effect.map((groups) => groups.flat())
+    )
   }
+  if (typeof value !== "object") return Effect.succeed([])
+  if (_isRawYaml(value)) return _splitRawYaml({ content: value.content, dir: appDir, pathSep: pathJoin })
+  if (_isParsedDoc(value)) return _collectOutputs({ value: value.value, appDir, pathJoin })
+  return _objectOutputs({ doc: value, dir: appDir, pathJoin })
+}
 
-  if (typeof value === "object") {
-    const parsed = Option.getOrUndefined(_decodeKindName(value))
-    const kind = parsed?.kind
-    const name = parsed?.metadata?.name
-    if (kind !== undefined && name !== undefined) {
-      return [
-        {
-          path: pathJoin(appDir, Yaml.filenameFor({ kind, metadata: { name } })),
-          content: Yaml.serialize({ value })
-        }
-      ]
-    }
+export interface OutputCollision {
+  readonly path: string
+  readonly objects: ReadonlyArray<string>
+}
+
+class OutputFileCollision extends Data.TaggedError("OutputFileCollision")<{
+  readonly collisions: ReadonlyArray<OutputCollision>
+}> {
+  get message(): string {
+    const lines = this.collisions.map((c) => `  ${c.path}: ${c.objects.join(" vs ")}`)
+    return `distinct rendered objects map to the same output file:\n${lines.join("\n")}`
   }
+}
 
-  return []
+export const findOutputCollisions = (files: ReadonlyArray<OutputFile>): OutputCollision[] =>
+  Object.entries(Arr.groupBy(files, (f) => f.path)).flatMap(([path, group]) =>
+    Arr.dedupe(group.map((f) => f.content)).length > 1
+      ? [{ path, objects: group.map((f) => f.object ?? "(unnamed document)") }]
+      : []
+  )
+
+const _failOnCollisions = (files: ReadonlyArray<OutputFile>) => {
+  const collisions = findOutputCollisions(files)
+  return collisions.length === 0 ? Effect.void : Effect.fail(new OutputFileCollision({ collisions }))
 }
 
 export interface RenderedEnv {
@@ -232,10 +287,11 @@ const _renderChild = (input: RenderChildInput) =>
           : Effect.die(new NonManifestChild({ child: child.name })),
       { concurrency: "unbounded" }
     )
-    const out: OutputFile[] = []
-    for (const value of rendered) {
-      out.push(..._collectOutputs({ value, appDir, pathJoin: path.join }))
-    }
+    const collected = yield* Effect.forEach(
+      rendered,
+      (value) => _collectOutputs({ value, appDir, pathJoin: path.join })
+    )
+    const out: OutputFile[] = collected.flat()
     if (child.argo !== undefined) {
       out.push({
         path: path.join(appsDirAbs, applicationCRFilename(child.argo.app)),
@@ -273,6 +329,7 @@ const _renderEnvBody = (input: RenderEnvInput) =>
       { concurrency: 4 }
     )
     const files: OutputFile[] = perAppFiles.flat()
+    yield* _failOnCollisions(files)
 
     const rendered: RenderedEnv = { appsDirAbs, outDirAbs, files }
     return rendered

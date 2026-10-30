@@ -180,6 +180,57 @@ describe("computeInputHash: render-context sensitivity", () => {
       expect(matchedEdit).not.toBe(base)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
+  it.effect("cacheInclude brace globs hash every alternative; ** does not match a name suffix", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
+      yield* fs.makeDirectory(path.join(root, "infra"), { recursive: true })
+      yield* fs.makeDirectory(path.join(root, "config"), { recursive: true })
+      yield* fs.makeDirectory(path.join(root, "src", "deep"), { recursive: true })
+      const yamlFile = path.join(root, "config", "a.yaml")
+      const lookalike = path.join(root, "src", "barfoo.ts")
+      const nested = path.join(root, "src", "deep", "foo.ts")
+      yield* fs.writeFileString(yamlFile, "a: 1\n")
+      yield* fs.writeFileString(lookalike, "1")
+      yield* fs.writeFileString(nested, "1")
+      const ctx = RenderContext.make("prod")
+      const hashOf = (pattern: string) => computeInputHash({ cfg: _cfgFor(root, [pattern]), envName: "prod", ctx })
+
+      const braceBase = yield* hashOf("config/*.{json,yaml}")
+      yield* fs.writeFileString(yamlFile, "a: 2\n")
+      expect(yield* hashOf("config/*.{json,yaml}")).not.toBe(braceBase)
+
+      const globBase = yield* hashOf("src/**/foo.ts")
+      yield* fs.writeFileString(lookalike, "2")
+      expect(yield* hashOf("src/**/foo.ts")).toBe(globBase)
+      yield* fs.writeFileString(nested, "2")
+      expect(yield* hashOf("src/**/foo.ts")).not.toBe(globBase)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("with root \".\", .git and the generated output do not shift the hash but the lockfile does", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
+      yield* fs.makeDirectory(path.join(root, ".git"), { recursive: true })
+      yield* fs.makeDirectory(path.join(root, "rendered", "prod"), { recursive: true })
+      yield* fs.writeFileString(path.join(root, "a.ts"), "1")
+      yield* fs.writeFileString(path.join(root, "bun.lock"), "lock1")
+      const base = _cfgFor(root)
+      const cfg: ResolvedKonfigConfig = { ...base, config: { ...base.config, root: "." } }
+      const ctx = RenderContext.make("prod")
+      const hash = () => computeInputHash({ cfg, envName: "prod", ctx })
+
+      const before = yield* hash()
+      yield* fs.writeFileString(path.join(root, ".git", "HEAD"), "ref")
+      yield* fs.writeFileString(path.join(root, "rendered", "prod", "x.yaml"), "k: v")
+      expect(yield* hash()).toBe(before)
+
+      yield* fs.writeFileString(path.join(root, "bun.lock"), "lock2")
+      expect(yield* hash()).not.toBe(before)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
   it.effect("cacheInclude accepts a single file path", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem

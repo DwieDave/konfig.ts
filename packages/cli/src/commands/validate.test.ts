@@ -40,7 +40,7 @@ const _kubeconformSpawner = (
         Effect.gen(function*() {
           const args = command._tag === "StandardCommand" ? _plainArgs(command) : []
           captured.args = args
-          const dir = args[2]
+          const dir = args[args.length - 1]
           if (dir !== undefined) {
             captured.filesInDir = yield* fs.readDirectory(dir, { recursive: true }).pipe(
               Effect.orElseSucceed(() => [])
@@ -184,10 +184,11 @@ describe("runValidate", () => {
 
         const args = captured.args ?? []
         expect(args.slice(0, 2)).toEqual(["-summary", "-strict"])
-        const scratchDir = args[2] ?? ""
+        expect(args.slice(2, 5)).toEqual(["-ignore-missing-schemas", "-kubernetes-version", "1.29.0"])
+        const scratchDir = args[5] ?? ""
         expect(path.basename(scratchDir).startsWith("konfig-validate-")).toBe(true)
         expect(scratchDir.startsWith(root)).toBe(false)
-        expect(args.slice(3)).toEqual(["-ignore-missing-schemas", "-kubernetes-version", "1.29.0"])
+        expect(args).toHaveLength(6)
 
         // The render was staged into the scratch dir while kubeconform ran...
         expect((captured.filesInDir ?? []).some((f) => f.endsWith(".yaml"))).toBe(true)

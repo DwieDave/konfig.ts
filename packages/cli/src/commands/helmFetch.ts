@@ -1,12 +1,9 @@
-import { Helm, runProcessExit } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
 import { Command, Flag } from "effect/cli"
-import { FileSystem } from "effect/FileSystem"
-import { Path } from "effect/Path"
 import { loadChartRegistryEffect } from "../chartRegistry"
 import { resolveCliPaths } from "../cliConfig"
 import { resolveConfig } from "../configResolver"
-import { helmPullCommand } from "../helmPull"
+import { ensureChartTarball } from "../helmPull"
 import { assertHelmVersion } from "../helmVersion"
 
 export class MissingAllFlag extends Data.TaggedError("MissingAllFlag") {}
@@ -24,49 +21,16 @@ interface FetchOneInput {
 
 export const _fetchOne = (input: FetchOneInput) =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
-    const path = yield* Path
-
-    yield* fs.makeDirectory(input.cacheDir, { recursive: true })
-
+    yield* ensureChartTarball({
+      chart: input,
+      cacheDir: input.cacheDir,
+      digest: input.digest
+    })
     if (input.digest === undefined) {
-      const cachedTgz = path.join(input.cacheDir, Helm.cacheFileName({ chart: input.chart, version: input.version }))
-      const exists = yield* fs.exists(cachedTgz)
-      if (!exists) {
-        const cmd = helmPullCommand({ chart: input, options: { destination: input.cacheDir } })
-        yield* runProcessExit(cmd, { timeout: yield* Helm.timeout })
-      }
       yield* Console.log(
         `  warning: ${input.chart}@${input.version} has no recorded digest — cached under a plain name that Helm.release's digest-suffixed cache won't reuse`
       )
-      return
     }
-
-    const digest = input.digest
-    const digestTgz = path.join(
-      input.cacheDir,
-      Helm.cacheFileName({ chart: input.chart, version: input.version, digest })
-    )
-    const digestExists = yield* fs.exists(digestTgz)
-    if (digestExists) return
-
-    // `helm pull` always writes the plain `<chart>-<version>.tgz` name;
-    // pull into a private temp dir, verify against the recorded digest,
-    // then rename into the digest-suffixed slot `Helm.release` also caches
-    // under, so a later render reuses this fetch instead of re-pulling.
-    const pullDir = yield* fs.makeTempDirectory({ directory: input.cacheDir, prefix: ".konfig-helm-fetch-" })
-    yield* Effect.gen(function*() {
-      const cmd = helmPullCommand({ chart: input, options: { destination: pullDir } })
-      yield* runProcessExit(cmd, { timeout: yield* Helm.timeout })
-      const pulled = path.join(pullDir, Helm.cacheFileName({ chart: input.chart, version: input.version }))
-      yield* Helm.verifyChartDigest({
-        chart: input.chart,
-        version: input.version,
-        digest,
-        cachedTgz: pulled
-      })
-      yield* fs.rename(pulled, digestTgz)
-    }).pipe(Effect.ensuring(fs.remove(pullDir, { recursive: true, force: true }).pipe(Effect.ignore)))
   })
 
 interface HelmFetchFlags {

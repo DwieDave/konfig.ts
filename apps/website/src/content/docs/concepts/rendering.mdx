@@ -32,7 +32,9 @@ All output goes through `Yaml.serialize`, so two renders of the same input are b
 - YAML 1.1 semantics, so strings such as `"yes"`, `"no"`, `"on"`, `"off"` are quoted and are not read back as booleans by go-yaml based tools.
 - CRLF is normalised and the file ends with a single newline.
 
-`Yaml.filenameFor({ kind, metadata: { name } })` produces `<Kind>-<name>.yaml` with `.` and `/` in either part replaced by `-`. It throws if `kind` or `metadata.name` is missing; validate or decode first.
+`Yaml.filenameFor({ kind, metadata: { name } })` produces `<Kind>-<name>.yaml` with `.` and `/` in either part replaced by `-`. It throws if `kind` or `metadata.name` is missing; validate or decode first. `konfig build` checks this before calling it: an object with an empty `kind` or `metadata.name` fails with `InvalidOutputObject`.
+
+The file name carries no namespace, and `.` maps to `-`. If two different objects in one app resolve to the same file (the same kind and name in two namespaces, or `a.b` next to `a-b`) with differing content, the render fails with `OutputFileCollision` listing the colliding objects instead of letting one overwrite the other.
 
 ## Structural diff
 
@@ -46,7 +48,7 @@ All output goes through `Yaml.serialize`, so two renders of the same input are b
 
 ## Build cache
 
-`konfig build` skips the render entirely when nothing that feeds it has changed. Before rendering it computes a SHA-256 hash over the decoded `konfig.json`, the render-context signature (`cluster`, `k8sVersion`, sorted `flags`), the env entry file, every file under `root` (skipping `node_modules`, `dist`, and `.konfig`), and any extra `cacheInclude` files, directories, or globs (relative to the `konfig.json` directory).
+`konfig build` skips the render entirely when nothing that feeds it has changed. Before rendering it computes a SHA-256 hash over the decoded `konfig.json`, the render-context signature (`cluster`, `k8sVersion`, sorted `flags`), the env entry file, every file under `root` (skipping `node_modules`, `dist`, `.konfig`, `.git`, and the generated manifests directory), the nearest lockfile, and any extra `cacheInclude` files, directories, or globs (relative to the `konfig.json` directory).
 
 The hash is conservative in one direction only. Touching any file under `root` invalidates it, so unnecessary re-renders are possible. The reverse is not guaranteed: files outside `root` that feed the render (a shared contracts package, for example) are only hashed when listed in `cacheInclude`; without that, a change there can be served a stale hit.
 

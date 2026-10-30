@@ -12,7 +12,14 @@ import {
   makeHandle,
   ProcessId
 } from "effect/process/ChildProcessSpawner"
-import { CrdDrift, crdExtractEffect, crdVerifyEffect, MissingCrdFlags, ReleaseNotFound } from "./crd"
+import {
+  CrdDrift,
+  crdExtractEffect,
+  crdVerifyEffect,
+  EmptyChartRegistry,
+  MissingCrdFlags,
+  ReleaseNotFound
+} from "./crd"
 
 const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
 
@@ -35,21 +42,27 @@ const _handle = (proc: { stdout?: string; stderr?: string; exitCode?: number }):
 
 /**
  * Fake `helm` spawner covering every subcommand the crd command path
- * shells out to: `version --short` (preflight), `pull`/`pull --untar`
- * (chart fetch/crds-dir scan) and `template` (the CRD YAML source).
+ * shells out to: `version --short` (preflight), `pull` (writes a tarball into
+ * `--destination`) and `template` (the CRD YAML source).
  */
-const _helmSpawner = (templateStdout: string): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(
+const _helmSpawner = (templateStdout: string): Layer.Layer<ChildProcessSpawner, never, FileSystem | Path> =>
+  Layer.effect(
     ChildProcessSpawner,
-    makeSpawner((command: Command) => {
-      const args = isStandardCommand(command) ? command.args : []
-      if (args.includes("version")) {
-        return Effect.succeed(_handle({ stdout: "v3.16.0\n", exitCode: 0 }))
-      }
-      if (args.includes("template")) {
-        return Effect.succeed(_handle({ stdout: templateStdout, exitCode: 0 }))
-      }
-      return Effect.succeed(_handle({ stdout: "", exitCode: 0 }))
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      return makeSpawner((command: Command) =>
+        Effect.gen(function*() {
+          const args = isStandardCommand(command) ? command.args : []
+          if (args.includes("version")) return _handle({ stdout: "v3.16.0\n", exitCode: 0 })
+          if (args.includes("template")) return _handle({ stdout: templateStdout, exitCode: 0 })
+          if (args[0] === "pull") {
+            const dest = args.map(String)[args.indexOf("--destination") + 1] ?? ""
+            yield* fs.writeFile(path.join(dest, "chart-0.0.0.tgz"), new Uint8Array([1]))
+          }
+          return _handle({ stdout: "", exitCode: 0 })
+        })
+      )
     })
   )
 
@@ -70,7 +83,7 @@ spec:
               type: string
 `
 
-const _testLayer = Layer.merge(NodeServices.layer, _helmSpawner(_validCrdYaml))
+const _testLayer = Layer.provideMerge(_helmSpawner(_validCrdYaml), NodeServices.layer)
 
 const _writeChartFile = (root: string, name: string, body: string) =>
   Effect.gen(function*() {
@@ -265,14 +278,15 @@ describe("crdVerifyEffect", () => {
       }
     }).pipe(Effect.scoped, Effect.provide(_testLayer)))
 
-  it.effect("succeeds trivially when the chart registry is empty", () =>
+  it.effect("fails with EmptyChartRegistry when the chart registry is empty", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const chartsDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crdcmd-charts-empty-" })
       const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crdcmd-out-" })
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crdcmd-cache-" })
 
-      yield* _withCliPathsEnv({ chartsDir, outDir, cacheDir }, crdVerifyEffect)
+      const failure = yield* _withCliPathsEnv({ chartsDir, outDir, cacheDir }, Effect.flip(crdVerifyEffect))
+      expect(failure).toBeInstanceOf(EmptyChartRegistry)
     }).pipe(Effect.scoped, Effect.provide(_testLayer)))
 })
 

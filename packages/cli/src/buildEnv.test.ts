@@ -4,7 +4,8 @@ import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { renderEnv, writeFiles } from "./buildEnv"
+import fc from "fast-check"
+import { findOutputCollisions, renderEnv, writeFiles } from "./buildEnv"
 
 const _writeEnvFile = (root: string, entry: string, body: string) =>
   Effect.gen(function*() {
@@ -183,6 +184,79 @@ describe("renderEnv: env-entry error paths", () => {
       expect(err._tag).toBe("EnvEntryNotFound")
       expect(err._tag === "EnvEntryNotFound" && err.entry.endsWith("custom/staging-entry.ts")).toBe(true)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+const _bundleEnv = (build: string) => `
+import { Bundle, Manifest } from "@konfig.ts/core";
+import { ConfigMap } from "@konfig.ts/k8s";
+const api = Bundle.define({ name: "api", namespace: "app", build: () => ${build} });
+export default Bundle.fromModules({ modules: [api] as const });
+`
+
+const _renderFlipped = (body: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-env-err-" })
+    yield* _writeEnvFile(root, "infra/env/test.ts", body)
+    return yield* renderEnv({ cfg: _cfgFor(root), envName: "test", ctx: RenderContext.make("test") }).pipe(Effect.flip)
+  })
+
+describe("renderEnv: output file safety", () => {
+  it.effect("same kind+name in two namespaces fails with OutputFileCollision listing both objects", () =>
+    Effect.gen(function*() {
+      const err = yield* _renderFlipped(
+        _bundleEnv(
+          `[ConfigMap.make({ name: "c", namespace: "a", data: { K: "1" } }), ConfigMap.make({ name: "c", namespace: "b", data: { K: "1" } })]`
+        )
+      )
+      expect(err._tag).toBe("OutputFileCollision")
+      expect(String(err.message)).toContain("ConfigMap a/c")
+      expect(String(err.message)).toContain("ConfigMap b/c")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("an empty metadata.name fails with InvalidOutputObject instead of throwing", () =>
+    Effect.gen(function*() {
+      const err = yield* _renderFlipped(
+        _bundleEnv(`[Manifest.embedYaml({ literal: "apiVersion: v1\\nkind: ConfigMap\\nmetadata:\\n  name: ''\\n" })]`)
+      )
+      expect(err._tag).toBe("InvalidOutputObject")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("a default export Effect with the wrong result shape fails with EnvResultInvalid", () =>
+    Effect.gen(function*() {
+      const err = yield* _renderFlipped(
+        `import { Effect } from "effect";\nexport default Effect.succeed({ name: 5 });\n`
+      )
+      expect(err._tag).toBe("EnvResultInvalid")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("findOutputCollisions", () => {
+  const _seg = fc.stringMatching(/^[a-z]{1,6}$/)
+
+  it("property: distinct paths never collide", () => {
+    fc.assert(
+      fc.property(fc.uniqueArray(_seg, { minLength: 1, maxLength: 6 }), (names) => {
+        const files = names.map((n) => ({ path: `/o/${n}.yaml`, content: n }))
+        expect(findOutputCollisions(files)).toEqual([])
+      })
+    )
+  })
+
+  it("property: the same path with differing content is reported once, identical content is not", () => {
+    fc.assert(
+      fc.property(_seg, _seg, _seg, (name, a, b) => {
+        const path = `/o/${name}.yaml`
+        const differing = findOutputCollisions([{ path, content: `${a}1`, object: "x" }, {
+          path,
+          content: `${a}2`,
+          object: "y"
+        }])
+        expect(differing).toEqual([{ path, objects: ["x", "y"] }])
+        expect(findOutputCollisions([{ path, content: b }, { path, content: b }])).toEqual([])
+      })
+    )
+  })
 })
 
 describe("writeFiles: atomic staging", () => {

@@ -181,7 +181,7 @@ export const runKubeconform = (input: KubeconformInput) =>
   Effect.scoped(
     Effect.gen(function*() {
       const spawner = yield* ChildProcessSpawner
-      const args = ["-summary", "-strict", input.dir, ...(input.extraArgs ?? [])]
+      const args = ["-summary", "-strict", ...(input.extraArgs ?? []), input.dir]
       const cmd = ChildProcess.make("kubeconform", args)
       const [exitCode, stdout, stderr] = yield* spawner.spawn(cmd).pipe(
         Effect.flatMap((handle) =>

@@ -1,9 +1,10 @@
-import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
+import { DEFAULT_HELM_CACHE_DIR, type RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
 import * as crypto from "node:crypto"
+import { matchesGlob } from "./globMatch"
 
 class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
   readonly path: string
@@ -79,6 +80,18 @@ const _hashEntry = (
     hash.update("\n")
   })
 
+const _toPosix = (value: string, sep: string): string => value.split(sep).join("/")
+
+const _globMatcher = (extra: string, cfg: ResolvedKonfigConfig, path: Path) => {
+  const relative = !path.isAbsolute(extra)
+  const pattern = relative ? extra.replace(/^(\.\/)+/, "") : extra
+  return (candidate: string): boolean =>
+    matchesGlob({
+      pattern,
+      path: _toPosix(relative ? path.relative(cfg.configDir, candidate) : candidate, path.sep)
+    })
+}
+
 const _resolveCacheIncludeFiles = (
   cfg: ResolvedKonfigConfig,
   fs: FileSystem,
@@ -86,19 +99,17 @@ const _resolveCacheIncludeFiles = (
 ): Effect.Effect<string[], PlatformError, FileSystem | Path> =>
   Effect.gen(function*() {
     const files: string[] = []
+    const skipDirs = _outputDirs(cfg, path)
     for (const extra of cfg.config.cacheInclude ?? []) {
       const abs = path.isAbsolute(extra) ? extra : path.join(cfg.configDir, extra)
       if (_GLOB_CHARS.test(extra)) {
         const candidates: string[] = []
-        yield* _collectFiles(_globBase(abs, path.sep), candidates)
-        const pattern = _globToRegExp(abs, path.sep)
-        for (const c of candidates) {
-          if (pattern.test(c)) files.push(c)
-        }
+        yield* _collectFiles({ dir: _globBase(abs, path.sep), out: candidates, skipDirs })
+        files.push(...candidates.filter(_globMatcher(extra, cfg, path)))
       } else {
         const stat = yield* _orAbsentIfNotFound(fs.stat(abs), () => null)
         if (stat?.type === "Directory") {
-          yield* _collectFiles(abs, files)
+          yield* _collectFiles({ dir: abs, out: files, skipDirs })
         } else if (stat?.type === "File") {
           files.push(abs)
         }
@@ -140,8 +151,9 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
 
     const rootAbs = path.join(cfg.configDir, cfg.config.root)
     const files: string[] = []
-    yield* _collectFiles(rootAbs, files)
+    yield* _collectFiles({ dir: rootAbs, out: files, skipDirs: _outputDirs(cfg, path) })
     files.push(...(yield* _resolveCacheIncludeFiles(cfg, fs, path)))
+    files.push(...(yield* _findLockfiles(cfg.configDir)))
 
     yield* _hashFiles(hash, fs, files)
 
@@ -159,45 +171,19 @@ const _globBase = (pattern: string, sep: string): string => {
   return staticSegs.join(sep) || sep
 }
 
-const _REGEXP_SPECIAL = /[\\^$.|+(){}]/
+const _ALWAYS_SKIPPED_DIRS: ReadonlySet<string> = new Set(["node_modules", "dist", ".konfig", ".git"])
 
-const _globToRegExp = (pattern: string, sep: string): RegExp => {
-  const sepClass = sep === "\\" ? "\\\\" : sep
-  let source = ""
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i]
-    if (c === "*") {
-      if (pattern[i + 1] === "*") {
-        source += ".*"
-        i++
-        if (pattern[i + 1] === sep) i++
-      } else {
-        source += `[^${sepClass}]*`
-      }
-    } else if (c === "?") {
-      source += `[^${sepClass}]`
-    } else if (c === "[") {
-      const end = pattern.indexOf("]", i + 1)
-      if (end === -1) {
-        source += "\\["
-      } else {
-        source += pattern.slice(i, end + 1)
-        i = end
-      }
-    } else if (c !== undefined && _REGEXP_SPECIAL.test(c)) {
-      source += `\\${c}`
-    } else {
-      source += c
-    }
-  }
-  return new RegExp(`^${source}$`)
+interface CollectFilesInput {
+  readonly dir: string
+  readonly out: string[]
+  readonly skipDirs: ReadonlySet<string>
 }
 
 const _collectFiles = (
-  dir: string,
-  out: string[]
+  input: CollectFilesInput
 ): Effect.Effect<void, never, FileSystem | Path> =>
   Effect.gen(function*() {
+    const { dir, out, skipDirs } = input
     const fs = yield* FileSystem
     const path = yield* Path
     const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed((): string[] => []))
@@ -206,12 +192,37 @@ const _collectFiles = (
       const stat = yield* fs.stat(full).pipe(Effect.orElseSucceed(() => null))
       if (stat === null) continue
       if (stat.type === "Directory") {
-        if (e === "node_modules" || e === "dist" || e === ".konfig") continue
-        yield* _collectFiles(full, out)
+        if (_ALWAYS_SKIPPED_DIRS.has(e) || skipDirs.has(full)) continue
+        yield* _collectFiles({ dir: full, out, skipDirs })
       } else if (stat.type === "File") {
         out.push(full)
       }
     }
+  })
+
+const _outputDirs = (cfg: ResolvedKonfigConfig, path: Path): ReadonlySet<string> =>
+  new Set([
+    path.join(cfg.configDir, cfg.config.root, cfg.config.outDir.manifests),
+    path.resolve(cfg.configDir, cfg.config.helm?.cacheDir ?? DEFAULT_HELM_CACHE_DIR)
+  ])
+
+const _LOCKFILES = ["bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"] as const
+
+// Walks up from the config dir to the nearest directory holding a lockfile:
+// node_modules is never hashed, so dependency upgrades only show up here.
+const _findLockfiles = (
+  dir: string
+): Effect.Effect<ReadonlyArray<string>, never, FileSystem | Path> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const present = yield* Effect.filter(
+      _LOCKFILES.map((name) => path.join(dir, name)),
+      (candidate) => fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))
+    )
+    if (present.length > 0) return present
+    const parent = path.dirname(dir)
+    return parent === dir ? [] : yield* _findLockfiles(parent)
   })
 
 export const computeOutputHash = (

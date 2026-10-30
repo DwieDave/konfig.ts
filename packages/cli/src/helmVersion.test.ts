@@ -11,9 +11,10 @@ import {
   makeHandle,
   ProcessId
 } from "effect/process/ChildProcessSpawner"
+import fc from "fast-check"
 import semver from "semver"
 import { describe, expect, it } from "vitest"
-import { _parseHelmVersion, assertHelmVersion } from "./helmVersion"
+import { _normalizeMinVersion, _parseHelmVersion, assertHelmVersion, HelmMinVersionInvalid } from "./helmVersion"
 
 describe("_parseHelmVersion", () => {
   it("parses a plain release version", () => {
@@ -36,6 +37,29 @@ describe("_parseHelmVersion", () => {
     // any option (includePrerelease only exists for range checks).
     expect(semver.gte("3.16.0-rc.1", "3.15.0")).toBe(true)
     expect(semver.gte("3.16.0-rc.1", "3.16.0")).toBe(false)
+  })
+})
+
+describe("_normalizeMinVersion", () => {
+  it("pads major.minor to major.minor.0", () => {
+    expect(_normalizeMinVersion("3.12")).toBe("3.12.0")
+    expect(_normalizeMinVersion("v3.12")).toBe("3.12.0")
+  })
+
+  it("keeps full versions and rejects junk", () => {
+    expect(_normalizeMinVersion("3.12.1")).toBe("3.12.1")
+    expect(_normalizeMinVersion("three")).toBe(null)
+    expect(_normalizeMinVersion("")).toBe(null)
+  })
+
+  it("property: major.minor always normalizes to a valid semver that equals major.minor.0", () => {
+    fc.assert(
+      fc.property(fc.nat(50), fc.nat(50), (major, minor) => {
+        const out = _normalizeMinVersion(`${major}.${minor}`)
+        expect(out).toBe(`${major}.${minor}.0`)
+        expect(semver.valid(out)).toBe(out)
+      })
+    )
   })
 })
 
@@ -158,5 +182,21 @@ effectDescribe("assertHelmVersion", () => {
           expect((err as ProcessError).message).toContain("unknown flag")
         }
       })
+  )
+
+  effectIt.effect("fails with a typed HelmMinVersionInvalid for a non-semver minVersion", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        assertHelmVersion("banana").pipe(Effect.provide(_spawnerFor({ stdout: "v3.16.0\n" })))
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBeInstanceOf(HelmMinVersionInvalid)
+      }
+    }))
+
+  effectIt.effect(
+    "accepts a major.minor minVersion",
+    () => assertHelmVersion("3.12").pipe(Effect.provide(_spawnerFor({ stdout: "v3.16.0\n" })))
   )
 })

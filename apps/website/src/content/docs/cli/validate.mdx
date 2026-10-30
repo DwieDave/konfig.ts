@@ -24,7 +24,7 @@ konfig validate <env> [--strict] [--ignore-missing-schemas]
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `--strict` | `false` | Additionally run `kubeconform -summary -strict <dir>` over the rendered manifests. Requires `kubeconform` on `PATH`. |
+| `--strict` | `false` | Additionally run `kubeconform -summary -strict [flags] <dir>` over the rendered manifests. Requires `kubeconform` on `PATH`. |
 | `--ignore-missing-schemas` | `false` | Append `-ignore-missing-schemas` to the kubeconform invocation, for CRDs the bundled schema set does not know. |
 | `--cluster`, `--k8s-version`, `--flag` | unset | Shared render flags, see [CLI overview](/konfig.ts/docs/cli/overview/). |
 

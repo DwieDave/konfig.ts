@@ -33,7 +33,7 @@ The command finds the monorepo root by walking up from the current directory to 
 
 Each workspace becomes a node. An edge is drawn for every `dependencies` or `peerDependencies` entry (runtime edges) and every `devDependencies` entry (dev edges) whose version spec uses the `workspace:` or `link:` protocol and points at another workspace. Packages from the registry never appear.
 
-Before drawing, the command checks for cycles. A cycle fails the command with `CircularWorkspaceDep` and prints `error: workspace cycle detected: a → b → a`. Dev edges are only drawn, and only considered by the cycle check, when `--with-dev` is passed.
+Before drawing, the command checks for cycles (only within the target's dependency closure when a target is given). A cycle fails the command with `CircularWorkspaceDep` and prints `error: workspace cycle detected: a → b → a`. Dev edges are only drawn, and only considered by the cycle check, when `--with-dev` is passed.
 
 Nodes that define a `build` script are marked, so you can see which packages the `builder` stage of a generated Dockerfile will compile.
 

@@ -175,6 +175,32 @@ describe("runGraph", () => {
       expect(errors.some((e) => e.includes("workspace cycle detected"))).toBe(true)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
+  it.effect("a target graph ignores cycles outside the target closure", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-graph-unrelated-" })
+      yield* _buildWorkspace(root)
+      yield* _write(root, "packages/a/package.json", {
+        name: "@fix/a",
+        dependencies: { "@fix/b": "workspace:*" }
+      })
+      yield* _write(root, "packages/b/package.json", {
+        name: "@fix/b",
+        dependencies: { "@fix/a": "workspace:*" }
+      })
+      const { messages, testConsole } = _captured()
+
+      yield* runGraph({
+        cwd: root,
+        target: Option.some("@fix/app"),
+        withDev: false,
+        full: false,
+        width: Option.none()
+      }).pipe(Effect.provideService(Console.Console, testConsole))
+
+      expect(messages[0] ?? "").toContain("closure: @fix/app")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
   it.effect("--full disables transitive-edge reduction and reports the full edge set", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem

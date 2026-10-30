@@ -97,7 +97,7 @@ export const runGraph = (
       }
       targetName = resolved
     }
-    const cycle = detectCycle({ nodes, edges, withDev: args.withDev })
+    const cycle = detectCycle({ nodes, edges, withDev: args.withDev, target: targetName })
     if (cycle !== null) {
       return yield* new CircularWorkspaceDep({ cycle: cycle.slice() })
     }

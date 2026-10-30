@@ -17,7 +17,7 @@ import { Aside, Snippet } from "@/components/docs"
 | `envs` | `Record<string, { entry: string }>` | required (may be `{}`) | Env name to entry file, relative to `root`. Envs not listed fall back to `<root>/env/<name>.ts`. |
 | `outDir.manifests` | `string` | required | Where `build` writes, relative to `root`. Files land in `<root>/<outDir.manifests>/<env>[/<cluster>]/`. |
 | `diff.baseline` | `string` | unset | Baseline manifest tree for `konfig diff`, relative to `root`; the env name is appended. `diff` fails with `DiffBaselineMissing` when absent. |
-| `cacheInclude` | `string[]` | `[]` | Extra files, directories, or glob patterns (relative to `konfig.json`) hashed into the build cache on top of `root`, for inputs that live outside the konfig root. |
+| `cacheInclude` | `string[]` | `[]` | Extra files, directories, or glob patterns (relative to `konfig.json`) hashed into the build cache on top of `root`, for inputs that live outside the konfig root. Globs support `*`, `**`, `?`, `[...]`, and `{a,b}` alternatives. |
 | `cluster` | `string` | `"cluster.ts"` | Path of the cluster module, relative to `root`. |
 | `modules` | `string` | `"modules"` | Path of the modules directory, relative to `root`. |
 | `charts` | `string` | `"infra/k8s-konfig/charts"` | Path of the chart definitions directory, relative to `konfig.json`'s own directory. Read by `crd` and `helm fetch` (see below). |

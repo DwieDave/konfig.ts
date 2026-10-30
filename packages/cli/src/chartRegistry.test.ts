@@ -3,7 +3,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { ChartRegistryEntryDecodeError, loadChartRegistryEffect } from "./chartRegistry"
+import { ChartRegistryEntryDecodeError, ChartRegistryError, loadChartRegistryEffect } from "./chartRegistry"
 
 const _writeChartFile = (root: string, name: string, body: string) =>
   Effect.gen(function*() {
@@ -105,10 +105,10 @@ export const chart = {
       expect(entries).toEqual([])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("returns an empty registry when the charts directory does not exist", () =>
+  it.effect("fails with ChartRegistryError when the charts directory does not exist", () =>
     Effect.gen(function*() {
-      const entries = yield* loadChartRegistryEffect("/nonexistent/konfig-charts-dir-xyz")
-      expect(entries).toEqual([])
+      const failure = yield* Effect.flip(loadChartRegistryEffect("/nonexistent/konfig-charts-dir-xyz"))
+      expect(failure).toBeInstanceOf(ChartRegistryError)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("fails with ChartRegistryEntryDecodeError when a marked entry fails schema validation", () =>
@@ -138,7 +138,7 @@ export const chart = {
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("skips a chart module that throws on import and continues loading the rest", () =>
+  it.effect("fails with ChartRegistryError when a chart module throws on import", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-chartreg-" })
@@ -158,8 +158,9 @@ export const chart = {
 `
       )
 
-      const entries = yield* loadChartRegistryEffect(root)
-      expect(entries.map((e) => e.id)).toEqual(["ok"])
+      const failure = yield* Effect.flip(loadChartRegistryEffect(root))
+      expect(failure).toBeInstanceOf(ChartRegistryError)
+      expect(String(failure)).toContain("boom during import")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("picks up multiple chart files from the same directory", () =>

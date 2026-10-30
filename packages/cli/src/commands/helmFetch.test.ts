@@ -54,19 +54,30 @@ const _handle = (proc: FakeProc): ChildProcessHandle =>
 const _recordingSpawner = (
   proc: FakeProc,
   calls: Array<ReadonlyArray<string>>
-): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(
+): Layer.Layer<ChildProcessSpawner, never, FileSystem | Path> =>
+  Layer.effect(
     ChildProcessSpawner,
-    makeSpawner((command: Command) => {
-      if (ChildProcess.isStandardCommand(command)) {
-        if (command.args.includes("version")) {
-          return Effect.succeed(_handle({ stdout: "v3.99.0\n", exitCode: 0 }))
-        }
-        calls.push([command.command, ..._plainArgs(command)])
-      }
-      return Effect.succeed(_handle(proc))
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      return makeSpawner(
+        (command: Command) =>
+          Effect.gen(function*() {
+            if (!ChildProcess.isStandardCommand(command)) return _handle(proc)
+            const args = _plainArgs(command)
+            if (args.includes("version")) return _handle({ stdout: "v3.99.0\n", exitCode: 0 })
+            calls.push([command.command, ...args])
+            if (args[0] === "pull") {
+              const dest = args[args.indexOf("--destination") + 1] ?? ""
+              yield* fs.writeFile(path.join(dest, `${args[3]}-${args[5]}.tgz`), Buffer.from("t"))
+            }
+            return _handle(proc)
+          })
+      )
     })
   )
+
+const _pullDest = expect.stringMatching(/\.konfig-helm-pull-/)
 
 const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
   command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
@@ -83,7 +94,7 @@ const _pullingSpawner = (tarball: Buffer): Layer.Layer<ChildProcessSpawner, neve
       const fs = yield* FileSystem
       const path = yield* Path
       return makeSpawner(
-        ((command: Command) =>
+        (command: Command) =>
           Effect.gen(function*() {
             if (!ChildProcess.isStandardCommand(command)) return _handle({ exitCode: 0 })
             const args = _plainArgs(command)
@@ -97,7 +108,7 @@ const _pullingSpawner = (tarball: Buffer): Layer.Layer<ChildProcessSpawner, neve
               return _handle({ exitCode: 0 })
             }
             return _handle({ exitCode: 0 })
-          })) as unknown as Parameters<typeof makeSpawner>[0]
+          })
       )
     })
   )
@@ -136,7 +147,7 @@ describe("_fetchOne", () => {
           "--version",
           "16.0.0",
           "--destination",
-          cacheDir
+          _pullDest
         ]
       ])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
@@ -292,7 +303,7 @@ describe("helmFetchEffect", () => {
           "--version",
           "16.0.0",
           "--destination",
-          cacheDir
+          _pullDest
         ]
       ])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))

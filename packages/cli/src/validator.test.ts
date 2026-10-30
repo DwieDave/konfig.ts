@@ -265,7 +265,7 @@ describe("runKubeconform", () => {
       }
     }))
 
-  it.effect("forwards extraArgs, appending -kubernetes-version after the built-in flags", () =>
+  it.effect("forwards extraArgs, placing every flag before the directory", () =>
     Effect.gen(function*() {
       const captured: { args: ReadonlyArray<string> | undefined } = { args: undefined }
       yield* runKubeconform({
@@ -277,10 +277,10 @@ describe("runKubeconform", () => {
       expect(captured.args).toEqual([
         "-summary",
         "-strict",
-        "/rendered",
         "-ignore-missing-schemas",
         "-kubernetes-version",
-        "1.29.0"
+        "1.29.0",
+        "/rendered"
       ])
     }))
 

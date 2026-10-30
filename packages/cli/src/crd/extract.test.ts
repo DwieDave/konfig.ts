@@ -55,24 +55,6 @@ const _handle = (proc: { stdout?: string; stderr?: string; exitCode?: number }):
     } as Parameters<typeof makeHandle>[0]
   )
 
-/**
- * Fake `helm` spawner: routes on the subcommand (`pull`/`template`) so a
- * single layer can stand in for the whole extract pipeline — `pull
- * --untar` (into the crds/ scan) always "succeeds" with no output, while
- * `template` returns the caller-supplied CRD YAML fixture.
- */
-const _helmSpawner = (templateStdout: string): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(
-    ChildProcessSpawner,
-    makeSpawner((command: Command) => {
-      const args = isStandardCommand(command) ? _plainArgs(command) : []
-      if (args.includes("template")) {
-        return Effect.succeed(_handle({ stdout: templateStdout, exitCode: 0 }))
-      }
-      return Effect.succeed(_handle({ stdout: "", exitCode: 0 }))
-    })
-  )
-
 const _validCrdYaml = `
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -95,19 +77,22 @@ spec:
                 - size
 `
 
-const _testLayer = (templateStdout: string) => Layer.merge(NodeServices.layer, _helmSpawner(templateStdout))
-
 const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
+interface _Call {
+  readonly args: ReadonlyArray<string>
+}
+
 /**
- * Like `_helmSpawner`, but a non-`--untar` `pull` writes `tarball`'s bytes to
- * `<--destination>/<chart>-<version>.tgz` (matching real `helm pull`
- * output), so the digest-verify-then-rename path in `_pullChart` has a real
- * file to hash.
+ * Fake `helm` spawner: `pull` writes `tarball`'s bytes to
+ * `<--destination>/<tarballName>` (default `<chart>-<version>.tgz`, matching
+ * real `helm pull` output) and `template` returns the CRD YAML fixture.
+ * Every invocation is recorded in `calls`.
  */
 const _pullingHelmSpawner = (
   tarball: Buffer,
-  templateStdout: string
+  templateStdout: string,
+  options: { readonly tarballName?: string; readonly calls?: Array<_Call> } = {}
 ): Layer.Layer<ChildProcessSpawner, never, FileSystem | Path> =>
   Layer.effect(
     ChildProcessSpawner,
@@ -117,18 +102,23 @@ const _pullingHelmSpawner = (
       return makeSpawner((command: Command) =>
         Effect.gen(function*() {
           const args = isStandardCommand(command) ? _plainArgs(command) : []
+          options.calls?.push({ args })
           if (args.includes("template")) return _handle({ stdout: templateStdout, exitCode: 0 })
-          if (args[0] === "pull" && !args.includes("--untar")) {
+          if (args[0] === "pull") {
             const dest = args[args.indexOf("--destination") + 1] ?? ""
             const chart = args[3] ?? "chart"
             const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
-            yield* fs.writeFile(path.join(dest, `${chart}-${version}.tgz`), tarball)
+            yield* fs.writeFile(path.join(dest, options.tarballName ?? `${chart}-${version}.tgz`), tarball)
           }
           return _handle({ stdout: "", exitCode: 0 })
         })
       )
     })
   )
+
+const _helmSpawner = (templateStdout: string) => _pullingHelmSpawner(Buffer.from("fake-tarball"), templateStdout)
+
+const _testLayer = (templateStdout: string) => Layer.provideMerge(_helmSpawner(templateStdout), NodeServices.layer)
 
 layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
   it.effect("rejects shell-metachar chart name before any process is spawned", () =>
@@ -246,6 +236,24 @@ describe("extractCrdsEffect end-to-end", () => {
         expect(fails).toContain("HelmDigestMismatch")
       }
       expect(yield* fs.readDirectory(cacheDir)).toEqual([])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("never runs helm pull --untar and accepts a tarball named after a different version string", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-out-" })
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-cache-" })
+      const calls: Array<_Call> = []
+
+      yield* extractCrdsEffect({ ...validOpts, version: "v16.0.0", outDir, cacheDir }).pipe(
+        Effect.provide(
+          _pullingHelmSpawner(Buffer.from("t"), _validCrdYaml, { tarballName: "postgresql-16.0.0.tgz", calls })
+        )
+      )
+
+      expect(calls.some((c) => c.args.includes("--untar"))).toBe(false)
+      expect(calls.filter((c) => c.args[0] === "pull")).toHaveLength(1)
+      expect(yield* fs.readDirectory(cacheDir)).toEqual(["postgresql-v16.0.0.tgz"])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("writes a stub file when the chart has no CRDs", () =>

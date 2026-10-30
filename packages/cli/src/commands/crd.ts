@@ -28,6 +28,14 @@ export class ReleaseNotFound extends Data.TaggedError("ReleaseNotFound")<{
 
 export class MissingCrdFlags extends Data.TaggedError("MissingCrdFlags") {}
 
+export class EmptyChartRegistry extends Data.TaggedError("EmptyChartRegistry")<{
+  readonly chartsDir: string
+}> {
+  get message(): string {
+    return `no chart definitions found in ${this.chartsDir} — nothing was verified`
+  }
+}
+
 export class CrdDrift extends Data.TaggedError("CrdDrift")<{
   readonly drifted: ReadonlyArray<string>
 }> {}
@@ -119,8 +127,8 @@ export const crdVerifyEffect = Effect.gen(function*() {
   const registry = yield* loadChartRegistryEffect(chartsDir)
 
   if (registry.length === 0) {
-    yield* Console.log("No chart definitions found — nothing to verify")
-    return
+    yield* Console.error(`No chart definitions found in ${chartsDir} — nothing to verify`)
+    return yield* new EmptyChartRegistry({ chartsDir })
   }
 
   const releases = registry.map((r) => ({

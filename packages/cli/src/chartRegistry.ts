@@ -18,7 +18,11 @@ export type ChartRegistryEntry = typeof ChartRegistryEntrySchema.Type
 export class ChartRegistryError extends Data.TaggedError("ChartRegistryError")<{
   readonly chartsDir: string
   readonly cause: unknown
-}> {}
+}> {
+  get message(): string {
+    return `cannot load chart registry from ${this.chartsDir}: ${String(this.cause)}`
+  }
+}
 
 export class ChartRegistryEntryDecodeError extends Data.TaggedError("ChartRegistryEntryDecodeError")<{
   readonly file: string
@@ -46,23 +50,21 @@ const _decodeEntry = (val: Record<string, unknown>, file: string, defaultId: str
     Effect.mapError((cause) => new ChartRegistryEntryDecodeError({ file, cause }))
   )
 
+interface _LoadOneInput {
+  readonly absPath: string
+  readonly file: string
+  readonly chartsDir: string
+}
+
 const _loadOne = (
-  absPath: string,
-  file: string
-): Effect.Effect<ChartRegistryEntry | undefined, ChartRegistryEntryDecodeError> =>
+  input: _LoadOneInput
+): Effect.Effect<ChartRegistryEntry | undefined, ChartRegistryEntryDecodeError | ChartRegistryError> =>
   Effect.gen(function*() {
+    const { absPath, chartsDir, file } = input
     const mod = yield* Effect.tryPromise({
       try: () => import(absPath),
-      catch: (cause) => ({ importFailed: true as const, cause })
-    }).pipe(
-      Effect.tapError((e) =>
-        // Surface import failures instead of letting the module silently
-        // vanish from the registry.
-        Effect.sync(() => process.stderr.write(`konfig: failed to load chart module ${absPath}: ${String(e.cause)}\n`))
-      ),
-      Effect.orElseSucceed(() => undefined)
-    )
-    if (mod === undefined) return undefined
+      catch: (cause) => new ChartRegistryError({ chartsDir, cause: `failed to import ${absPath}: ${String(cause)}` })
+    })
 
     for (const key of Object.keys(mod)) {
       const val = mod[key]
@@ -80,17 +82,15 @@ export const loadChartRegistryEffect = (
     const fs = yield* FileSystem
     const path = yield* Path
 
-    const allFiles = yield* fs.readDirectory(chartsDir).pipe(Effect.orElseSucceed((): string[] => []))
+    const allFiles = yield* fs.readDirectory(chartsDir).pipe(
+      Effect.mapError((cause) => new ChartRegistryError({ chartsDir, cause }))
+    )
     const files = allFiles.filter((f) => f.endsWith(".ts") && !f.startsWith("_"))
 
     const entries: ChartRegistryEntry[] = []
     for (const file of files) {
-      const entry = yield* _loadOne(path.resolve(chartsDir, file), file)
+      const entry = yield* _loadOne({ absPath: path.resolve(chartsDir, file), file, chartsDir })
       if (entry !== undefined) entries.push(entry)
     }
     return entries
-  }).pipe(
-    Effect.mapError((cause) =>
-      cause instanceof ChartRegistryEntryDecodeError ? cause : new ChartRegistryError({ chartsDir, cause })
-    )
-  )
+  })

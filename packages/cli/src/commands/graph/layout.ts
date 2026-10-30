@@ -25,6 +25,7 @@ export interface CycleInput {
   readonly nodes: ReadonlyArray<GraphNode>
   readonly edges: ReadonlyArray<GraphEdge>
   readonly withDev?: boolean
+  readonly target?: string
 }
 
 const GUTTER = 3
@@ -59,10 +60,13 @@ const _reverseAdjacency = (edges: ReadonlyArray<GraphEdge>): Map<string, string[
 }
 
 export const detectCycle = (input: CycleInput): ReadonlyArray<string> | null => {
-  const edges = _activeEdges(input.edges, input.withDev ?? true)
+  const active = _activeEdges(input.edges, input.withDev ?? true)
+  const { nodes, edges } = input.target === undefined
+    ? { nodes: input.nodes, edges: active }
+    : _reachableFromTarget(input.nodes, active, input.target)
   const adj = _adjacency(edges)
   const colour = new Map<string, "white" | "grey" | "black">()
-  for (const n of input.nodes) colour.set(n.name, "white")
+  for (const n of nodes) colour.set(n.name, "white")
   const path: string[] = []
   const visit = (node: string): ReadonlyArray<string> | null => {
     colour.set(node, "grey")
@@ -83,7 +87,7 @@ export const detectCycle = (input: CycleInput): ReadonlyArray<string> | null => 
     colour.set(node, "black")
     return null
   }
-  for (const n of input.nodes) {
+  for (const n of nodes) {
     if (colour.get(n.name) === "white") {
       const cyc = visit(n.name)
       if (cyc) return cyc
