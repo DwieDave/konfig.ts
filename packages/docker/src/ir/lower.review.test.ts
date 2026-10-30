@@ -139,7 +139,7 @@ describe("lower healthcheck probe", () => {
       const dir = yield* writeTree(baseFiles())
 
       const base = inputFor(dir, {
-        packageManager: PackageManagerAtom.cases.NpmPm.make({}),
+        packageManager: PackageManagerAtom.cases.BunPm.make({}),
         runtime: RuntimeAtom.cases.BunRuntime.make({ alpine: false })
       })
 

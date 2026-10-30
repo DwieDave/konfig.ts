@@ -69,7 +69,7 @@ describe("lower fixes", () => {
       expect(copySrcs(stage(b, "runner"))).not.toContain("/app/packages/tsconfig")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("builder only copies deps node_modules for the runtime closure", () =>
+  it.effect("builder copies deps node_modules for the whole build closure", () =>
     Effect.gen(function*() {
       const dir = yield* writeTree({
         ...baseFiles,
@@ -82,7 +82,7 @@ describe("lower fixes", () => {
       const fromDeps = copiesOf(stage(b, "builder")).filter((i) => i.from === "deps").flatMap((i) => i.src)
 
       expect(fromDeps).toContain("/app/packages/util/node_modules")
-      expect(fromDeps).not.toContain("/app/packages/tsconfig/node_modules")
+      expect(fromDeps).toContain("/app/packages/tsconfig/node_modules")
       expect(copySrcs(stage(b, "builder"))).toContain("packages/tsconfig")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 

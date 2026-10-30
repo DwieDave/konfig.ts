@@ -14,6 +14,11 @@ const _renderFrom = (
     Match.exhaustive
   )
 
+const _needsExecForm = (path: string): boolean => /[\s"\\]/.test(path) || path.startsWith("[")
+
+const _copyPaths = (i: Extract<Instruction, { _tag: "Copy" }>): string =>
+  [...i.src, i.dst].some(_needsExecForm) ? _json([...i.src, i.dst]) : `${i.src.join(" ")} ${i.dst}`
+
 const _renderCopy = (i: Extract<Instruction, { _tag: "Copy" }>): string => {
   const flags: string[] = []
 
@@ -22,7 +27,7 @@ const _renderCopy = (i: Extract<Instruction, { _tag: "Copy" }>): string => {
   if (i.chown) flags.push(`--chown=${i.chown}`)
   const flagStr = flags.length === 0 ? "" : `${flags.join(" ")} `
 
-  return `COPY ${flagStr}${i.src.join(" ")} ${i.dst}`
+  return `COPY ${flagStr}${_copyPaths(i)}`
 }
 
 const _renderEnv = (i: Extract<Instruction, { _tag: "Env" }>): string => {

@@ -1,14 +1,15 @@
 import { brand, existsOrFalse, findUp, readOrEmpty } from "@konfig.ts/core"
-import { Effect, Option, type PlatformError, Schema } from "effect"
+import { Effect, Match, Option, type PlatformError, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { relative, resolve } from "node:path"
+import { posix, relative, resolve } from "node:path"
 import { parse as parseYaml } from "yaml"
 import {
   CircularWorkspaceDep,
   MonorepoRootNotFound,
   PackageJsonInvalid,
   UnsupportedPm,
+  UnsupportedYarnLinker,
   WorkspaceConfigInvalid
 } from "../DockerError"
 import type { NodeModulesLayout, PmKind, YarnVariant } from "./PackageManager"
@@ -71,6 +72,8 @@ export interface DetectedPm {
   readonly version: string | undefined
   readonly pnpmLayout?: NodeModulesLayout | undefined
   readonly yarnVariant?: YarnVariant | undefined
+  readonly yarnLayout?: NodeModulesLayout | undefined
+  readonly yarnPath?: string | undefined
 }
 
 interface DecodeInput {
@@ -357,6 +360,49 @@ const _detectYarnVariant = (input: {
       Effect.map((exists): YarnVariant => exists ? "berry" : "classic")
     )
 
+const YarnRcSchema = Schema.Struct({
+  nodeLinker: Schema.optionalKey(Schema.String),
+  yarnPath: Schema.optionalKey(Schema.String)
+})
+
+const _parseYarnRc = (input: {
+  readonly path: string
+  readonly text: string
+}): Effect.Effect<typeof YarnRcSchema.Type, WorkspaceConfigInvalid> =>
+  Effect.try(() => parseYaml(input.text) ?? {}).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(YarnRcSchema)),
+    Effect.mapError((cause) => new WorkspaceConfigInvalid({ path: input.path, cause }))
+  )
+
+const _layoutOfLinker = (linker: string | undefined): Effect.Effect<NodeModulesLayout, UnsupportedYarnLinker> =>
+  Match.value(linker).pipe(
+    Match.when("node-modules", () => Effect.succeed<NodeModulesLayout>("hoisted")),
+    Match.when("pnpm", () => Effect.succeed<NodeModulesLayout>("isolated")),
+    Match.orElse(() => Effect.fail(new UnsupportedYarnLinker({ linker: linker ?? "pnp" })))
+  )
+
+const _normalizeYarnPath = (yarnPath: string | undefined): string | undefined =>
+  yarnPath === undefined ? undefined : _insideRoot(posix.normalize(yarnPath))
+
+const _insideRoot = (normalized: string): string | undefined =>
+  posix.isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../") ? undefined : normalized
+
+const _readYarnBerryConfig = (
+  env: GraphEnv
+): Effect.Effect<
+  Pick<DetectedPm, "yarnLayout" | "yarnPath">,
+  UnsupportedYarnLinker | WorkspaceConfigInvalid | PlatformError.PlatformError,
+  FileSystem
+> =>
+  Effect.gen(function*() {
+    const path = env.p.join(env.root, ".yarnrc.yml")
+    const text = yield* readOrEmpty(path)
+    const rc = yield* _parseYarnRc({ path, text })
+    const yarnLayout = yield* _layoutOfLinker(rc.nodeLinker)
+
+    return { yarnLayout, yarnPath: _normalizeYarnPath(rc.yarnPath) }
+  })
+
 const _detectPnpmLayout = (
   env: GraphEnv
 ): Effect.Effect<NodeModulesLayout, PlatformError.PlatformError, FileSystem> =>
@@ -376,7 +422,11 @@ interface PmChoice {
 
 const _finalizePm = (
   input: { readonly env: GraphEnv; readonly choice: PmChoice }
-): Effect.Effect<DetectedPm, PlatformError.PlatformError, FileSystem> =>
+): Effect.Effect<
+  DetectedPm,
+  UnsupportedYarnLinker | WorkspaceConfigInvalid | PlatformError.PlatformError,
+  FileSystem
+> =>
   Effect.gen(function*() {
     const { env, choice } = input
     const pnpmLayout = choice.kind === "Pnpm" ? yield* _detectPnpmLayout(env) : undefined
@@ -385,7 +435,9 @@ const _finalizePm = (
       ? yield* _detectYarnVariant({ env, corepackVersion: choice.version })
       : undefined
 
-    return { kind: choice.kind, version: choice.version, pnpmLayout, yarnVariant }
+    const berry = yarnVariant === "berry" ? yield* _readYarnBerryConfig(env) : {}
+
+    return { kind: choice.kind, version: choice.version, pnpmLayout, yarnVariant, ...berry }
   })
 
 const _presentLockfiles = (
@@ -420,7 +472,11 @@ const _chooseKind = (input: {
 
 export const detectPm = (
   root: RootDir
-): Effect.Effect<DetectedPm, UnsupportedPm | PackageJsonInvalid | PlatformError.PlatformError, FileSystem | Path> =>
+): Effect.Effect<
+  DetectedPm,
+  UnsupportedPm | UnsupportedYarnLinker | WorkspaceConfigInvalid | PackageJsonInvalid | PlatformError.PlatformError,
+  FileSystem | Path
+> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path

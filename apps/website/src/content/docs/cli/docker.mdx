@@ -97,6 +97,8 @@ Errors from `@konfig.ts/docker` (the `AnyDockerError` union), raised while resol
 | `CircularWorkspaceDep` | The workspace graph contains a cycle. |
 | `WorkspaceNotFound` | The `<target>` argument is not a workspace of the monorepo. |
 | `UnsupportedPm` | The package manager could not be determined or is not supported. |
+| `UnsupportedYarnLinker` | Yarn Berry uses Plug'n'Play (`nodeLinker` absent or `pnp`). Set `nodeLinker: node-modules` or `pnpm` in `.yarnrc.yml`. |
+| `PmRuntimeIncompatible` | The package manager does not run on the chosen runtime image. Bun needs the Bun runtime; npm, pnpm and Yarn need Node. |
 | `BuildScriptMissing` | The spec's build step names a `package.json` script the target does not have. |
 | `WorkspaceSourceUnknown` | A `workspaceSource(name)` atom names a workspace outside the closure. |
 | `SharedRootFileMissing` | A file listed in `sharedRootFiles` does not exist. |

@@ -8,6 +8,7 @@ export const pnpm = (opts: PnpmOptions): PackageManager => ({
   kind: "Pnpm",
   lockfileNames: ["pnpm-lock.yaml"],
   auxFiles: ["pnpm-workspace.yaml", ".npmrc"],
+  supportFiles: [],
   installCommand: ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"],
   prodInstall: ProdInstall.Rewrite({ command: ["pnpm", "install", "--ignore-scripts", "--prod"] }),
   nodeModulesLayout: opts.layout,

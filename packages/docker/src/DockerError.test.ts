@@ -6,8 +6,10 @@ import {
   CircularWorkspaceDep,
   EngineVersionMissing,
   MonorepoRootNotFound,
+  PmRuntimeIncompatible,
   SharedRootFileMissing,
   UnsupportedPm,
+  UnsupportedYarnLinker,
   WorkspaceNotFound,
   WorkspaceSourceUnknown
 } from "./DockerError"
@@ -44,10 +46,12 @@ describe("DockerError", () => {
       [
         new BunVersionUnsupported({ target: "apps/x", version: "1.1.38", minimum: "1.2" }),
         "BunVersionUnsupported"
-      ]
+      ],
+      [new UnsupportedYarnLinker({ linker: "pnp" }), "UnsupportedYarnLinker"],
+      [new PmRuntimeIncompatible({ pm: "Bun", runtime: "Node" }), "PmRuntimeIncompatible"]
     ]
 
-    expect(all).toHaveLength(9)
+    expect(all).toHaveLength(11)
 
     for (const [err, tag] of all) {
       expect(err._tag).toBe(tag)

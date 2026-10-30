@@ -27,7 +27,24 @@ const parseFrom = (line: string): Stage => {
   return { name: m[2] ?? "", from, instructions: [] }
 }
 
+const execFormCopy = /^((?:--\S+ )*)(\[.*\])$/
+
+const parseExecCopy = (m: RegExpMatchArray): Instruction => {
+  const paths = parseArgv(m[2] ?? "")
+  const flags = (m[1] ?? "").split(" ")
+
+  return Instr.Copy({
+    src: paths.slice(0, -1),
+    dst: paths[paths.length - 1] ?? "",
+    from: flagValue(flags, "from"),
+    chown: flagValue(flags, "chown")
+  })
+}
+
 const parseCopy = (body: string): Instruction => {
+  const exec = body.match(execFormCopy)
+
+  if (exec) return parseExecCopy(exec)
   const tokens = body.split(" ")
   const flags = tokens.filter((t) => t.startsWith("--"))
   const rest = tokens.filter((t) => !t.startsWith("--"))
@@ -144,11 +161,14 @@ const duration = fc.constantFrom("5s", "10s", "30s")
 
 const fromImage = fc.record({ image: safeStr, tag: safeStr }).map(FromOf.FromImage)
 
+const pathChar = fc.constantFrom("a", "b", "0", " ", "\"", "\\", "[", "/", ".")
+const pathStr = fc.array(pathChar, { minLength: 1, maxLength: 6 }).map((cs) => cs.join(""))
+
 const copyArb: fc.Arbitrary<Instruction> = fc
   .tuple(
     fc.option(safeStr, { nil: undefined }),
-    fc.array(safeStr, { minLength: 1, maxLength: 3 }),
-    safeStr
+    fc.array(fc.oneof(safeStr, pathStr), { minLength: 1, maxLength: 3 }),
+    fc.oneof(safeStr, pathStr)
   )
   .map(([from, src, dst]) => Instr.Copy({ src, dst, from }))
 
@@ -204,6 +224,31 @@ describe("Renderer round-trip", () => {
       }),
       { numRuns: 40 }
     )
+  })
+
+  it("COPY with spaces, quotes and backslashes parses back to the same instruction", () => {
+    fc.assert(
+      fc.property(copyArb, (copy) => {
+        const line = render({
+          stages: [{ name: "s", from: FromOf.FromImage({ image: "i", tag: "t" }), instructions: [copy] }]
+        })
+          .split("\n")
+          .find((l) => l.startsWith("COPY "))
+
+        expect(parseInstruction(line ?? "")).toEqual(copy)
+      }),
+      { numRuns: 200 }
+    )
+  })
+
+  it("renders a spaced path in JSON exec form", () => {
+    const copy = Instr.Copy({ src: ["my assets"], dst: "/app/my assets", chown: "app:app" })
+
+    const out = render({
+      stages: [{ name: "s", from: FromOf.FromImage({ image: "i", tag: "t" }), instructions: [copy] }]
+    })
+
+    expect(out).toContain("COPY --chown=app:app [\"my assets\",\"/app/my assets\"]")
   })
 
   it("render is deterministic", () => {

@@ -3,6 +3,7 @@ import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
 import { CopyAtom, type DockerSpec } from "../spec"
+import { pkgJson, rootPkgJson, writeTree } from "../testing/tree"
 import { copiesOf, requireStage, runsOf } from "./irTesting"
 import { lower } from "./lower"
 
@@ -71,4 +72,32 @@ describe("per-workspace node_modules", () => {
       const bundle = yield* lowerFixture({ fixture: "bun" })
       expect(nodeModulesCopies(requireStage({ bundle, name: "runner" }))).toEqual([])
     }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+const toolFiles = {
+  "package.json": rootPkgJson({ workspaces: ["packages/*"], extra: { packageManager: "bun@1.3.5" } }),
+  "bun.lock": "{}",
+  "packages/app/package.json": pkgJson({
+    name: "app",
+    extra: { engines: { bun: "1.3.5" }, devDependencies: { tool: "workspace:*" } }
+  }),
+  "packages/tool/package.json": pkgJson({ name: "tool", extra: { dependencies: { esbuild: "^0.20.0" } } })
+}
+
+describe("build-only workspace node_modules", () => {
+  it.effect("deps and builder cover buildClosure; prod-deps and runner stay on closure", () =>
+    Effect.gen(function*() {
+      const dir = yield* writeTree(toolFiles)
+      const bundle = yield* lower({ target: `${dir}/packages/app`, spec: specWith({ production: true }) })
+      const stage = (name: string) => requireStage({ bundle, name })
+      const lastRun = (name: string) => runsOf(stage(name)).at(-1)?.cmd
+      expect(lastRun("deps")).toContain("packages/tool/node_modules")
+      expect(lastRun("prod-deps")).not.toContain("tool")
+
+      expect(nodeModulesCopies(stage("builder")).map((c) => c.src[0])).toContain("/app/packages/tool/node_modules")
+
+      expect(nodeModulesCopies(stage("runner")).map((c) => c.src[0])).not.toContain(
+        "/app/packages/tool/node_modules"
+      )
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

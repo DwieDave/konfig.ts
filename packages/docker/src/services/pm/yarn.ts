@@ -1,7 +1,9 @@
-import { type PackageManager, ProdInstall, type YarnVariant } from "../PackageManager"
+import { type NodeModulesLayout, type PackageManager, ProdInstall, type YarnVariant } from "../PackageManager"
 
 export interface YarnOptions {
   readonly variant: YarnVariant
+  readonly layout?: NodeModulesLayout | undefined
+  readonly yarnPath?: string | undefined
 }
 
 export const yarn = (opts: YarnOptions): PackageManager => {
@@ -11,6 +13,7 @@ export const yarn = (opts: YarnOptions): PackageManager => {
     kind: "Yarn",
     lockfileNames: ["yarn.lock"],
     auxFiles: isBerry ? [".yarnrc.yml", ".yarnrc"] : [".yarnrc"],
+    supportFiles: opts.yarnPath === undefined ? [] : [opts.yarnPath],
     // Berry has no --ignore-scripts flag; YARN_ENABLE_SCRIPTS=false is its
     // equivalent lifecycle-script suppression (every other PM disables scripts too).
     installCommand: isBerry
@@ -21,7 +24,7 @@ export const yarn = (opts: YarnOptions): PackageManager => {
         command: (target) => ["YARN_ENABLE_SCRIPTS=false", "yarn", "workspaces", "focus", "--production", target]
       })
       : ProdInstall.Rewrite({ command: ["yarn", "install", "--ignore-scripts", "--production"] }),
-    nodeModulesLayout: "hoisted",
+    nodeModulesLayout: opts.layout ?? "hoisted",
     prependDepsRuns: (version) =>
       version === ""
         ? []

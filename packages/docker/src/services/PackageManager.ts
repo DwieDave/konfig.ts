@@ -24,6 +24,7 @@ export interface PackageManager {
   readonly kind: PmKind
   readonly lockfileNames: ReadonlyArray<string>
   readonly auxFiles: ReadonlyArray<string>
+  readonly supportFiles: ReadonlyArray<string>
   readonly installCommand: ReadonlyArray<string>
   readonly prodInstall: ProdInstall
   readonly nodeModulesLayout: NodeModulesLayout

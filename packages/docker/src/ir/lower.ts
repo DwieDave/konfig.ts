@@ -9,6 +9,7 @@ import {
   BunVersionUnsupported,
   EngineVersionInvalid,
   EngineVersionMissing,
+  PmRuntimeIncompatible,
   SharedRootFileMissing,
   WorkspaceNotFound,
   WorkspaceSourceUnknown
@@ -118,7 +119,12 @@ export const pmFromAtom = (input: {
     Match.tag("PnpmPm", (): PackageManager => pnpmPm({ layout: input.detected.pnpmLayout ?? "isolated" })),
     Match.tag(
       "YarnPm",
-      (atom): PackageManager => yarnPm({ variant: atom.variant ?? input.detected.yarnVariant ?? "classic" })
+      (atom): PackageManager =>
+        yarnPm({
+          variant: atom.variant ?? input.detected.yarnVariant ?? "classic",
+          layout: input.detected.yarnLayout,
+          yarnPath: input.detected.yarnPath
+        })
     ),
     Match.exhaustive
   )
@@ -337,6 +343,7 @@ interface PmContext {
   readonly runtimeImage: ImageRef
   readonly alpine: boolean
   readonly rootFiles: ReadonlyArray<string>
+  readonly needsCorepackInstall: boolean
 }
 
 const _presentRootFiles = (
@@ -350,6 +357,33 @@ const _presentRootFiles = (
       (f) => existsOrFalse(p.join(input.root, f))
     )
   })
+
+const _checkPmRuntime = (input: {
+  readonly pm: PmKind
+  readonly runtime: RuntimeKind
+}): Effect.Effect<void, PmRuntimeIncompatible> =>
+  _defaultRuntimeFor(input.pm) === input.runtime
+    ? Effect.void
+    : Effect.fail(new PmRuntimeIncompatible({ pm: input.pm, runtime: input.runtime }))
+
+const FIRST_NODE_WITHOUT_COREPACK = 25
+
+const _majorOf = (version: string): number => Number.parseInt(version, 10)
+
+const _needsCorepackInstall = (input: {
+  readonly pm: PackageManager
+  readonly pmVersion: string
+  readonly runtimeKind: RuntimeKind
+  readonly runtimeVersion: string
+}): boolean =>
+  input.runtimeKind === "Node" &&
+  input.pm.prependDepsRuns(input.pmVersion).length > 0 &&
+  _majorOf(input.runtimeVersion) >= FIRST_NODE_WITHOUT_COREPACK
+
+const _pmPrelude = (pm: PmContext): ReadonlyArray<string> => [
+  ...(pm.needsCorepackInstall ? ["npm install -g corepack"] : []),
+  ...pm.pmImpl.prependDepsRuns(pm.pmVersion)
+]
 
 const _resolveDefaults = (
   input: { readonly spec: DockerSpec; readonly ctx: LowerContext }
@@ -365,6 +399,7 @@ const _resolveDefaults = (
     const pmKind = pmImpl.kind
     const runtimeKind: RuntimeKind = _specRuntimeKind(spec) ?? _defaultRuntimeFor(pmKind)
     const alpine = spec.runtime?.alpine ?? true
+    yield* _checkPmRuntime({ pm: pmKind, runtime: runtimeKind })
 
     const pmVersion = yield* _requireEngineVersion({
       ws: ctx.target,
@@ -376,7 +411,9 @@ const _resolveDefaults = (
     const runtimeImage = _runtimeImpl(runtimeKind).imageRef({ version: runtimeVersion, alpine })
     const rootFiles = yield* _presentRootFiles({ root: ctx.root, pm: pmImpl })
 
-    return { pmKind, pmVersion, pmImpl, runtimeKind, runtimeImage, alpine, rootFiles }
+    const needsCorepackInstall = _needsCorepackInstall({ pm: pmImpl, pmVersion, runtimeKind, runtimeVersion })
+
+    return { pmKind, pmVersion, pmImpl, runtimeKind, runtimeImage, alpine, rootFiles, needsCorepackInstall }
   })
 
 // The bun prod-deps stage relies on `bun install --filter`.
@@ -397,8 +434,11 @@ const _baseStage = (img: ImageRef): Stage => ({
   instructions: []
 })
 
+const _supportFileCopy = (path: string): Instruction => Instr.Copy({ src: [path], dst: `./${posix.dirname(path)}/` })
+
 const _rootCopyInstructions = (input: { readonly ctx: LowerContext; readonly pm: PmContext }): Instruction[] => [
   Instr.Copy({ src: ["package.json", ...input.pm.rootFiles], dst: "./" }),
+  ...input.pm.pmImpl.supportFiles.map(_supportFileCopy),
   ...(input.ctx.hasPatchesDir ? [Instr.Copy({ src: ["patches"], dst: "./patches" })] : [])
 ]
 
@@ -441,7 +481,7 @@ const _targetedProdDepsInstructions = (
   }
 ): Instruction[] => [
   ..._packageJsonCopyInstructions(input.ctx.allWorkspaces),
-  ..._runs(input.pm.pmImpl.prependDepsRuns(input.pm.pmVersion)),
+  ..._runs(_pmPrelude(input.pm)),
   Instr.Run({ cmd: input.command(input.ctx.target.name).join(" ") })
 ]
 
@@ -451,7 +491,7 @@ const _targetedProdDepsInstructions = (
 const _rewriteProdDepsInstructions = (input: CtxPm & { readonly command: ReadonlyArray<string> }): Instruction[] => [
   _prodDepsWorkspaceRewriteInstruction(input.ctx),
   ..._packageJsonCopyInstructions(input.ctx.closure),
-  ..._runs(input.pm.pmImpl.prependDepsRuns(input.pm.pmVersion)),
+  ..._runs(_pmPrelude(input.pm)),
   Instr.Run({ cmd: input.command.join(" ") })
 ]
 
@@ -478,7 +518,7 @@ const _prodDepsStage = (input: BuildIRInput): Stage =>
       ..._rootCopyInstructions(input),
       ..._prodDepsInstallInstructions(input),
       ..._removePathInstructions(input.spec.runner.removePaths),
-      ..._ensureNodeModulesDirs(input)
+      ..._ensureNodeModulesDirs({ ...input, workspaces: input.ctx.closure })
     ]
   })
 
@@ -497,21 +537,21 @@ const _stage = (input: StageInput): Stage => ({
 const _installInstructions = (input: CtxPm & { readonly installCmd: ReadonlyArray<string> }): Instruction[] => [
   ..._rootCopyInstructions(input),
   ..._packageJsonCopyInstructions(input.ctx.allWorkspaces),
-  ..._runs(input.pm.pmImpl.prependDepsRuns(input.pm.pmVersion)),
+  ..._runs(_pmPrelude(input.pm)),
   Instr.Run({ cmd: input.installCmd.join(" ") })
 ]
 
-const _ensureNodeModulesDirs = (input: CtxPm): Instruction[] =>
-  input.pm.pmImpl.nodeModulesLayout === "hoisted" || input.ctx.closure.length === 0
+const _ensureNodeModulesDirs = (input: CtxPm & { readonly workspaces: ReadonlyArray<Workspace> }): Instruction[] =>
+  input.pm.pmImpl.nodeModulesLayout === "hoisted" || input.workspaces.length === 0
     ? []
-    : [Instr.Run({ cmd: `mkdir -p ${input.ctx.closure.map((ws) => `${ws.relDir}/node_modules`).join(" ")}` })]
+    : [Instr.Run({ cmd: `mkdir -p ${input.workspaces.map((ws) => `${ws.relDir}/node_modules`).join(" ")}` })]
 
 const _depsStage = (input: CtxPm): Stage =>
   _stage({
     name: "deps",
     instructions: [
       ..._installInstructions({ ...input, installCmd: input.pm.pmImpl.installCommand }),
-      ..._ensureNodeModulesDirs(input)
+      ..._ensureNodeModulesDirs({ ...input, workspaces: input.ctx.buildClosure })
     ]
   })
 
@@ -529,7 +569,7 @@ const _envWithDefault = (input: {
 const _optional = <A>(value: A | undefined): ReadonlyArray<A> => (value === undefined ? [] : [value])
 
 const _depsNodeModulesCopies = (input: CtxPm): Instruction[] =>
-  input.pm.pmImpl.nodeModulesLayout === "hoisted" ? [] : input.ctx.closure.map((ws): Instruction =>
+  input.pm.pmImpl.nodeModulesLayout === "hoisted" ? [] : input.ctx.buildClosure.map((ws): Instruction =>
     Instr.Copy({
       from: "deps",
       src: [`/app/${ws.relDir}/node_modules`],

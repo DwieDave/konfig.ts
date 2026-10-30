@@ -55,6 +55,8 @@ Every failure the package can produce is a tagged error, and `AnyDockerError` is
 | --- | --- |
 | `MonorepoRootNotFound` | No monorepo root could be found walking up from the starting directory |
 | `WorkspaceNotFound` | The target app is not a workspace of the monorepo |
+| `UnsupportedYarnLinker` | Yarn Berry resolves to Plug'n'Play (`nodeLinker` absent or `pnp`); only `node-modules` and `pnpm` linkers are supported. A `yarnPath` release file is copied before `yarn install` |
+| `PmRuntimeIncompatible` | The package manager and runtime image cannot work together: Bun needs `BunRuntime`; npm, pnpm and Yarn need `NodeRuntime` |
 | `UnsupportedPm` | The package manager could not be determined: no `packageManager` field and either no recognized lockfile or several conflicting ones |
 | `CircularWorkspaceDep` | The workspace graph contains a cycle |
 | `EngineVersionMissing` | The app's `package.json` lacks the required `engines.*` entry |

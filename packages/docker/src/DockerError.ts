@@ -67,6 +67,15 @@ export class SpecInvalid extends Data.TaggedError("SpecInvalid")<{
   readonly cause: unknown
 }> {}
 
+export class UnsupportedYarnLinker extends Data.TaggedError("UnsupportedYarnLinker")<{
+  readonly linker: string
+}> {}
+
+export class PmRuntimeIncompatible extends Data.TaggedError("PmRuntimeIncompatible")<{
+  readonly pm: string
+  readonly runtime: string
+}> {}
+
 export type AnyDockerError =
   | PlatformError.PlatformError
   | SpecInvalid
@@ -82,3 +91,5 @@ export type AnyDockerError =
   | BuildScriptMissing
   | WorkspaceSourceUnknown
   | SharedRootFileMissing
+  | UnsupportedYarnLinker
+  | PmRuntimeIncompatible
