@@ -619,6 +619,24 @@ describe("_collectOutputs: kind/name routing", () => {
     expect(await _collect(undefined)).toEqual([])
   })
 
+  it("property: any primitive render value fails with InvalidOutputObject", async () => {
+    await fc.assert(fc.asyncProperty(fc.oneof(fc.integer(), fc.string(), fc.boolean()), async (value) => {
+      const outcome = await _collect(value).then(() => "ok", _tagOf)
+      expect(outcome).toBe("InvalidOutputObject")
+    }))
+  })
+
+  it("fails on a RawYaml whose only document is a scalar", async () => {
+    const value = { _tag: "RawYaml" as const, content: "42" }
+
+    const outcome = await _collectOutputs({ value, appDir: "/out/app" }).pipe(
+      Effect.provide(NodeServices.layer),
+      Effect.runPromise
+    ).then(() => "ok", _tagOf)
+
+    expect(outcome).toBe("InvalidOutputObject")
+  })
+
   it("fails on records without a string kind and metadata.name", async () => {
     const values = [{ apiVersion: "v1", data: { a: "b" } }, { kind: 5, metadata: { name: "x" } }, { justAString: true }]
 

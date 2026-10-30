@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { detectCycle, renderGraph } from "./layout"
+import { renderGraph } from "./layout"
 
 const node = (name: string, relDir: string, hasBuildScript = false) => ({
   name,
@@ -127,46 +127,6 @@ describe("renderGraph — monorepo mode (no target)", () => {
     expect(out).toContain("@s/utils")
     expect(out.indexOf("@s/utils")).toBeGreaterThan(out.indexOf("@s/api"))
     expect(out).toContain("@s/utils  (see above)")
-  })
-})
-
-describe("detectCycle", () => {
-  it("returns null for an acyclic graph", () => {
-    const cycle = detectCycle({
-      nodes: [node("a", "a"), node("b", "b")],
-      edges: [{ from: "a", to: "b", kind: "runtime" }],
-      withDev: true
-    })
-
-    expect(cycle).toBeNull()
-  })
-
-  it("returns the cycle path for a simple cycle", () => {
-    const cycle = detectCycle({
-      nodes: [node("a", "a"), node("b", "b")],
-      edges: [
-        { from: "a", to: "b", kind: "runtime" },
-        { from: "b", to: "a", kind: "runtime" }
-      ],
-      withDev: true
-    })
-
-    expect(cycle).not.toBeNull()
-    expect(cycle).toContain("a")
-    expect(cycle).toContain("b")
-  })
-
-  it("returns the cycle including a dev edge only when withDev is true", () => {
-    const input = {
-      nodes: [node("a", "a"), node("b", "b")],
-      edges: [
-        { from: "a", to: "b", kind: "runtime" as const },
-        { from: "b", to: "a", kind: "dev" as const }
-      ]
-    }
-
-    expect(detectCycle({ ...input, withDev: false })).toBeNull()
-    expect(detectCycle({ ...input, withDev: true })).not.toBeNull()
   })
 })
 

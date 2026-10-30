@@ -83,6 +83,14 @@ describe("resolveCliPaths", () => {
       expect(paths.minVersion).toBe("3.20.0")
     }).pipe(_withEnv({}), Effect.provide(NodeServices.layer)))
 
+  it.effect("without helm.cacheDir the cache default resolves against configDir, like outDir", () =>
+    Effect.gen(function*() {
+      const { crd: _crd, helm: _helm, ...config } = _fakeConfig(yield* Path).config
+      const paths = yield* resolveCliPaths({ configDir: "/proj", config })
+      expect(paths.cacheDir).toBe("/proj/.konfig/helm-cache")
+      expect(paths.outDir).toBe("/proj/.generated/crd")
+    }).pipe(_withEnv({}), Effect.provide(NodeServices.layer)))
+
   it.effect("an absolute konfig.json path is honored as-is, not nested under the config directory", () =>
     Effect.gen(function*() {
       const path = yield* Path

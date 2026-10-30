@@ -45,8 +45,8 @@ Every command walks up from the cwd to find a `konfig.json`. Key fields:
 `konfig.json` is the source of truth for the Helm cache dir, the chart
 registry dir, and the CRD codegen out dir. Each resolves with precedence
 **env var > matching `konfig.json` field > built-in default** (defaults in
-parentheses, all `konfig.json` fields resolved relative to the config file's
-own directory, same as `root`/`outDir`):
+parentheses). Relative values and defaults resolve against the `konfig.json`
+directory when one exists, else against `process.cwd()`:
 
 - `KONFIG_HELM_CACHE` > `helm.cacheDir` > `.konfig/helm-cache`
 - `KONFIG_CHARTS_DIR` > `charts` > `infra/k8s-konfig/charts`
@@ -54,9 +54,8 @@ own directory, same as `root`/`outDir`):
 - `KONFIG_HELM_MIN_VERSION` > `helm.minVersion` > `3.16.0`
 
 `konfig crd extract`/`konfig crd verify`/`konfig helm fetch` also work
-outside a konfig project (no `konfig.json` found); every path then falls
-back to the built-in default, resolved relative to `process.cwd()`, same as
-before this precedence existed. `konfig build`/`validate`/`diff` always
+outside a konfig project (no `konfig.json` found); every path then resolves
+against `process.cwd()`. `konfig build`/`validate`/`diff` always
 require a `konfig.json` (to find the env entry file) and pass its resolved
 `helm.cacheDir` through to every `Helm.release()` call a chart definition
 makes, via a `ConfigProvider` installed around the render (see

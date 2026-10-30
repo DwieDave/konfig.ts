@@ -22,7 +22,7 @@ import { Aside, Snippet } from "@/components/docs"
 | `modules` | `string` | `"modules"` | Path of the modules directory, relative to `root`. |
 | `charts` | `string` | `"infra/k8s-konfig/charts"` | Path of the chart definitions directory, relative to `konfig.json`'s own directory. Read by `crd` and `helm fetch` (see below). |
 | `crd.outDir` | `string` | `".generated/crd"` | Destination for generated CRD types, relative to `konfig.json`'s own directory. Read by `crd extract` (see below). |
-| `helm.cacheDir` | `string` | `".konfig/helm-cache"` | Helm tarball cache directory, relative to `konfig.json`'s own directory. Read by `crd`, `helm fetch`, and `Helm.release` at render time (see below). |
+| `helm.cacheDir` | `string` | `".konfig/helm-cache"` | Helm tarball cache directory, relative to `konfig.json`'s directory (to the working directory when no `konfig.json` exists). Read by `crd`, `helm fetch`, and `Helm.release` at render time (see below). |
 | `helm.minVersion` | `string` | `"3.16.0"` | Minimum `helm` version. Read by the `crd` and `helm fetch` preflight check (see below); `Helm.release` still takes its own opt-in `minVersion` option and does not read this field. |
 | `services.outFile` | `string` | unset | Reserved for the services layer; validated only. |
 | `services.globalPaths` | `string[]` | `[]` | Reserved for the services layer; validated only. |
@@ -34,7 +34,9 @@ The Helm-related fields (`charts`, `crd.outDir`, `helm.cacheDir`, `helm.minVersi
 
 1. The environment variable, if set.
 2. Otherwise the matching `konfig.json` field, resolved relative to the config directory.
-3. Otherwise a built-in default, resolved relative to the current working directory.
+3. Otherwise a built-in default, resolved the same way as the field: relative to the config directory.
+
+Without a `konfig.json`, relative paths resolve against the current working directory.
 
 This lets a project set these paths once in `konfig.json` without exporting environment variables, while CI or a shell override still takes priority when needed. Outside a konfig project (no `konfig.json` found), only the environment variable and the built-in default apply.
 

@@ -20,13 +20,6 @@ export interface RenderInput {
   readonly reduce: boolean
 }
 
-export interface CycleInput {
-  readonly nodes: ReadonlyArray<GraphNode>
-  readonly edges: ReadonlyArray<GraphEdge>
-  readonly withDev: boolean
-  readonly target?: string
-}
-
 export interface Scope {
   readonly nodes: ReadonlyArray<GraphNode>
   readonly edges: ReadonlyArray<GraphEdge>

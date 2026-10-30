@@ -1,15 +1,8 @@
-import {
-  allWorkspaces,
-  CircularWorkspaceDep,
-  findRoot,
-  lookupWorkspace,
-  type Workspace,
-  workspaceDeps
-} from "@konfig.ts/docker"
-import { Console, Data, Effect, Option } from "effect"
+import { allWorkspaces, closureOf, findRoot, lookupWorkspace, type Workspace, workspaceDeps } from "@konfig.ts/docker"
+import { Console, Data, Effect, Option, Order } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { Path } from "effect/Path"
-import { detectCycle, type GraphEdge, type GraphNode, renderGraph } from "./graph/layout"
+import { type GraphEdge, type GraphNode, renderGraph } from "./graph/layout"
 
 class GraphTargetNotFound extends Data.TaggedError("GraphTargetNotFound")<{
   readonly target: string
@@ -57,6 +50,11 @@ const _resolveTarget = (input: {
 const _toNodes = (workspaces: ReadonlyArray<Workspace>): GraphNode[] =>
   workspaces.map((w) => ({ name: w.name, relDir: w.relDir, hasBuildScript: w.hasBuildScript }))
 
+const _scopeOf = (input: { readonly workspaces: ReadonlyArray<Workspace>; readonly target: string | undefined }) =>
+  input.target === undefined
+    ? [...input.workspaces].sort(Order.mapInput(Order.String, (w: Workspace) => w.name))
+    : input.workspaces.filter((w) => w.name === input.target)
+
 const _graphOutput = (input: {
   readonly workspaces: ReadonlyArray<Workspace>
   readonly target: string | undefined
@@ -64,14 +62,21 @@ const _graphOutput = (input: {
   readonly full: boolean
 }) =>
   Effect.gen(function*() {
-    const nodes = _toNodes(input.workspaces)
-    const edges = _buildEdges(input.workspaces)
-    const { target, withDev } = input
-    const cycle = detectCycle({ nodes, edges, withDev, target })
+    const { target, withDev, workspaces } = input
 
-    if (cycle !== null) return yield* new CircularWorkspaceDep({ cycle: cycle.slice() })
+    yield* Effect.forEach(
+      _scopeOf({ workspaces, target }),
+      (ws) => closureOf({ all: workspaces, target: ws, includeDev: withDev }),
+      { discard: true }
+    )
 
-    return renderGraph({ nodes, edges, target, withDev, reduce: !input.full })
+    return renderGraph({
+      nodes: _toNodes(workspaces),
+      edges: _buildEdges(workspaces),
+      target,
+      withDev,
+      reduce: !input.full
+    })
   })
 
 export const runGraph = (args: RunGraphArgs) =>

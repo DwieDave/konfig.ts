@@ -48,6 +48,7 @@ export { decodeKonfigConfigEffect, KonfigConfig, type ResolvedKonfigConfig } fro
 export {
   DEFAULT_CHARTS_DIR,
   DEFAULT_CRD_OUT_DIR,
+  DEFAULT_HELM_CACHE_DIR,
   DEFAULT_HELM_MIN_VERSION,
   helmCacheDirConfig,
   KONFIG_CHARTS_DIR_ENV,
@@ -80,15 +81,10 @@ export { omitUndefined } from "./omitUndefined"
 
 export { renderManifest } from "./renderManifest"
 
-export {
-  runProcessCollect,
-  runProcessExit,
-  runProcessString,
-  runProcessWithStdin
-} from "./subprocess"
+export { runCliWithStdin, runProcessCollect, runProcessExit, runProcessString, runProcessWithStdin } from "./subprocess"
 
 export { unwrapDocs } from "./unwrapDocs"
 
-export { objectMetaSchema, parseYamlWith, stringRecordSchema } from "./yamlSchema"
+export { decodeYamlOutput, objectMetaSchema, parseYamlWith, stringRecordSchema } from "./yamlSchema"
 
 export * as Yaml from "./yaml"

@@ -1,6 +1,6 @@
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { detectCycle, type EdgeKind, type GraphEdge, type GraphNode, renderGraph } from "./layout"
+import { type EdgeKind, type GraphEdge, type GraphNode, renderGraph } from "./layout"
 import { transitiveReduce } from "./layout/adjacency"
 
 /**
@@ -85,36 +85,6 @@ describe("renderGraph — layout property tests", () => {
         const first = renderGraph(input)
         const second = renderGraph({ ...input })
         expect(second).toBe(first)
-      }),
-      { numRuns: 100 }
-    )
-  })
-
-  it("detectCycle finds no cycle in any forward-only-edge DAG", () => {
-    fc.assert(
-      fc.property(arbGraph, ({ nodes, edges, withDev }) => {
-        const cycle = detectCycle({ nodes, edges, withDev })
-        expect(cycle).toBeNull()
-      }),
-      { numRuns: 100 }
-    )
-  })
-
-  it("detectCycle reports a cycle once a back-edge closes the loop", () => {
-    fc.assert(
-      fc.property(arbGraph.filter(({ nodes }) => nodes.length >= 2), ({ nodes, edges }) => {
-        if (edges.length === 0) return
-        const last = edges[edges.length - 1]
-
-        if (!last) return
-        const backEdge: GraphEdge = { from: last.to, to: last.from, kind: last.kind }
-        const withCycle = [...edges, backEdge]
-        const cycle = detectCycle({ nodes, edges: withCycle, withDev: true })
-        expect(cycle).not.toBeNull()
-
-        if (cycle) {
-          expect(cycle[0]).toBe(cycle[cycle.length - 1])
-        }
       }),
       { numRuns: 100 }
     )

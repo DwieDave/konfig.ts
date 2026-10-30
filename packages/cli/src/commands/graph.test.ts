@@ -1,9 +1,12 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Console, Effect, Option, Schema } from "effect"
+import { allWorkspaces, closureOf, findRoot } from "@konfig.ts/docker"
+import { Console, Effect, Exit, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import fc from "fast-check"
 import { runGraph } from "./graph"
+import * as layout from "./graph/layout"
 
 const _write = <A>(root: string, rel: string, body: A) =>
   Effect.gen(function*() {
@@ -273,4 +276,87 @@ describe("runGraph", () => {
       expect(full[0] ?? "").toContain("3 runtime edges")
       expect(full[0] ?? "").toContain("full")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+interface CycleCase {
+  readonly size: number
+  readonly deps: ReadonlyArray<{ readonly from: number; readonly to: number; readonly dev: boolean }>
+  readonly target: number | undefined
+  readonly withDev: boolean
+}
+
+const arbCycleCase: fc.Arbitrary<CycleCase> = fc.integer({ min: 2, max: 5 }).chain((size) => {
+  const idx = fc.integer({ min: 0, max: size - 1 })
+
+  return fc.record({
+    size: fc.constant(size),
+    deps: fc.array(fc.record({ from: idx, to: idx, dev: fc.boolean() }), { maxLength: 8 }),
+    target: fc.option(idx, { nil: undefined }),
+    withDev: fc.boolean()
+  })
+})
+
+const _writeCase = (root: string, c: CycleCase) =>
+  Effect.gen(function*() {
+    yield* _write(root, "package.json", { name: "r", private: true, workspaces: ["packages/*"] })
+
+    yield* Effect.forEach(Array.from({ length: c.size }, (_, i) => i), (i) => {
+      const named = (dev: boolean) =>
+        Object.fromEntries(c.deps.filter((d) => d.from === i && d.dev === dev).map((d) => [`w${d.to}`, "workspace:*"]))
+
+      return _write(root, `packages/w${i}/package.json`, {
+        name: `w${i}`,
+        dependencies: named(false),
+        devDependencies: named(true)
+      })
+    })
+  })
+
+const _expectedCycle = (input: { readonly root: string; readonly c: CycleCase }) =>
+  Effect.gen(function*() {
+    const all = yield* allWorkspaces(yield* findRoot(input.root))
+    const byName = [...all].sort((a, b) => (a.name < b.name ? -1 : 1))
+    const scope = input.c.target === undefined ? byName : byName.filter((w) => w.name === `w${input.c.target}`)
+
+    const exits = yield* Effect.forEach(
+      scope,
+      (ws) => Effect.exit(closureOf({ all, target: ws, includeDev: input.c.withDev }))
+    )
+
+    return exits.flatMap((e) => Exit.isFailure(e) ? [e] : [])[0]
+  })
+
+describe("runGraph cycle detection", () => {
+  it("does not export detectCycle from the layout module", () => {
+    expect("detectCycle" in layout).toBe(false)
+  })
+
+  it("fails exactly when docker closureOf fails, with the same cycle", async () => {
+    await fc.assert(
+      fc.asyncProperty(arbCycleCase, (c) =>
+        Effect.gen(function*() {
+          const fs = yield* FileSystem
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-graph-prop-" })
+          yield* _writeCase(root, c)
+          const expected = yield* _expectedCycle({ root, c })
+          const { testConsole } = _captured()
+
+          const actual = yield* Effect.exit(
+            runGraph({
+              cwd: root,
+              target: c.target === undefined ? Option.none() : Option.some(`w${c.target}`),
+              withDev: c.withDev,
+              full: false
+            }).pipe(Effect.provideService(Console.Console, testConsole))
+          )
+
+          expect(Exit.isFailure(actual)).toBe(expected !== undefined)
+
+          if (expected !== undefined && Exit.isFailure(actual)) {
+            expect(JSON.stringify(actual.cause)).toBe(JSON.stringify(expected.cause))
+          }
+        }).pipe(Effect.scoped, Effect.provide(NodeServices.layer), Effect.runPromise)),
+      { numRuns: 100 }
+    )
+  })
 })

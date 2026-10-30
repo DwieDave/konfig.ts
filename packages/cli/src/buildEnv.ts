@@ -226,7 +226,13 @@ export const _collectOutputs = (
 
   if (isRawYaml(value) || isParsedDoc(value)) return unwrapDocs(value).pipe(Effect.flatMap(flatten))
 
-  if (!Predicate.isObject(value)) return Effect.succeed([])
+  if (value === null || value === undefined) return Effect.succeed([])
+
+  if (!Predicate.isObject(value)) {
+    return Effect.fail(
+      new InvalidOutputObject({ kind: "non-object value", objectName: JSON.stringify(value), dir: appDir })
+    )
+  }
 
   return Effect.map(
     _toOutputFile({ doc: value, dir: appDir, routing: _routingOf(_decodeKindName(value)) }),
