@@ -64,17 +64,12 @@ export const packageDirs = Effect.gen(function*() {
     .readDirectory(packagesDir)
     .pipe(mapRepoError(`cannot list ${packagesDir}`))
 
-  const dirs: Array<string> = []
+  const dirs = entries.slice().sort().map((entry) => path.join(packagesDir, entry))
 
-  for (const entry of entries.slice().sort()) {
-    const dir = path.join(packagesDir, entry)
-    const pkgJson = path.join(dir, "package.json")
-    const exists = yield* fs.exists(pkgJson).pipe(Effect.orElseSucceed(() => false))
-
-    if (exists) dirs.push(dir)
-  }
-
-  return dirs
+  return yield* Effect.filter(
+    dirs,
+    (dir) => fs.exists(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => false))
+  )
 })
 
 export const testPackageNames = Effect.gen(function*() {
@@ -130,4 +125,23 @@ export const packageInfos = Effect.gen(function*() {
     dirs,
     (dir) => readJson(path.join(dir, "package.json")).pipe(Effect.flatMap((raw) => _toInfo({ dir, raw })))
   )
+})
+
+export const readRootCatalogs = Effect.gen(function*() {
+  const path = yield* Path
+  const rootPkg = yield* readJson(path.join(REPO_ROOT, "package.json"))
+
+  const catalog = (yield* decodeField({
+    schema: Schema.UndefinedOr(StringRecord),
+    value: rootPkg.catalog,
+    what: "root catalog"
+  })) ?? {}
+
+  const namedCatalogs = (yield* decodeField({
+    schema: Schema.UndefinedOr(Schema.Record(Schema.String, StringRecord)),
+    value: rootPkg.catalogs,
+    what: "root catalogs"
+  })) ?? {}
+
+  return { catalog, namedCatalogs }
 })

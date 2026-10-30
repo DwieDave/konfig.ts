@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 import { makeStubLayer } from "../lib/stubFs"
-import { _writeAllBadges, coverageColor, makeStats, RepoStats } from "./badges"
+import { coverageColor, makeStats, RepoStats, writeAllBadges } from "./badges"
 
 describe("makeStats", () => {
   it("rounds line coverage to one decimal and keeps the raw counts", () => {
@@ -39,12 +39,12 @@ describe("coverageColor", () => {
   })
 })
 
-describe("_writeAllBadges", () => {
+describe("writeAllBadges", () => {
   it("writes the four badge files into outDir", () => {
     const files = new Map<string, string>()
     const stats = makeStats({ tests: 5, linesCovered: 9, linesTotal: 10, effectVersion: "4.0.0", packages: 2 })
     Effect.runSync(
-      _writeAllBadges({ outDir: "/out", pct: 90, tests: 5, effectVersion: "4.0.0", stats }).pipe(
+      writeAllBadges({ outDir: "/out", pct: 90, tests: 5, effectVersion: "4.0.0", stats }).pipe(
         Effect.provide(makeStubLayer(files))
       )
     )

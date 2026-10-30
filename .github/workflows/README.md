@@ -1,21 +1,30 @@
 # CI / release workflows
 
-## `ci.yml` — on push and PR
+## `.github/actions/setup`
 
-Runs `bun run check` (typecheck every package), `bun run test` (every
-test suite), `bun run lint` and `bun run knip` (dead code). All steps
-are blocking.
+Composite action shared by ci, release and pages: setup-bun (version
+from `package.json`) and `bun install --frozen-lockfile`. Run
+`actions/checkout` first.
+
+## `ci.yml` — on push, PR and `workflow_call`
+
+The `check` job runs `bun run check`, `bun run build`,
+`bun run test:coverage` (coverage thresholds enforced), `bun run lint`
+and `bun run knip`. The `peer-floor` job pins `effect@4.0.0` and
+`@effect/platform-node@~4.0.0`, asserts they were installed, then runs
+check and test for core and env. All steps are blocking.
 
 ## `release.yml` — on tag
 
-Triggered by a `vX.Y.Z` tag. Runs:
+Triggered by a `vX.Y.Z` tag. The `ci.yml` workflow is called as the
+release gate; publishing only proceeds when it passes. Runs:
 
 1. **Verify tag → version match.** Every `packages/*/package.json` must
    declare the version that the tag names. konfig.ts uses lockstep
    versioning (see `.docs/versioning.md`), so this is one check
    repeated 9×.
-2. **`bun run check` + `bun run test` + `bun run build`** — the same
-   gates as CI, run on the tagged commit's tree.
+2. **CI gate** — `ci.yml` (check, build, coverage, lint, knip,
+   peer-floor) on the tagged commit.
 3. **Rewrite `workspace:*` → exact version** via
    `scripts/cli.ts rewrite-workspace-deps`. The npm registry doesn't
    understand `workspace:*`; the script pins every internal dep to the

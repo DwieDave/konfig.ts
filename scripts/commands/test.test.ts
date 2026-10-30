@@ -1,21 +1,22 @@
-import { Effect } from "effect"
+import { ConfigProvider, Effect, Layer } from "effect"
 import * as Fs from "effect/FileSystem"
-import { afterEach, describe, expect, it } from "vitest"
-import { _summaryTmpDir } from "./test"
+import { describe, expect, it } from "vitest"
+import { summaryTmpDir } from "./test"
 
-describe("_summaryTmpDir", () => {
-  const saved = process.env.GITHUB_STEP_SUMMARY
-  afterEach(() => {
-    if (saved === undefined) delete process.env.GITHUB_STEP_SUMMARY
-    else process.env.GITHUB_STEP_SUMMARY = saved
-  })
+const _run = (input: { readonly env: Record<string, string>; readonly fs: Layer.Layer<Fs.FileSystem> }) =>
+  Effect.runSync(
+    summaryTmpDir.pipe(
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(input.fs, ConfigProvider.layer(ConfigProvider.fromEnv({ env: input.env }))))
+    )
+  )
+
+describe("summaryTmpDir", () => {
   it("is undefined without GITHUB_STEP_SUMMARY", () => {
-    delete process.env.GITHUB_STEP_SUMMARY
-    expect(Effect.runSync(_summaryTmpDir.pipe(Effect.scoped, Effect.provide(Fs.layerNoop({}))))).toBeUndefined()
+    expect(_run({ env: {}, fs: Fs.layerNoop({}) })).toBeUndefined()
   })
   it("creates a prefixed temp dir when GITHUB_STEP_SUMMARY is set", () => {
-    process.env.GITHUB_STEP_SUMMARY = "/tmp/x"
     const fs = Fs.layerNoop({ makeTempDirectoryScoped: (o) => Effect.succeed(`/tmp/${o?.prefix}1`) })
-    expect(Effect.runSync(_summaryTmpDir.pipe(Effect.scoped, Effect.provide(fs)))).toBe("/tmp/konfig-test-summaries-1")
+    expect(_run({ env: { GITHUB_STEP_SUMMARY: "/tmp/x" }, fs })).toBe("/tmp/konfig-test-summaries-1")
   })
 })

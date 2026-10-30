@@ -1,4 +1,4 @@
-import { Console, Effect, Stream } from "effect"
+import { Config, Console, Effect, Option, Stream } from "effect"
 import { Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -53,30 +53,36 @@ const _run = (input: { readonly pkg: string; readonly summaryFile: string | unde
     mapRepoError(`cannot spawn tests for ${input.pkg}`)
   )
 
+const _labelFor = (pkg: string) => pkg === _SCRIPTS_PSEUDO_PACKAGE ? pkg : `@konfig.ts/${pkg}`
+
+const _summaryEnv = Config.option(Config.String("GITHUB_STEP_SUMMARY"))
+
+const _readOrEmpty = (file: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+
+    return yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""))
+  })
+
+const _block = (r: _RunResult & { readonly summaryFile: string | undefined }) =>
+  Effect.map(
+    r.summaryFile === undefined ? Effect.succeed("") : _readOrEmpty(r.summaryFile),
+    (block) => `\n## 📦 ${_labelFor(r.pkg)}\n${block}`
+  )
+
 // Each child gets its own GITHUB_STEP_SUMMARY file; stitched under its package heading afterwards.
 const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFile: string | undefined }>) =>
   Effect.gen(function*() {
-    const summaryFile = process.env.GITHUB_STEP_SUMMARY
+    const summaryFile = yield* _summaryEnv
 
-    if (summaryFile === undefined) return
+    if (Option.isNone(summaryFile)) return
     const fs = yield* FileSystem
-    let out = ""
-
-    for (const r of results) {
-      const block = r.summaryFile === undefined
-        ? ""
-        : yield* fs.readFileString(r.summaryFile).pipe(Effect.orElseSucceed(() => ""))
-
-      out += `\n## 📦 ${r.pkg === _SCRIPTS_PSEUDO_PACKAGE ? r.pkg : `@konfig.ts/${r.pkg}`}\n${block}`
-    }
-
-    const existing = yield* fs.readFileString(summaryFile).pipe(Effect.orElseSucceed(() => ""))
+    const blocks = yield* Effect.forEach(results, _block)
+    const existing = yield* _readOrEmpty(summaryFile.value)
     yield* fs
-      .writeFileString(summaryFile, existing + out)
-      .pipe(mapRepoError(`cannot append to ${summaryFile}`))
+      .writeFileString(summaryFile.value, existing + blocks.join(""))
+      .pipe(mapRepoError(`cannot append to ${summaryFile.value}`))
   })
-
-const _labelFor = (pkg: string) => pkg === _SCRIPTS_PSEUDO_PACKAGE ? pkg : `@konfig.ts/${pkg}`
 
 const _runOne = (input: { readonly pkg: string; readonly tmpDir: string | undefined }) =>
   Effect.gen(function*() {
@@ -89,8 +95,8 @@ const _runOne = (input: { readonly pkg: string; readonly tmpDir: string | undefi
     return { ...result, summaryFile }
   })
 
-export const _summaryTmpDir = Effect.gen(function*() {
-  if (process.env.GITHUB_STEP_SUMMARY === undefined) return undefined
+export const summaryTmpDir = Effect.gen(function*() {
+  if (Option.isNone(yield* _summaryEnv)) return undefined
   const fs = yield* FileSystem
 
   return yield* fs
@@ -101,7 +107,7 @@ export const _summaryTmpDir = Effect.gen(function*() {
 const _runAll = (concurrency: number) =>
   Effect.gen(function*() {
     const packages = [...(yield* testPackageNames), _SCRIPTS_PSEUDO_PACKAGE]
-    const tmpDir = yield* _summaryTmpDir
+    const tmpDir = yield* summaryTmpDir
     const results = yield* Effect.forEach(packages, (pkg) => _runOne({ pkg, tmpDir }), { concurrency })
     yield* _stitchSummary(results)
     const failed = results.filter((r) => r.code !== 0)

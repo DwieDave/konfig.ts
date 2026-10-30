@@ -3,13 +3,14 @@ name: ci
 # Every push / PR runs the full check + test + lint matrix. This is
 # the contract the release workflow relies on — if `ci` is green on a
 # tagged commit, the release workflow's typecheck/test gate is a
-# rerun (intentional belt-and-suspenders).
+# rerun. The release workflow calls this file as its gate.
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
@@ -21,20 +22,47 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Workspace typecheck
         run: bun run check
 
-      - name: Workspace tests
-        run: bun run test
+      - name: Build
+        run: bun run build
+
+      - name: Workspace tests with coverage thresholds
+        run: bun run test:coverage
 
       - name: Lint
         run: bun run lint
 
       - name: Dead code (knip)
         run: bun run knip
+
+  peer-floor:
+    name: peer floor (effect 4.0.0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Pin the effect family to the declared peer floor
+        run: |
+          jq '.catalog.effect = "4.0.0" | .catalog["@effect/vitest"] = "4.0.0" | .catalog["@effect/platform-node"] = "~4.0.0"' package.json > package.floor.json
+          mv package.floor.json package.json
+
+      - uses: ./.github/actions/setup
+        with:
+          frozen-lockfile: "false"
+
+      - name: Assert the floor versions were installed
+        run: |
+          bun pm ls --all | grep -E ' effect@4\.0\.0$'
+          bun pm ls --all | grep -E ' @effect/platform-node@4\.0\.'
+
+      - name: Typecheck and test core and env at the floor
+        run: |
+          for pkg in core env; do
+            bun run --cwd "packages/$pkg" check
+            bun run --cwd "packages/$pkg" test
+          done

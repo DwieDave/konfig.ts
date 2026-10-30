@@ -3,15 +3,7 @@ import { Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { renderBadge } from "../lib/badge"
-import {
-  coveragePackageNames,
-  decodeField,
-  mapRepoError,
-  readJson,
-  REPO_ROOT,
-  RepoScriptError,
-  StringRecord
-} from "../lib/repo"
+import { coveragePackageNames, mapRepoError, readJson, readRootCatalogs, REPO_ROOT, RepoScriptError } from "../lib/repo"
 
 const CoverageSummary = Schema.Struct({
   total: Schema.Struct({
@@ -57,11 +49,11 @@ export const makeStats = (input: {
 export const coverageColor = (pct: number) =>
   pct >= 90 ? "#4c1" : pct >= 75 ? "#a3c51c" : pct >= 60 ? "#dfb317" : "#e05d44"
 
-const _writeBadge = (input: { readonly file: string; readonly svg: string }) =>
+const _writeBadge = (input: { readonly file: string; readonly content: string }) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     yield* fs
-      .writeFileString(input.file, input.svg)
+      .writeFileString(input.file, input.content)
       .pipe(mapRepoError(`cannot write ${input.file}`))
   })
 
@@ -78,14 +70,16 @@ const _readDecoded = <S extends Schema.Decoder<unknown>>(input: {
     )
   })
 
-const _collectTotals = Effect.gen(function*() {
-  const path = yield* Path
-  let linesTotal = 0
-  let linesCovered = 0
-  let tests = 0
+interface _Totals {
+  readonly linesTotal: number
+  readonly linesCovered: number
+  readonly tests: number
+}
 
-  for (const p of yield* coveragePackageNames) {
-    const dir = path.join(REPO_ROOT, "packages", p, "coverage")
+const _readPackageTotals = (name: string) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    const dir = path.join(REPO_ROOT, "packages", name, "coverage")
 
     const cov = yield* _readDecoded({
       schema: CoverageSummary,
@@ -99,25 +93,27 @@ const _collectTotals = Effect.gen(function*() {
       what: "test results"
     })
 
-    linesTotal += cov.total.lines.total
-    linesCovered += cov.total.lines.covered
-    tests += results.numTotalTests
-  }
-
-  return { linesTotal, linesCovered, tests }
-})
-
-const _readEffectVersion = Effect.gen(function*() {
-  const path = yield* Path
-  const rootPkg = yield* readJson(path.join(REPO_ROOT, "package.json"))
-
-  const catalog = yield* decodeField({
-    schema: Schema.UndefinedOr(StringRecord),
-    value: rootPkg.catalog,
-    what: "root catalog"
+    return {
+      linesTotal: cov.total.lines.total,
+      linesCovered: cov.total.lines.covered,
+      tests: results.numTotalTests
+    } satisfies _Totals
   })
 
-  const effectVersion = catalog?.effect
+const _sumTotals = (all: ReadonlyArray<_Totals>): _Totals => ({
+  linesTotal: all.reduce((n, t) => n + t.linesTotal, 0),
+  linesCovered: all.reduce((n, t) => n + t.linesCovered, 0),
+  tests: all.reduce((n, t) => n + t.tests, 0)
+})
+
+const _collectTotals = coveragePackageNames.pipe(
+  Effect.flatMap((names) => Effect.forEach(names, _readPackageTotals)),
+  Effect.map(_sumTotals)
+)
+
+const _readEffectVersion = Effect.gen(function*() {
+  const { catalog } = yield* readRootCatalogs
+  const effectVersion = catalog.effect
 
   if (effectVersion === undefined) {
     return yield* new RepoScriptError({ message: "no effect entry in the root catalog" })
@@ -126,7 +122,7 @@ const _readEffectVersion = Effect.gen(function*() {
   return effectVersion
 })
 
-export const _writeAllBadges = (input: {
+export const writeAllBadges = (input: {
   readonly outDir: string
   readonly pct: number
   readonly tests: number
@@ -138,7 +134,7 @@ export const _writeAllBadges = (input: {
     const out = (name: string) => path.join(input.outDir, name)
     yield* _writeBadge({
       file: out("coverage.svg"),
-      svg: renderBadge({
+      content: renderBadge({
         label: "line coverage",
         value: `${input.pct.toFixed(1)}%`,
         color: coverageColor(input.pct)
@@ -146,13 +142,13 @@ export const _writeAllBadges = (input: {
     })
     yield* _writeBadge({
       file: out("tests.svg"),
-      svg: renderBadge({ label: "tests", value: `${input.tests}`, color: "#007ec6" })
+      content: renderBadge({ label: "tests", value: `${input.tests}`, color: "#007ec6" })
     })
     yield* _writeBadge({
       file: out("effect.svg"),
-      svg: renderBadge({ label: "effect", value: input.effectVersion, color: "#312e81" })
+      content: renderBadge({ label: "effect", value: input.effectVersion, color: "#312e81" })
     })
-    yield* _writeBadge({ file: out("stats.json"), svg: `${JSON.stringify(input.stats, null, 2)}\n` })
+    yield* _writeBadge({ file: out("stats.json"), content: `${JSON.stringify(input.stats, null, 2)}\n` })
   })
 
 const _runBadges = Effect.gen(function*() {
@@ -165,7 +161,7 @@ const _runBadges = Effect.gen(function*() {
   yield* fs.makeDirectory(outDir, { recursive: true }).pipe(mapRepoError(`cannot create ${outDir}`))
   const packages = (yield* coveragePackageNames).length
   const stats = makeStats({ tests, linesCovered, linesTotal, effectVersion, packages })
-  yield* _writeAllBadges({ outDir, pct, tests, effectVersion, stats })
+  yield* writeAllBadges({ outDir, pct, tests, effectVersion, stats })
   yield* Console.log(`line coverage ${pct.toFixed(1)}% (${linesCovered}/${linesTotal})`)
   yield* Console.log(`tests ${tests}`)
   yield* Console.log(`effect ${effectVersion}`)

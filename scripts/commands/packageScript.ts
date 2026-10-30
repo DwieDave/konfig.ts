@@ -1,5 +1,6 @@
 import { Console, Effect } from "effect"
 import { Command } from "effect/cli"
+import { Path } from "effect/Path"
 import { ChildProcess } from "effect/process"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { mapRepoError, type PackageInfo, packageInfos, REPO_ROOT, RepoScriptError } from "../lib/repo"
@@ -61,6 +62,7 @@ export const coverageCommand = _makeCommand({
 
 export const packagesCommand = Command.make("packages", {}, () =>
   Effect.gen(function*() {
+    const path = yield* Path
     const pkgs = topoOrder(yield* packageInfos).filter((p) => !p.isPrivate)
-    yield* Effect.forEach(pkgs, (p) => Console.log(p.dir.split("/").pop()))
+    yield* Effect.forEach(pkgs, (p) => Console.log(path.basename(p.dir)))
   })).pipe(Command.withDescription("Print publishable package directory names in dependency order"))
