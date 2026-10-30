@@ -49,9 +49,9 @@ const bound = Secret.bind({
 | Export | Purpose |
 | --- | --- |
 | `Sops.passthrough` | `({ file })`: read and verify the file's `SopsSecret` and emit it; `requiresSource: false`. Name and namespace are restamped to the bound contract only when the file was encrypted with `mac_only_encrypted: true`; otherwise a mismatch fails the render |
-| `Sops.backend` | `({ recipients, type? })`: re-encrypt to `age` / `kms` / `gcpKms` / `azureKv` / `pgp` recipients; `requiresSource: true` |
+| `Sops.backend` | `({ recipients, type?, encryptedRegex? })`: re-encrypt to `age` / `kms` / `gcpKms` / `azureKv` / `pgp` recipients; `encryptedRegex` defaults to `^(data|stringData)$` so only secret values are encrypted; `requiresSource: true` |
 | `Sops.source` | `({ file, keys, extract? })`: a `SecretSource` that decrypts once and yields `Redacted` values; `extract(key, parsed)` defaults to a flat `{ key: value }` lookup |
-| `sopsDecrypt({ file })`, `sopsEncryptStdin({ plaintextYaml, recipients })` | Low-level CLI wrappers (`SopsDecryptInput`, `SopsEncryptStdinInput`) |
+| `sopsDecrypt({ file })`, `sopsEncryptStdin({ plaintextYaml, recipients, encryptedRegex? })` | Low-level CLI wrappers (`SopsDecryptInput`, `SopsEncryptStdinInput`) |
 | `SopsBackendOptions`, `SopsSourceInput`, `SopsRecipients`, `SopsSecret`, `SopsSecretSpec`, `SopsSecretTemplate` | Option and CR types |
 
 ## Errors

@@ -1,11 +1,12 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Yaml } from "@konfig.ts/core"
+import { runProcessString, Yaml } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
 import { SealedSecrets } from "@konfig.ts/sealed-secrets"
-import { Effect, Exit, Layer, Redacted, Schema, Sink, Stream } from "effect"
+import { Effect, Exit, Layer, Option, Redacted, Schema, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
+import { ChildProcess } from "effect/process"
 import { type Command, isStandardCommand, type StandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
@@ -148,6 +149,41 @@ describe("Sops.backend (case B: konfig source → SopsSecret CR)", () => {
       expect(call?.stdin).toContain("kind: SopsSecret")
       expect(call?.stdin).toContain("url: u")
     }).pipe(Effect.provide(NodeServices.layer)))
+
+  const _encryptArgs = (encryptedRegex?: string) =>
+    Effect.gen(function*() {
+      const sink: CallSink = { calls: [] }
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: Sops.backend({
+          recipients: { age: ["age1stub00000000000000000000000000000000000000000000000000ends"] },
+          encryptedRegex
+        }),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+      yield* bound.manifest!.render(ctx).pipe(
+        Effect.provide(_makeStubSpawner(sink, () => SOPS_ENCRYPT_OUTPUT))
+      )
+      return sink.calls[0]?.args ?? []
+    }).pipe(Effect.provide(NodeServices.layer))
+
+  it.effect("passes the default --encrypted-regex limiting encryption to secret data", () =>
+    Effect.gen(function*() {
+      const args = yield* _encryptArgs()
+      expect(args[args.indexOf("--encrypted-regex") + 1]).toBe("^(data|stringData)$")
+    }))
+
+  it.effect("ignores any ambient .sops.yaml by passing --config /dev/null", () =>
+    Effect.gen(function*() {
+      const args = yield* _encryptArgs()
+      expect(args[args.indexOf("--config") + 1]).toBe("/dev/null")
+    }))
+
+  it.effect("passes a custom encryptedRegex through", () =>
+    Effect.gen(function*() {
+      const args = yield* _encryptArgs("^stringData$")
+      expect(args[args.indexOf("--encrypted-regex") + 1]).toBe("^stringData$")
+    }))
 })
 
 describe("Sops.passthrough (case C)", () => {
@@ -555,6 +591,14 @@ sops:
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
+  it.effect("honours unencrypted_regex metadata when checking values", () =>
+    Effect.gen(function*() {
+      const exit = yield* runWith(
+        ENCRYPTED_BLOCK_PLAINTEXT_VALUES.replace("sops:\n", "sops:\n  unencrypted_regex: \"^(url|password)$\"\n")
+      )
+      expect(Exit.isSuccess(exit)).toBe(true)
+    }).pipe(Effect.provide(NodeServices.layer)))
+
   it.effect("accepts a properly-encrypted document", () =>
     Effect.gen(function*() {
       const exit = yield* runWith(SOPS_ENCRYPT_OUTPUT)
@@ -591,5 +635,30 @@ metadata:
         expect(text).toContain("BoundaryDecodeError")
         expect(text).toContain("SopsSecret")
       }
+    }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+const _run = (command: string, args: readonly string[]) =>
+  runProcessString(ChildProcess.make(command, args)).pipe(Effect.scoped, Effect.option)
+
+const _freshAgeRecipient = Effect.gen(function*() {
+  const out = yield* _run("age-keygen", [])
+  return Option.flatMap(out, (text) => Option.fromNullishOr(/public key: (age1[0-9a-z]+)/.exec(text)?.[1]))
+})
+
+describe("Sops.backend with real sops (skipped when sops/age-keygen are absent)", () => {
+  it.effect("encrypts with a fresh age key, decodes and restamps successfully", () =>
+    Effect.gen(function*() {
+      const sopsVersion = yield* _run("sops", ["--version"])
+      const recipient = yield* _freshAgeRecipient
+      if (Option.isNone(sopsVersion) || Option.isNone(recipient)) return
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: Sops.backend({ recipients: { age: [recipient.value] } }),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+      const rendered = coerce<SopsSecret>(yield* bound.manifest!.render(ctx))
+      expect(rendered.metadata.name).toBe("db-creds")
+      expect(rendered.spec.secretTemplates[0]?.stringData?.url).toContain("ENC[")
     }).pipe(Effect.provide(NodeServices.layer)))
 })

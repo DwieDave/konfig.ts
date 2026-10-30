@@ -45,7 +45,10 @@ export const SopsSecretSpecSchema = Schema.Struct({
 const SopsMetadataSchema = Schema.StructWithRest(
   Schema.Struct({
     mac_only_encrypted: Schema.optionalKey(Schema.Boolean),
-    encrypted_regex: Schema.optionalKey(Schema.String)
+    encrypted_regex: Schema.optionalKey(Schema.String),
+    unencrypted_regex: Schema.optionalKey(Schema.String),
+    encrypted_suffix: Schema.optionalKey(Schema.String),
+    unencrypted_suffix: Schema.optionalKey(Schema.String)
   }),
   [Schema.Record(Schema.String, Schema.Unknown)]
 )

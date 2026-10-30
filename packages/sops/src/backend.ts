@@ -4,7 +4,8 @@ import { Data, Effect, Redacted } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import * as YAML from "yaml"
 import type { SopsRecipients, SopsSecret } from "./crd"
-import { SopsEncryptedSecretSchema, SopsRecipientsSchema } from "./schema"
+import { compilePolicy, mustEncrypt } from "./encryption-policy"
+import { SopsEncryptedSecretSchema } from "./schema"
 import { sopsEncryptStdin } from "./sops"
 import { SopsSource } from "./source"
 
@@ -13,9 +14,8 @@ const _decodeSopsSecret = boundary({
   label: "SopsSecret"
 })
 
-// Fail-closed: every value must carry the sops ENC[ ciphertext marker, unless
-// encrypted_regex partially-encrypts (a key needs ENC[ if the regex matches
-// it or any ancestor key on its path).
+// Fail-closed: every value must carry the sops ENC[ ciphertext marker, unless the
+// recorded partial-encryption rules (see encryption-policy.ts) exempt it.
 const _ENC_MARKER = "ENC["
 
 // Post-hoc validation failure (sops exited 0 but the value isn't ciphertext) — distinct from
@@ -29,35 +29,18 @@ class SopsUnencryptedValueError extends Data.TaggedError("SopsUnencryptedValueEr
   }
 }
 
-const _encryptedRegex = (
-  secret: SopsSecret,
-  label: string
-): Effect.Effect<RegExp | undefined, RenderError> => {
-  const raw = secret.sops.encrypted_regex
-  if (raw === undefined) return Effect.undefined
-  return Effect.try({
-    try: () => new RegExp(raw),
-    catch: (cause) =>
-      new RenderError({
-        message: `${label}: sops.encrypted_regex is not a valid regex`,
-        cause
-      })
-  })
-}
-
 const _assertEncrypted = (
   secret: SopsSecret,
   label: string
 ): Effect.Effect<void, RenderError> =>
   Effect.gen(function*() {
-    const regex = yield* _encryptedRegex(secret, label)
+    const policy = yield* compilePolicy({ sops: secret.sops, label })
     for (const template of secret.spec.secretTemplates) {
       for (const [container, record] of [["stringData", template.stringData], ["data", template.data]] as const) {
         if (record === undefined) continue
         for (const [key, value] of Object.entries(record)) {
-          const mustEncrypt = regex === undefined
-            || ["spec", "secretTemplates", container, key].some((segment) => regex.test(segment))
-          if (mustEncrypt && !value.startsWith(_ENC_MARKER)) {
+          const path = ["spec", "secretTemplates", container, key]
+          if (mustEncrypt({ policy, path }) && !value.startsWith(_ENC_MARKER)) {
             const unencrypted = new SopsUnencryptedValueError({ label, key })
             return yield* new RenderError({
               message:
@@ -69,11 +52,6 @@ const _assertEncrypted = (
       }
     }
   })
-
-const _decodeRecipients = boundary({
-  schema: SopsRecipientsSchema,
-  label: "SopsRecipients"
-})
 
 // Shared fail-closed pipeline for _emit and _passthrough: parse → schema-decode → MAC/ciphertext-assert.
 const _parseVerified = (
@@ -127,6 +105,7 @@ const _restampIdentity = (
 export interface SopsBackendOptions {
   readonly recipients: SopsRecipients
   readonly type?: string
+  readonly encryptedRegex?: string
 }
 
 interface _EmitInput<N extends string, K extends string> {
@@ -177,18 +156,18 @@ const _emit = <N extends string, K extends string>(
         stringData[key] = Redacted.value(resolved[key])
       }
       const yaml = Yaml.serialize({ value: _plainCR(input, stringData) })
-      const recipients = yield* _decodeRecipients(input.opts.recipients)
       const encryptedYaml = yield* sopsEncryptStdin({
         plaintextYaml: yaml,
-        recipients
+        recipients: input.opts.recipients,
+        encryptedRegex: input.opts.encryptedRegex
       }).pipe(
-        Effect.mapError(
-          (cause) =>
+        Effect.catchTag("SopsInvocationError", (cause) =>
+          Effect.fail(
             new RenderError({
               message: `${label}: sops --encrypt failed`,
               cause
             })
-        )
+          ))
       )
       return yield* _parseVerified(encryptedYaml, label)
     })

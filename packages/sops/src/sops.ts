@@ -53,7 +53,10 @@ export const sopsDecrypt = (input: SopsDecryptInput) =>
 export interface SopsEncryptStdinInput {
   readonly plaintextYaml: string
   readonly recipients: SopsRecipients
+  readonly encryptedRegex?: string | undefined
 }
+
+const DEFAULT_ENCRYPTED_REGEX = "^(data|stringData)$"
 
 export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
   Effect.gen(function*() {
@@ -62,11 +65,15 @@ export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
     const recipients = yield* _decodeRecipients(input.recipients)
     const encoded = new TextEncoder().encode(input.plaintextYaml)
     const args = [
+      "--config",
+      "/dev/null",
       "--encrypt",
       "--input-type",
       "yaml",
       "--output-type",
       "yaml",
+      "--encrypted-regex",
+      input.encryptedRegex ?? DEFAULT_ENCRYPTED_REGEX,
       ..._recipientArgs(recipients),
       "/dev/stdin"
     ]
