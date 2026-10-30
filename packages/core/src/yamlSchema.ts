@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import { parseYaml } from "./diff"
+import { RenderError } from "./RenderError"
 
 export const stringRecordSchema = Schema.Record(Schema.String, Schema.String)
 
@@ -22,3 +23,21 @@ export const parseYamlWith = <S extends Schema.Decoder<unknown>, E>(
   Effect.try({ try: () => parseYaml(input.text), catch: input.onError }).pipe(
     Effect.flatMap((doc) => Schema.decodeEffect(input.schema)(doc).pipe(Effect.mapError(input.onError)))
   )
+
+type YamlDocument = Schema.Schema.Type<typeof Schema.Unknown>
+
+export const decodeYamlOutput = <A, E, R>(input: {
+  readonly text: string
+  readonly label: string
+  readonly what?: string
+  readonly decode: (parsed: YamlDocument) => Effect.Effect<A, E, R>
+}): Effect.Effect<A, RenderError | E, R> =>
+  parseYamlWith({
+    text: input.text,
+    schema: Schema.Unknown,
+    onError: (cause) =>
+      new RenderError({
+        message: `${input.label}: ${input.what === undefined ? "" : `${input.what} — `}output was not valid YAML`,
+        cause
+      })
+  }).pipe(Effect.flatMap(input.decode))

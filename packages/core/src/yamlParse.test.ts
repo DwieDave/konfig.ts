@@ -2,7 +2,7 @@ import { Cause, Effect, Exit } from "effect"
 import fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { diffFiles, parseYamlAll } from "./diff"
-import { parseYamlWith, stringRecordSchema } from "./yamlSchema"
+import { decodeYamlOutput, parseYamlWith, stringRecordSchema } from "./yamlSchema"
 
 const _failsWith = <A, E>(effect: Effect.Effect<A, E>): boolean => {
   const exit = Effect.runSyncExit(effect)
@@ -59,5 +59,20 @@ describe("parseYamlWith", () => {
 
     expect(calls).toHaveLength(1)
     expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual({ wrapped: calls[0] })
+  })
+})
+
+describe("decodeYamlOutput", () => {
+  it("fails with a labelled RenderError on invalid YAML", () => {
+    const run = (what?: string) => {
+      const exit = Effect.runSyncExit(
+        decodeYamlOutput({ text: "a: [", label: "L", what, decode: (doc) => Effect.succeed(doc) })
+      )
+
+      return Exit.isFailure(exit) ? String(Cause.squash(exit.cause)) : ""
+    }
+
+    expect(run()).toContain("L: output was not valid YAML")
+    expect(run("sealed")).toContain("sealed — ")
   })
 })

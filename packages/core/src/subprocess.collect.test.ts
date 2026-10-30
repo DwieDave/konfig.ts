@@ -3,10 +3,12 @@ import { Duration, Effect, Fiber, Ref } from "effect"
 import { ChildProcess } from "effect/process"
 import { TestClock } from "effect/testing"
 import { describe, expect } from "vitest"
+import { RenderError } from "./RenderError"
 import {
   ProcessError,
   ProcessInvocationError,
   ProcessTimeout,
+  runCliWithStdin,
   runProcessCollect,
   runProcessWithStdin
 } from "./subprocess"
@@ -25,14 +27,15 @@ describe("runProcessCollect", () => {
       expect(result).toEqual({ exitCode: 3, stdout: "out", stderr: "bad\n" })
     }))
 
-  it.effect("returns only the bounded stderr tail for large stderr", () =>
+  it.effect("returns the full stderr, not the bounded tail", () =>
     Effect.gen(function*() {
+      const lines = Array.from({ length: 500 }, (_, i) => `line-${i}`)
+
       const result = yield* runProcessCollect({ command: _cmd }).pipe(
-        Effect.provide(stubSpawner({ respond: () => ({ stderr: _bigStderr }) }))
+        Effect.provide(stubSpawner({ respond: () => ({ stderr: lines.join("\n") }) }))
       )
 
-      expect(result.stderr.length).toBeLessThanOrEqual(2048)
-      expect(result.stderr.trimEnd().endsWith("END")).toBe(true)
+      expect(result.stderr).toBe(`${lines.join("\n")}\n`)
     }))
 
   it.effect("closes stdin on the spawned command", () =>
@@ -129,5 +132,18 @@ describe("runProcessWithStdin", () => {
       const error = yield* Fiber.join(fiber)
 
       expect(error.cause).toBeInstanceOf(ProcessTimeout)
+    }))
+})
+
+describe("runCliWithStdin", () => {
+  it.effect("fails RenderError with label and bin, caused by ProcessInvocationError", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(runCliWithStdin({ bin: "tool", args: [], stdin: "in", label: "L" })).pipe(
+        Effect.provide(stubSpawner({ respond: () => ({ exitCode: 1 }) }))
+      )
+
+      expect(error).toBeInstanceOf(RenderError)
+      expect(error.message).toBe("L: tool failed")
+      expect(error.cause).toBeInstanceOf(ProcessInvocationError)
     }))
 })

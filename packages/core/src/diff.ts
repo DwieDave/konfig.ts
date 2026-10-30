@@ -339,6 +339,14 @@ interface DocsInput {
   readonly rDocs: KeyedDocs
 }
 
+const _absentSideDocs = (input: { readonly left: Json; readonly right: Json }): ReadonlyArray<DocDiff> | undefined => {
+  const { left, right } = input
+
+  if (left === undefined) return [DocDiff.MissingLeft({ key: ":doc:0", right })]
+
+  return right === undefined ? [DocDiff.MissingRight({ key: ":doc:0", left })] : undefined
+}
+
 const _diffSingle = (input: DocsInput): FileDiff => {
   const { file } = input
   const l = input.lDocs[0]?.[1]
@@ -346,7 +354,10 @@ const _diffSingle = (input: DocsInput): FileDiff => {
 
   if (_redactedEqual({ a: l, b: r, parentKey: null })) return FileDiff.Same({ file })
 
-  return FileDiff.Changed({ file, left: redact({ value: l }), right: redact({ value: r }) })
+  const left = redact({ value: l })
+  const right = redact({ value: r })
+
+  return FileDiff.Changed({ file, left, right, docs: _absentSideDocs({ left, right }) })
 }
 
 const _diffDoc = (

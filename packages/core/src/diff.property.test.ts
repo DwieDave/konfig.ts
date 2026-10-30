@@ -1,7 +1,16 @@
 import { Effect, Predicate } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { deepEqual, diffFiles as diffFilesEffect, hasDifferences, type Json, redact, redactedEqual } from "./diff"
+import * as YAML from "yaml"
+import {
+  deepEqual,
+  diffFiles as diffFilesEffect,
+  formatDiff,
+  hasDifferences,
+  type Json,
+  redact,
+  redactedEqual
+} from "./diff"
 
 const diffFiles = (input: Parameters<typeof diffFilesEffect>[0]) => Effect.runSync(diffFilesEffect(input))
 
@@ -147,6 +156,27 @@ describe("redact", () => {
         const out = redact({ value: { kind: "Secret", [field]: data } })
         const expected = Object.fromEntries(Object.keys(data).map((k) => [k, "<redacted>"]))
         expect(out).toEqual({ kind: "Secret", [field]: expected })
+      })
+    )
+  })
+})
+
+describe("formatDiff totality", () => {
+  const arbSide = fc.oneof(
+    fc.constant(""),
+    fc.constant("---\n"),
+    fc.constant("# c\n"),
+    fc.jsonValue().map((v) => YAML.stringify(v))
+  )
+
+  it("never throws for any format", () => {
+    fc.assert(
+      fc.property(arbSide, arbSide, (l, r) => {
+        const result = diffFiles({ left: { "a.yaml": l }, right: { "a.yaml": r } })
+
+        for (const format of ["summary", "detail", "json"] as const) {
+          expect(() => formatDiff({ result, format })).not.toThrow()
+        }
       })
     )
   })

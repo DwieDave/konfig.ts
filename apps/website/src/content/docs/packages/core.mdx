@@ -45,11 +45,11 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 | `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`) and the type-level tracking of unmet needs behind every `fromModules` (`Compose.ResidualCheck`, `Compose.NoDuplicateProvides`) |
 | `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template`; `cacheFileName`, `ensureChartTarball`, `assertMinVersion`, `timeout` for the CLI's shared cache |
 | `Yaml` | `serialize` (stable key order) and `filenameFor` |
-| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYamlAll` | Structural YAML diff |
+| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYamlAll`, `parseYamlWith`, `decodeYamlOutput` | Structural YAML diff |
 | `KonfigConfig`, `decodeKonfigConfigEffect` | Schemas and decoders for `konfig.json`; `ResolvedKonfigConfig` pairs the decoded config with its directory |
 | `ImagesConfig`, `decodeImagesSync`, `decodeImagesEffect`, `imagesFor`, `requireImage` | Schema and lookups for `images.json` |
 | `boundary`, `brand`, `unsafeCoerce` | Schema decode at boundaries; annotated escape hatches |
-| `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin` | Subprocess helpers used by Helm and the secret backends |
+| `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin`, `runCliWithStdin` | Subprocess helpers used by Helm and the secret backends |
 
 ## Errors
 
@@ -60,8 +60,16 @@ Core exports tagged error classes from `src/index.ts`. The render-time ones are 
 | `RenderError` | A render step failed; carries a message and an optional cause | yes |
 | `BoundaryDecodeError` | Data at a boundary did not match the named schema | yes |
 | `CrdExtractError` | Extracting CRDs from a chart failed | yes |
+| `EmbedYamlReadError` | Reading an embedded YAML file failed | yes |
+| `YamlParseError` | YAML text had syntax errors or duplicate keys | yes |
+| `HelmVersionTooLow` | The Helm CLI is older than the required version | yes |
+| `HelmMinVersionInvalid` | A Helm `minVersion` is not `major.minor[.patch]` | yes |
+| `HelmRenderError` | A Helm step (version-check, pull, template, parse) failed | yes |
+| `HelmDigestMismatch` | A pulled chart's digest differs from the pinned one | yes |
 | `ImagesEnvMissing` | `images.json` has no entry for the requested env | no |
 | `ImagesAppMissing` | `images.json` has no image for the requested app in that env | no |
+
+The six classes after `CrdExtractError` are not exported; match them by `_tag` with `Effect.catchTag`.
 
 <Aside type="note">
 `Manifest<A>` does not carry dependencies in its own type. Per-kind tracking lives one level up, in the Effect `Layer`s that `Module` and `Application.define` compose.

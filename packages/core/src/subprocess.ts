@@ -2,6 +2,7 @@ import { Data, Duration, Effect, Redacted, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/process"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
+import { RenderError } from "./RenderError"
 
 // -1 marks a spawn that never produced a real exit code, distinct from any OS exit code.
 const SPAWN_FAILED_EXIT = -1
@@ -9,8 +10,16 @@ const SPAWN_FAILED_EXIT = -1
 // Bounds stderr tail retained on ProcessError so a runaway log can't pin memory.
 const STDERR_TAIL_LIMIT = 2048
 
-const _tail = (text: string): string =>
-  text.length > STDERR_TAIL_LIMIT ? text.slice(text.length - STDERR_TAIL_LIMIT) : text
+export const _tail = (text: string): string => {
+  if (text.length <= STDERR_TAIL_LIMIT) return text
+  const start = text.length - STDERR_TAIL_LIMIT
+
+  if (text[start - 1] === "\n") return text.slice(start)
+  const cut = text.slice(start)
+  const newline = cut.indexOf("\n")
+
+  return newline >= 0 && newline < cut.length - 1 ? cut.slice(newline + 1) : cut
+}
 
 const _commandLabel = (command: ChildProcess.Command): string =>
   ChildProcess.isStandardCommand(command)
@@ -73,28 +82,33 @@ interface _CollectedProcess {
   readonly exitCode: number
   readonly stdout: string
   readonly stderrTail: string
+  readonly stderr: string
 }
 
 const _collect = (
   stream: Stream.Stream<Uint8Array, PlatformError>
 ): Effect.Effect<string, PlatformError> => Stream.mkString(Stream.decodeText(stream))
 
-const _appendTail = (input: { readonly tailRef: { current: string }; readonly line: string }): Effect.Effect<void> =>
+interface _StderrRefs {
+  readonly tail: { current: string }
+  readonly full: string[]
+}
+
+const _appendLine = (input: { readonly refs: _StderrRefs; readonly line: string }): Effect.Effect<void> =>
   Effect.sync(() => {
-    input.tailRef.current = _tail(`${input.tailRef.current}${input.line}\n`)
+    input.refs.tail.current = _tail(`${input.refs.tail.current}${input.line}\n`)
+    input.refs.full.push(input.line)
   })
 
 // Streams stderr line by line to the debug log as it arrives (so a slow `helm pull`
 // is visible under --log-level debug) while keeping only the bounded tail for errors.
 const _drainStderr = (input: {
   readonly stream: Stream.Stream<Uint8Array, PlatformError>
-  readonly tailRef: { current: string }
+  readonly refs: _StderrRefs
 }): Effect.Effect<void, PlatformError> =>
   Stream.decodeText(input.stream).pipe(
     Stream.splitLines,
-    Stream.runForEach((line) =>
-      Effect.logDebug(line).pipe(Effect.andThen(_appendTail({ tailRef: input.tailRef, line })))
-    )
+    Stream.runForEach((line) => Effect.logDebug(line).pipe(Effect.andThen(_appendLine({ refs: input.refs, line }))))
   )
 
 // Subprocesses never get an interactive stdin: a pipe nobody writes to (the effect
@@ -107,7 +121,7 @@ const _withClosedStdin = (command: ChildProcess.Command): ChildProcess.Command =
 
 const _spawnAndDrain = (input: {
   readonly command: ChildProcess.Command
-  readonly stderrTail: { current: string }
+  readonly refs: _StderrRefs
 }) =>
   Effect.scoped(
     Effect.gen(function*() {
@@ -118,12 +132,17 @@ const _spawnAndDrain = (input: {
         [
           handle.exitCode,
           _collect(handle.stdout),
-          _drainStderr({ stream: handle.stderr, tailRef: input.stderrTail })
+          _drainStderr({ stream: handle.stderr, refs: input.refs })
         ],
         { concurrency: "unbounded" }
       )
 
-      return { exitCode, stdout, stderrTail: input.stderrTail.current }
+      return {
+        exitCode,
+        stdout,
+        stderrTail: input.refs.tail.current,
+        stderr: input.refs.full.map((line) => `${line}\n`).join("")
+      }
     })
   )
 
@@ -163,9 +182,10 @@ const _spawnCollect = (input: {
   readonly options: ProcessOptions | undefined
 }): Effect.Effect<_CollectedProcess, ProcessFailure, ChildProcessSpawner> => {
   const label = _commandLabel(input.command)
-  const stderrTail = { current: "" }
+  const refs: _StderrRefs = { tail: { current: "" }, full: [] }
+  const stderrTail = refs.tail
 
-  const run = _spawnAndDrain({ command: input.command, stderrTail }).pipe(
+  const run = _spawnAndDrain({ command: input.command, refs }).pipe(
     Effect.mapError((cause) => _spawnFailure({ label, cause }))
   )
 
@@ -231,7 +251,7 @@ export const runProcessCollect = (input: {
   ChildProcessSpawner
 > =>
   _spawnCollect({ command: input.command, options: { timeout: input.timeout } }).pipe(
-    Effect.map(({ exitCode, stderrTail, stdout }) => ({ exitCode, stdout, stderr: stderrTail }))
+    Effect.map(({ exitCode, stderr, stdout }) => ({ exitCode, stdout, stderr }))
   )
 
 export class ProcessInvocationError extends Data.TaggedError("ProcessInvocationError")<{
@@ -267,4 +287,21 @@ export const runProcessWithStdin = (input: {
     Effect.mapError((cause) =>
       new ProcessInvocationError({ label: input.label ?? _commandLabel(input.command), cause })
     )
+  )
+
+export const runCliWithStdin = (input: {
+  readonly bin: string
+  readonly args: ReadonlyArray<string>
+  readonly stdin: string
+  readonly label: string
+  readonly timeout?: Duration.Input | undefined
+}): Effect.Effect<string, RenderError, ChildProcessSpawner> =>
+  runProcessWithStdin({
+    command: ChildProcess.make(input.bin, input.args),
+    stdin: input.stdin,
+    label: `${input.label}: ${input.bin}`,
+    timeout: input.timeout
+  }).pipe(
+    Effect.catchTag("ProcessInvocationError", (cause) =>
+      Effect.fail(new RenderError({ message: `${input.label}: ${input.bin} failed`, cause })))
   )

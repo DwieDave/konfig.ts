@@ -61,16 +61,17 @@ resolved cache directory. Outside the CLI (a bare Effect program calling
 
 ## Surface
 
-| Area        | Exports                                                                                                                                                                        |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Manifest    | `Manifest` (`.make` / `.concat` / `.embedYaml`), `renderAllYaml`, `renderAllYamlEffect`, `renderManifest`, `RenderContext`                                                     |
-| Deps        | `Dep.*` kinds + `Dep.provide*` helpers; plain branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `ServiceAccountRef` / `BuiltImageRef`                                          |
-| Modules     | `Module.fixedNs`, `Module.dynamicNs`                                                                                                                                           |
-| Helm        | `Helm.release` — chart pull + SHA-256 digest verification; `Helm.cacheFileName`, `Helm.ensureChartTarball`, the shared cache-naming/verification building blocks it's built on |
-| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYamlAll`                                                                                               |
-| Config      | `KonfigConfig`, `ImagesConfig`, and their decoders; `konfigDefaults.ts`'s `DEFAULT_*`/`KONFIG_*_ENV` constants                                                                 |
-| Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `brand` / `unsafeCoerce` escape hatches                                                                                    |
-| Errors      | the tagged union `AnyRenderError` (`RenderError`, `BoundaryDecodeError`, `CrdExtractError`)                                                                                    |
+| Area        | Exports                                                                                                                                                                                                                                                                                                  |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manifest    | `Manifest` (`.make` / `.concat` / `.embedYaml`), `renderAllYaml`, `renderAllYamlEffect`, `renderManifest`, `RenderContext`                                                                                                                                                                               |
+| Deps        | `Dep.*` kinds + `Dep.provide*` helpers; plain branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `ServiceAccountRef` / `BuiltImageRef`                                                                                                                                                                    |
+| Modules     | `Module.fixedNs`, `Module.dynamicNs`                                                                                                                                                                                                                                                                     |
+| Helm        | `Helm.release` — chart pull + SHA-256 digest verification; `Helm.cacheFileName`, `Helm.ensureChartTarball`, the shared cache-naming/verification building blocks it's built on                                                                                                                           |
+| Subprocess  | `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin`, `runCliWithStdin`                                                                                                                                                                                                      |
+| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYamlAll`, `parseYamlWith`, `decodeYamlOutput`                                                                                                                                                                                    |
+| Config      | `KonfigConfig`, `ImagesConfig`, and their decoders; `konfigDefaults.ts`'s `DEFAULT_*`/`KONFIG_*_ENV` constants                                                                                                                                                                                           |
+| Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `brand` / `unsafeCoerce` escape hatches                                                                                                                                                                                                              |
+| Errors      | the tagged union `AnyRenderError` (`RenderError`, `BoundaryDecodeError`, `CrdExtractError`, plus `EmbedYamlReadError`, `YamlParseError`, `HelmVersionTooLow`, `HelmMinVersionInvalid`, `HelmRenderError`, `HelmDigestMismatch`, which are not exported and are matched by `_tag` with `Effect.catchTag`) |
 
 ## Internals
 
