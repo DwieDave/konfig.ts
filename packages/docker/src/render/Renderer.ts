@@ -5,22 +5,27 @@ const _json = (argv: ReadonlyArray<string>): string => JSON.stringify(argv)
 
 const _renderPlatformFlag = (p: PlatformIR | undefined): string => (p ? `--platform=${p.value} ` : "")
 
-const _renderFrom = (f: From, platform: PlatformIR | undefined, name: string): string => {
-  const platformFlag = _renderPlatformFlag(platform)
-  if (f._tag === "FromImage") return `FROM ${platformFlag}${f.image}:${f.tag} AS ${name}`
-  return `FROM ${platformFlag}${f.stage} AS ${name}`
-}
+const _renderFrom = (f: From, platform: PlatformIR | undefined, name: string): string =>
+  Match.value(f).pipe(
+    Match.tag("FromImage", (i) => `FROM ${_renderPlatformFlag(platform)}${i.image}:${i.tag} AS ${name}`),
+    Match.tag("FromStage", (s) => `FROM ${_renderPlatformFlag(platform)}${s.stage} AS ${name}`),
+    Match.exhaustive
+  )
 
 const _renderCopy = (i: Extract<Instruction, { _tag: "Copy" }>): string => {
   const flags: string[] = []
+
   if (i.from) flags.push(`--from=${i.from}`)
+
   if (i.chown) flags.push(`--chown=${i.chown}`)
   const flagStr = flags.length === 0 ? "" : `${flags.join(" ")} `
+
   return `COPY ${flagStr}${i.src.join(" ")} ${i.dst}`
 }
 
 const _renderEnv = (i: Extract<Instruction, { _tag: "Env" }>): string => {
   const pairs = i.entries.map(([k, v]) => `${k}=${_quoteIfNeeded(v)}`).join(" ")
+
   return `ENV ${pairs}`
 }
 
@@ -28,11 +33,16 @@ const _quoteIfNeeded = (v: string): string => /[\s"'\\$]/.test(v) ? JSON.stringi
 
 const _renderHealthcheck = (h: HealthcheckIR): string => {
   const flags: string[] = []
+
   if (h.interval) flags.push(`--interval=${h.interval}`)
+
   if (h.timeout) flags.push(`--timeout=${h.timeout}`)
+
   if (h.retries !== undefined) flags.push(`--retries=${h.retries}`)
+
   if (h.startPeriod) flags.push(`--start-period=${h.startPeriod}`)
   const flagStr = flags.length === 0 ? "" : `${flags.join(" ")} `
+
   return `HEALTHCHECK ${flagStr}CMD ${_json(h.argv)}`
 }
 

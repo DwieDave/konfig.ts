@@ -23,10 +23,13 @@ export const emit = (
   Effect.gen(function*() {
     const bundle = yield* lower(input.spec)
     const dockerfile = renderFile({ specPath: input.specPath, body: render(bundle.prod) })
+
     if (!bundle.dev) return { dockerfile }
+
     const dockerfileDev = renderFile({
       specPath: input.specPath,
       body: render(bundle.dev)
     })
+
     return { dockerfile, dockerfileDev }
   })

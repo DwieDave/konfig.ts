@@ -1,130 +1,114 @@
+import { Effect, Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import type { Dockerfile, HealthcheckIR, Instruction, PlatformValue, Stage } from "../ir/DockerfileIR"
+import type { Dockerfile, Instruction, Stage } from "../ir/DockerfileIR"
+import { FromTag, HealthcheckTag, InstructionTag } from "./irTags"
 import { render } from "./Renderer"
 
-const splitFromLine = (line: string): { platform?: PlatformValue; rest: string } => {
-  const m = line.match(/^FROM (--platform=(\S+) )?(.+)$/)
+const decodeArgv = Schema.decodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))
+
+const parseArgv = (json: string): ReadonlyArray<string> => Effect.runSync(decodeArgv(json))
+
+const flagValue = (flags: ReadonlyArray<string>, name: string): string | undefined =>
+  flags.find((f) => f.startsWith(`--${name}=`))?.slice(name.length + 3)
+
+const parseFrom = (line: string): Stage => {
+  const m = line.match(/^FROM (\S+) AS (\S+)$/)
+
   if (!m) throw new Error(`bad FROM: ${line}`)
-  const platform = m[2] as PlatformValue | undefined
-  return { platform, rest: m[3] ?? "" }
-}
 
-const parseFrom = (
-  line: string
-): { from: Stage["from"]; platform?: Stage["platform"]; name: string } => {
-  const { platform, rest } = splitFromLine(line)
-  const m = rest.match(/^(\S+) AS (\S+)$/)
-  if (!m) throw new Error(`bad FROM payload: ${rest}`)
   const ref = m[1] ?? ""
-  const name = m[2] ?? ""
-  const platformIR = platform ? ({ _tag: "Single", value: platform } as const) : undefined
-  if (ref.includes(":")) {
-    const colonIdx = ref.indexOf(":")
-    return {
-      from: { _tag: "FromImage", image: ref.slice(0, colonIdx), tag: ref.slice(colonIdx + 1) },
-      platform: platformIR,
-      name
-    }
-  }
-  return { from: { _tag: "FromStage", stage: ref }, platform: platformIR, name }
+  const colonIdx = ref.indexOf(":")
+
+  const from = colonIdx < 0
+    ? FromTag.FromStage({ stage: ref })
+    : FromTag.FromImage({ image: ref.slice(0, colonIdx), tag: ref.slice(colonIdx + 1) })
+
+  return { name: m[2] ?? "", from, instructions: [] }
 }
 
-const parseCopy = (line: string): Instruction => {
-  const tokens = line.slice("COPY ".length).split(" ")
-  let from: string | undefined
-  let chown: string | undefined
-  let i = 0
-  while (i < tokens.length && tokens[i]?.startsWith("--")) {
-    const t = tokens[i] ?? ""
-    if (t.startsWith("--from=")) from = t.slice("--from=".length)
-    else if (t.startsWith("--chown=")) chown = t.slice("--chown=".length)
-    i++
-  }
-  const rest = tokens.slice(i)
-  if (rest.length < 2) throw new Error(`bad COPY: ${line}`)
-  const dst = rest[rest.length - 1] ?? ""
-  const src = rest.slice(0, -1)
-  return { _tag: "Copy", src, dst, ...(from ? { from } : {}), ...(chown ? { chown } : {}) }
+const parseCopy = (body: string): Instruction => {
+  const tokens = body.split(" ")
+  const flags = tokens.filter((t) => t.startsWith("--"))
+  const rest = tokens.filter((t) => !t.startsWith("--"))
+
+  if (rest.length < 2) throw new Error(`bad COPY: ${body}`)
+
+  return InstructionTag.Copy({
+    src: rest.slice(0, -1),
+    dst: rest[rest.length - 1] ?? "",
+    from: flagValue(flags, "from"),
+    chown: flagValue(flags, "chown")
+  })
 }
 
-const parseEnv = (line: string): Instruction => {
-  const body = line.slice("ENV ".length)
-  const entries: Array<[string, string]> = []
-  for (const pair of body.split(" ")) {
-    const eq = pair.indexOf("=")
-    if (eq < 0) continue
-    entries.push([pair.slice(0, eq), pair.slice(eq + 1)])
-  }
-  return { _tag: "Env", entries }
+const parseEnvPair = (pair: string): ReadonlyArray<readonly [string, string]> => {
+  const m = pair.match(/^([^=]*)=(.*)$/)
+
+  return m ? [[m[1] ?? "", m[2] ?? ""]] : []
 }
 
-const parseHealthcheck = (line: string): Instruction => {
-  const body = line.slice("HEALTHCHECK ".length)
-  const cmdIdx = body.indexOf(" CMD ")
-  const flagsPart = cmdIdx < 0 ? "" : body.slice(0, cmdIdx)
-  const cmdPart = cmdIdx < 0 ? body.slice("CMD ".length) : body.slice(cmdIdx + " CMD ".length)
-  const argv = JSON.parse(cmdPart) as ReadonlyArray<string>
-  const partial: {
-    -readonly [K in keyof Extract<HealthcheckIR, { _tag: "Cmd" }>]?: Extract<HealthcheckIR, { _tag: "Cmd" }>[K]
-  } = { _tag: "Cmd", argv }
-  for (const flag of flagsPart ? flagsPart.split(" ") : []) {
-    if (flag.startsWith("--interval=")) partial.interval = flag.slice("--interval=".length)
-    else if (flag.startsWith("--timeout=")) partial.timeout = flag.slice("--timeout=".length)
-    else if (flag.startsWith("--retries=")) partial.retries = Number(flag.slice("--retries=".length))
-    else if (flag.startsWith("--start-period=")) partial.startPeriod = flag.slice("--start-period=".length)
-  }
-  return { _tag: "Healthcheck", check: partial as Extract<HealthcheckIR, { _tag: "Cmd" }> }
+const parseEnv = (body: string): Instruction => InstructionTag.Env({ entries: body.split(" ").flatMap(parseEnvPair) })
+
+const parseHealthcheck = (body: string): Instruction => {
+  const m = body.match(/^(?:(.*?) )?CMD (.*)$/)
+
+  if (!m) throw new Error(`bad HEALTHCHECK: ${body}`)
+  const flags = (m[1] ?? "").split(" ")
+  const retries = flagValue(flags, "retries")
+
+  return InstructionTag.Healthcheck({
+    check: HealthcheckTag.Cmd({
+      argv: parseArgv(m[2] ?? ""),
+      interval: flagValue(flags, "interval"),
+      timeout: flagValue(flags, "timeout"),
+      retries: retries === undefined ? undefined : Number(retries),
+      startPeriod: flagValue(flags, "start-period")
+    })
+  })
 }
+
+const instructionParsers: ReadonlyArray<readonly [string, (body: string) => Instruction]> = [
+  ["COPY ", parseCopy],
+  ["RUN ", (cmd) => InstructionTag.Run({ cmd })],
+  ["ENV ", parseEnv],
+  ["EXPOSE ", (body) => InstructionTag.Expose({ port: Number(body) })],
+  ["USER ", (user) => InstructionTag.User({ user })],
+  ["WORKDIR ", (path) => InstructionTag.Workdir({ path })],
+  ["CMD ", (body) => InstructionTag.Cmd({ argv: parseArgv(body) })],
+  ["ENTRYPOINT ", (body) => InstructionTag.Entrypoint({ argv: parseArgv(body) })],
+  ["HEALTHCHECK ", parseHealthcheck]
+]
 
 const parseInstruction = (line: string): Instruction => {
-  if (line.startsWith("COPY ")) return parseCopy(line)
-  if (line.startsWith("RUN ")) return { _tag: "Run", cmd: line.slice("RUN ".length) }
-  if (line.startsWith("ENV ")) return parseEnv(line)
-  if (line.startsWith("EXPOSE ")) {
-    const body = line.slice("EXPOSE ".length)
-    return { _tag: "Expose", port: Number(body) }
-  }
-  if (line.startsWith("USER ")) return { _tag: "User", user: line.slice("USER ".length) }
-  if (line.startsWith("WORKDIR ")) return { _tag: "Workdir", path: line.slice("WORKDIR ".length) }
-  if (line.startsWith("CMD ")) return { _tag: "Cmd", argv: JSON.parse(line.slice("CMD ".length)) }
-  if (line.startsWith("ENTRYPOINT ")) {
-    return { _tag: "Entrypoint", argv: JSON.parse(line.slice("ENTRYPOINT ".length)) }
-  }
-  if (line.startsWith("HEALTHCHECK ")) return parseHealthcheck(line)
-  throw new Error(`unknown instruction: ${line}`)
+  const hit = instructionParsers.find(([prefix]) => line.startsWith(prefix))
+
+  if (!hit) throw new Error(`unknown instruction: ${line}`)
+
+  return hit[1](line.slice(hit[0].length))
 }
 
-const parseDockerfile = (text: string): Dockerfile => {
-  const lines = text.split("\n").filter((l) => l.length > 0 && !l.startsWith("#"))
-  const stages: Stage[] = []
-  let current: Stage | undefined
-  let stageWorkdirSet = false
-  for (const line of lines) {
-    if (line.startsWith("FROM ")) {
-      const parsed = parseFrom(line)
-      current = {
-        name: parsed.name,
-        from: parsed.from,
-        ...(parsed.platform ? { platform: parsed.platform } : {}),
-        instructions: []
-      }
-      stages.push(current)
-      stageWorkdirSet = false
-      continue
-    }
-    if (!current) throw new Error("instruction before any FROM")
-    if (line.startsWith("WORKDIR ") && !stageWorkdirSet && current.instructions.length === 0) {
-      current = { ...current, workdir: line.slice("WORKDIR ".length) }
-      stages[stages.length - 1] = current
-      stageWorkdirSet = true
-      continue
-    }
-    current = { ...current, instructions: [...current.instructions, parseInstruction(line)] }
-    stages[stages.length - 1] = current
-  }
-  return { stages }
+const appendLine = (stages: ReadonlyArray<Stage>, line: string): ReadonlyArray<Stage> => {
+  if (line.startsWith("FROM ")) return [...stages, parseFrom(line)]
+  const last = stages.at(-1)
+
+  if (!last) throw new Error("instruction before any FROM")
+
+  const isStageWorkdir = line.startsWith("WORKDIR ") && last.workdir === undefined && last.instructions.length === 0
+
+  const updated: Stage = isStageWorkdir
+    ? { ...last, workdir: line.slice("WORKDIR ".length) }
+    : { ...last, instructions: [...last.instructions, parseInstruction(line)] }
+
+  return [...stages.slice(0, -1), updated]
 }
+
+const parseDockerfile = (text: string): Dockerfile => ({
+  stages: text
+    .split("\n")
+    .filter((l) => l.length > 0 && !l.startsWith("#"))
+    .reduce<ReadonlyArray<Stage>>(appendLine, [])
+})
 
 const idChar = fc.constantFrom(
   "a",
@@ -142,10 +126,12 @@ const idChar = fc.constantFrom(
   "2",
   "3"
 )
+
 const safeStr = fc.array(idChar, { minLength: 3, maxLength: 6 }).map((cs) => cs.join(""))
 
 const upperChar = fc.constantFrom("A", "B", "C", "D", "E")
 const envChar = fc.constantFrom("A", "B", "0", "1", "_")
+
 const safeEnvKey = fc
   .tuple(upperChar, fc.array(envChar, { minLength: 0, maxLength: 4 }))
   .map(([h, t]) => `${h}${t.join("")}`)
@@ -156,9 +142,7 @@ const safeEnvVal = fc.array(envValChar, { minLength: 1, maxLength: 6 }).map((cs)
 const port = fc.integer({ min: 1, max: 65535 })
 const duration = fc.constantFrom("5s", "10s", "30s")
 
-const fromImage = fc
-  .record({ image: safeStr, tag: safeStr })
-  .map((r) => ({ _tag: "FromImage" as const, image: r.image, tag: r.tag }))
+const fromImage = fc.record({ image: safeStr, tag: safeStr }).map(FromTag.FromImage)
 
 const copyArb: fc.Arbitrary<Instruction> = fc
   .tuple(
@@ -166,18 +150,13 @@ const copyArb: fc.Arbitrary<Instruction> = fc
     fc.array(safeStr, { minLength: 1, maxLength: 3 }),
     safeStr
   )
-  .map(([from, src, dst]) => ({
-    _tag: "Copy",
-    src,
-    dst,
-    ...(from ? { from } : {})
-  }))
+  .map(([from, src, dst]) => InstructionTag.Copy({ src, dst, from }))
 
 const envArb: fc.Arbitrary<Instruction> = fc
   .array(fc.tuple(safeEnvKey, safeEnvVal), { minLength: 1, maxLength: 3 })
-  .map((entries) => ({ _tag: "Env", entries }))
+  .map((entries) => InstructionTag.Env({ entries }))
 
-const exposeArb: fc.Arbitrary<Instruction> = port.map((p) => ({ _tag: "Expose", port: p }))
+const exposeArb: fc.Arbitrary<Instruction> = port.map((p) => InstructionTag.Expose({ port: p }))
 
 const argvArb = fc.array(safeStr, { minLength: 1, maxLength: 3 })
 
@@ -187,25 +166,19 @@ const healthArb: fc.Arbitrary<Instruction> = fc
     fc.option(duration, { nil: undefined }),
     fc.option(fc.integer({ min: 1, max: 5 }), { nil: undefined })
   )
-  .map(([argv, interval, retries]) => ({
-    _tag: "Healthcheck",
-    check: {
-      _tag: "Cmd",
-      argv,
-      ...(interval ? { interval } : {}),
-      ...(retries !== undefined ? { retries } : {})
-    }
-  }))
+  .map(([argv, interval, retries]) =>
+    InstructionTag.Healthcheck({ check: HealthcheckTag.Cmd({ argv, interval, retries }) })
+  )
 
 const instructionArb: fc.Arbitrary<Instruction> = fc.oneof(
   copyArb,
-  safeStr.map((s) => ({ _tag: "Run", cmd: `cmd-${s}` }) satisfies Instruction),
+  safeStr.map((s) => InstructionTag.Run({ cmd: `cmd-${s}` })),
   envArb,
   exposeArb,
-  safeStr.map((u) => ({ _tag: "User", user: u }) satisfies Instruction),
-  safeStr.map((p) => ({ _tag: "Workdir", path: `/${p}` }) satisfies Instruction),
-  argvArb.map((argv) => ({ _tag: "Cmd", argv }) satisfies Instruction),
-  argvArb.map((argv) => ({ _tag: "Entrypoint", argv }) satisfies Instruction),
+  safeStr.map((user) => InstructionTag.User({ user })),
+  safeStr.map((p) => InstructionTag.Workdir({ path: `/${p}` })),
+  argvArb.map((argv) => InstructionTag.Cmd({ argv })),
+  argvArb.map((argv) => InstructionTag.Entrypoint({ argv })),
   healthArb
 )
 
@@ -216,30 +189,11 @@ const stageArb: fc.Arbitrary<Stage> = fc
     workdir: fc.option(safeStr.map((p) => `/${p}`), { nil: undefined }),
     instructions: fc.array(instructionArb, { minLength: 0, maxLength: 4 })
   })
-  .map((s) => ({
-    name: s.name,
-    from: s.from,
-    ...(s.workdir ? { workdir: s.workdir } : {}),
-    instructions: s.instructions
-  }))
+  .map((s): Stage => ({ name: s.name, from: s.from, workdir: s.workdir, instructions: s.instructions }))
 
 const dockerfileArb: fc.Arbitrary<Dockerfile> = fc
   .array(stageArb, { minLength: 1, maxLength: 3 })
-  .map((stages): Dockerfile => {
-    const unique: Stage[] = []
-    const seen = new Set<string>()
-    for (const s of stages) {
-      let name = s.name
-      let i = 0
-      while (seen.has(name)) {
-        i++
-        name = `${s.name}${i}`
-      }
-      seen.add(name)
-      unique.push({ ...s, name })
-    }
-    return { stages: unique }
-  })
+  .map((stages): Dockerfile => ({ stages: stages.map((s, i) => ({ ...s, name: `${s.name}-${i}` })) }))
 
 describe("Renderer round-trip", () => {
   it("render→parse→render is fixed-point", () => {
