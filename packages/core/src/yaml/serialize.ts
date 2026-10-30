@@ -83,8 +83,18 @@ const _normalize = (input: _NormalizeInput): _Out => {
 
   if (_isLeaf(value)) return value
 
-  return isRecord(value) ? _reorderObject({ obj: value, depth, parentKey }) : undefined
+  if (value instanceof Map) return _normalize({ value: _mapToRecord(value), depth, parentKey })
+
+  if (value instanceof Set) return _normalize({ value: [...value], depth, parentKey })
+
+  return isRecord(value) && _hasPlainPrototype(value) ? _reorderObject({ obj: value, depth, parentKey }) : undefined
 }
+
+const _hasPlainPrototype = (value: YamlRecord): boolean =>
+  [Object.prototype, null].includes(Object.getPrototypeOf(value))
+
+const _mapToRecord = (map: ReadonlyMap<string, _Out>): YamlRecord =>
+  Object.fromEntries([...map].filter(([k]) => _isString(k)))
 
 // The yaml block-scalar writer drops a whitespace-only line, so such strings
 // are emitted double-quoted where every character survives.

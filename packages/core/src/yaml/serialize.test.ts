@@ -355,3 +355,39 @@ describe("serialize — non-plain leaves", () => {
     fc.assert(fc.property(fc.oneof(fc.boolean(), fc.string()), (v) => _roundTrip(v) === v))
   })
 })
+
+describe("serialize — Map, Set and class instances", () => {
+  type Leaf = number | boolean | string
+
+  const _leaf = fc.oneof(fc.integer(), fc.boolean(), fc.string())
+
+  const _spec = (
+    v: Leaf | ReadonlyArray<Leaf> | ReadonlySet<Leaf> | ReadonlyMap<string, Leaf> | Record<string, Leaf>
+  ) => _parse<{ spec: { v: unknown } }>(serialize({ value: { spec: { v } } })).spec.v
+
+  it("serializes a string-keyed Map as a mapping", () => {
+    fc.assert(
+      fc.property(fc.dictionary(fc.string(), _leaf), (d) => {
+        expect(_spec(new Map(Object.entries(d)))).toStrictEqual(_spec(d))
+      })
+    )
+  })
+
+  it("serializes a Set as a sequence", () => {
+    fc.assert(
+      fc.property(fc.array(_leaf), (a) => {
+        expect(_spec(new Set(a))).toStrictEqual(a.filter((x, i) => a.indexOf(x) === i))
+      })
+    )
+  })
+
+  it("drops other class instances", () => {
+    class Point {
+      readonly x = 1
+    }
+
+    const out = serialize({ value: { kind: "X", metadata: { name: "a" }, spec: { p: new Point() } } })
+
+    expect(_parse<{ spec: object }>(out).spec).not.toHaveProperty("p")
+  })
+})
