@@ -7,7 +7,7 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
-import { runValidate, StructuralValidationFailed } from "./validate"
+import { _kubeconformArgs, runValidate, StructuralValidationFailed } from "./validate"
 
 interface _CapturedKubeconform {
   args: ReadonlyArray<string> | undefined
@@ -181,4 +181,11 @@ describe("runValidate", () => {
         expect(yield* fs.exists(path.join(root, "infra", "rendered"))).toBe(false)
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
+})
+
+describe("_kubeconformArgs", () => {
+  it("normalizes the k8s version to major.minor.patch", () => {
+    const ctx = RenderContext.makeFull({ env: "prod", k8sVersion: "1.31" })
+    expect(_kubeconformArgs({ ctx, ignoreMissingSchemas: false })).toEqual(["-kubernetes-version", "1.31.0"])
+  })
 })

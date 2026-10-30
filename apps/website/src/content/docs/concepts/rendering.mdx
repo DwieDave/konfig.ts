@@ -66,7 +66,7 @@ The cache entry lives at `<configDir>/.konfig/cache/<env>-<ctx digest>.json` and
 
 Any issue fails with `StructuralValidationFailed { env, issueCount }`.
 
-Deeper, schema-level validation is left to `--strict`. It stages the same in-memory render into a scratch directory, runs `kubeconform -summary -strict` over it, and decides pass or fail from the exit code (`KubeconformReportError` on non-zero); it no longer depends on a prior `konfig build`. `kubeconform` must be on `PATH` (`KubeconformNotFound` otherwise). `--ignore-missing-schemas` is forwarded as `-ignore-missing-schemas` for CRDs without published schemas, and `--k8s-version` is forwarded as `-kubernetes-version <ver>`.
+Deeper, schema-level validation is left to `--strict`. It stages the same in-memory render into a scratch directory, runs `kubeconform -summary -strict` over it, and decides pass or fail from the exit code (`KubeconformReportError` on non-zero); it no longer depends on a prior `konfig build`. `kubeconform` must be on `PATH` (`KubeconformNotFound` otherwise). `--ignore-missing-schemas` is forwarded as `-ignore-missing-schemas` for CRDs without published schemas, and `--k8s-version` is forwarded as `-kubernetes-version <major.minor.patch>` (`1.31` becomes `1.31.0`); values that are not `major.minor[.patch]` fail with `InvalidK8sVersion`.
 
 ## Errors
 

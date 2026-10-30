@@ -6,6 +6,7 @@ import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
 import {
+  _checkNames,
   checkDnsName,
   KubeconformNotFound,
   KubeconformReportError,
@@ -192,7 +193,7 @@ metadata:
       const issues = yield* validateManifestFile({ file: "svc.yaml", content })
       expect(issues).toHaveLength(1)
       expect(issues[0]?.message).toContain("metadata.name")
-      expect(issues[0]?.message).toContain("RFC 1123 label")
+      expect(issues[0]?.message).toContain("DNS-1035 label")
     }))
 
   it.effect("rejects a dotted metadata.namespace — namespaces always use the RFC 1123 label rule", () =>
@@ -340,5 +341,86 @@ describe("checkDnsName properties", () => {
   it("the empty string is always invalid", () => {
     expect(checkDnsName({ value: "", rule: "label" })).toBeDefined()
     expect(checkDnsName({ value: "", rule: "subdomain" })).toBeDefined()
+  })
+})
+
+const _nameIssues = (kind: string, name: string) => _checkNames({ kind, name, namespace: undefined })
+
+describe("_checkNames per-kind rules", () => {
+  it("accepts ClusterRole names with colons", () => {
+    expect(_nameIssues("ClusterRole", "system:metrics-server")).toEqual([])
+  })
+
+  it("rejects Service names starting with a digit", () => {
+    expect(_nameIssues("Service", "1api")).toHaveLength(1)
+  })
+
+  it("property: path-segment kinds accept names without '/', '%' and dot-only", () => {
+    const kinds = fc.constantFrom("Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding")
+    const valid = fc.string({ minLength: 1 }).filter((v) => !/[/%]/.test(v) && v !== "." && v !== "..")
+
+    fc.assert(fc.property(kinds, valid, (kind, name) => {
+      expect(_nameIssues(kind, name)).toEqual([])
+    }))
+  })
+
+  it("property: path-segment kinds reject '/', '%', '.', '..' and empty", () => {
+    const kinds = fc.constantFrom("Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding")
+
+    const invalid = fc.oneof(
+      fc.tuple(fc.string(), fc.constantFrom("/", "%"), fc.string()).map(([a, c, b]) => `${a}${c}${b}`),
+      fc.constantFrom("", ".", "..")
+    )
+
+    fc.assert(fc.property(kinds, invalid, (kind, name) => {
+      expect(_nameIssues(kind, name)).toHaveLength(1)
+    }))
+  })
+
+  it("property: Service accepts DNS-1035 labels", () => {
+    const valid = fc.tuple(
+      fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz".split("")),
+      _labelOf(40)
+    ).map(([head, rest]) => `${head}${rest}`)
+
+    fc.assert(fc.property(valid, (name) => {
+      expect(_nameIssues("Service", name)).toEqual([])
+    }))
+  })
+
+  it("property: Service rejects digit-leading, dotted, and over-long names", () => {
+    const invalid = fc.oneof(
+      fc.tuple(fc.constantFrom(..."0123456789".split("")), _labelOf(10)).map(([d, r]) => `${d}${r}`),
+      fc.tuple(_labelOf(10), _labelOf(10)).map(([a, b]) => `${a}.${b}`),
+      fc.constant("a".repeat(64))
+    )
+
+    fc.assert(fc.property(invalid, (name) => {
+      expect(_nameIssues("Service", name)).toHaveLength(1)
+    }))
+  })
+
+  it("property: Namespace accepts labels and rejects dotted names", () => {
+    fc.assert(fc.property(_labelOf(63), (name) => {
+      expect(_nameIssues("Namespace", name)).toEqual([])
+    }))
+
+    fc.assert(
+      fc.property(_labelOf(10), _labelOf(10), (a, b) => {
+        expect(_nameIssues("Namespace", `${a}.${b}`)).toHaveLength(1)
+      })
+    )
+  })
+
+  it("property: other kinds use DNS-1123 subdomain rules", () => {
+    fc.assert(
+      fc.property(
+        fc.array(_labelOf(10), { minLength: 1, maxLength: 4 }),
+        (labels) => {
+          expect(_nameIssues("Deployment", labels.join("."))).toEqual([])
+        }
+      )
+    )
+    expect(_nameIssues("Deployment", "Bad_Name")).toHaveLength(1)
   })
 })

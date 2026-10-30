@@ -3,7 +3,7 @@ import { Console, Data, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { type RenderedEnv, renderEnv, writeFilesToDir } from "../buildEnv"
-import { renderContextFlags, withRenderContext } from "../renderContextFlags"
+import { _toKubeconformVersion, renderContextFlags, withRenderContext } from "../renderContextFlags"
 import { runKubeconform, validateManifestFile, type ValidationIssue } from "../validator"
 
 const _issueLine = (issue: ValidationIssue): string =>
@@ -37,9 +37,9 @@ const _structuralIssues = (rendered: RenderedEnv) =>
     { concurrency: "unbounded" }
   ).pipe(Effect.map((all) => all.flat()))
 
-const _kubeconformArgs = (input: Pick<RunValidateInput, "ctx" | "ignoreMissingSchemas">): string[] => [
+export const _kubeconformArgs = (input: Pick<RunValidateInput, "ctx" | "ignoreMissingSchemas">): string[] => [
   ...(input.ignoreMissingSchemas ? ["-ignore-missing-schemas"] : []),
-  ...(input.ctx.k8sVersion !== undefined ? ["-kubernetes-version", input.ctx.k8sVersion] : [])
+  ...(input.ctx.k8sVersion !== undefined ? ["-kubernetes-version", _toKubeconformVersion(input.ctx.k8sVersion)] : [])
 ]
 
 const _runStrict = (input: RunValidateInput & { readonly rendered: RenderedEnv }) =>

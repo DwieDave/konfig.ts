@@ -20,7 +20,24 @@ const _DNS_SUBDOMAIN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z
 const _MAX_LABEL_LENGTH = 63
 const _MAX_SUBDOMAIN_LENGTH = 253
 
-const _LABEL_NAME_KINDS: ReadonlySet<string> = new Set(["Namespace", "Service"])
+const _DNS_1035_LABEL = /^[a-z]([-a-z0-9]*[a-z0-9])?$/
+
+type _NameRule = "label" | "label1035" | "subdomain" | "pathSegment"
+
+const _NAME_RULES: ReadonlyMap<string, _NameRule> = new Map<string, _NameRule>([
+  ["Namespace", "label"],
+  ["Service", "label1035"],
+  ["Role", "pathSegment"],
+  ["ClusterRole", "pathSegment"],
+  ["RoleBinding", "pathSegment"],
+  ["ClusterRoleBinding", "pathSegment"]
+])
+
+const _isPathSegment = (value: string): boolean =>
+  value.length > 0 && !/[/%]/.test(value) && value !== "." && value !== ".."
+
+const _isDns1035Label = (value: string): boolean =>
+  value.length > 0 && value.length <= _MAX_LABEL_LENGTH && _DNS_1035_LABEL.test(value)
 
 type _DnsRule = "label" | "subdomain"
 
@@ -28,6 +45,26 @@ const _dnsRuleDescription = (rule: _DnsRule): string =>
   rule === "label"
     ? "RFC 1123 label — lowercase alphanumeric characters or '-', must start and end with an alphanumeric character, max 63 chars"
     : "RFC 1123 subdomain — lowercase alphanumeric characters, '-', or '.', must start and end with an alphanumeric character, max 253 chars"
+
+const _NAME_RULE_DESCRIPTIONS: Readonly<Record<_NameRule, string>> = {
+  pathSegment: "path segment name — non-empty, must not contain '/' or '%', must not be '.' or '..'",
+  label1035:
+    "DNS-1035 label — lowercase alphanumeric characters or '-', must start with a letter and end with an alphanumeric character, max 63 chars",
+  label: _dnsRuleDescription("label"),
+  subdomain: _dnsRuleDescription("subdomain")
+}
+
+const _NAME_PREDICATES: Readonly<Record<_NameRule, (value: string) => boolean>> = {
+  pathSegment: _isPathSegment,
+  label1035: _isDns1035Label,
+  label: (value) => checkDnsName({ value, rule: "label" }) === undefined,
+  subdomain: (value) => checkDnsName({ value, rule: "subdomain" }) === undefined
+}
+
+const _nameViolation = (input: { readonly value: string; readonly rule: _NameRule }): string | undefined =>
+  _NAME_PREDICATES[input.rule](input.value)
+    ? undefined
+    : `'${input.value}' is not a valid ${_NAME_RULE_DESCRIPTIONS[input.rule]}`
 
 interface _CheckDnsNameInput {
   readonly value: string
@@ -75,12 +112,14 @@ const _issueFor = (input: { readonly field: "name" | "namespace"; readonly error
     ? []
     : [{ path: ["metadata", input.field], message: `metadata.${input.field} ${input.error}` }]
 
-const _checkNames = (input: _CheckNamesInput): ReadonlyArray<{ path: ReadonlyArray<string>; message: string }> => {
+export const _checkNames = (
+  input: _CheckNamesInput
+): ReadonlyArray<{ path: ReadonlyArray<string>; message: string }> => {
   const { kind, name, namespace } = input
-  const nameRule: _DnsRule = _LABEL_NAME_KINDS.has(kind) ? "label" : "subdomain"
+  const nameRule: _NameRule = _NAME_RULES.get(kind) ?? "subdomain"
 
   return [
-    ..._issueFor({ field: "name", error: checkDnsName({ value: name, rule: nameRule }) }),
+    ..._issueFor({ field: "name", error: _nameViolation({ value: name, rule: nameRule }) }),
     ...(namespace === undefined
       ? []
       : _issueFor({ field: "namespace", error: checkDnsName({ value: namespace, rule: "label" }) }))
