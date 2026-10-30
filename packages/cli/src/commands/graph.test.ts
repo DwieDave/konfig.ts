@@ -80,6 +80,20 @@ describe("runGraph", () => {
       expect(out).not.toContain("dev edge")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
+  it.effect("draws edges for semver-range workspace deps (npm/yarn classic)", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-graph-" })
+      yield* _write(root, "package.json", { name: "r", workspaces: ["packages/*"] })
+      yield* _write(root, "packages/a/package.json", { name: "@s/a", dependencies: { "@s/b": "^1.0.0" } })
+      yield* _write(root, "packages/b/package.json", { name: "@s/b", version: "1.0.0" })
+      const { messages, testConsole } = _captured()
+      yield* runGraph({ cwd: root, target: Option.none(), withDev: false, full: false, width: Option.none() }).pipe(
+        Effect.provideService(Console.Console, testConsole)
+      )
+      expect(messages[0] ?? "").toContain("1 runtime edge")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
   it.effect("--with-dev includes the dev edge and dev-only workspace in the render", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem

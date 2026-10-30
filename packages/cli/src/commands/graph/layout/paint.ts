@@ -10,7 +10,7 @@ const _crossings: ReadonlySet<string> = new Set(["│─", "─│", "╎─", "
 const _verticals: ReadonlySet<string> = new Set(["│╎", "╎│"])
 const _precedence = ["▼", "▽", "┬", "┴"] as const
 
-const mergeChars = (input: { readonly existing: string; readonly incoming: string }): string => {
+const _mergeChars = (input: { readonly existing: string; readonly incoming: string }): string => {
   const { existing: a, incoming: b } = input
   if (a === " ") return b
   if (b === " " || a === b) return a
@@ -34,7 +34,7 @@ export class CharGrid {
   put(cell: Cell): void {
     const row = this.rows[cell.y]
     if (!row || cell.x < 0 || cell.x >= this.width) return
-    row[cell.x] = mergeChars({ existing: row[cell.x] ?? " ", incoming: cell.ch })
+    row[cell.x] = _mergeChars({ existing: row[cell.x] ?? " ", incoming: cell.ch })
   }
 
   putAll(cells: ReadonlyArray<Cell>): void {

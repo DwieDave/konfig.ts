@@ -22,7 +22,7 @@ export const activeEdges = (input: {
   readonly withDev: boolean
 }): GraphEdge[] => (input.withDev ? input.edges.slice() : input.edges.filter((e) => e.kind === "runtime"))
 
-const bfsReach = (input: {
+const _bfsReach = (input: {
   readonly adj: ReadonlyMap<string, ReadonlyArray<string>>
   readonly seeds: ReadonlyArray<string>
 }): Set<string> => {
@@ -44,7 +44,7 @@ export const reachableFromTarget = (input: {
   readonly edges: ReadonlyArray<GraphEdge>
   readonly target: string
 }): { nodes: GraphNode[]; edges: GraphEdge[] } => {
-  const reach = bfsReach({ adj: adjacency(input.edges), seeds: [input.target] })
+  const reach = _bfsReach({ adj: adjacency(input.edges), seeds: [input.target] })
   return {
     nodes: input.nodes.filter((n) => reach.has(n.name)),
     edges: input.edges.filter((e) => reach.has(e.from) && reach.has(e.to))
@@ -55,6 +55,6 @@ export const transitiveReduce = (edges: ReadonlyArray<GraphEdge>): GraphEdge[] =
   const adj = adjacency(edges)
   return edges.filter((e) => {
     const seeds = (adj.get(e.from) ?? []).filter((k) => k !== e.to)
-    return !bfsReach({ adj, seeds }).has(e.to)
+    return !_bfsReach({ adj, seeds }).has(e.to)
   })
 }

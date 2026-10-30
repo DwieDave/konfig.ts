@@ -9,18 +9,14 @@ class GraphTargetNotFound extends Data.TaggedError("GraphTargetNotFound")<{
   readonly candidates: ReadonlyArray<string>
 }> {}
 
-const WORKSPACE_PROTOCOLS = ["workspace:", "link:"] as const
-
-const _hasWorkspaceProtocol = (spec: string): boolean => WORKSPACE_PROTOCOLS.some((p) => spec.startsWith(p))
-
 const _depEdges = (input: {
   readonly workspace: Workspace
   readonly names: ReadonlySet<string>
   readonly record: Readonly<Record<string, string>> | undefined
   readonly kind: EdgeKind
 }): GraphEdge[] =>
-  Object.entries(input.record ?? {}).flatMap(([to, spec]): GraphEdge[] =>
-    input.names.has(to) && _hasWorkspaceProtocol(spec) ? [{ from: input.workspace.name, to, kind: input.kind }] : []
+  Object.keys(input.record ?? {}).flatMap((to): GraphEdge[] =>
+    input.names.has(to) ? [{ from: input.workspace.name, to, kind: input.kind }] : []
   )
 
 const _buildEdges = (workspaces: ReadonlyArray<Workspace>): GraphEdge[] => {

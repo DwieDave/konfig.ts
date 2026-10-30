@@ -3,7 +3,7 @@ import type { LaidNode, LayoutEdgeData, SlotMap } from "./types"
 const SLOT_GAP = 2
 const VISUAL_GAP = 4
 
-const nodeCenter = (ln: LaidNode): number => ln.boxStartX + Math.floor(ln.boxWidth / 2)
+const _nodeCenter = (ln: LaidNode): number => ln.boxStartX + Math.floor(ln.boxWidth / 2)
 
 interface Bounds {
   readonly min: number
@@ -45,7 +45,7 @@ const _mirror = (slots: ReadonlyArray<number>): number[] => slots.map((s) => -s)
 
 const _mirrorBounds = (bounds: Bounds): Bounds => ({ min: -bounds.max, max: -bounds.min, minGap: bounds.minGap })
 
-const allocateMonotonic = (input: {
+const _allocateMonotonic = (input: {
   readonly ideals: ReadonlyArray<number>
   readonly bounds: Bounds
 }): number[] => {
@@ -75,7 +75,7 @@ const _dummySlots = (input: {
   readonly outEdges: ReadonlyArray<LayoutEdgeData>
   readonly inEdges: ReadonlyArray<LayoutEdgeData>
 }): SlotMap => {
-  const x = nodeCenter(input.laid)
+  const x = _nodeCenter(input.laid)
   return {
     outgoingSlotX: new Map(input.outEdges.map((e) => [e.to, x])),
     incomingSlotX: new Map(input.inEdges.map((e) => [e.from, x]))
@@ -84,7 +84,7 @@ const _dummySlots = (input: {
 
 const _centerOf = (input: { readonly positions: ReadonlyMap<string, LaidNode>; readonly name: string }): number => {
   const node = input.positions.get(input.name)
-  return node ? nodeCenter(node) : 0
+  return node ? _nodeCenter(node) : 0
 }
 
 const _outgoingSlots = (input: {
@@ -99,14 +99,14 @@ const _outgoingSlots = (input: {
     const bx = centerOf(b.to)
     return ax === bx ? a.to.localeCompare(b.to) : ax - bx
   })
-  const ideals = ordered.map((e) => positions.has(e.to) ? centerOf(e.to) : nodeCenter(laid))
-  const xs = allocateMonotonic({ ideals, bounds: _boxBounds(laid) })
+  const ideals = ordered.map((e) => positions.has(e.to) ? centerOf(e.to) : _nodeCenter(laid))
+  const xs = _allocateMonotonic({ ideals, bounds: _boxBounds(laid) })
   return _toSlotMap({ keys: ordered.map((e) => e.to), xs })
 }
 
 const _incomingIdeals = (input: { readonly laid: LaidNode; readonly count: number }): number[] => {
   const { laid, count } = input
-  const center = nodeCenter(laid)
+  const center = _nodeCenter(laid)
   const spacing = count > 1 ? Math.max(1, laid.boxWidth - 2) / (count + 1) : 0
   return Array.from(
     { length: count },
@@ -129,7 +129,7 @@ const _incomingSlots = (input: {
     return ax === bx ? a.from.localeCompare(b.from) : ax - bx
   })
   const ideals = _incomingIdeals({ laid, count: ordered.length })
-  const xs = allocateMonotonic({ ideals, bounds: _boxBounds(laid) })
+  const xs = _allocateMonotonic({ ideals, bounds: _boxBounds(laid) })
   return _toSlotMap({ keys: ordered.map((e) => e.from), xs })
 }
 
