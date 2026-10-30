@@ -3,7 +3,7 @@ import { expect, layer } from "@effect/vitest"
 import { Dep } from "@konfig.ts/core"
 import { Effect, Layer } from "effect"
 import { define } from "./Application"
-import { entrypoint, fromModules } from "./AppOfApps"
+import { fromModules } from "./AppOfApps"
 
 const src = (name: string) => ({
   repoURL: "https://example.com/repo",
@@ -94,7 +94,7 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
       })
     }))
 
-  it.effect("returns a sealed program; the deprecated entrypoint still passes it through", () =>
+  it.effect("returns a directly renderable sealed program", () =>
     Effect.gen(function*() {
       const m = define({
         name: "m",
@@ -104,8 +104,7 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
       })
 
       const program = fromModules({ target, defaults, modules: [m] as const })
-      const wrapped = entrypoint(program)
-      const result = yield* wrapped
+      const result = yield* program
       expect(result.apps[0]?.name).toBe("m")
     }))
 

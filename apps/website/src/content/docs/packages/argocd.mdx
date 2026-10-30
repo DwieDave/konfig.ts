@@ -33,7 +33,6 @@ The check in practice: if the `api` module needs the `ghcr-pull` secret (it yiel
 | `Application.target` | Adapter passed as `target` to `Module.fixedNs` / `Module.dynamicNs` |
 | `Application.LiteralName<T>`, `Application.ApplicationHandle`, `Application.HandleKind` | Types: reject a `string`-widened `name` at the call site; the handle and kind produced by `define` |
 | `AppOfApps.fromModules` | Compose handles into a sealed, directly renderable app-of-apps; the compile-time check fires here. `provides?: Layer` satisfies group-level needs |
-| `AppOfApps.entrypoint` | Deprecated no-op wrapper, kept for one release; export `fromModules` directly instead |
 | `AppOfApps.make` | Plain `AppOfAppsResult` from already-built `Application`s |
 | `Sync.wave(n)`, `Sync.hook(phase)`, `Sync.options([...])` | `argocd.argoproj.io/*` annotation helpers to spread into `annotations` |
 | `buildCR`, `serializeApplicationCR`, `applicationCRFilename`, `emitApplicationCR` | Emit an Application CR as an object, YAML string, filename, or `Manifest<string>` |

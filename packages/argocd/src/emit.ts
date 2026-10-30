@@ -54,7 +54,7 @@ const _mergeRetry = (
   }
 }
 
-const _mergeSyncPolicy = (input: _MergeSyncPolicyInput): AnyApp["syncPolicy"] => {
+export const _mergeSyncPolicy = (input: _MergeSyncPolicyInput): AnyApp["syncPolicy"] => {
   const { def, app } = input
   if (def === undefined) return app
   if (app === undefined) return def
@@ -70,40 +70,44 @@ export interface BuildCRInput {
   readonly target: AppOfAppsTarget
   readonly defaults: AppOfAppsDefaults
 }
-export const buildCR = (input: BuildCRInput): ApplicationCR => {
-  const { app, target, defaults } = input
-  const server = defaults.destination?.server ?? "https://kubernetes.default.svc"
-  const project = app.project ?? defaults.project ?? "default"
-  const controllerNamespace = target.controllerNamespace ?? "argocd"
-  const syncPolicy = _mergeSyncPolicy({ def: defaults.syncPolicy, app: app.syncPolicy })
-
+const _metadata = (
+  input: { readonly app: AnyApp; readonly controllerNamespace: string }
+): ApplicationCR["metadata"] => {
+  const { app, controllerNamespace } = input
   const hasAnnotations = app.annotations !== undefined && Object.keys(app.annotations).length > 0
-
-  const metadata: ApplicationCR["metadata"] = {
+  return {
     ...(hasAnnotations ? { annotations: app.annotations } : {}),
     name: app.name,
     namespace: controllerNamespace
   }
+}
 
+const _source = (app: AnyApp): ApplicationCR["spec"]["source"] => ({
+  path: app.source.path,
+  repoURL: app.source.repoURL,
+  targetRevision: app.source.targetRevision
+})
+
+const _spec = (input: BuildCRInput): ApplicationCR["spec"] => {
+  const { app, defaults } = input
+  const syncPolicy = _mergeSyncPolicy({ def: defaults.syncPolicy, app: app.syncPolicy })
   return {
-    apiVersion: "argoproj.io/v1alpha1",
-    kind: "Application",
-    metadata,
-    spec: {
-      destination: {
-        namespace: app.namespace,
-        server
-      },
-      project,
-      source: {
-        path: app.source.path,
-        repoURL: app.source.repoURL,
-        targetRevision: app.source.targetRevision
-      },
-      ...(syncPolicy !== undefined ? { syncPolicy } : {})
-    }
+    destination: {
+      namespace: app.namespace,
+      server: defaults.destination?.server ?? "https://kubernetes.default.svc"
+    },
+    project: app.project ?? defaults.project ?? "default",
+    source: _source(app),
+    ...(syncPolicy !== undefined ? { syncPolicy } : {})
   }
 }
+
+export const buildCR = (input: BuildCRInput): ApplicationCR => ({
+  apiVersion: "argoproj.io/v1alpha1",
+  kind: "Application",
+  metadata: _metadata({ app: input.app, controllerNamespace: input.target.controllerNamespace ?? "argocd" }),
+  spec: _spec(input)
+})
 
 export const emitApplicationCR = (input: BuildCRInput): Manifest.Manifest<string> => {
   const cr = buildCR(input)

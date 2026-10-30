@@ -38,14 +38,6 @@ export const make = (opts: AppOfAppsMakeOptions): AppOfAppsResult => ({
   apps: opts.apps
 })
 
-/**
- * @deprecated `AppOfApps.fromModules` now performs the residual-dependency
- * check itself and returns a directly renderable Effect — wrapping it in
- * `AppOfApps.entrypoint` is no longer needed. Export the `fromModules` result
- * directly. This wrapper will be removed in a future release.
- */
-export const entrypoint = Compose.makeResidualEntrypoint("AppOfApps.fromModules")
-
 // any (not unknown) for bivariance at the inference site — same pattern as
 // core's Compose.AnyHandle / Bundle.AnyHandle.
 // oxlint-disable-next-line app/no-type-assertion
@@ -65,7 +57,7 @@ export interface FromModulesOptions<Ms extends ReadonlyArray<AnyHandle>, Extra =
 // fails right here as _konfig_unsatisfied. Duplicate provided names across
 // modules fail as _konfig_duplicate rather than silently shadowing. A
 // group-level `provides` layer can satisfy needs no module provides. The
-// result is sealed: R is exactly RenderServices, no entrypoint wrapper needed.
+// result is sealed: R is exactly RenderServices.
 export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = never>(
   opts:
     & FromModulesOptions<Ms, Extra>

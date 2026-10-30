@@ -65,16 +65,13 @@ type _BadR = Expect<Equal<BadR, Manifest.RenderServices>>
 
 declare const target: AppOfAppsNS.AppOfAppsTarget
 
-// The residual check fires at the fromModules call itself; the deprecated
-// entrypoint wrapper still accepts a sealed program.
+// The residual check fires at the fromModules call itself.
 const _okCall = AppOfAppsNS.fromModules({ target, defaults: {}, modules: [provider, consumer] as const })
-const _okEntry = AppOfAppsNS.entrypoint(okProgram)
 
 // @ts-expect-error _konfig_unsatisfied (Secret "ghcr-pull")
 const _badCall = AppOfAppsNS.fromModules({ target, defaults: {}, modules: [consumer] as const })
 
 void _okCall
-void _okEntry
 void _badCall
 
 export type _Tests = readonly [_Ok, _Bad, _Single, _Missing, _OkR, _BadR]

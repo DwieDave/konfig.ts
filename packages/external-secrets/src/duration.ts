@@ -1,6 +1,6 @@
 import { Data } from "effect"
 
-export type GoDurationUnit = "ns" | "us" | "µs" | "μs" | "ms" | "s" | "m" | "h"
+type GoDurationUnit = "ns" | "us" | "µs" | "μs" | "ms" | "s" | "m" | "h"
 
 export type GoDuration = "0" | `${"-" | "+" | ""}${number}${GoDurationUnit}${string}`
 

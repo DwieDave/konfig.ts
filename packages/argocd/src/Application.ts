@@ -124,6 +124,13 @@ type DefinedHandle<Name extends string, Ns extends string, R, Extra> = Applicati
   Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
 >
 
+const _internalLayer = <Name extends string, Ns extends string, Extra>(
+  opts: { readonly name: Name; readonly namespace: Ns; readonly provides?: Layer.Layer<Extra> }
+) => {
+  const ownsLayer = _ownsLayer(opts.name, opts.namespace)
+  return opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer
+}
+
 export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["define"] = <
   const Name extends string,
   const Ns extends string,
@@ -137,13 +144,7 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
     namespace: opts.namespace
   }
   const tag = Dep.App<Name, Application>(names.name)
-
-  const ownsLayer = _ownsLayer(names.name, names.namespace)
-  const internalLayer = opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer
-
-  const appLayer = _appLayer(tag, names, opts)
-
-  const layer = appLayer.pipe(Layer.provideMerge(internalLayer))
+  const layer = _appLayer(tag, names, opts).pipe(Layer.provideMerge(_internalLayer(opts)))
 
   return unsafeCoerce<DefinedHandle<Name, Ns, R, Extra>>(
     attachLayerToTag({ tag, layer }),
