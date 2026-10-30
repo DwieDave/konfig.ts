@@ -19,7 +19,7 @@ export type LiteralName<T extends string> = string extends T ? T & {
 // literal T the conditional collapses to T, but inside a generic body TS keeps the
 // conditional deferred and cannot verify it. (LiteralName<T> -> T needs no witness:
 // both branches are assignable to T.)
-export const asLiteralName = <T extends string>(value: T): LiteralName<T> =>
+const _asLiteralName = <T extends string>(value: T): LiteralName<T> =>
   unsafeCoerce<LiteralName<T>>(
     value,
     "T extends string; for any literal instantiation LiteralName<T> = T, and non-literal T is rejected at the wrapper call site"
@@ -86,6 +86,33 @@ export interface Target<
   ) => ApplyHandle<Kind, Name, Ns, R, Extra>
 }
 
+const _defineWith = <
+  Kind extends HandleKind,
+  ExtraConfig extends object,
+  ExtraCallArgs extends object,
+  Name extends string,
+  Ns extends string,
+  R,
+  Extra
+>(
+  input: {
+    readonly target: Target<Kind, ExtraConfig, ExtraCallArgs>
+    readonly fields: object
+    readonly buildResult: BuildResult<unknown, R>
+    readonly provides: Layer.Layer<Extra> | undefined
+  }
+): ApplyHandle<Kind, Name, Ns, R, Extra> =>
+  input.target.define<Name, Ns, R, Extra>(unsafeCoerce<
+    DefineBaseArgs<Name, Ns, R, Extra> & ExtraConfig & ExtraCallArgs
+  >(
+    {
+      ...input.fields,
+      build: liftEffect(input.buildResult),
+      ...(input.provides !== undefined ? { provides: input.provides } : {})
+    },
+    "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
+  ))
+
 export interface FixedNsConfig<
   Kind extends HandleKind,
   ExtraConfig extends object,
@@ -119,21 +146,12 @@ export const fixedNs = <
   return <const Name extends string>(
     args: { readonly name: LiteralName<Name> } & ExtraCallArgs & Opts
   ): ApplyHandle<Kind, Name, Ns, R, Extra> => {
-    const buildResult = build({ name: args.name, namespace }, args)
-
-    return target.define<Name, Ns, R, Extra>(unsafeCoerce<
-      DefineBaseArgs<Name, Ns, R, Extra> & ExtraConfig & ExtraCallArgs
-    >(
-      {
-        ...extraConfig,
-        ...args,
-        name: args.name,
-        namespace: asLiteralName(namespace),
-        build: liftEffect(buildResult),
-        ...(provides !== undefined ? { provides } : {})
-      },
-      "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
-    ))
+    return _defineWith<Kind, ExtraConfig, ExtraCallArgs, Name, Ns, R, Extra>({
+      target,
+      fields: { ...extraConfig, ...args, name: args.name, namespace: _asLiteralName(namespace) },
+      buildResult: build({ name: args.name, namespace }, args),
+      provides
+    })
   }
 }
 
@@ -173,18 +191,11 @@ export const dynamicNs = <
       & ExtraCallArgs
       & Opts
   ): ApplyHandle<Kind, Name, Ns, R, Extra> => {
-    const buildResult = build({ name: args.name, namespace: args.namespace }, args)
-
-    return target.define<Name, Ns, R, Extra>(unsafeCoerce<
-      DefineBaseArgs<Name, Ns, R, Extra> & ExtraConfig & ExtraCallArgs
-    >(
-      {
-        ...extraConfig,
-        ...args,
-        build: liftEffect(buildResult),
-        ...(provides !== undefined ? { provides } : {})
-      },
-      "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
-    ))
+    return _defineWith<Kind, ExtraConfig, ExtraCallArgs, Name, Ns, R, Extra>({
+      target,
+      fields: { ...extraConfig, ...args },
+      buildResult: build({ name: args.name, namespace: args.namespace }, args),
+      provides
+    })
   }
 }

@@ -41,162 +41,156 @@ export interface RedactInput {
   readonly options?: RedactOptions
 }
 
+const _isPresent = (v: unknown): boolean => v !== null && v !== undefined
+
+interface RedactEntryInput {
+  readonly parent: Record<string, unknown>
+  readonly key: string
+  readonly value: unknown
+  readonly parentKey: string | null
+  readonly options: RedactOptions
+}
+
+const _redactEntry = (input: RedactEntryInput): unknown => {
+  const { key, options, parent, parentKey, value } = input
+  if (key === "labels" && parentKey === "metadata" && isRecord(value)) return _redactLabelMap(value)
+  if (key === "annotations" && parentKey === "metadata" && isRecord(value)) return _redactAnnotationMap(value)
+  if ((key === "data" || key === "stringData") && parent.kind === "Secret" && isRecord(value)) {
+    return _redactSecretDataMap(value)
+  }
+  return redact({ value, parentKey: key, options })
+}
+
+const _redactRecord = (
+  input: {
+    readonly parent: Record<string, unknown>
+    readonly parentKey: string | null
+    readonly options: RedactOptions
+  }
+) =>
+  Object.fromEntries(
+    Object.entries(input.parent)
+      .filter(([, v]) => _isPresent(v))
+      .map(([key, value]) => [key, _redactEntry({ ...input, key, value })])
+  )
+
+const _redactLeaf = (input: { readonly value: unknown; readonly options: RedactOptions }): unknown =>
+  input.options.normalizeNumerics === true && typeof input.value === "string" && _isNumericString(input.value)
+    ? Number(input.value)
+    : input.value
+
 // Drops null/undefined object keys deliberately: an explicit `field: null` then compares
 // equal to an absent field, so "set to null" vs "removed" is intentionally invisible here.
 export const redact = (input: RedactInput): unknown => {
-  const value = input.value
-  const parentKey = input.parentKey ?? null
+  const { value } = input
   const options = input.options ?? {}
-  if (Array.isArray(value)) {
-    return value.map((v) => redact({ value: v, parentKey: null, options }))
-  }
-  if (isRecord(value)) {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(value)) {
-      if (v === null || v === undefined) continue
-      if (k === "labels" && parentKey === "metadata" && isRecord(v)) {
-        out[k] = _redactLabelMap(v)
-        continue
-      }
-      if (k === "annotations" && parentKey === "metadata" && isRecord(v)) {
-        out[k] = _redactAnnotationMap(v)
-        continue
-      }
-      if ((k === "data" || k === "stringData") && value.kind === "Secret" && isRecord(v)) {
-        out[k] = _redactSecretDataMap(v)
-        continue
-      }
-      out[k] = redact({ value: v, parentKey: k, options })
-    }
-    return out
-  }
-  if (options.normalizeNumerics === true) {
-    if (typeof value === "string" && _isNumericString(value)) {
-      return Number(value)
-    }
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value
-    }
-  }
-  return value
+  if (Array.isArray(value)) return value.map((v) => redact({ value: v, parentKey: null, options }))
+  if (isRecord(value)) return _redactRecord({ parent: value, parentKey: input.parentKey ?? null, options })
+  return _redactLeaf({ value, options })
 }
 
 export interface DeepEqualInput {
   readonly a: unknown
   readonly b: unknown
 }
+const _arrayDeepEqual = (a: ReadonlyArray<unknown>, b: unknown): boolean =>
+  Array.isArray(b) && a.length === b.length && a.every((x, i) => deepEqual({ a: x, b: b[i] }))
+
+const _recordDeepEqual = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => {
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length &&
+    keys.every((k) => Object.hasOwn(b, k) && deepEqual({ a: a[k], b: b[k] }))
+}
+
 export const deepEqual = (input: DeepEqualInput): boolean => {
   const { a, b } = input
   if (a === b) return true
-  if (a === null || b === null) return false
-  if (typeof a !== typeof b) return false
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b) || a.length !== b.length) return false
-    for (let i = 0; i < a.length; i++) {
-      if (!deepEqual({ a: a[i], b: b[i] })) return false
-    }
-    return true
-  }
-  if (isRecord(a) && isRecord(b)) {
-    const oa = a
-    const ob = b
-    const ka = Object.keys(oa)
-    if (ka.length !== Object.keys(ob).length) return false
-    for (const k of ka) {
-      if (!Object.hasOwn(ob, k)) return false
-      if (!deepEqual({ a: oa[k], b: ob[k] })) return false
-    }
-    return true
-  }
-  return false
+  if (a === null || b === null || typeof a !== typeof b) return false
+  if (Array.isArray(a)) return _arrayDeepEqual(a, b)
+  return isRecord(a) && isRecord(b) && _recordDeepEqual(a, b)
 }
 
-// Equality of two raw values as if both had been passed through `redact` first, without
-// allocating the redacted copies. Must stay in lockstep with `redact`; the property test
-// in diff.property.test.ts checks it against `deepEqual(redact(a), redact(b))`.
-const _isPresent = (v: unknown): boolean => v !== null && v !== undefined
-
-const _isObjectLike = (v: unknown): v is Record<string, unknown> => isRecord(v)
+interface FilteredMapInput {
+  readonly a: Record<string, unknown>
+  readonly b: Record<string, unknown>
+  readonly keep: (k: string, v: unknown) => boolean
+}
 
 // Mirrors deepEqual(_redactLabelMap(a), _redactLabelMap(b)) / the annotation variant.
-const _filteredMapEqual = (
-  a: Record<string, unknown>,
-  b: Record<string, unknown>,
-  keep: (k: string, v: unknown) => boolean
-): boolean => {
-  let countA = 0
-  for (const [k, v] of Object.entries(a)) {
-    if (!keep(k, v)) continue
-    countA++
-    if (!Object.hasOwn(b, k)) return false
-    const bv = b[k]
-    if (!keep(k, bv)) return false
-    if (!deepEqual({ a: v, b: bv })) return false
-  }
-  let countB = 0
-  for (const [k, v] of Object.entries(b)) if (keep(k, v)) countB++
-  return countA === countB
+const _filteredMapEqual = (input: FilteredMapInput): boolean => {
+  const { a, b, keep } = input
+  const kept = Object.entries(a).filter(([k, v]) => keep(k, v))
+  const sameEntries = kept.every(([k, v]) => Object.hasOwn(b, k) && keep(k, b[k]) && deepEqual({ a: v, b: b[k] }))
+  return sameEntries && kept.length === Object.entries(b).filter(([k, v]) => keep(k, v)).length
 }
 
 // Mirrors deepEqual(_redactSecretDataMap(a), _redactSecretDataMap(b)): same key set.
 const _sameKeySet = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => {
   const ka = Object.keys(a)
-  if (ka.length !== Object.keys(b).length) return false
-  for (const k of ka) if (!Object.hasOwn(b, k)) return false
-  return true
+  return ka.length === Object.keys(b).length && ka.every((k) => Object.hasOwn(b, k))
 }
 
-const _redactedLeafEqual = (a: unknown, b: unknown, options: RedactOptions): boolean => {
-  if (options.normalizeNumerics === true) {
-    const na = typeof a === "string" && _isNumericString(a) ? Number(a) : a
-    const nb = typeof b === "string" && _isNumericString(b) ? Number(b) : b
-    return deepEqual({ a: na, b: nb })
+const _normalizeNumeric = (v: unknown): unknown => typeof v === "string" && _isNumericString(v) ? Number(v) : v
+
+const _redactedLeafEqual = (input: { readonly a: unknown; readonly b: unknown; readonly options: RedactOptions }) =>
+  input.options.normalizeNumerics === true
+    ? deepEqual({ a: _normalizeNumeric(input.a), b: _normalizeNumeric(input.b) })
+    : deepEqual({ a: input.a, b: input.b })
+
+interface EqualInput {
+  readonly a: unknown
+  readonly b: unknown
+  readonly parentKey: string | null
+  readonly options: RedactOptions
+}
+
+interface FieldEqualInput {
+  readonly key: string
+  readonly a: unknown
+  readonly b: unknown
+  readonly parentKey: string | null
+  readonly secret: boolean
+  readonly options: RedactOptions
+}
+
+const _fieldEqual = (input: FieldEqualInput): boolean => {
+  const { a, b, key, options, parentKey, secret } = input
+  if (key === "labels" && parentKey === "metadata" && isRecord(a)) {
+    return isRecord(b) && _filteredMapEqual({ a, b, keep: _labelKept })
   }
-  return deepEqual({ a, b })
+  if (key === "annotations" && parentKey === "metadata" && isRecord(a)) {
+    return isRecord(b) && _filteredMapEqual({ a, b, keep: _annotationKept })
+  }
+  if ((key === "data" || key === "stringData") && secret && isRecord(a)) {
+    return isRecord(b) && _sameKeySet(a, b)
+  }
+  return _redactedEqual({ a, b, parentKey: key, options })
 }
 
-const _redactedEqual = (a: unknown, b: unknown, parentKey: string | null, options: RedactOptions): boolean => {
+const _recordRedactedEqual = (
+  input: { readonly a: Record<string, unknown>; readonly b: Record<string, unknown> } & Omit<EqualInput, "a" | "b">
+): boolean => {
+  const { a, b, options, parentKey } = input
+  const secret = a.kind === "Secret"
+  if (secret !== (b.kind === "Secret")) return false
+  const present = Object.entries(a).filter(([, v]) => _isPresent(v))
+  const sameFields = present.every(([key, v]) =>
+    Object.hasOwn(b, key) && _isPresent(b[key]) &&
+    _fieldEqual({ key, a: v, b: b[key], parentKey, secret, options })
+  )
+  return sameFields && present.length === Object.values(b).filter(_isPresent).length
+}
+
+const _redactedEqual = (input: EqualInput): boolean => {
+  const { a, b, options } = input
   if (Array.isArray(a)) {
-    if (!Array.isArray(b) || a.length !== b.length) return false
-    for (let i = 0; i < a.length; i++) {
-      if (!_redactedEqual(a[i], b[i], null, options)) return false
-    }
-    return true
+    return Array.isArray(b) && a.length === b.length &&
+      a.every((x, i) => _redactedEqual({ a: x, b: b[i], parentKey: null, options }))
   }
   if (Array.isArray(b)) return false
-  if (_isObjectLike(a)) {
-    if (!_isObjectLike(b)) return false
-    const aSecret = a.kind === "Secret"
-    const bSecret = b.kind === "Secret"
-    // Differing Secret-ness implies differing `kind` values, which is a difference on its own.
-    if (aSecret !== bSecret) return false
-    let countA = 0
-    for (const [k, v] of Object.entries(a)) {
-      if (!_isPresent(v)) continue
-      countA++
-      if (!Object.hasOwn(b, k)) return false
-      const bv = b[k]
-      if (!_isPresent(bv)) return false
-      if (k === "labels" && parentKey === "metadata" && _isObjectLike(v)) {
-        if (!_isObjectLike(bv) || !_filteredMapEqual(v, bv, _labelKept)) return false
-        continue
-      }
-      if (k === "annotations" && parentKey === "metadata" && _isObjectLike(v)) {
-        if (!_isObjectLike(bv) || !_filteredMapEqual(v, bv, _annotationKept)) return false
-        continue
-      }
-      if ((k === "data" || k === "stringData") && aSecret && _isObjectLike(v)) {
-        if (!_isObjectLike(bv) || !_sameKeySet(v, bv)) return false
-        continue
-      }
-      if (!_redactedEqual(v, bv, k, options)) return false
-    }
-    let countB = 0
-    for (const v of Object.values(b)) if (_isPresent(v)) countB++
-    return countA === countB
-  }
-  if (_isObjectLike(b)) return false
-  return _redactedLeafEqual(a, b, options)
+  if (isRecord(a)) return isRecord(b) && _recordRedactedEqual({ ...input, a, b })
+  if (isRecord(b)) return false
+  return _redactedLeafEqual({ a, b, options })
 }
 
 export interface RedactedEqualInput {
@@ -206,21 +200,13 @@ export interface RedactedEqualInput {
 }
 /** Equivalent to `deepEqual({ a: redact({ value: a, options }), b: redact({ value: b, options }) })` without cloning. */
 export const redactedEqual = (input: RedactedEqualInput): boolean =>
-  _redactedEqual(input.a, input.b, null, input.options ?? {})
+  _redactedEqual({ a: input.a, b: input.b, parentKey: null, options: input.options ?? {} })
 
 export const parseYaml = (text: string): unknown => YAML.parse(text)
 
 // Drops empty/whitespace-only segments; positions of remaining docs are not preserved.
-export const parseYamlAll = (text: string): ReadonlyArray<unknown> => {
-  const docs = YAML.parseAllDocuments(text)
-  const out: unknown[] = []
-  for (const d of docs) {
-    const value = d.toJS()
-    if (value === null || value === undefined) continue
-    out.push(value)
-  }
-  return out
-}
+export const parseYamlAll = (text: string): ReadonlyArray<unknown> =>
+  YAML.parseAllDocuments(text).map((d) => d.toJS()).filter(_isPresent)
 
 // Keys by (kind, name, namespace) so docs diff by identity, not position.
 const _docKey = (value: unknown, fallbackIdx: number): string => {
@@ -279,78 +265,83 @@ export interface DiffFilesInput {
   readonly options?: RedactOptions
 }
 
-const _diffOne = (
-  file: string,
-  leftText: string,
-  rightText: string,
-  options: RedactOptions
-): FileDiff => {
-  // Docs are compared raw under redaction semantics; `redact` only runs once the file is
-  // known to differ, so a Same file never clones its documents.
-  const lDocs = _keyedDocs(parseYamlAll(leftText))
-  const rDocs = _keyedDocs(parseYamlAll(rightText))
-  const equal = (a: unknown, b: unknown): boolean => _redactedEqual(a, b, null, options)
+interface DiffOneInput {
+  readonly file: string
+  readonly leftText: string
+  readonly rightText: string
+  readonly options: RedactOptions
+}
+
+type KeyedDocs = ReadonlyArray<readonly [string, unknown]>
+
+interface DocsInput {
+  readonly file: string
+  readonly lDocs: KeyedDocs
+  readonly rDocs: KeyedDocs
+  readonly options: RedactOptions
+}
+
+const _diffSingle = (input: DocsInput): FileDiff => {
+  const { file, options } = input
+  const l = input.lDocs[0]?.[1]
+  const r = input.rDocs[0]?.[1]
+  if (_redactedEqual({ a: l, b: r, parentKey: null, options })) return { _tag: "Same", file }
+  return { _tag: "Changed", file, left: redact({ value: l, options }), right: redact({ value: r, options }) }
+}
+
+const _diffDoc = (
+  input: { readonly key: string; readonly l: unknown; readonly r: unknown; readonly options: RedactOptions }
+): DocDiff => {
+  const { key, l, options, r } = input
   const clean = (value: unknown): unknown => redact({ value, options })
+  if (l === undefined) return { _tag: "MissingLeft", key, right: clean(r) }
+  if (r === undefined) return { _tag: "MissingRight", key, left: clean(l) }
+  if (_redactedEqual({ a: l, b: r, parentKey: null, options })) return { _tag: "Same", key }
+  return { _tag: "Changed", key, left: clean(l), right: clean(r) }
+}
 
-  if (lDocs.length <= 1 && rDocs.length <= 1) {
-    const l = lDocs[0]?.[1]
-    const r = rDocs[0]?.[1]
-    if (equal(l, r)) return { _tag: "Same", file }
-    return { _tag: "Changed", file, left: clean(l), right: clean(r) }
-  }
-
+const _diffMulti = (input: DocsInput): FileDiff => {
+  const { file, lDocs, options, rDocs } = input
   const lByKey = new Map(lDocs)
   const rByKey = new Map(rDocs)
   const keys = Array.from(new Set([...lByKey.keys(), ...rByKey.keys()])).sort()
+  const docs = keys.map((key) => _diffDoc({ key, l: lByKey.get(key), r: rByKey.get(key), options }))
+  if (docs.every((d) => d._tag === "Same")) return { _tag: "Same", file }
+  const clean = (d: readonly [string, unknown]): unknown => redact({ value: d[1], options })
+  return { _tag: "Changed", file, left: lDocs.map(clean), right: rDocs.map(clean), docs }
+}
 
-  const docs: DocDiff[] = []
-  let anyChange = false
-  for (const key of keys) {
-    const l = lByKey.get(key)
-    const r = rByKey.get(key)
-    if (l === undefined) {
-      docs.push({ _tag: "MissingLeft", key, right: clean(r) })
-      anyChange = true
-    } else if (r === undefined) {
-      docs.push({ _tag: "MissingRight", key, left: clean(l) })
-      anyChange = true
-    } else if (equal(l, r)) {
-      docs.push({ _tag: "Same", key })
-    } else {
-      docs.push({ _tag: "Changed", key, left: clean(l), right: clean(r) })
-      anyChange = true
-    }
+// Docs are compared raw under redaction semantics; `redact` only runs once the file is
+// known to differ, so a Same file never clones its documents.
+const _diffOne = (input: DiffOneInput): FileDiff => {
+  const docs: DocsInput = {
+    file: input.file,
+    lDocs: _keyedDocs(parseYamlAll(input.leftText)),
+    rDocs: _keyedDocs(parseYamlAll(input.rightText)),
+    options: input.options
   }
+  return docs.lDocs.length <= 1 && docs.rDocs.length <= 1 ? _diffSingle(docs) : _diffMulti(docs)
+}
 
-  if (!anyChange) return { _tag: "Same", file }
-  return {
-    _tag: "Changed",
-    file,
-    left: lDocs.map((d) => clean(d[1])),
-    right: rDocs.map((d) => clean(d[1])),
-    docs
+const _diffFile = (
+  input: {
+    readonly file: string
+    readonly left: Readonly<Record<string, string>>
+    readonly right: Readonly<Record<string, string>>
+    readonly options: RedactOptions
   }
+): FileDiff => {
+  const { file, left, options, right } = input
+  if (!Object.hasOwn(left, file)) return { _tag: "MissingLeft", file }
+  if (!Object.hasOwn(right, file)) return { _tag: "MissingRight", file }
+  return _diffOne({ file, leftText: left[file] ?? "", rightText: right[file] ?? "", options })
 }
 
 export const diffFiles = (input: DiffFilesInput): DiffResult => {
   const { left, right } = input
   const options = input.options ?? {}
   const files = Array.from(new Set([...Object.keys(left), ...Object.keys(right)])).sort()
-  const entries: FileDiff[] = []
-  for (const file of files) {
-    const hasL = Object.hasOwn(left, file)
-    const hasR = Object.hasOwn(right, file)
-    if (!hasL) {
-      entries.push({ _tag: "MissingLeft", file })
-      continue
-    }
-    if (!hasR) {
-      entries.push({ _tag: "MissingRight", file })
-      continue
-    }
-    entries.push(_diffOne(file, left[file] ?? "", right[file] ?? "", options))
-  }
-  return { entries }
+  return { entries: files.map((file) => _diffFile({ file, left, right, options })) }
 }
 
 export const hasDifferences = (result: DiffResult): boolean => result.entries.some((e) => e._tag !== "Same")
@@ -366,46 +357,41 @@ const _indentYaml = (input: { readonly value: unknown; readonly pad: string }): 
     .split("\n")
     .map((l) => `${input.pad}${l}`)
 
+const _yamlBlock = (input: { readonly label: string; readonly value: unknown; readonly indent: string }): string[] => [
+  `${input.indent}${input.label}:`,
+  ..._indentYaml({ value: input.value, pad: `${input.indent}  ` })
+]
+
+const _sides = (input: { readonly left: unknown; readonly right: unknown; readonly indent: string }): string[] => [
+  ..._yamlBlock({ label: "left", value: input.left, indent: input.indent }),
+  ..._yamlBlock({ label: "right", value: input.right, indent: input.indent })
+]
+
+const _docLines = (d: DocDiff): string[] => {
+  if (d._tag === "Same") return []
+  const head = `  [doc ${d.key}] ${d._tag}`
+  return d._tag === "Changed" ? [head, ..._sides({ left: d.left, right: d.right, indent: "    " })] : [head]
+}
+
+const _detailLines = (e: Extract<FileDiff, { readonly _tag: "Changed" }>): string[] =>
+  e.docs && e.docs.length > 0
+    ? e.docs.flatMap(_docLines)
+    : _sides({ left: e.left, right: e.right, indent: "  " })
+
+const _FILE_MARK = { MissingLeft: "+", MissingRight: "-", Same: "~", Changed: "~" } as const
+
+const _entryLines = (input: { readonly entry: FileDiff; readonly format: DiffFormat }): string[] => {
+  const { entry, format } = input
+  const head = `${_FILE_MARK[entry._tag]} ${entry.file}`
+  return format === "detail" && entry._tag === "Changed" ? [head, ..._detailLines(entry)] : [head]
+}
+
 export const formatDiff = (input: FormatDiffInput): string => {
   const { result } = input
   const format = input.format ?? "summary"
-  if (format === "json") {
-    return JSON.stringify(result, null, 2)
-  }
-  const changes = result.entries.filter((e) => e._tag !== "Same")
-  if (changes.length === 0) return ""
-  const lines: string[] = []
-  for (const e of changes) {
-    if (e._tag === "MissingLeft") lines.push(`+ ${e.file}`)
-    else if (e._tag === "MissingRight") lines.push(`- ${e.file}`)
-    else lines.push(`~ ${e.file}`)
-    if (format === "detail" && e._tag === "Changed") {
-      if (e.docs && e.docs.length > 0) {
-        for (const d of e.docs) {
-          if (d._tag === "Same") continue
-          lines.push(`  [doc ${d.key}] ${d._tag}`)
-          if (d._tag === "Changed") {
-            lines.push("    left:")
-            lines.push(
-              ..._indentYaml({ value: d.left, pad: "      " })
-            )
-            lines.push("    right:")
-            lines.push(
-              ..._indentYaml({ value: d.right, pad: "      " })
-            )
-          }
-        }
-      } else {
-        lines.push("  left:")
-        lines.push(
-          ..._indentYaml({ value: e.left, pad: "    " })
-        )
-        lines.push("  right:")
-        lines.push(
-          ..._indentYaml({ value: e.right, pad: "    " })
-        )
-      }
-    }
-  }
-  return lines.join("\n")
+  if (format === "json") return JSON.stringify(result, null, 2)
+  return result.entries
+    .filter((entry) => entry._tag !== "Same")
+    .flatMap((entry) => _entryLines({ entry, format }))
+    .join("\n")
 }

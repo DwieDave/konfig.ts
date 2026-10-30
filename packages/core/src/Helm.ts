@@ -1,4 +1,4 @@
-import { Config, Duration, Effect, Option, Stream } from "effect"
+import { Cause, Config, Deferred, Duration, Effect, Exit, Option, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
@@ -326,30 +326,51 @@ export const pullArgs = (input: PullArgsInput): ReadonlyArray<string> => [
 interface _SlotInput extends EnsureChartTarballInput {
   readonly cachedTgz: string
 }
-type _PullOnce = Effect.Effect<
-  void,
-  HelmRenderError | HelmDigestMismatch | ProcessFailure | Config.ConfigError | PlatformError,
-  FileSystem | Path | ChildProcessSpawner
->
+type _PullError = HelmRenderError | HelmDigestMismatch | ProcessFailure | Config.ConfigError | PlatformError
+type _PullOnce = Effect.Effect<void, _PullError, FileSystem | Path | ChildProcessSpawner>
 
 // In-flight pulls keyed by cached tarball path. Renders run several releases
 // concurrently, and two releases of the same chart@version would otherwise
 // both miss the cache and both spawn `helm pull`; the second now awaits the
 // first's result. Entries are dropped once the pull settles so a failed pull
 // is retried by the next render rather than replayed from memory.
-const _pullsInFlight = new Map<string, _PullOnce>()
+const _pullsInFlight = new Map<string, Deferred.Deferred<void, _PullError>>()
 
-const _pullOnce = (cachedTgz: string, pull: _PullOnce): _PullOnce =>
-  Effect.suspend(() => {
-    const inFlight = _pullsInFlight.get(cachedTgz)
-    if (inFlight !== undefined) return inFlight
-    // oxlint-disable-next-line effecttsgo/run-effect-inside-effect -- must not yield between the map check and set
-    const shared = Effect.runSync(Effect.cached(pull)).pipe(
-      Effect.ensuring(Effect.sync(() => _pullsInFlight.delete(cachedTgz)))
-    )
-    _pullsInFlight.set(cachedTgz, shared)
-    return shared
+interface _Claim {
+  readonly owner: boolean
+  readonly deferred: Deferred.Deferred<void, _PullError>
+}
+
+const _claimPull = (input: { readonly key: string; readonly fresh: Deferred.Deferred<void, _PullError> }) =>
+  Effect.sync((): _Claim => {
+    const existing = _pullsInFlight.get(input.key)
+    if (existing !== undefined) return { owner: false, deferred: existing }
+    _pullsInFlight.set(input.key, input.fresh)
+    return { owner: true, deferred: input.fresh }
   })
+
+const _settlePull =
+  (input: { readonly key: string; readonly deferred: Deferred.Deferred<void, _PullError> }) =>
+  (exit: Exit.Exit<void, _PullError>) =>
+    Effect.sync(() => _pullsInFlight.delete(input.key)).pipe(Effect.andThen(Deferred.done(input.deferred, exit)))
+
+const _ownerInterrupted = (exit: Exit.Exit<void, _PullError>) =>
+  Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
+
+const _awaitOwner = (input: { readonly deferred: Deferred.Deferred<void, _PullError>; readonly retry: _PullOnce }) =>
+  Effect.exit(Deferred.await(input.deferred)).pipe(
+    Effect.flatMap((exit) => _ownerInterrupted(exit) ? input.retry : exit)
+  )
+
+const _pullOnce = (input: { readonly cachedTgz: string; readonly pull: _PullOnce }): _PullOnce =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function*() {
+      const fresh = yield* Deferred.make<void, _PullError>()
+      const claim = yield* _claimPull({ key: input.cachedTgz, fresh })
+      if (!claim.owner) return yield* restore(_awaitOwner({ deferred: claim.deferred, retry: _pullOnce(input) }))
+      yield* Effect.onExit(restore(input.pull), _settlePull({ key: input.cachedTgz, deferred: fresh }))
+    })
+  )
 
 const _verifyPinned = (input: _SlotInput) =>
   input.digest === undefined
@@ -414,7 +435,7 @@ export const ensureChartTarball = (input: EnsureChartTarballInput) =>
     const cachedTgz = path.join(input.cacheDir, cacheFileName(input))
     const slot = { ...input, cachedTgz }
     if (yield* fs.exists(cachedTgz)) yield* _verifyPinned(slot)
-    else yield* _pullOnce(cachedTgz, _pullAndVerify(slot))
+    else yield* _pullOnce({ cachedTgz, pull: _pullAndVerify(slot) })
     return cachedTgz
   })
 
@@ -435,64 +456,87 @@ const _inPhase =
           : new HelmRenderError({ chart: opts.chart, version: opts.version, phase, cause })
     )
 
-export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> => {
-  const extraOpts = opts.extraOpts ?? []
+// cacheDir is read from Config (KONFIG_HELM_CACHE) rather than accepted
+// as a HelmReleaseOptions field: the CLI's build/validate/diff
+// commands install a ConfigProvider around the whole render (env var
+// > konfig.json's `helm.cacheDir` > this default, resolved once in
+// cliConfig.ts#resolveCliPaths), so every Helm.release() call shares one
+// resolved cache directory without threading it through every call site.
+// `minVersion` stays a plain, opt-in field: it is a per-chart floor a chart
+// author chooses, not a shared filesystem path.
+const _resolveCacheDir = (opts: HelmReleaseOptions) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    return yield* Config.String(KONFIG_HELM_CACHE_ENV).pipe(
+      Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR)),
+      _inPhase(opts, "pull")
+    )
+  })
 
-  return make<ParsedDoc[]>(() =>
-    Effect.gen(function*() {
-      const fs = yield* FileSystem
-      const path = yield* Path
+const _writeValues = (opts: HelmReleaseOptions) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-" }).pipe(_inPhase(opts, "template"))
+    const valuesFile = path.join(tmpDir, "values.yaml")
+    yield* fs.writeFileString(valuesFile, YAML.stringify(opts.values, { lineWidth: 0 })).pipe(
+      _inPhase(opts, "template")
+    )
+    return valuesFile
+  })
 
-      if (opts.minVersion !== undefined) {
-        yield* assertMinVersion(opts.minVersion).pipe(_inPhase(opts, "version-check"))
-      }
+const _templateCommand = (
+  input: {
+    readonly opts: HelmReleaseOptions
+    readonly releaseName: string
+    readonly cachedTgz: string
+    readonly valuesFile: string
+  }
+) =>
+  ChildProcess.make("helm", [
+    "template",
+    input.releaseName,
+    input.cachedTgz,
+    "--values",
+    input.valuesFile,
+    ...(input.opts.namespace !== undefined ? ["--namespace", input.opts.namespace] : []),
+    ...(input.opts.extraOpts ?? [])
+  ])
 
-      // cacheDir is read from Config (KONFIG_HELM_CACHE) rather than accepted
-      // as a HelmReleaseOptions field: the CLI's build/validate/diff
-      // commands install a ConfigProvider around the whole render — env var
-      // > konfig.json's `helm.cacheDir` > this default, resolved once in
-      // cliConfig.ts#resolveCliPaths — so every Helm.release() call across a
-      // project's chart definitions shares one resolved cache directory
-      // without threading it through every call site. `minVersion` stays a
-      // plain, opt-in HelmReleaseOptions field instead of following the same
-      // Config indirection: it's a per-chart floor a chart author chooses,
-      // not a shared filesystem path, and the project-wide default the CLI
-      // resolves the same way is enforced at the CLI boundary instead (the
-      // `helm version` preflight in `crd extract`/`crd verify`/`helm fetch`).
-      const cacheDir = yield* Config.String(KONFIG_HELM_CACHE_ENV).pipe(
-        Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR)),
-        _inPhase(opts, "pull")
-      )
-      const cachedTgz = yield* ensureChartTarball({ ...opts, cacheDir }).pipe(_inPhase(opts, "pull"))
+const _runTemplate = (
+  input: { readonly opts: HelmReleaseOptions; readonly cachedTgz: string; readonly valuesFile: string }
+) =>
+  Effect.gen(function*() {
+    const { opts } = input
+    const releaseName = opts.releaseName ?? opts.chart
+    const template = _templateCommand({ ...input, releaseName })
+    yield* Effect.logDebug(`helm: templating ${opts.chart}@${opts.version} as release ${releaseName}`)
+    return yield* timeout.pipe(
+      Effect.flatMap((t) => runProcessString(template, { allowEmptyStdout: false, timeout: t })),
+      _inPhase(opts, "template")
+    )
+  })
 
-      const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-" }).pipe(_inPhase(opts, "template"))
-      const valuesFile = path.join(tmpDir, "values.yaml")
-      yield* fs.writeFileString(valuesFile, YAML.stringify(opts.values, { lineWidth: 0 })).pipe(
-        _inPhase(opts, "template")
-      )
+const _preflight = (opts: HelmReleaseOptions) =>
+  opts.minVersion === undefined
+    ? Effect.void
+    : assertMinVersion(opts.minVersion).pipe(_inPhase(opts, "version-check"))
 
-      const releaseName = opts.releaseName ?? opts.chart
-      const template = ChildProcess.make("helm", [
-        "template",
-        releaseName,
-        cachedTgz,
-        "--values",
-        valuesFile,
-        ...(opts.namespace !== undefined ? ["--namespace", opts.namespace] : []),
-        ...extraOpts
-      ])
-      yield* Effect.logDebug(`helm: templating ${opts.chart}@${opts.version} as release ${releaseName}`)
-      const stdout = yield* timeout.pipe(
-        Effect.flatMap((t) => runProcessString(template, { allowEmptyStdout: false, timeout: t })),
-        _inPhase(opts, "template")
-      )
-      return yield* _parseHelmOutput({
-        output: stdout,
-        chart: opts.chart,
-        version: opts.version,
-        namespace: opts.namespace,
-        clusterScopedKinds: opts.clusterScopedKinds
-      }).pipe(_inPhase(opts, "parse"))
-    }).pipe(Effect.scoped)
-  )
-}
+const _releaseDocs = (opts: HelmReleaseOptions) =>
+  Effect.gen(function*() {
+    yield* _preflight(opts)
+    const cacheDir = yield* _resolveCacheDir(opts)
+    const cachedTgz = yield* ensureChartTarball({ ...opts, cacheDir }).pipe(_inPhase(opts, "pull"))
+    const valuesFile = yield* _writeValues(opts)
+    const output = yield* _runTemplate({ opts, cachedTgz, valuesFile })
+    return yield* _parseHelmOutput({
+      output,
+      chart: opts.chart,
+      version: opts.version,
+      namespace: opts.namespace,
+      clusterScopedKinds: opts.clusterScopedKinds
+    }).pipe(_inPhase(opts, "parse"))
+  })
+
+export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> =>
+  make<ParsedDoc[]>(() => _releaseDocs(opts).pipe(Effect.scoped))

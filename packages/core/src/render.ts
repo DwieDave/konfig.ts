@@ -1,5 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
+import { unsafeCoerce } from "./_cast"
 import type * as Manifest from "./Manifest"
 import { RenderContext } from "./RenderContext"
 import type { AnyRenderError } from "./RenderError"
@@ -19,8 +20,10 @@ export const _buildLayers = <RIn>(
   extra: Layer.Layer<RIn, never, never> | undefined
 ): Layer.Layer<NodeServices.NodeServices | RIn, never, never> =>
   extra === undefined
-    // oxlint-disable-next-line app/no-type-assertion
-    ? (NodeServices.layer as Layer.Layer<NodeServices.NodeServices | RIn, never, never>)
+    ? unsafeCoerce<Layer.Layer<NodeServices.NodeServices | RIn, never, never>>(
+      NodeServices.layer,
+      "no extra layers given means RIn is never at the call site; Layer is contravariant in its output so the generic form cannot be proven"
+    )
     : Layer.mergeAll(NodeServices.layer, extra)
 
 // Extracted so tests can exercise this with Effect.runPromise instead of runMain (which exits).

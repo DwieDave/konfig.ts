@@ -13,7 +13,7 @@ export interface Bundle {
   readonly manifests: ReadonlyArray<unknown>
 }
 
-export const make = (opts: Bundle): Bundle => ({
+const _make = (opts: Bundle): Bundle => ({
   name: opts.name,
   manifests: opts.manifests,
   ...(opts.namespace !== undefined ? { namespace: opts.namespace } : {})
@@ -59,6 +59,43 @@ type _NsProvides<Ns extends string> = [Ns] extends [never] ? never
 type _NsExcludes<Ns extends string> = [Ns] extends [never] ? never
   : Dep.Need<"Namespace", Ns>
 
+const _nsLayer = (namespace: string | undefined) =>
+  namespace === undefined ? Layer.empty : Dep.provideNamespace(namespace)
+
+interface DefineLayerInput<Name extends string, R, Extra> {
+  readonly tag: Context.Service<Dep.Need<"App", Name>, Bundle>
+  readonly namespace: string | undefined
+  readonly opts: {
+    readonly name: Name
+    readonly build:
+      | Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
+      | (() => ReadonlyArray<unknown>)
+    readonly provides?: Layer.Layer<Extra>
+  }
+}
+
+const _bundleOf = (input: { readonly name: string; readonly namespace: string | undefined }) =>
+(
+  manifests: ReadonlyArray<unknown>
+): Bundle =>
+  _make({
+    name: input.name,
+    ...(input.namespace !== undefined ? { namespace: input.namespace } : {}),
+    manifests
+  })
+
+const _defineLayer = <Name extends string, R, Extra>(input: DefineLayerInput<Name, R, Extra>) => {
+  const { namespace, opts, tag } = input
+  const nsLayer = _nsLayer(namespace)
+  const bundleBuild = liftBuild(opts.build).pipe(Effect.map(_bundleOf({ name: opts.name, namespace })))
+  if (opts.provides === undefined) {
+    return Layer.mergeAll(Layer.effect(tag, bundleBuild).pipe(Layer.provide(nsLayer)), nsLayer)
+  }
+  const internal = Layer.mergeAll(nsLayer, opts.provides)
+  const bundleLayer = Layer.effect(tag, bundleBuild).pipe(Layer.provide(internal))
+  return Layer.mergeAll(bundleLayer, nsLayer, opts.provides)
+}
+
 export const define = <
   const Name extends string,
   const Ns extends string = never,
@@ -72,35 +109,8 @@ export const define = <
   Exclude<R, _NsExcludes<Ns> | Extra>
 > => {
   const name: Name = opts.name
-  const namespace: Ns | undefined = opts.namespace
-
   const tag = Dep.App<Name, Bundle>(name)
-
-  const nsLayer = namespace === undefined
-    ? Layer.empty
-    : Dep.provideNamespace(namespace)
-
-  const internalLayer = opts.provides !== undefined ? Layer.mergeAll(nsLayer, opts.provides) : nsLayer
-
-  const buildEffect: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> = liftBuild(opts.build)
-
-  const bundleLayer = Layer.effect(
-    tag,
-    buildEffect.pipe(
-      Effect.map((manifests) =>
-        make({
-          name,
-          ...(namespace !== undefined ? { namespace } : {}),
-          manifests
-        })
-      )
-    )
-  ).pipe(Layer.provide(internalLayer))
-
-  const layer = opts.provides !== undefined
-    ? Layer.mergeAll(bundleLayer, nsLayer, opts.provides)
-    : Layer.mergeAll(bundleLayer, nsLayer)
-
+  const layer = _defineLayer({ tag, namespace: opts.namespace, opts })
   return unsafeCoerce<
     BundleHandle<
       Name,
@@ -134,18 +144,10 @@ export interface BundleSetMakeOptions {
   readonly bundles: ReadonlyArray<Bundle>
 }
 
-export const makeSet = (opts: BundleSetMakeOptions): BundleSetResult => ({
+const _makeSet = (opts: BundleSetMakeOptions): BundleSetResult => ({
   name: opts.name ?? "bundles",
   bundles: opts.bundles
 })
-
-/**
- * @deprecated `Bundle.fromModules` now performs the residual-dependency check
- * itself and returns a directly renderable Effect — wrapping it in
- * `Bundle.entrypoint` is no longer needed. Export the `fromModules` result
- * directly. This wrapper will be removed in a future release.
- */
-export const entrypoint = Compose.makeResidualEntrypoint("Bundle.fromModules")
 
 // `any` (not `unknown`) needed: Layer is contravariant here, invariant at the inference site.
 // oxlint-disable-next-line app/no-type-assertion
@@ -176,7 +178,7 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = n
       const b = yield* mod
       bundles.push(b)
     }
-    return makeSet({ name: opts.name, bundles })
+    return _makeSet({ name: opts.name, bundles })
   })
 
   const wired = Compose.composeLayers({ modules: opts.modules, provides: opts.provides })

@@ -1,4 +1,4 @@
-export { collectByKey, resolveByKey, typedKeys } from "./_record"
+export { resolveByKey } from "./_record"
 export { type AnyDownwardEntry, type DefineDownwardInput, Downward, type DownwardEntry } from "./downward"
 export { type EntryKind, type EntryMarker, type EnvClaim, EnvNameCollision, type HasEnvClaims } from "./entry"
 export { type AnyEnvironment, Environment, type EnvMember, type MemberValue } from "./environment"

@@ -1,29 +1,17 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
 import { Effect, Layer } from "effect"
-import * as Bundle from "./Bundle"
-import { define, entrypoint, fromModules } from "./Bundle"
+import { define, fromModules } from "./Bundle"
 import * as Dep from "./deps"
 
-describe("Bundle.make", () => {
-  it("constructs a Bundle with the given fields", () => {
-    const b = Bundle.make({
-      name: "api",
-      namespace: "app",
-      manifests: [{ kind: "ConfigMap", metadata: { name: "api-conf" } }]
-    })
-    expect(b.name).toBe("api")
-    expect(b.namespace).toBe("app")
-    expect(b.manifests).toHaveLength(1)
-  })
-
-  it("omits namespace when not provided", () => {
-    const b = Bundle.make({ name: "cluster-scoped", manifests: [] })
-    expect(b.namespace).toBeUndefined()
-  })
-})
-
 describe("Bundle.define", () => {
+  it.effect("omits namespace on the built Bundle when none is given", () =>
+    Effect.gen(function*() {
+      const handle = define({ name: "cluster-scoped", build: () => [] })
+      const b = yield* handle.pipe(Effect.provide(handle.layer))
+      expect(b.namespace).toBeUndefined()
+    }))
+
   it.effect("returns a yieldable handle whose value is the built Bundle", () =>
     Effect.gen(function*() {
       const handle = define({
@@ -116,18 +104,6 @@ layer(NodeServices.layer)("Bundle.fromModules", (it) => {
         kind: "ConfigMap",
         metadata: { name: "shared" }
       })
-    }))
-
-  it.effect("passes through entrypoint when every Need is met", () =>
-    Effect.gen(function*() {
-      const m = define({
-        name: "m",
-        namespace: "ns",
-        build: () => []
-      })
-      const program = fromModules({ modules: [m] as const })
-      const result = yield* entrypoint(program)
-      expect(result.bundles[0]?.name).toBe("m")
     }))
 
   it.effect("honors a custom result name", () =>

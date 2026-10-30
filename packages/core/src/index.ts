@@ -33,7 +33,6 @@ export {
   parseYaml,
   parseYamlAll,
   redact,
-  redactedEqual,
   type RedactOptions
 } from "./diff"
 export { isRecord } from "./guards"

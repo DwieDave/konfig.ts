@@ -1,6 +1,6 @@
 import { unsafeCoerce } from "@konfig.ts/core"
 import { Config } from "effect"
-import { _envClaim, _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
+import { _envClaim, _makeEntry, type EntryMarker, type HasEnvClaims } from "./entry"
 
 export interface LiteralEntry<EnvName extends string, T>
   extends Config.Config<T>, EntryMarker<"Literal">, HasEnvClaims
@@ -27,37 +27,28 @@ export type DefineLiteralInput<EnvName extends string, T> =
   & (T extends _Primitive ? { readonly serialize?: (value: T) => string }
     : { readonly serialize: (value: T) => string })
 
+const _erasedSerialize = <T>(userSerialize: (value: T) => string) => (value: unknown): string =>
+  userSerialize(
+    unsafeCoerce<T>(
+      value,
+      "stored serialize erases its param to unknown for variance; the user-facing Literal signature guarantees the value is a T"
+    )
+  )
+
 const _define = <const EnvName extends string, T = string>(
   input: DefineLiteralInput<EnvName, T>
 ): LiteralEntry<EnvName, T> => {
   const userSerialize = input.serialize ?? ((v: T) => String(v))
-  const serialize = (value: unknown): string =>
-    userSerialize(
-      unsafeCoerce<T>(
-        value,
-        "stored serialize erases its param to unknown for variance; the user-facing Literal signature guarantees the value is a T"
-      )
-    )
-  const serialized = userSerialize(input.value)
-
-  const value: T = input.value
-  const parser: Config.Config<T> = input.schema !== undefined
-    ? input.schema
-    : Config.succeed(value)
-
-  const envClaims: ReadonlyArray<EnvClaim> = [
-    _envClaim({ envName: input.envName, label: `Literal(${input.envName})` })
-  ]
-
+  const parser: Config.Config<T> = input.schema !== undefined ? input.schema : Config.succeed(input.value)
   return _makeEntry({
     config: parser,
     metadata: {
       _kind: "Literal" as const,
       envName: input.envName,
       value: input.value,
-      serialized,
-      serialize,
-      envClaims
+      serialized: userSerialize(input.value),
+      serialize: _erasedSerialize(userSerialize),
+      envClaims: [_envClaim({ envName: input.envName, label: `Literal(${input.envName})` })]
     }
   })
 }

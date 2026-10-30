@@ -122,3 +122,28 @@ describe("diff.ts — property tests", () => {
     )
   })
 })
+
+describe("redact", () => {
+  it("is idempotent", () => {
+    for (const options of [{}, { normalizeNumerics: true }]) {
+      fc.assert(
+        fc.property(arbValue, (value) => {
+          const once = redact({ value, options })
+          expect(redact({ value: once, options })).toEqual(once)
+        }),
+        { numRuns: 1000 }
+      )
+    }
+  })
+
+  it("never leaks Secret data values and keeps their keys", () => {
+    const arbData = fc.dictionary(fc.stringMatching(/^[a-z]{1,6}$/), fc.string({ minLength: 1 }), { minKeys: 1 })
+    fc.assert(
+      fc.property(arbData, fc.constantFrom("data", "stringData"), (data, field) => {
+        const out = redact({ value: { kind: "Secret", [field]: data } })
+        const expected = Object.fromEntries(Object.keys(data).map((k) => [k, "<redacted>"]))
+        expect(out).toEqual({ kind: "Secret", [field]: expected })
+      })
+    )
+  })
+})

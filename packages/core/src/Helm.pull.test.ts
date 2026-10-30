@@ -1,12 +1,18 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { createHash } from "node:crypto"
 import { Cause, Effect, Exit, Layer, Sink, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { type Command, isStandardCommand } from "effect/process/ChildProcess"
-import { ChildProcessSpawner, ExitCode, make as makeSpawner, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
+import {
+  ChildProcessSpawner,
+  ExitCode,
+  make as makeSpawner,
+  makeHandle,
+  ProcessId
+} from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
+import { createHash } from "node:crypto"
 import { describe, expect } from "vitest"
 import { cacheFileName, ensureChartTarball, pullArgs } from "./Helm"
 import { HelmDigestMismatch, HelmRenderError } from "./RenderError"
@@ -127,4 +133,39 @@ describe("ensureChartTarball", () => {
         expect(r.entries).toEqual([])
       })
   )
+})
+
+const _concurrent = (opts: { readonly files: ReadonlyArray<string>; readonly rounds: number }) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const cacheDir = path.join(yield* fs.makeTempDirectoryScoped(), "cache")
+    const pulls = { count: 0 }
+    const input = { repo: "https://r", chart: "web", version: "1.0.0", cacheDir }
+    const exits = yield* Effect.forEach(
+      Array.from({ length: opts.rounds }, () => ensureChartTarball(input)),
+      Effect.exit,
+      { concurrency: "unbounded" }
+    ).pipe(Effect.provide(_spawner({ files: opts.files, pulls })))
+    return { exits, pulls: pulls.count }
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+describe("ensureChartTarball in-flight sharing", () => {
+  it.effect("property: N concurrent callers of one slot spawn helm pull once", () =>
+    Effect.gen(function*() {
+      for (const rounds of [2, 5, 9]) {
+        const r = yield* _concurrent({ files: ["web-1.0.0.tgz"], rounds })
+        expect(r.exits.every(Exit.isSuccess)).toBe(true)
+        expect(r.pulls).toBe(1)
+      }
+    }))
+
+  it.effect("a failed pull is shared by concurrent callers and retried by the next call", () =>
+    Effect.gen(function*() {
+      const failed = yield* _concurrent({ files: [], rounds: 3 })
+      expect(failed.exits.every(Exit.isFailure)).toBe(true)
+      expect(failed.pulls).toBe(1)
+      const again = yield* _concurrent({ files: [], rounds: 1 })
+      expect(again.pulls).toBe(1)
+    }))
 })

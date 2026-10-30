@@ -103,34 +103,36 @@ const _withClosedStdin = (command: ChildProcess.Command): ChildProcess.Command =
     ? ChildProcess.make(command.command, [...command.args], { ...command.options, stdin: "ignore" })
     : command
 
-// Drains stdout/stderr concurrently with exitCode to avoid the classic pipe-buffer deadlock.
-const _spawnCollect = (
-  command: ChildProcess.Command,
-  options: ProcessOptions | undefined
-): Effect.Effect<_CollectedProcess, ProcessFailure, ChildProcessSpawner> => {
-  const label = _commandLabel(command)
-  const stderrTail = { current: "" }
-  const run = Effect.scoped(
+const _spawnAndDrain = (input: {
+  readonly command: ChildProcess.Command
+  readonly stderrTail: { current: string }
+}) =>
+  Effect.scoped(
     Effect.gen(function*() {
       const spawner = yield* ChildProcessSpawner
-      const handle = yield* spawner.spawn(_withClosedStdin(command))
+      const handle = yield* spawner.spawn(_withClosedStdin(input.command))
       const [exitCode, stdout, stderr] = yield* Effect.all(
-        [handle.exitCode, _collect(handle.stdout), _collectStderr(handle.stderr, stderrTail)],
+        [handle.exitCode, _collect(handle.stdout), _collectStderr(handle.stderr, input.stderrTail)],
         { concurrency: "unbounded" }
       )
       return { exitCode, stdout, stderr }
     })
-  ).pipe(
-    Effect.mapError(
-      (cause) =>
-        new ProcessError({
-          command: label,
-          exitCode: SPAWN_FAILED_EXIT,
-          stderrTail: _tail(String(cause))
-        })
-    )
   )
-  const timeout = options?.timeout
+
+const _spawnFailure = (input: { readonly label: string; readonly cause: unknown }): ProcessError =>
+  new ProcessError({
+    command: input.label,
+    exitCode: SPAWN_FAILED_EXIT,
+    stderrTail: _tail(String(input.cause))
+  })
+
+const _withTimeout = <A, R>(input: {
+  readonly run: Effect.Effect<A, ProcessFailure, R>
+  readonly label: string
+  readonly stderrTail: { current: string }
+  readonly timeout: Duration.Input | undefined
+}): Effect.Effect<A, ProcessFailure, R> => {
+  const { label, run, stderrTail, timeout } = input
   if (timeout === undefined) return run
   return run.pipe(
     Effect.timeoutOrElse({
@@ -143,6 +145,19 @@ const _spawnCollect = (
         })
     })
   )
+}
+
+// Drains stdout/stderr concurrently with exitCode to avoid the classic pipe-buffer deadlock.
+const _spawnCollect = (input: {
+  readonly command: ChildProcess.Command
+  readonly options: ProcessOptions | undefined
+}): Effect.Effect<_CollectedProcess, ProcessFailure, ChildProcessSpawner> => {
+  const label = _commandLabel(input.command)
+  const stderrTail = { current: "" }
+  const run = _spawnAndDrain({ command: input.command, stderrTail }).pipe(
+    Effect.mapError((cause) => _spawnFailure({ label, cause }))
+  )
+  return _withTimeout({ run, label, stderrTail, timeout: input.options?.timeout })
 }
 
 export interface RunProcessStringOptions extends ProcessOptions {
@@ -169,7 +184,7 @@ export const runProcessString = (
   options?: RunProcessStringOptions
 ): Effect.Effect<string, ProcessFailure, ChildProcessSpawner> =>
   Effect.gen(function*() {
-    const result = yield* _spawnCollect(command, options)
+    const result = yield* _spawnCollect({ command, options })
     yield* _failOnNonZero(command, result)
     if (options?.allowEmptyStdout !== true && result.stdout.trim().length === 0) {
       return yield* new ProcessError({
@@ -188,6 +203,6 @@ export const runProcessExit = (
   options?: ProcessOptions
 ): Effect.Effect<void, ProcessFailure, ChildProcessSpawner> =>
   Effect.gen(function*() {
-    const result = yield* _spawnCollect(command, options)
+    const result = yield* _spawnCollect({ command, options })
     yield* _failOnNonZero(command, result)
   })
