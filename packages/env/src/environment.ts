@@ -27,36 +27,23 @@ export interface Environment<M extends Readonly<Record<string, EnvMember>>>
 
 export type AnyEnvironment = Environment<Readonly<Record<string, EnvMember>>>
 
-// Throws EnvNameCollision synchronously (not Effect): Environment.define
-// is a synchronous builder and collisions are an authoring mistake caught
-// at module-load time, same moment _CheckCollisions flags most at compile time.
 const _collectClaims = (
   members: Readonly<Record<string, EnvMember>>
 ): ReadonlyArray<EnvClaim> => {
-  const byEnvName = new Map<string, string[]>()
-  const out: EnvClaim[] = []
+  const claims = Object.values(members).flatMap((member) => member.envClaims)
 
-  for (const [, entry] of Object.entries(members)) {
-    for (const claim of entry.envClaims) {
-      const prior = byEnvName.get(claim.envName)
+  const collision = claims.find((claim, index) =>
+    claims.some((other, otherIndex) => otherIndex !== index && other.envName === claim.envName)
+  )
 
-      if (prior === undefined) {
-        byEnvName.set(claim.envName, [claim.label])
-      } else {
-        prior.push(claim.label)
-      }
-
-      out.push(claim)
-    }
+  if (collision !== undefined) {
+    throw new EnvNameCollision({
+      envName: collision.envName,
+      claims: claims.filter((claim) => claim.envName === collision.envName).map((claim) => claim.label)
+    })
   }
 
-  for (const [envName, labels] of byEnvName) {
-    if (labels.length > 1) {
-      throw new EnvNameCollision({ envName, claims: labels })
-    }
-  }
-
-  return out
+  return claims
 }
 
 // Compile-time envName collision check; best-effort only (top-level members,

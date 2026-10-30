@@ -1,12 +1,6 @@
-import type {
-  Downward as _Downward,
-  Environment as _Environment,
-  EnvironmentValues,
-  Literal as _Literal,
-  MemberValue,
-  Secret as _Secret
-} from "@konfig.ts/env"
+import type { Downward as _Downward, Literal as _Literal, Secret as _Secret } from "@konfig.ts/env"
 import type { Config, Redacted } from "effect"
+import type { Environment as _Environment, EnvironmentValues, MemberValue } from "../src/environment"
 
 type Expect<T extends true> = T
 

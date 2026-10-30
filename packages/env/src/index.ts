@@ -1,25 +1,13 @@
 export { resolveByKey } from "./_record"
 
-export { type AnyDownwardEntry, type DefineDownwardInput, Downward, type DownwardEntry } from "./downward"
+export { type AnyDownwardEntry, Downward, type DownwardEntry } from "./downward"
 
-export { type EntryKind, type EntryMarker, type EnvClaim, EnvNameCollision, type HasEnvClaims } from "./entry"
+export { type AnyEnvironment, Environment, type EnvMember } from "./environment"
 
-export { type AnyEnvironment, Environment, type EnvMember, type MemberValue } from "./environment"
-
-export { environmentLayer, type EnvironmentValues } from "./layer"
-
-export { type AnyLiteralEntry, type DefineLiteralInput, Literal, type LiteralEntry } from "./literal"
+export { type AnyLiteralEntry, Literal, type LiteralEntry } from "./literal"
 
 export { runtime } from "./runtime"
 
-export { type AnySecretEntry, type DefineSecretInput, Secret, type SecretEntry } from "./secret"
+export { type AnySecretEntry, Secret, type SecretEntry } from "./secret"
 
-export {
-  type FromCommandInput,
-  type FromCommandSpec,
-  type FromConfigInput,
-  type LiteralInput,
-  type ResolvedSecretValues,
-  SecretSource,
-  SecretSourceError
-} from "./source"
+export { type ResolvedSecretValues, SecretSource, SecretSourceError } from "./source"

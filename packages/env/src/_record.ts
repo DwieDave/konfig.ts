@@ -14,14 +14,12 @@ export const allConfigs = <M extends Readonly<Record<string, Config.Config<unkno
     "Config.all over a record resolves each member to its success type; the deferred conditional in its signature is exactly this mapped record"
   )
 
-// Homogeneous variant: TS refuses to reduce the indexed access over the
-// generic mapped input, so this carries its own audited coercion.
-export const allConfigsByKey = <K extends string, V>(
+export const allFields = <K extends string, V>(
   fields: { readonly [P in K]: Config.Config<V> }
 ): Config.Config<{ readonly [P in K]: V }> =>
   unsafeCoerce<Config.Config<{ readonly [P in K]: V }>>(
     Config.all(fields),
-    "Config.all over a K-keyed record of Config<V> yields a Config of the K-keyed record of V"
+    "Config.all over a K-keyed record of Config<V> yields the K-keyed record of V"
   )
 
 // Builds a record with exactly the given keys; the single coercion is sound
@@ -45,14 +43,7 @@ export const resolveByKey = <K extends string, E, R>(input: {
   readonly keys: ReadonlyArray<K>
   readonly resolve: (key: K) => Effect.Effect<Redacted.Redacted<string>, E, R>
 }): Effect.Effect<{ readonly [P in K]: Redacted.Redacted<string> }, E, R> =>
-  Effect.forEach(
-    input.keys,
-    (key) => Effect.map(input.resolve(key), (value): [K, Redacted.Redacted<string>] => [key, value])
-  ).pipe(
-    Effect.map((entries) =>
-      unsafeCoerce<{ readonly [P in K]: Redacted.Redacted<string> }>(
-        Object.fromEntries(entries),
-        "entries are one [key, value] pair per requested key"
-      )
-    )
+  unsafeCoerce<Effect.Effect<{ readonly [P in K]: Redacted.Redacted<string> }, E, R>>(
+    Effect.all(collectByKey({ keys: input.keys, build: input.resolve })),
+    "Effect.all over a K-keyed record of effects yields the K-keyed record of their successes"
   )

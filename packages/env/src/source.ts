@@ -8,29 +8,30 @@ export class SecretSourceError extends Data.TaggedError("SecretSourceError")<{
   readonly source: string
   readonly key: string
   readonly cause: unknown
-}> {}
+}> {
+  get message(): string {
+    return `secret source "${this.source}" failed for key "${this.key}": ${String(this.cause)}`
+  }
+}
 
 export type ResolvedSecretValues<K extends string> = {
   readonly [P in K]: Redacted.Redacted<string>
 }
 
-export interface SecretSource<K extends string, R = never> {
-  readonly _tag: "SecretSource"
+type _SourceFields<K extends string, R> = {
   readonly keys: ReadonlyArray<K>
   readonly resolve: Effect.Effect<ResolvedSecretValues<K>, SecretSourceError, R>
 }
 
-class _Source<K extends string, R> extends Data.TaggedClass("SecretSource")<{
-  readonly keys: ReadonlyArray<K>
-  readonly resolve: Effect.Effect<ResolvedSecretValues<K>, SecretSourceError, R>
-}> {}
+export interface SecretSource<K extends string, R = never> extends _SourceFields<K, R> {
+  readonly _tag: "SecretSource"
+}
 
-const _source = <K extends string, R>(input: {
-  readonly keys: ReadonlyArray<K>
-  readonly resolve: Effect.Effect<ResolvedSecretValues<K>, SecretSourceError, R>
-}): SecretSource<K, R> => new _Source(input)
+class _Source<K extends string, R> extends Data.TaggedClass("SecretSource")<_SourceFields<K, R>> {}
 
-export interface FromConfigInput<K extends string> {
+const _source = <K extends string, R>(input: _SourceFields<K, R>): SecretSource<K, R> => new _Source(input)
+
+interface FromConfigInput<K extends string> {
   readonly keys: ReadonlyArray<K>
   readonly envName?: (key: K) => string
 }
@@ -49,7 +50,7 @@ const _fromConfig = <const K extends string>(input: FromConfigInput<K>): SecretS
   return _source({ keys: input.keys, resolve })
 }
 
-export interface LiteralInput<D extends Readonly<Record<string, string>>> {
+interface LiteralInput<D extends Readonly<Record<string, string>>> {
   readonly data: D
 }
 
@@ -62,23 +63,24 @@ const _literal = <const D extends Readonly<Record<string, string>>>(
   return _source({ keys, resolve })
 }
 
-export interface FromCommandSpec {
+interface FromCommandSpec {
   readonly cmd: string
   readonly args: ReadonlyArray<string>
 }
 
-export interface FromCommandInput<K extends string> {
+interface FromCommandInput<K extends string> {
   readonly keys: ReadonlyArray<K>
   readonly run: (key: K) => FromCommandSpec
 }
 
-const _runCommand = (spec: FromCommandSpec, key: string) =>
-  runProcessString(ChildProcess.make(spec.cmd, [...spec.args]), { allowEmptyStdout: true }).pipe(
-    Effect.mapError((cause) => new SecretSourceError({ source: "fromCommand", key, cause })),
+const _runCommand = (input: { readonly spec: FromCommandSpec; readonly key: string }) =>
+  runProcessString(ChildProcess.make(input.spec.cmd, [...input.spec.args]), { allowEmptyStdout: true }).pipe(
+    Effect.mapError((cause) => new SecretSourceError({ source: "fromCommand", key: input.key, cause })),
     Effect.map((stdout) => stdout.trim()),
     Effect.filterOrFail(
       (value) => value.length > 0,
-      () => new SecretSourceError({ source: "fromCommand", key, cause: "secret command produced empty output" })
+      () =>
+        new SecretSourceError({ source: "fromCommand", key: input.key, cause: "secret command produced empty output" })
     ),
     Effect.map((value) => Redacted.make(value))
   )
@@ -86,7 +88,7 @@ const _runCommand = (spec: FromCommandSpec, key: string) =>
 const _fromCommand = <const K extends string>(
   input: FromCommandInput<K>
 ): SecretSource<K, ChildProcessSpawner> => {
-  const resolve = resolveByKey({ keys: input.keys, resolve: (key) => _runCommand(input.run(key), key) })
+  const resolve = resolveByKey({ keys: input.keys, resolve: (key) => _runCommand({ spec: input.run(key), key }) })
 
   return _source({ keys: input.keys, resolve })
 }

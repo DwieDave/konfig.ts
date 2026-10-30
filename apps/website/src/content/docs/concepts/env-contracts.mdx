@@ -17,7 +17,7 @@ An env contract is a TypeScript value that describes every environment variable 
 
 <Snippet file="shared/env-contracts/src/secrets.ts" startAt="export const dbCreds" endBefore="export const s3Creds" />
 
-`Literal.define({ envName, value, schema?, serialize? })` declares a constant. Without a schema, `runtime` returns the value as declared. With one (for example `Config.number("HTTP_PORT").pipe(Config.withDefault(8080))`) it reads and parses the variable instead. `serialize` controls how the value is written into the pod; it is optional for primitives (`String(value)`) and required for objects.
+`Literal.define({ envName, value, schema?, serialize? })` declares a constant. Without a schema, `runtime` returns the value as declared. With a key-less string codec (for example `Schema.NumberFromString`) it reads the `envName` variable and decodes it instead. `serialize` controls how the value is written into the pod; it is optional for primitives (`String(value)`) and required for objects.
 
 `Downward.define({ envName, fieldPath })` declares a downward-API field such as `metadata.name`. The runtime reads it as a string.
 

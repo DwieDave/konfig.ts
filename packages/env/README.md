@@ -55,22 +55,22 @@ console.log(`listening on :${config.http.port}`)
 
 ## Atoms
 
-| Constructor          | Produces                                                                           |
-| -------------------- | ---------------------------------------------------------------------------------- |
-| `Secret.define`      | a secret contract (`{ name, namespace, env }`), bound to a backend at compose time |
-| `Literal.define`     | a constant (`{ envName, value, schema? }`) baked into the manifest                 |
-| `Downward.define`    | a Kubernetes downward-API field (`{ envName, fieldPath }`)                         |
-| `Environment.define` | a bundle of the above — nestable; the single source of truth for both sides        |
-| `SecretSource`       | plaintext sources for backends: `.fromConfig`, `.literal`, `.fromCommand`          |
+| Constructor          | Produces                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Secret.define`      | a secret contract (`{ name, namespace, env }`), bound to a backend at compose time                   |
+| `Literal.define`     | a constant (`{ envName, value, schema? }`, where `schema` decodes `envName`) baked into the manifest |
+| `Downward.define`    | a Kubernetes downward-API field (`{ envName, fieldPath }`)                                           |
+| `Environment.define` | a bundle of the above — nestable; the single source of truth for both sides                          |
+| `SecretSource`       | plaintext sources for backends: `.fromConfig`, `.literal`, `.fromCommand`                            |
 
 Two members claiming the same `envName` is a compile-time error
-(`EnvNameCollision`) — caught before it can silently shadow another.
+(`_konfig_error` hint) for top-level members; `Environment.define` also throws
+`EnvNameCollision` at runtime, which covers nested environments.
 
 ## Internals
 
 An atom is a yieldable Effect `Config` intersected with its binding metadata; a
-bundle is a `Config` over the whole tree. See the `Environment` section of
-[`.docs/architecture.md`](../../.docs/architecture.md).
+bundle is a `Config` over the whole tree.
 
 ## Requirements
 
@@ -78,6 +78,6 @@ konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.
 is supported:
 
 - **`effect@^4.0.0`** — peer dependency of every package.
-- **`@effect/platform-node@^4.1.0`** — a regular dependency of `@konfig.ts/core`,
+- **`@effect/platform-node@^4.0.0`** — a regular dependency of `@konfig.ts/core`,
   whose `render()` entrypoint needs the Node filesystem/subprocess services.
   It is installed automatically with core.

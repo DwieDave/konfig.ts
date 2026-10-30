@@ -1,5 +1,5 @@
 import { Downward, Environment, Literal } from "@konfig.ts/env"
-import { Config } from "effect"
+import { Schema } from "effect"
 import { dbCreds, jwtKey, s3Creds } from "./secrets"
 
 export const apiEnv = Environment.define({
@@ -10,12 +10,12 @@ export const apiEnv = Environment.define({
     port: Literal.define({
       envName: "HTTP_PORT",
       value: 8080,
-      schema: Config.Number("HTTP_PORT").pipe(Config.withDefault(8080))
+      schema: Schema.NumberFromString
     }),
     logLevel: Literal.define({
       envName: "LOG_LEVEL",
       value: "info",
-      schema: Config.String("LOG_LEVEL").pipe(Config.withDefault("info"))
+      schema: Schema.String
     })
   }),
   runtime: Environment.define({
@@ -31,12 +31,12 @@ export const workerEnv = Environment.define({
     batchSize: Literal.define({
       envName: "BATCH_SIZE",
       value: 100,
-      schema: Config.Number("BATCH_SIZE").pipe(Config.withDefault(100))
+      schema: Schema.NumberFromString
     }),
     concurrency: Literal.define({
       envName: "CONCURRENCY",
       value: 4,
-      schema: Config.Number("CONCURRENCY").pipe(Config.withDefault(4))
+      schema: Schema.NumberFromString
     })
   }),
   runtime: Environment.define({

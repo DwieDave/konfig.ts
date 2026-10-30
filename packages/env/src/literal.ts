@@ -1,5 +1,5 @@
-import { Config } from "effect"
-import { _envClaim, _makeEntry, type EntryMarker, type HasEnvClaims } from "./entry"
+import { Config, type Schema } from "effect"
+import { _makeEntry, type EntryMarker, type HasEnvClaims } from "./entry"
 
 export interface LiteralEntry<EnvName extends string, T>
   extends Config.Config<T>, EntryMarker<"Literal">, HasEnvClaims
@@ -14,11 +14,11 @@ type _Primitive = string | number | boolean | bigint
 
 // serialize is optional only for primitive T (default String(v) is meaningful);
 // for objects/arrays it's required so values don't silently become "[object Object]".
-export type DefineLiteralInput<EnvName extends string, T> =
+type DefineLiteralInput<EnvName extends string, T> =
   & {
     readonly envName: EnvName
     readonly value: T
-    readonly schema?: Config.Config<T>
+    readonly schema?: Schema.Codec<T, string>
   }
   & (T extends _Primitive ? { readonly serialize?: (value: T) => string }
     : { readonly serialize: (value: T) => string })
@@ -27,7 +27,10 @@ const _define = <const EnvName extends string, T = string>(
   input: DefineLiteralInput<EnvName, T>
 ): LiteralEntry<EnvName, T> => {
   const userSerialize = input.serialize ?? ((v: T) => String(v))
-  const parser: Config.Config<T> = input.schema !== undefined ? input.schema : Config.succeed(input.value)
+
+  const parser: Config.Config<T> = input.schema !== undefined
+    ? Config.schema(input.schema, input.envName)
+    : Config.succeed(input.value)
 
   return _makeEntry({
     config: parser,
@@ -37,7 +40,7 @@ const _define = <const EnvName extends string, T = string>(
       value: input.value,
       serialized: userSerialize(input.value),
       serialize: userSerialize,
-      envClaims: [_envClaim({ envName: input.envName, label: `Literal(${input.envName})` })]
+      envClaims: [{ envName: input.envName, label: `Literal(${input.envName})` }]
     }
   })
 }

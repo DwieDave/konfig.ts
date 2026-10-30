@@ -1,7 +1,7 @@
 import type { Config } from "effect"
 import { Data } from "effect"
 
-export type EntryKind = "Secret" | "Literal" | "Downward" | "Environment"
+type EntryKind = "Secret" | "Literal" | "Downward" | "Environment"
 
 export interface EntryMarker<K extends EntryKind> {
   readonly _kind: K
@@ -28,8 +28,6 @@ export interface EnvClaim {
 export interface HasEnvClaims {
   readonly envClaims: ReadonlyArray<EnvClaim>
 }
-
-export const _envClaim = ({ envName, label }: EnvClaim): EnvClaim => ({ envName, label })
 
 export interface MakeEntryInput<C extends Config.Config<unknown>, M extends object> {
   readonly config: C

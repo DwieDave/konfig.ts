@@ -1,5 +1,6 @@
 import { it } from "@effect/vitest"
-import { Config, ConfigProvider, Effect } from "effect"
+import { ConfigProvider, Effect, Schema } from "effect"
+import * as fc from "fast-check"
 import { describe, expect } from "vitest"
 import { Literal } from "./literal"
 
@@ -35,7 +36,7 @@ describe("Literal", () => {
       const port = Literal.define({
         envName: "PORT",
         value: 8080,
-        schema: Config.Port("PORT")
+        schema: Schema.NumberFromString
       })
 
       const v = yield* port
@@ -43,6 +44,21 @@ describe("Literal", () => {
     }).pipe(
       Effect.provide(
         ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PORT: "9090" } }))
+      )
+    ))
+
+  it.effect("schema reads the variable named by envName", () =>
+    Effect.promise(() =>
+      fc.assert(
+        fc.asyncProperty(fc.stringMatching(/^[A-Z][A-Z0-9_]{0,10}$/), fc.integer(), async (envName, n) => {
+          const entry = Literal.define({ envName, value: 0, schema: Schema.NumberFromString })
+
+          const read = await Effect.runPromise(
+            entry.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { [envName]: String(n) } }))))
+          )
+
+          expect(read).toBe(n)
+        })
       )
     ))
 

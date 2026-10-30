@@ -1,6 +1,6 @@
 import { Config, type Redacted } from "effect"
-import { allConfigsByKey, collectByKey, typedKeys } from "./_record"
-import { _envClaim, _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
+import { allFields, collectByKey, typedKeys } from "./_record"
+import { _makeEntry, type EntryMarker, type EnvClaim, type HasEnvClaims } from "./entry"
 
 export interface SecretEntry<
   N extends string,
@@ -14,7 +14,7 @@ export interface SecretEntry<
   readonly fields: { readonly [P in K]: Config.Config<Redacted.Redacted<string>> }
 }
 
-export interface DefineSecretInput<
+interface DefineSecretInput<
   N extends string,
   E extends Readonly<Record<string, string>>
 > {
@@ -33,11 +33,12 @@ const _define = <
 
   const fields = collectByKey({ keys, build: (key) => Config.Redacted(input.env[key]) })
 
-  const root: Config.Config<{ readonly [P in keyof E & string]: Redacted.Redacted<string> }> = allConfigsByKey(fields)
+  const root: Config.Config<{ readonly [P in keyof E & string]: Redacted.Redacted<string> }> = allFields(fields)
 
-  const envClaims: ReadonlyArray<EnvClaim> = keys.map((key) =>
-    _envClaim({ envName: input.env[key], label: `Secret(${input.name}).${key}` })
-  )
+  const envClaims: ReadonlyArray<EnvClaim> = keys.map((key) => ({
+    envName: input.env[key],
+    label: `Secret(${input.name}).${key}`
+  }))
 
   return _makeEntry({
     config: root,
