@@ -3,9 +3,8 @@
 ## `ci.yml` — on push and PR
 
 Runs `bun run check` (typecheck every package), `bun run test` (every
-test suite), and the full-stack example's typecheck. Lint is invoked
-with `continue-on-error: true` until the M6.1 scope refactor settles
-the pre-existing warnings.
+test suite), `bun run lint` and `bun run knip` (dead code). All steps
+are blocking.
 
 ## `release.yml` — on tag
 

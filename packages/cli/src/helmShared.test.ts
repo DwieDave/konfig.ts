@@ -30,11 +30,11 @@ describe("helmShared", () => {
     )
   })
 
-  it.effect("ConfigNotFound becomes undefined", () =>
+  it.effect("ConfigNotFound is recoverable", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(
         Effect.fail(new ConfigNotFound({ startedFrom: "." })).pipe(
-          Effect.catchTag("ConfigNotFound", () => Effect.succeed(undefined))
+          Effect.catchTag("ConfigNotFound", () => Effect.succeed("missing"))
         )
       )
       expect(Exit.isSuccess(exit)).toBe(true)

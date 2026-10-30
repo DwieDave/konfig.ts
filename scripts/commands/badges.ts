@@ -71,7 +71,7 @@ const _readDecoded = <S extends Schema.Decoder<unknown>>(input: {
 }) =>
   Effect.gen(function*() {
     const json = yield* readJson(input.file)
-    return yield* Schema.decodeUnknownEffect(input.schema)(json).pipe(
+    return yield* Schema.decodeEffect(input.schema)(json).pipe(
       mapRepoError(`unexpected ${input.what} shape in ${input.file}`)
     )
   })
