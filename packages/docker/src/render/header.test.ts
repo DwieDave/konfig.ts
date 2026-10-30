@@ -1,6 +1,7 @@
+import { sha256Hex } from "@konfig.ts/core"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { extractHeader, HEADER_MARKER, renderFile, renderHeader, sha256Hex } from "./header"
+import { extractHeader, HEADER_MARKER, renderFile, renderHeader } from "./header"
 
 describe("generation header", () => {
   const body = "FROM alpine:3.20 AS base\n"

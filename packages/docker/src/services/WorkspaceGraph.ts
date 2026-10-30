@@ -1,5 +1,5 @@
-import { brand } from "@konfig.ts/core"
-import { Effect, type PlatformError, Schema } from "effect"
+import { brand, existsOrFalse, findUp, readOrEmpty } from "@konfig.ts/core"
+import { Effect, Option, type PlatformError, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { relative, resolve } from "node:path"
@@ -54,10 +54,6 @@ const _recoverNotFound = <B>(fallback: B) =>
 ): Effect.Effect<A | B, PlatformError.PlatformError, R> =>
   effect.pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(fallback)))
 
-export const existsOrFalse = (
-  input: { readonly fs: FileSystem; readonly path: string }
-): Effect.Effect<boolean, PlatformError.PlatformError> => input.fs.exists(input.path).pipe(_recoverNotFound(false))
-
 const _readStringIfExists = (input: {
   readonly fs: FileSystem
   readonly path: string
@@ -100,24 +96,18 @@ const _readPkgJsonIfExists = (
 const _isMonorepoRoot = (input: { readonly pkg: PackageJson | undefined; readonly hasPnpmYaml: boolean }): boolean =>
   input.hasPnpmYaml || Boolean(input.pkg?.workspaces)
 
-const _searchRoot = (input: {
-  readonly env: GraphEnv
-  readonly remaining: number
-}): Effect.Effect<RootDir | undefined, PackageJsonInvalid | PlatformError.PlatformError> =>
+const _isRootAt = (
+  env: GraphEnv
+): Effect.Effect<boolean, PackageJsonInvalid | PlatformError.PlatformError, FileSystem> =>
   Effect.gen(function*() {
-    const { env } = input
     const pkg = yield* _readPkgJsonIfExists(env)
-    const hasPnpmYaml = yield* existsOrFalse({ fs: env.fs, path: env.p.join(env.root, "pnpm-workspace.yaml") })
+    const hasPnpmYaml = yield* existsOrFalse(env.p.join(env.root, "pnpm-workspace.yaml"))
 
-    if (_isMonorepoRoot({ pkg, hasPnpmYaml })) return _brandRoot(env.root)
-    const parent = env.p.dirname(env.root)
-
-    if (input.remaining <= 1 || parent === env.root) return undefined
-
-    return yield* _searchRoot({ env: { ...env, root: parent }, remaining: input.remaining - 1 })
+    return _isMonorepoRoot({ pkg, hasPnpmYaml })
   })
 
-const MAX_ROOT_SEARCH_DEPTH = 64
+const _stopsSearchAt = (env: GraphEnv) => (dir: string): Effect.Effect<boolean, never, FileSystem> =>
+  _isRootAt({ ...env, root: dir }).pipe(Effect.match({ onFailure: () => true, onSuccess: (isRoot) => isRoot }))
 
 export const findRoot = (
   from: string
@@ -125,9 +115,13 @@ export const findRoot = (
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
-    const found = yield* _searchRoot({ env: { fs, p, root: p.resolve(from) }, remaining: MAX_ROOT_SEARCH_DEPTH })
+    const env: GraphEnv = { fs, p, root: from }
+    const found = yield* findUp({ from, test: _stopsSearchAt(env) })
 
-    return found ?? (yield* new MonorepoRootNotFound({ from }))
+    if (Option.isNone(found)) return yield* new MonorepoRootNotFound({ from })
+    yield* _isRootAt({ ...env, root: found.value })
+
+    return _brandRoot(found.value)
   })
 
 interface SegmentStep {
@@ -145,7 +139,7 @@ const _isTraversable = (name: string): boolean => name !== "node_modules" && !na
 const _descendantsIfDir = (input: {
   readonly env: GraphEnv
   readonly rel: string
-}): Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError> =>
+}): Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError, FileSystem> =>
   input.env.fs.stat(input.env.p.join(input.env.root, input.rel)).pipe(
     _recoverNotFound(undefined),
     Effect.flatMap((stat) =>
@@ -158,7 +152,7 @@ const _descendantsIfDir = (input: {
 const _collectDescendantDirs = (input: {
   readonly env: GraphEnv
   readonly dir: string
-}): Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError> =>
+}): Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError, FileSystem> =>
   _listChildren(input).pipe(
     Effect.flatMap((children) =>
       Effect.forEach(
@@ -169,7 +163,7 @@ const _collectDescendantDirs = (input: {
     Effect.map((nested) => [input.dir, ...nested.flat()])
   )
 
-type Listing = Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError>
+type Listing = Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError, FileSystem>
 
 const _listChildren = (input: { readonly env: GraphEnv; readonly dir: string }): Listing =>
   input.env.fs.readDirectory(input.env.p.join(input.env.root, input.dir)).pipe(_recoverNotFound([]))
@@ -210,14 +204,14 @@ const _withPackageJson = (input: {
 }): Listing =>
   Effect.filter(
     input.dirs,
-    (d) => existsOrFalse({ fs: input.env.fs, path: input.env.p.join(input.env.root, d, "package.json") })
+    (d) => existsOrFalse(input.env.p.join(input.env.root, d, "package.json"))
   )
 
 const _applyPattern = (input: {
   readonly env: GraphEnv
   readonly acc: ReadonlySet<string>
   readonly pattern: string
-}): Effect.Effect<ReadonlySet<string>, PlatformError.PlatformError> =>
+}): Effect.Effect<ReadonlySet<string>, PlatformError.PlatformError, FileSystem> =>
   input.pattern.startsWith("!")
     ? _expandWorkspaceGlob({ env: input.env, pattern: input.pattern.slice(1) }).pipe(
       Effect.map((dirs) => new Set([...input.acc].filter((d) => !dirs.includes(d))))
@@ -270,11 +264,12 @@ const _readWorkspacePatterns = (
   env: GraphEnv
 ): Effect.Effect<
   ReadonlyArray<string>,
-  PackageJsonInvalid | WorkspaceConfigInvalid | PlatformError.PlatformError
+  PackageJsonInvalid | WorkspaceConfigInvalid | PlatformError.PlatformError,
+  FileSystem
 > =>
   Effect.gen(function*() {
     const pnpmPath = env.p.join(env.root, "pnpm-workspace.yaml")
-    const pnpmExists = yield* existsOrFalse({ fs: env.fs, path: pnpmPath })
+    const pnpmExists = yield* existsOrFalse(pnpmPath)
 
     return yield* (pnpmExists ? _readPnpmPatterns({ env, path: pnpmPath }) : _readPackageJsonPatterns(env))
   })
@@ -355,24 +350,21 @@ const PM_LOCKFILES: ReadonlyArray<PmLockfile> = [
 const _detectYarnVariant = (input: {
   readonly env: GraphEnv
   readonly corepackVersion: string | undefined
-}): Effect.Effect<YarnVariant, PlatformError.PlatformError> =>
+}): Effect.Effect<YarnVariant, PlatformError.PlatformError, FileSystem> =>
   input.corepackVersion && !input.corepackVersion.startsWith("1.")
     ? Effect.succeed("berry")
-    : existsOrFalse({ fs: input.env.fs, path: input.env.p.join(input.env.root, ".yarnrc.yml") }).pipe(
+    : existsOrFalse(input.env.p.join(input.env.root, ".yarnrc.yml")).pipe(
       Effect.map((exists): YarnVariant => exists ? "berry" : "classic")
     )
 
-const _readOrEmpty = (
-  input: { readonly env: GraphEnv; readonly file: string }
-): Effect.Effect<string, PlatformError.PlatformError> =>
-  input.env.fs.readFileString(input.env.p.join(input.env.root, input.file)).pipe(_recoverNotFound(""))
-
-const _detectPnpmLayout = (env: GraphEnv): Effect.Effect<NodeModulesLayout, PlatformError.PlatformError> =>
+const _detectPnpmLayout = (
+  env: GraphEnv
+): Effect.Effect<NodeModulesLayout, PlatformError.PlatformError, FileSystem> =>
   Effect.gen(function*() {
-    const npmrc = yield* _readOrEmpty({ env, file: ".npmrc" })
+    const npmrc = yield* readOrEmpty(env.p.join(env.root, ".npmrc"))
 
     if (/^\s*node-linker\s*=\s*hoisted\s*$/m.test(npmrc)) return "hoisted"
-    const pnpmYaml = yield* _readOrEmpty({ env, file: "pnpm-workspace.yaml" })
+    const pnpmYaml = yield* readOrEmpty(env.p.join(env.root, "pnpm-workspace.yaml"))
 
     return /^\s*nodeLinker:\s*hoisted\s*$/m.test(pnpmYaml) ? "hoisted" : "isolated"
   })
@@ -384,7 +376,7 @@ interface PmChoice {
 
 const _finalizePm = (
   input: { readonly env: GraphEnv; readonly choice: PmChoice }
-): Effect.Effect<DetectedPm, PlatformError.PlatformError> =>
+): Effect.Effect<DetectedPm, PlatformError.PlatformError, FileSystem> =>
   Effect.gen(function*() {
     const { env, choice } = input
     const pnpmLayout = choice.kind === "Pnpm" ? yield* _detectPnpmLayout(env) : undefined
@@ -396,8 +388,10 @@ const _finalizePm = (
     return { kind: choice.kind, version: choice.version, pnpmLayout, yarnVariant }
   })
 
-const _presentLockfiles = (env: GraphEnv): Effect.Effect<ReadonlyArray<PmLockfile>, PlatformError.PlatformError> =>
-  Effect.filter(PM_LOCKFILES, (entry) => existsOrFalse({ fs: env.fs, path: env.p.join(env.root, entry.file) }))
+const _presentLockfiles = (
+  env: GraphEnv
+): Effect.Effect<ReadonlyArray<PmLockfile>, PlatformError.PlatformError, FileSystem> =>
+  Effect.filter(PM_LOCKFILES, (entry) => existsOrFalse(env.p.join(env.root, entry.file)))
 
 const _kindFromLockfiles = (present: ReadonlyArray<PmLockfile>): Effect.Effect<PmKind, UnsupportedPm> => {
   const [first, ...rest] = [...new Set(present.map((l) => l.kind))]

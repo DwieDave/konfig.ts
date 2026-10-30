@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { sha256Hex } from "@konfig.ts/core"
 
 export const HEADER_MARKER = "# konfig-managed: @konfig.ts/docker"
 
@@ -8,8 +8,6 @@ interface HeaderInput {
   readonly specPath: string
   readonly body: string
 }
-
-export const sha256Hex = (s: string): string => createHash("sha256").update(s, "utf8").digest("hex")
 
 export const renderHeader = (input: HeaderInput): string => {
   const hash = sha256Hex(input.body)

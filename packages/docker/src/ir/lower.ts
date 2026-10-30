@@ -1,3 +1,4 @@
+import { existsOrFalse } from "@konfig.ts/core"
 import { Array as Arr, Effect, Match, type PlatformError, Schema, Struct } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -25,7 +26,6 @@ import {
   closureOf,
   type DetectedPm,
   detectPm,
-  existsOrFalse,
   findRoot,
   lookupWorkspace,
   type RootDir,
@@ -74,7 +74,6 @@ const _prepareContext = (
   input: LowerInput
 ): Effect.Effect<LowerContext, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
     const p = yield* Path
     const root = yield* findRoot(input.target)
     const all = yield* allWorkspaces(root)
@@ -84,7 +83,7 @@ const _prepareContext = (
     const detectedPm = yield* detectPm(root)
     const closure = yield* closureOf({ all, target })
     const buildClosure = yield* closureOf({ all, target, includeDev: true })
-    const hasPatchesDir = yield* existsOrFalse({ fs, path: p.join(root, "patches") })
+    const hasPatchesDir = yield* existsOrFalse(p.join(root, "patches"))
 
     return { root, allWorkspaces: all, closure, buildClosure, target, detectedPm, hasPatchesDir }
   })
@@ -179,12 +178,11 @@ const _checkSharedRootFiles = (
   input: ValidateSpecInput
 ): Effect.Effect<void, SharedRootFileMissing | PlatformError.PlatformError, FileSystem | Path> =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
     const p = yield* Path
     yield* Effect.forEach(
       input.spec.sharedRootFiles ?? [],
       (path) =>
-        existsOrFalse({ fs, path: p.join(input.ctx.root, path) }).pipe(
+        existsOrFalse(p.join(input.ctx.root, path)).pipe(
           Effect.flatMap((ok) =>
             ok ? Effect.void : Effect.fail(new SharedRootFileMissing({ target: input.ctx.target.name, path }))
           )
@@ -345,12 +343,11 @@ const _presentRootFiles = (
   input: { readonly root: string; readonly pm: PackageManager }
 ): Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError, FileSystem | Path> =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
     const p = yield* Path
 
     return yield* Effect.filter(
       [...input.pm.lockfileNames, ...input.pm.auxFiles],
-      (f) => existsOrFalse({ fs, path: p.join(input.root, f) })
+      (f) => existsOrFalse(p.join(input.root, f))
     )
   })
 

@@ -28,6 +28,19 @@ describe("findRoot", () => {
       expect(root.endsWith("/fixtures/pnpm-isolated")).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
 
+  it.effect("returns the bun fixture root from packages/app/src", () =>
+    Effect.gen(function*() {
+      const root = yield* findRoot(`${FIXTURES}bun/packages/app/src`)
+      expect(root.endsWith("/fixtures/bun")).toBe(true)
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("keeps a malformed package.json met during the search as a typed PackageJsonInvalid", () =>
+    Effect.gen(function*() {
+      const dir = yield* writeTree({ "package.json": "{not json", "sub/.keep": "" })
+      const failure = yield* Effect.flip(findRoot(`${dir}/sub`))
+      expect(failure._tag).toBe("PackageJsonInvalid")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
   it.effect("fails MonorepoRootNotFound when no workspaces field anywhere up the tree", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(findRoot("/etc"))
