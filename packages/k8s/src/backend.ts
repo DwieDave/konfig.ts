@@ -1,6 +1,8 @@
 import { type Manifest, parseYaml, RenderError } from "@konfig.ts/core"
 import type { ResolvedSecretValues, SecretSource } from "@konfig.ts/env"
 import { Effect, Redacted, Schema } from "effect"
+import type { Secret as K8sSecret } from "./.generated/k8s-types"
+import { toObjectMeta } from "./meta"
 
 export type BackendTag = string
 
@@ -71,3 +73,45 @@ export interface SecretBackend<
   readonly requiresSource: RequiresSource
   readonly emit: (input: BackendEmitInput<N, K, RequiresSource>) => Manifest.Manifest<Out>
 }
+
+interface _MakeBackendInput<N extends string, K extends string, RequiresSource extends boolean, Out> {
+  readonly tag: BackendTag
+  readonly requiresSource: RequiresSource
+  readonly emit: SecretBackend<N, K, RequiresSource, Out>["emit"]
+}
+
+export const SecretBackend = {
+  make: <N extends string, K extends string, RequiresSource extends boolean, Out = unknown>(
+    input: _MakeBackendInput<N, K, RequiresSource, Out>
+  ): SecretBackend<N, K, RequiresSource, Out> => ({
+    _tag: input.tag,
+    requiresSource: input.requiresSource,
+    emit: input.emit
+  })
+}
+
+export const secretMeta = <N extends string, K extends string>(base: BackendEmitInput<N, K>) =>
+  toObjectMeta({
+    name: base.name,
+    namespace: base.namespace,
+    labels: base.labels,
+    annotations: base.annotations
+  })
+
+export const backendLabel = <N extends string, K extends string>(
+  input: { readonly tag: BackendTag; readonly base: BackendEmitInput<N, K> }
+): string => `${input.tag}(${input.base.namespace}/${input.base.name})`
+
+export const plainSecret = <N extends string, K extends string>(input: {
+  readonly base: BackendEmitInput<N, K>
+  readonly type?: string
+  readonly stringData: Record<string, string>
+  readonly immutable?: boolean
+}): K8sSecret => ({
+  apiVersion: "v1",
+  kind: "Secret",
+  metadata: secretMeta(input.base),
+  type: input.type,
+  stringData: input.stringData,
+  immutable: input.immutable
+})

@@ -1,7 +1,16 @@
 import type { Manifest } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
-import type { BackendEmitInput, BackendTag, SecretBackend } from "@konfig.ts/k8s"
-import { Environment, Secret } from "@konfig.ts/k8s"
+import type { BackendEmitInput, SecretBackend } from "@konfig.ts/k8s"
+import {
+  backendLabel,
+  Environment,
+  plainSecret,
+  Secret,
+  SecretBackend as BackendFactory,
+  secretMeta
+} from "@konfig.ts/k8s"
+
+type _BarrelHelpers = [typeof backendLabel, typeof plainSecret, typeof secretMeta, typeof BackendFactory.make]
 
 type Expect<T extends true> = T
 
@@ -13,8 +22,6 @@ declare const reqFalse: SecretBackend<"x", "k", false>
 type _Backend_NotAssignable = Expect<
   Equal<typeof reqTrue extends SecretBackend<"x", "k", false> ? true : false, false>
 >
-
-type _BackendTag = Expect<Equal<BackendTag, string>>
 
 type _BackendEmitInputRequired = Expect<
   Equal<
@@ -66,7 +73,6 @@ type _Defaulted = Expect<
 
 export type _Tests = readonly [
   _Backend_NotAssignable,
-  _BackendTag,
   _BackendEmitInputRequired,
   _BackendEmitInputOptional,
   _Defaulted

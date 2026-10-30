@@ -1,5 +1,5 @@
 import type { ConfigMapRef, ConfigMapRefKeys, SecretRef, SecretRefKeys, SecretRefNamespace } from "@konfig.ts/core"
-import { _entriesOf } from "./_lower"
+import { _entriesOf } from "./_entries"
 
 export interface EnvVarSource {
   readonly secretKeyRef?: {
@@ -64,6 +64,16 @@ export interface ConfigMapEnvOptions {
   readonly optional?: boolean
 }
 
+export interface SecretEnvBatchInput<R, Map> extends SecretEnvOptions<R> {
+  readonly ref: R
+  readonly map: Map
+}
+
+export interface ConfigMapEnvBatchInput<R, Map> extends ConfigMapEnvOptions {
+  readonly ref: R
+  readonly map: Map
+}
+
 // Env-var name → key in the referenced Secret/ConfigMap. Names are the object keys so they stay literal for
 // Container.define's duplicate-name check.
 export type EnvKeyMap<K extends string> = Readonly<Record<string, K>>
@@ -86,41 +96,26 @@ export const EnvVar = {
   fromSecret: <const EnvName extends string, N extends string, K extends string = string>(
     input: SecretEnvInput<EnvName, N, K>
   ): EnvVar<EnvName> => _secretEnvVar(input),
-  // kube-apiserver only resolves secretKeyRef within the pod's own namespace; Ns must match podNamespace.
-  fromSecretForPod: <
-    const EnvName extends string,
-    N extends string,
-    K extends string,
-    const Ns extends string
-  >(
-    input: SecretEnvForPodInput<EnvName, N, K, Ns>
-  ): EnvVar<EnvName> => _secretEnvVar(input),
-  // Batch form: many env vars from one secret ref; podNamespace folds in the fromSecretForPod check.
-  // oxlint-disable-next-line app/no-multiple-function-params -- (ref, map, opts?) reads as a call, not a config
+  // Batch form: many env vars from one secret ref; podNamespace is checked against the ref's namespace.
   secretEnv: <
     R extends SecretRef<string, string, string>,
     const Map extends EnvKeyMap<SecretRefKeys<R>>
   >(
-    ref: R,
-    map: Map,
-    opts?: SecretEnvOptions<R>
+    input: SecretEnvBatchInput<R, Map>
   ): ReadonlyArray<EnvVar<keyof Map & string>> =>
-    _entriesOf(map).map(([name, key]) => ({
+    _entriesOf(input.map).map(([name, key]) => ({
       name,
-      valueFrom: { secretKeyRef: { name: ref, key, optional: opts?.optional } }
+      valueFrom: { secretKeyRef: { name: input.ref, key, optional: input.optional } }
     })),
-  // oxlint-disable-next-line app/no-multiple-function-params -- same shape as secretEnv
   configMapEnv: <
     R extends ConfigMapRef<string, string>,
     const Map extends EnvKeyMap<ConfigMapRefKeys<R>>
   >(
-    ref: R,
-    map: Map,
-    opts?: ConfigMapEnvOptions
+    input: ConfigMapEnvBatchInput<R, Map>
   ): ReadonlyArray<EnvVar<keyof Map & string>> =>
-    _entriesOf(map).map(([name, key]) => ({
+    _entriesOf(input.map).map(([name, key]) => ({
       name,
-      valueFrom: { configMapKeyRef: { name: ref, key, optional: opts?.optional } }
+      valueFrom: { configMapKeyRef: { name: input.ref, key, optional: input.optional } }
     })),
   fromConfigMap: <const EnvName extends string, N extends string, K extends string = string>(
     input: ConfigMapEnvInput<EnvName, N, K>

@@ -1,7 +1,14 @@
 import { Manifest } from "@konfig.ts/core"
-import { Data, Effect } from "effect"
+import { Effect } from "effect"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
-import { type BackendEmitInput, type EmitInput, resolvePlaintext, type SecretBackend } from "./backend"
+import {
+  type BackendEmitInput,
+  backendLabel,
+  type EmitInput,
+  plainSecret,
+  resolvePlaintext,
+  SecretBackend
+} from "./backend"
 
 export interface NativeSecretOptions {
   readonly type?: string
@@ -9,44 +16,32 @@ export interface NativeSecretOptions {
   readonly silenceWarning?: boolean
 }
 
+const _TAG = "NativeSecret"
+
+const _warn = <N extends string, K extends string>(
+  input: EmitInput<N, K, NativeSecretOptions>
+) =>
+  input.opts.silenceWarning === true
+    ? Effect.void
+    : Effect.logWarning(
+      `NativeSecret backend emits a plaintext Secret with stringData on disk for "${input.base.namespace}/${input.base.name}". Pass { silenceWarning: true } to suppress, or switch to ExternalSecrets / SealedSecrets / Sops for production.`
+    )
+
 const _emit = <N extends string, K extends string>(
   input: EmitInput<N, K, NativeSecretOptions>
 ): Manifest.Manifest<K8sSecret> =>
   Manifest.make<K8sSecret>((_ctx) =>
     Effect.gen(function*() {
-      if (input.opts.silenceWarning !== true) {
-        yield* Effect.logWarning(
-          `NativeSecret backend emits a plaintext Secret with stringData on disk for "${input.base.namespace}/${input.base.name}". Pass { silenceWarning: true } to suppress, or switch to ExternalSecrets / SealedSecrets / Sops for production.`
-        )
-      }
+      yield* _warn(input)
 
       const stringData = yield* resolvePlaintext({
         base: input.base,
-        label: `NativeSecret(${input.base.namespace}/${input.base.name})`
+        label: backendLabel({ tag: _TAG, base: input.base })
       })
 
-      const out: K8sSecret = {
-        apiVersion: "v1",
-        kind: "Secret",
-        metadata: {
-          name: input.base.name,
-          namespace: input.base.namespace,
-          labels: input.base.labels,
-          annotations: input.base.annotations
-        },
-        type: input.opts.type,
-        stringData,
-        immutable: input.opts.immutable
-      }
-
-      return out
+      return plainSecret({ base: input.base, type: input.opts.type, stringData, immutable: input.opts.immutable })
     })
   )
-
-class _NativeSecretBackend<N extends string, K extends string> extends Data.TaggedClass("NativeSecret")<{
-  readonly requiresSource: true
-  readonly emit: SecretBackend<N, K, true, K8sSecret>["emit"]
-}> {}
 
 export const NativeSecret = {
   backend: <N extends string, K extends string>(
@@ -54,7 +49,8 @@ export const NativeSecret = {
   ): SecretBackend<N, K, true, K8sSecret> => {
     const resolvedOpts = opts ?? {}
 
-    return new _NativeSecretBackend<N, K>({
+    return SecretBackend.make<N, K, true, K8sSecret>({
+      tag: _TAG,
       requiresSource: true,
       emit: (input: BackendEmitInput<N, K, true>) => _emit({ base: input, opts: resolvedOpts })
     })

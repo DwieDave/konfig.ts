@@ -1,6 +1,6 @@
 import { brand } from "@konfig.ts/core"
 import type { SecretRef, SecretRefNamespace } from "@konfig.ts/core"
-import { EnvVar, Secret, SecretRef as SecretRefValue } from "@konfig.ts/k8s"
+import { EnvVar, Secret } from "@konfig.ts/k8s"
 
 type Expect<T extends true> = T
 
@@ -26,62 +26,38 @@ type MonRef = typeof monitoringCreds.ref
 
 type _MonNs = Expect<Equal<SecretRefNamespace<MonRef>, "monitoring">>
 
-const _ok = EnvVar.fromSecretForPod({
-  name: "DATABASE_URL",
-  ref: dbCreds.ref,
-  key: "url",
-  podNamespace: "app"
-})
+const _ok = EnvVar.secretEnv({ ref: dbCreds.ref, map: { DATABASE_URL: "url" }, podNamespace: "app" })
 
-const _crossNs = EnvVar.fromSecretForPod({
-  name: "GRAFANA_TOKEN",
-  // @ts-expect-error - SecretRef<*, *, "monitoring"> not assignable to SecretRef<*, *, "app">.
+const _crossNs = EnvVar.secretEnv({
   ref: monitoringCreds.ref,
-  key: "token",
+  map: { GRAFANA_TOKEN: "token" },
+  // @ts-expect-error - podNamespace "app" does not match the ref's namespace "monitoring".
   podNamespace: "app"
 })
 
-const _backwards = EnvVar.fromSecretForPod({
-  name: "DB_URL",
-  // @ts-expect-error - SecretRef<*, *, "app"> not assignable to SecretRef<*, *, "monitoring">.
+const _backwards = EnvVar.secretEnv({
   ref: dbCreds.ref,
-  key: "url",
+  map: { DB_URL: "url" },
+  // @ts-expect-error - podNamespace "monitoring" does not match the ref's namespace "app".
   podNamespace: "monitoring"
 })
 
-const escaped = SecretRefValue.unsafeReNamespace(monitoringCreds.ref)
-
-const _escapeOk = EnvVar.fromSecretForPod({
-  name: "GRAFANA_TOKEN",
-  ref: escaped,
-  key: "token",
-  podNamespace: "app"
-})
-
-const _keyTypo = EnvVar.fromSecretForPod({
-  name: "DATABASE_PASSWORD",
+const _keyTypo = EnvVar.secretEnv({
   ref: dbCreds.ref,
   // @ts-expect-error - "passowrd" is not in "url" | "password".
-  key: "passowrd",
+  map: { DATABASE_PASSWORD: "passowrd" },
   podNamespace: "app"
 })
 
 const opaque: SecretRef<"opaque"> = brand<SecretRef<"opaque">>("opaque")
 
-const _anyPod = EnvVar.fromSecretForPod({
-  name: "OPAQUE",
-  ref: SecretRefValue.unsafeReNamespace(opaque),
-  key: "anything",
-  podNamespace: "some-pod"
-})
+const _anyPod = EnvVar.secretEnv({ ref: opaque, map: { OPAQUE: "anything" }, podNamespace: "some-pod" })
 
 void _ok
 
 void _crossNs
 
 void _backwards
-
-void _escapeOk
 
 void _keyTypo
 

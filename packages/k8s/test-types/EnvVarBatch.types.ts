@@ -1,6 +1,6 @@
 import { brand } from "@konfig.ts/core"
 import type { SecretRef } from "@konfig.ts/core"
-import { ConfigMap, EnvVar, Secret, SecretRef as SecretRefValue } from "@konfig.ts/k8s"
+import { ConfigMap, EnvVar, Secret } from "@konfig.ts/k8s"
 
 type Expect<T extends true> = T
 
@@ -12,37 +12,37 @@ const dbCreds = Secret.make({
   stringData: { url: "u", password: "p" }
 })
 
-const vars = EnvVar.secretEnv(dbCreds.ref, { DATABASE_URL: "url", DATABASE_PASSWORD: "password" })
+const vars = EnvVar.secretEnv({ ref: dbCreds.ref, map: { DATABASE_URL: "url", DATABASE_PASSWORD: "password" } })
 
 type _Names = Expect<Equal<(typeof vars)[number]["name"], "DATABASE_URL" | "DATABASE_PASSWORD">>
 
-const _nsOk = EnvVar.secretEnv(dbCreds.ref, { DATABASE_URL: "url" }, { podNamespace: "prod" })
+const _nsOk = EnvVar.secretEnv({ ref: dbCreds.ref, map: { DATABASE_URL: "url" }, podNamespace: "prod" })
 
-const _keyTypo = EnvVar.secretEnv(dbCreds.ref, {
+const _keyTypo = EnvVar.secretEnv({
+  ref: dbCreds.ref,
   // @ts-expect-error - "passowrd" is not in "url" | "password".
-  DATABASE_PASSWORD: "passowrd"
+  map: { DATABASE_PASSWORD: "passowrd" }
 })
 
 // @ts-expect-error - podNamespace "staging" does not match the ref's namespace "prod".
-const _nsMismatch = EnvVar.secretEnv(dbCreds.ref, { DATABASE_URL: "url" }, { podNamespace: "staging" })
+const _nsMismatch = EnvVar.secretEnv({ ref: dbCreds.ref, map: { DATABASE_URL: "url" }, podNamespace: "staging" })
 
 // @ts-expect-error - raw string is not a SecretRef.
-const _rawRef = EnvVar.secretEnv("db-creds", { DATABASE_URL: "url" })
+const _rawRef = EnvVar.secretEnv({ ref: "db-creds", map: { DATABASE_URL: "url" } })
 
 const opaque: SecretRef<"opaque"> = brand<SecretRef<"opaque">>("opaque")
 
-const _anyKey = EnvVar.secretEnv(SecretRefValue.unsafeReNamespace(opaque), { OPAQUE: "anything" }, {
-  podNamespace: "some-pod"
-})
+const _anyKey = EnvVar.secretEnv({ ref: opaque, map: { OPAQUE: "anything" }, podNamespace: "some-pod" })
 
 const cfg = ConfigMap.make({ name: "cfg", namespace: "prod", data: { HOST: "h", PORT: "1" } })
-const cfgVars = EnvVar.configMapEnv(cfg.ref, { DB_HOST: "HOST", DB_PORT: "PORT" })
+const cfgVars = EnvVar.configMapEnv({ ref: cfg.ref, map: { DB_HOST: "HOST", DB_PORT: "PORT" } })
 
 type _CfgNames = Expect<Equal<(typeof cfgVars)[number]["name"], "DB_HOST" | "DB_PORT">>
 
-const _cfgTypo = EnvVar.configMapEnv(cfg.ref, {
+const _cfgTypo = EnvVar.configMapEnv({
+  ref: cfg.ref,
   // @ts-expect-error - "PROT" is not in "HOST" | "PORT".
-  DB_PORT: "PROT"
+  map: { DB_PORT: "PROT" }
 })
 
 void _nsOk

@@ -27,7 +27,7 @@ export type DeclaredSecret<N extends string, K extends string, Ns extends string
   & _DeclaredSecretBase<N, K, Ns>
   & _SecretValuesFields<N, K>
 
-export interface BindSecretInput<
+interface BindSecretInput<
   N extends string,
   K extends string,
   E extends Readonly<Record<K, string>>,
@@ -54,31 +54,48 @@ const _buildValuesLayer = <N extends string, K extends string>(
 
   const layer = L.effect(
     values,
-    resolveSource({ source: input.source, label: `SecretValues(${input.namespace}/${input.name})` })
+    _cachedSource(input.source).pipe(
+      Effect.flatMap((source) => resolveSource({ source, label: `SecretValues(${input.namespace}/${input.name})` }))
+    )
   )
 
   return { values, layer }
 }
 
-const _memoizeSource = <K extends string>(
+const _cachedSource = <K extends string>(
   source: SecretSource<K, Manifest.RenderServices>
-): SecretSource<K, Manifest.RenderServices> => ({
-  ...source,
-  resolve: Effect.runSync(Effect.cached(source.resolve))
-})
+): Effect.Effect<SecretSource<K, Manifest.RenderServices>> =>
+  Effect.cached(source.resolve).pipe(Effect.map((resolve) => ({ ...source, resolve })))
+
+const _cachedManifest = <K extends string>(input: {
+  readonly source: SecretSource<K, Manifest.RenderServices>
+  readonly build: (source: SecretSource<K, Manifest.RenderServices>) => Manifest.Manifest<unknown>
+}): Manifest.Manifest<unknown> =>
+  Manifest.make((ctx) => _cachedSource(input.source).pipe(Effect.flatMap((source) => input.build(source).render(ctx))))
+
+interface _EnvVarsInput<N extends string, K extends string, Ns extends string> {
+  readonly secret: SecretEntry<N, K, Readonly<Record<K, string>>>
+  readonly ref: SecretRef<N, K, Ns>
+}
 
 const _buildEnvVars = <N extends string, K extends string, Ns extends string>(
-  secret: SecretEntry<N, K, Readonly<Record<K, string>>>,
-  ref: SecretRef<N, K, Ns>
+  { secret, ref }: _EnvVarsInput<N, K, Ns>
 ): EnvVar[] => secret.keys.map((key: K) => EnvVar.fromSecret({ name: secret.env[key], ref, key }))
 
 // RequiresSource is erased to `boolean` here, so the compiler can't prove `source` is present; fail at runtime instead
 // of letting `emit` read `undefined.resolve` and throw.
-const _missingSourceManifest = (backend: { readonly _tag: string }, name: string, namespace: string) =>
+interface _MissingSourceInput {
+  readonly backend: { readonly _tag: string }
+  readonly name: string
+  readonly namespace: string
+}
+
+const _missingSourceManifest = (input: _MissingSourceInput) =>
   Manifest.make<unknown>(() =>
     Effect.fail(
       new RenderError({
-        message: `backend "${backend._tag}" requires a source but none was provided for secret "${namespace}/${name}"`
+        message:
+          `backend "${input.backend._tag}" requires a source but none was provided for secret "${input.namespace}/${input.name}"`
       })
     )
   )
@@ -97,17 +114,20 @@ const _backendManifest = <N extends string, K extends string, E extends Readonly
   if (backend === undefined) return undefined
 
   if (backend.requiresSource && source === undefined) {
-    return _missingSourceManifest(backend, secret.name, namespace)
+    return _missingSourceManifest({ backend, name: secret.name, namespace })
   }
 
-  return backend.emit({
-    name: secret.name,
-    namespace,
-    keys: secret.keys,
-    labels: input.labels,
-    annotations: input.annotations,
-    source
-  })
+  const emit = (resolved: SecretSource<K, Manifest.RenderServices> | undefined) =>
+    backend.emit({
+      name: secret.name,
+      namespace,
+      keys: secret.keys,
+      labels: input.labels,
+      annotations: input.annotations,
+      source: resolved
+    })
+
+  return source === undefined ? emit(undefined) : _cachedManifest({ source, build: emit })
 }
 
 // Overloaded so the namespace type parameter `Ns` only narrows when an explicit
@@ -127,6 +147,29 @@ export interface BindSecret {
   ): DeclaredSecret<N, K, string>
 }
 
+interface _DeclareInput<N extends string, K extends string, E extends Readonly<Record<K, string>>> {
+  readonly input: BindSecretInput<N, K, E, string>
+  readonly source: SecretSource<K, Manifest.RenderServices> | undefined
+  readonly namespace: string
+}
+
+const _declareBase = <N extends string, K extends string, E extends Readonly<Record<K, string>>>(
+  { input, source, namespace }: _DeclareInput<N, K, E>
+): DeclaredSecret<N, K, string> => {
+  const { secret } = input
+  const ref = SecretRefValue.of<N, K, string>(secret.name)
+
+  return {
+    ref,
+    name: secret.name,
+    namespace,
+    keys: secret.keys,
+    envVars: _buildEnvVars({ secret, ref }),
+    manifest: _backendManifest({ input, source, namespace }),
+    refLayer: Dep.provideSecret(secret.name)
+  }
+}
+
 export const bindSecret: BindSecret = <
   N extends string,
   K extends string,
@@ -134,23 +177,11 @@ export const bindSecret: BindSecret = <
 >(
   input: BindSecretInput<N, K, E, string>
 ): DeclaredSecret<N, K, string> => {
-  const { secret } = input
-  const source = input.source === undefined ? undefined : _memoizeSource(input.source)
-  const namespace = input.namespace ?? secret.namespace
-  const ref = SecretRefValue.of<N, K, string>(secret.name)
-  const manifest = _backendManifest({ input, source, namespace })
-
-  const out: DeclaredSecret<N, K, string> = {
-    ref,
-    name: secret.name,
-    namespace,
-    keys: secret.keys,
-    envVars: _buildEnvVars(secret, ref),
-    manifest,
-    refLayer: Dep.provideSecret(secret.name)
-  }
+  const source = input.source
+  const namespace = input.namespace ?? input.secret.namespace
+  const out = _declareBase({ input, source, namespace })
 
   return source === undefined
     ? out
-    : { ...out, ..._buildValuesLayer({ name: secret.name, namespace, source }) }
+    : { ...out, ..._buildValuesLayer({ name: input.secret.name, namespace, source }) }
 }

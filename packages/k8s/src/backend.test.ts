@@ -1,10 +1,17 @@
 import { NodeServices } from "@effect/platform-node"
-import { RenderError } from "@konfig.ts/core"
+import { Manifest, RenderError } from "@konfig.ts/core"
 import { SecretSource, SecretSourceError } from "@konfig.ts/env"
 import { Effect, Redacted } from "effect"
 import * as fc from "fast-check"
-import { it } from "vitest"
-import { type BackendEmitInput, resolvePlaintext } from "./backend"
+import { expect, it } from "vitest"
+import {
+  type BackendEmitInput,
+  backendLabel,
+  plainSecret,
+  resolvePlaintext,
+  SecretBackend,
+  secretMeta
+} from "./backend"
 
 const word = fc.stringMatching(/^[a-z]{1,6}$/)
 
@@ -47,3 +54,23 @@ it("succeeding source yields only base.keys as plaintext", () =>
       return JSON.stringify(out) === JSON.stringify(Object.fromEntries(keys.map((k) => [k, `v-${k}`])))
     })
   ))
+
+it("SecretBackend.make carries tag, requiresSource and emit", () => {
+  fc.assert(fc.property(word, fc.boolean(), (tag, requiresSource) => {
+    const backend = SecretBackend.make({ tag, requiresSource, emit: () => Manifest.make(() => Effect.succeed({})) })
+    expect(backend._tag).toBe(tag)
+    expect(backend.requiresSource).toBe(requiresSource)
+  }))
+})
+
+it("backendLabel and plainSecret derive from the emit base", () => {
+  fc.assert(fc.property(word, word, word, (tag, name, namespace) => {
+    const base: BackendEmitInput<string, string, true> = { ...baseOf(["k"], Effect.succeed({})), name, namespace }
+    expect(backendLabel({ tag, base })).toBe(`${tag}(${namespace}/${name})`)
+    expect(secretMeta(base)).toMatchObject({ name, namespace })
+    expect(plainSecret({ base, stringData: { k: "v" } })).toMatchObject({
+      kind: "Secret",
+      metadata: { name, namespace }
+    })
+  }))
+})

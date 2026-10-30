@@ -319,7 +319,7 @@ describe("Environment.bind secret shorthand", () => {
 })
 
 describe("Secret.bind source resolution", () => {
-  effectIt.effect("resolves the source once across emit and values layer", () =>
+  effectIt.effect("resolves once per render of the manifest and once per layer build", () =>
     Effect.gen(function*() {
       let calls = 0
       const base = SecretSource.literal({ data: { value: "s" } })
@@ -331,37 +331,44 @@ describe("Secret.bind source resolution", () => {
 
       const backend: SecretBackend<"session-key", "value", false> = new TestBackend<"session-key", "value">({
         requiresSource: false,
+        emit: (i) =>
+          Manifest.make(() =>
+            Effect.all([i.source?.resolve ?? Effect.succeed({}), i.source?.resolve ?? Effect.succeed({})]).pipe(
+              Effect.as({})
+            )
+          )
+      })
+
+      const bound = Secret.bind({ secret: sessionKey, backend, source })
+      const ctx = RenderContext.make("test")
+      yield* bound.manifest!.render(ctx)
+      expect(calls).toBe(1)
+      yield* bound.manifest!.render(ctx)
+      expect(calls).toBe(2)
+      yield* Effect.service(bound.values!).pipe(Effect.provide(bound.layer!))
+      expect(calls).toBe(3)
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  effectIt.effect("a failed resolve is not cached: the next render retries", () =>
+    Effect.gen(function*() {
+      let calls = 0
+      const base = SecretSource.literal({ data: { value: "s" } })
+
+      const source = {
+        ...base,
+        resolve: Effect.suspend(() => ++calls === 1 ? Effect.die("boom") : base.resolve)
+      }
+
+      const backend: SecretBackend<"session-key", "value", false> = new TestBackend<"session-key", "value">({
+        requiresSource: false,
         emit: (i) => Manifest.make(() => (i.source?.resolve ?? Effect.succeed({})).pipe(Effect.as({})))
       })
 
       const bound = Secret.bind({ secret: sessionKey, backend, source })
-      yield* bound.manifest!.render(RenderContext.make("test"))
-      yield* Effect.service(bound.values!).pipe(Effect.provide(bound.layer!))
-      expect(calls).toBe(1)
+      const ctx = RenderContext.make("test")
+      const first = yield* Effect.exit(bound.manifest!.render(ctx))
+      expect(first._tag).toBe("Failure")
+      yield* bound.manifest!.render(ctx)
+      expect(calls).toBe(2)
     }).pipe(Effect.provide(NodeServices.layer)))
-
-  effectIt.effect(
-    "memoizes per bind: re-rendering the same bound secret does not re-resolve",
-    () =>
-      Effect.gen(function*() {
-        let calls = 0
-        const base = SecretSource.literal({ data: { value: "s" } })
-
-        const source = {
-          ...base,
-          resolve: Effect.sync(() => ++calls).pipe(Effect.flatMap(() => base.resolve))
-        }
-
-        const backend: SecretBackend<"session-key", "value", false> = new TestBackend<"session-key", "value">({
-          requiresSource: false,
-          emit: (i) => Manifest.make(() => (i.source?.resolve ?? Effect.succeed({})).pipe(Effect.as({})))
-        })
-
-        const bound = Secret.bind({ secret: sessionKey, backend, source })
-        const ctx = RenderContext.make("test")
-        yield* bound.manifest!.render(ctx)
-        yield* bound.manifest!.render(ctx)
-        expect(calls).toBe(1)
-      }).pipe(Effect.provide(NodeServices.layer))
-  )
 })

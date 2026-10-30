@@ -18,19 +18,10 @@ export type ServiceAccountRef<N extends string = string> = SARef<N>
 
 export type PvcRef<N extends string = string> = PRef<N>
 
-export type { ConfigMapRefName, PvcRefName, SecretRefName } from "@konfig.ts/core"
-
 export const SecretRef = {
   of: <N extends string, K extends string = string, Ns extends string = string>(
     name: N
-  ): SecretRef<N, K, Ns> => brand<SecretRef<N, K, Ns>>(name),
-  // Escape hatch: widens a typed ref's namespace slot to `any`. Use sparingly (legitimate cross-namespace cases only).
-  // oxlint-disable-next-line app/no-type-assertion
-  unsafeReNamespace: <N extends string, K extends string>(
-    // oxlint-disable-next-line app/no-type-assertion app/no-any
-    ref: SecretRef<N, K, any>
-    // oxlint-disable-next-line app/no-type-assertion app/no-any
-  ): SecretRef<N, K, any> => ref
+  ): SecretRef<N, K, Ns> => brand<SecretRef<N, K, Ns>>(name)
 }
 
 export const ConfigMapRef = {

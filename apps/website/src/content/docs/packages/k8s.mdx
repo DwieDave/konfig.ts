@@ -8,7 +8,7 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`@konfig.ts/k8s` builds Kubernetes resources in TypeScript, with one twist: wherever a resource points at another resource, it takes a branded reference instead of a raw string. An env var that reads from a Secret, a volume that mounts a ConfigMap, an Ingress TLS block that names a Secret, an `imagePullSecrets` entry: each of these needs a reference produced by the resource it points at. A workload that references a Secret nobody creates is therefore a compile error, not a failed `argocd sync`. The package also hosts `Environment.bind` and `Secret.bind`, the step that takes an environment contract from `@konfig.ts/env` and turns it into a Deployment env block plus whatever custom resources the chosen secret backend emits.
+`@konfig.ts/k8s` builds Kubernetes resources in TypeScript, with one twist: wherever a resource points at another resource, it takes a branded reference instead of a raw string. An env var that reads from a Secret, a volume that mounts a claim, an Ingress TLS block that names a Secret, an `imagePullSecrets` entry: each of these needs a reference produced by the resource it points at. A workload that references a Secret nobody creates is therefore a compile error, not a failed `argocd sync`. The package also hosts `Environment.bind` and `Secret.bind`, the step that takes an environment contract from `@konfig.ts/env` and turns it into a Deployment env block plus whatever custom resources the chosen secret backend emits.
 
 ## Install
 
@@ -22,26 +22,24 @@ The API module of the full-stack example. It binds the env contract, defines a c
 
 <Snippet file="infra/modules/api.ts" startAt="const apiContainer = Container.define" endBefore="return [...bound.manifests" title="infra/modules/api.ts" />
 
-Two of the type-level checks are visible here. `EnvVar.fromSecretForPod` requires `podNamespace` to match the Secret's namespace, so a pod cannot read a Secret from another namespace. `Port.ref("http")` only accepts a name that was declared in `ports`, so a probe or Service cannot point at a port that does not exist.
+Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNamespace` requires `podNamespace` to match the Secret's namespace, so a pod cannot read a Secret from another namespace. `Port.ref("http")` only accepts a name that was declared in `ports`, so a probe or Service cannot point at a port that does not exist.
 
 ## Surface
 
 | Export | Purpose |
 | --- | --- |
-| `Container`, `Pod`, `PodSet` | `Container.define`, pod specs, and shared pod-set inputs for workloads |
+| `Container`, `Pod` | `Container.define` and pod specs |
 | `Port` | `Port.make({ name, containerPort })`, `Port.ref(name)` for probes and Services |
-| `EnvVar` | `value`, `secretEnv`, `configMapEnv`, `fromSecret`, `fromSecretForPod`, `fromConfigMap`, `raw`; duplicate names in one container are a compile error at `Container.define` |
-| `Secret`, `ConfigMap`, `Namespace`, `ServiceAccount` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind` |
+| `EnvVar` | `value`, `secretEnv`, `configMapEnv`, `fromSecret`, `fromConfigMap`; duplicate names in one container are a compile error at `Container.define` |
+| `Secret`, `ConfigMap`, `Namespace` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind` |
 | `Environment` | `Environment.define` re-exported with `bind` (manifest side) and `runtime` (process side) |
 | `NativeSecret` | `NativeSecret.backend({ type?, immutable?, silenceWarning? })`: built-in backend that emits a plain `Secret` from a source |
-| `Workload` | `Workload.web` (Deployment + Service + optional Ingress, `reloader: "stakater"`), `Workload.cron` (CronJob + ServiceAccount) |
-| `Deployment`, `StatefulSet`, `Job`, `CronJob`, `Service`, `Ingress` | Lower-level resource constructors |
-| `Role`, `RoleBinding`, `ClusterRole`, `ClusterRoleBinding`, `NetworkPolicy`, `PersistentVolume`, `PersistentVolumeClaim` | RBAC, policy, and storage constructors |
+| `Workload` | `Workload.web` (Deployment + Service + optional Ingress, `reloader: "stakater"`) |
+| `Deployment`, `Service`, `NetworkPolicy` | Lower-level resource constructors |
 | `Volume`, `Selector` | Typed volumes/mounts; label selectors shared between workloads and NetworkPolicy peers |
-| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef` | Brand constructors; `SecretRefName`, `ConfigMapRefName`, `PvcRefName` type helpers |
+| `PvcRef` | `PvcRef.of(name)` brand constructor for an externally managed claim |
 | `hashSecretValues` | Stamp a pod-spec hash so pods roll on re-render |
-| `SecretBackend`, `BackendEmitInput`, `BackendTag` | The contract secret backend packages implement |
-| `K8s` | Raw Kubernetes types (`kubernetes-types@1.30`) |
+| `SecretBackend`, `BackendEmitInput` | The contract secret backend packages implement |
 
 ## Errors
 

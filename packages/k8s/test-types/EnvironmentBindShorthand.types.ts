@@ -1,6 +1,7 @@
+import type { SecretRef } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
 import { Literal } from "@konfig.ts/env"
-import type { SecretBackend, SecretRef } from "@konfig.ts/k8s"
+import type { SecretBackend } from "@konfig.ts/k8s"
 import { Environment, NativeSecret, Secret } from "@konfig.ts/k8s"
 
 type Expect<T extends true> = T

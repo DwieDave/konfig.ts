@@ -36,8 +36,12 @@ export const defineApi = Application.module({
         ports: [Port.make({ name: "http", containerPort: 8080 })],
         env: [
           ...bound.envVars,
-          ...EnvVar.secretEnv(bound.members.db.ref, { DATABASE_URL_PRIMARY: "url" }, { podNamespace: namespace }),
-          ...EnvVar.configMapEnv(featureFlags.ref, { FEATURE_NEW_UI: "NEW_UI" }),
+          ...EnvVar.secretEnv({
+            ref: bound.members.db.ref,
+            map: { DATABASE_URL_PRIMARY: "url" },
+            podNamespace: namespace
+          }),
+          ...EnvVar.configMapEnv({ ref: featureFlags.ref, map: { FEATURE_NEW_UI: "NEW_UI" } }),
           EnvVar.value({ name: "API_NAME", value: name })
         ],
         readinessProbe: {
