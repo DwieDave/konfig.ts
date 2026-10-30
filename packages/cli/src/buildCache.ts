@@ -4,7 +4,9 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
 import * as crypto from "node:crypto"
+import { envEntryPath } from "./envEntry"
 import { matchesGlob } from "./globMatch"
+import { walkFiles } from "./walkFiles"
 
 class BuildCacheError extends Data.TaggedError("BuildCacheError")<{
   readonly path: string
@@ -55,17 +57,6 @@ const _ctxSignature = (ctx: RenderContext): string => {
   ].join("\n")
 }
 
-const _entryPath = (
-  cfg: ResolvedKonfigConfig,
-  envName: string,
-  path: Path
-): string => {
-  const envSpec = cfg.config.envs[envName]
-  return envSpec === undefined
-    ? path.join(cfg.configDir, cfg.config.root, "env", `${envName}.ts`)
-    : path.join(cfg.configDir, cfg.config.root, envSpec.entry)
-}
-
 const _hashEntry = (
   hash: crypto.Hash,
   fs: FileSystem,
@@ -103,13 +94,12 @@ const _resolveCacheIncludeFiles = (
     for (const extra of cfg.config.cacheInclude ?? []) {
       const abs = path.isAbsolute(extra) ? extra : path.join(cfg.configDir, extra)
       if (_GLOB_CHARS.test(extra)) {
-        const candidates: string[] = []
-        yield* _collectFiles({ dir: _globBase(abs, path.sep), out: candidates, skipDirs })
+        const candidates = yield* _collectFiles({ dir: _globBase(abs, path.sep), skipDirs })
         files.push(...candidates.filter(_globMatcher(extra, cfg, path)))
       } else {
         const stat = yield* _orAbsentIfNotFound(fs.stat(abs), () => null)
         if (stat?.type === "Directory") {
-          yield* _collectFiles({ dir: abs, out: files, skipDirs })
+          files.push(...(yield* _collectFiles({ dir: abs, skipDirs })))
         } else if (stat?.type === "File") {
           files.push(abs)
         }
@@ -147,11 +137,10 @@ export const computeInputHash = (input: ComputeInputHashInput) =>
     hash.update("\n")
     hash.update(`ctx:${_ctxSignature(ctx)}\n`)
 
-    yield* _hashEntry(hash, fs, _entryPath(cfg, envName, path))
+    yield* _hashEntry(hash, fs, envEntryPath({ cfg, envName, pathJoin: path.join }))
 
     const rootAbs = path.join(cfg.configDir, cfg.config.root)
-    const files: string[] = []
-    yield* _collectFiles({ dir: rootAbs, out: files, skipDirs: _outputDirs(cfg, path) })
+    const files = yield* _collectFiles({ dir: rootAbs, skipDirs: _outputDirs(cfg, path) })
     files.push(...(yield* _resolveCacheIncludeFiles(cfg, fs, path)))
     files.push(...(yield* _findLockfiles(cfg.configDir)))
 
@@ -175,29 +164,13 @@ const _ALWAYS_SKIPPED_DIRS: ReadonlySet<string> = new Set(["node_modules", "dist
 
 interface CollectFilesInput {
   readonly dir: string
-  readonly out: string[]
   readonly skipDirs: ReadonlySet<string>
 }
 
-const _collectFiles = (
-  input: CollectFilesInput
-): Effect.Effect<void, never, FileSystem | Path> =>
-  Effect.gen(function*() {
-    const { dir, out, skipDirs } = input
-    const fs = yield* FileSystem
-    const path = yield* Path
-    const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed((): string[] => []))
-    for (const e of entries) {
-      const full = path.join(dir, e)
-      const stat = yield* fs.stat(full).pipe(Effect.orElseSucceed(() => null))
-      if (stat === null) continue
-      if (stat.type === "Directory") {
-        if (_ALWAYS_SKIPPED_DIRS.has(e) || skipDirs.has(full)) continue
-        yield* _collectFiles({ dir: full, out, skipDirs })
-      } else if (stat.type === "File") {
-        out.push(full)
-      }
-    }
+const _collectFiles = (input: CollectFilesInput) =>
+  walkFiles({
+    dir: input.dir,
+    skipDir: ({ full, name }) => _ALWAYS_SKIPPED_DIRS.has(name) || input.skipDirs.has(full)
   })
 
 const _outputDirs = (cfg: ResolvedKonfigConfig, path: Path): ReadonlySet<string> =>
@@ -242,30 +215,14 @@ export const computeOnDiskOutputHash = (
   outDirAbs: string
 ): Effect.Effect<string, never, FileSystem | Path> =>
   Effect.gen(function*() {
-    const files: { path: string; content: string }[] = []
-    yield* _collectOutputFiles(outDirAbs, files)
-    return computeOutputHash(files)
-  })
-
-const _collectOutputFiles = (
-  dir: string,
-  out: { path: string; content: string }[]
-): Effect.Effect<void, never, FileSystem | Path> =>
-  Effect.gen(function*() {
     const fs = yield* FileSystem
-    const path = yield* Path
-    const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed((): string[] => []))
-    for (const e of entries) {
-      const full = path.join(dir, e)
-      const stat = yield* fs.stat(full).pipe(Effect.orElseSucceed(() => null))
-      if (stat === null) continue
-      if (stat.type === "Directory") {
-        yield* _collectOutputFiles(full, out)
-      } else if (stat.type === "File") {
-        const content = yield* fs.readFileString(full).pipe(Effect.orElseSucceed(() => ""))
-        out.push({ path: full, content })
-      }
-    }
+    const paths = yield* walkFiles({ dir: outDirAbs })
+    const files = yield* Effect.forEach(paths, (path) =>
+      fs.readFileString(path).pipe(
+        Effect.orElseSucceed(() => ""),
+        Effect.map((content) => ({ path, content }))
+      ))
+    return computeOutputHash(files)
   })
 
 // Folds a digest of the render-context signature into the filename so builds

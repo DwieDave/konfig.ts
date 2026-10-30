@@ -3,8 +3,7 @@ import { Console, Data, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { renderEnv, writeFilesToDir } from "../buildEnv"
-import { resolveConfig } from "../configResolver"
-import { renderContextFlags, renderContextFromFlags } from "../renderContextFlags"
+import { renderContextFlags, withRenderContext } from "../renderContextFlags"
 import { runKubeconform, validateManifestFile } from "../validator"
 
 export class StructuralValidationFailed extends Data.TaggedError("StructuralValidationFailed")<{
@@ -88,16 +87,16 @@ export const validateCommand = Command.make(
     ...renderContextFlags
   },
   (args) =>
-    Effect.gen(function*() {
-      const cfg = yield* resolveConfig()
-      const ctx = renderContextFromFlags({ env: args.env, flags: args })
-      return yield* runValidate({
-        cfg,
-        envName: args.env,
-        ctx,
-        strict: args.strict,
-        ignoreMissingSchemas: args.ignoreMissingSchemas
-      })
+    withRenderContext({
+      args,
+      run: ({ cfg, ctx }) =>
+        runValidate({
+          cfg,
+          envName: args.env,
+          ctx,
+          strict: args.strict,
+          ignoreMissingSchemas: args.ignoreMissingSchemas
+        })
     })
 ).pipe(
   Command.withDescription(

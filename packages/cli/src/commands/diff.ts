@@ -1,11 +1,18 @@
-import { diffFiles, type DiffFormat, formatDiff, hasDifferences } from "@konfig.ts/core"
+import {
+  diffFiles,
+  type DiffFormat,
+  formatDiff,
+  hasDifferences,
+  type RenderContext,
+  type ResolvedKonfigConfig
+} from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
-import { Argument, Command, Flag } from "effect/cli"
+import { Argument, Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { renderEnv } from "../buildEnv"
-import { resolveConfig } from "../configResolver"
-import { renderContextFlags, renderContextFromFlags } from "../renderContextFlags"
+import { formatFlag, renderContextFlags, withRenderContext } from "../renderContextFlags"
+import { walkFiles } from "../walkFiles"
 
 class DiffBaselineMissing extends Data.TaggedError("DiffBaselineMissing")<{
   readonly env: string
@@ -19,72 +26,47 @@ export const readBaselineDir = (baselineDir: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
+    const paths = (yield* walkFiles({ dir: baselineDir })).filter((p) => p.endsWith(".yaml"))
+    const entries = yield* Effect.forEach(paths, (full) =>
+      fs.readFileString(full).pipe(
+        Effect.orElseSucceed(() => ""),
+        Effect.map((content) => [path.relative(baselineDir, full), content] as const)
+      ))
+    return Object.fromEntries(entries)
+  })
 
-    const collect = (
-      dir: string
-    ): Effect.Effect<Record<string, string>, never, FileSystem | Path> =>
-      Effect.gen(function*() {
-        const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => []))
-        const out: Record<string, string> = {}
-        for (const e of entries) {
-          const full = path.join(dir, e)
-          const stat = yield* fs.stat(full).pipe(Effect.orElseSucceed(() => null))
-          if (stat?.type === "Directory") {
-            const sub = yield* collect(full)
-            for (const [k, v] of Object.entries(sub)) {
-              out[`${e}/${k}`] = v
-            }
-          } else if (stat?.type === "File" && e.endsWith(".yaml")) {
-            const content = yield* fs.readFileString(full).pipe(Effect.orElseSucceed(() => ""))
-            out[e] = content
-          }
-        }
-        return out
-      })
-    return yield* collect(baselineDir)
+interface RunDiffInput {
+  readonly args: { readonly env: string; readonly format: DiffFormat }
+  readonly cfg: ResolvedKonfigConfig
+  readonly ctx: RenderContext
+}
+
+const _runDiff = ({ args, cfg, ctx }: RunDiffInput) =>
+  Effect.gen(function*() {
+    const path = yield* Path
+    if (cfg.config.diff === undefined) {
+      return yield* new DiffBaselineMissing({ env: args.env })
+    }
+    const rendered = yield* renderEnv({ cfg, envName: args.env, ctx })
+    const baselineDirAbs = path.join(cfg.configDir, cfg.config.root, cfg.config.diff.baseline, args.env)
+    const left = yield* readBaselineDir(baselineDirAbs)
+    const right = Object.fromEntries(
+      rendered.files.map((file) => [path.relative(rendered.outDirAbs, file.path), file.content])
+    )
+    const result = diffFiles({ left, right })
+    if (hasDifferences(result)) {
+      yield* Console.log(formatDiff({ result, format: args.format }))
+      return yield* new DiffNonEmpty({ env: args.env })
+    }
+    yield* Console.log(`OK — env '${args.env}' matches baseline`)
   })
 
 export const diffCommand = Command.make(
   "diff",
   {
     env: Argument.String("env").pipe(Argument.withDescription("Env to diff")),
-    format: Flag.Literals("format", ["summary", "detail", "json"] as const satisfies readonly DiffFormat[]).pipe(
-      Flag.withDescription("Output format"),
-      Flag.withDefault("summary" as const)
-    ),
+    format: formatFlag,
     ...renderContextFlags
   },
-  (args) =>
-    Effect.gen(function*() {
-      const cfg = yield* resolveConfig()
-      const ctx = renderContextFromFlags({ env: args.env, flags: args })
-      const path = yield* Path
-
-      if (cfg.config.diff === undefined) {
-        return yield* new DiffBaselineMissing({ env: args.env })
-      }
-
-      const rendered = yield* renderEnv({ cfg, envName: args.env, ctx })
-
-      const baselineDirAbs = path.join(
-        cfg.configDir,
-        cfg.config.root,
-        cfg.config.diff.baseline,
-        args.env
-      )
-      const left = yield* readBaselineDir(baselineDirAbs)
-
-      const right: Record<string, string> = {}
-      for (const file of rendered.files) {
-        const rel = path.relative(rendered.outDirAbs, file.path)
-        right[rel] = file.content
-      }
-
-      const result = diffFiles({ left, right })
-      if (hasDifferences(result)) {
-        yield* Console.log(formatDiff({ result, format: args.format }))
-        return yield* new DiffNonEmpty({ env: args.env })
-      }
-      yield* Console.log(`OK — env '${args.env}' matches baseline`)
-    })
+  (args) => withRenderContext({ args, run: ({ cfg, ctx }) => _runDiff({ args, cfg, ctx }) })
 ).pipe(Command.withDescription("Structural diff vs the nixidy baseline"))

@@ -1,4 +1,4 @@
-import { parseYamlAll } from "@konfig.ts/core"
+import { isRecord, parseYamlAll } from "@konfig.ts/core"
 import { Data, Effect, Result, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/process"
@@ -120,7 +120,7 @@ export const validateManifestFile = (
     let docIndex = -1
     for (const parsed of docs) {
       docIndex++
-      if (parsed === null || typeof parsed !== "object") continue
+      if (!isRecord(parsed)) continue
 
       const result = yield* Effect.result(_decodeEnvelope(parsed))
       if (Result.isFailure(result)) {

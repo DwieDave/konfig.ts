@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { isRecord } from "@konfig.ts/core"
 import { Cause, Console, Effect, Runtime } from "effect"
 import { Command } from "effect/cli"
 import { createRequire } from "node:module"
@@ -32,7 +33,7 @@ const root = Command.make(
 // At runtime this module is `dist/main.mjs`, so `../package.json` resolves to
 // the package root in both source and bundled layouts.
 const _pkg: unknown = createRequire(import.meta.url)("../package.json")
-const version = typeof _pkg === "object" && _pkg !== null && "version" in _pkg && typeof _pkg.version === "string"
+const version = isRecord(_pkg) && "version" in _pkg && typeof _pkg.version === "string"
   ? _pkg.version
   : "0.0.0"
 

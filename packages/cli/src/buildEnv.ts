@@ -1,21 +1,23 @@
 import { applicationCRFilename, type AppOfAppsResult, serializeApplicationCR } from "@konfig.ts/argocd"
 import {
   type AnyRenderError,
+  isParsedDoc,
+  isRawYaml,
+  isRecord,
   KONFIG_HELM_CACHE_ENV,
   Manifest as M,
-  type ParsedDoc,
-  parseYamlAll,
-  type RawYaml,
   type RenderContext,
   renderManifest,
   type ResolvedKonfigConfig,
   unsafeCoerce,
+  unwrapDocs,
   Yaml
 } from "@konfig.ts/core"
 import { Array as Arr, ConfigProvider, Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { resolveCliPaths } from "./cliConfig"
+import { envEntryPath } from "./envEntry"
 import { decodeEnvResult, type EnvResult } from "./envResult"
 import { moduleDefault } from "./moduleDefault"
 
@@ -67,10 +69,7 @@ const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
     const path = yield* Path
     const fs = yield* FileSystem
 
-    const envSpec = cfg.config.envs[envName]
-    const entry = envSpec === undefined
-      ? path.join(cfg.configDir, cfg.config.root, "env", `${envName}.ts`)
-      : path.join(cfg.configDir, cfg.config.root, envSpec.entry)
+    const entry = envEntryPath({ cfg, envName, pathJoin: path.join })
 
     const exists = yield* fs.exists(entry).pipe(Effect.orElseSucceed(() => false))
     if (!exists) {
@@ -175,22 +174,6 @@ const _objectOutputs = (
     : Effect.map(_toOutputFile({ ...input, routing }), (file) => [file])
 }
 
-interface _SplitRawYamlInput {
-  readonly content: string
-  readonly dir: string
-  readonly pathSep: (...parts: string[]) => string
-}
-const _splitRawYaml = (input: _SplitRawYamlInput): Effect.Effect<OutputFile[], InvalidOutputObject> =>
-  Effect.forEach(
-    parseYamlAll(input.content).filter((doc): doc is object => doc !== null && typeof doc === "object"),
-    (doc) => _objectOutputs({ doc, dir: input.dir, pathJoin: input.pathSep })
-  ).pipe(Effect.map((groups) => groups.flat()))
-
-const _isRawYaml = (v: object): v is RawYaml =>
-  "_tag" in v && v._tag === "RawYaml" && "content" in v && typeof v.content === "string"
-
-const _isParsedDoc = (v: object): v is ParsedDoc => "_tag" in v && v._tag === "ParsedDoc" && "value" in v
-
 interface _CollectOutputsInput {
   readonly value: unknown
   readonly appDir: string
@@ -198,16 +181,12 @@ interface _CollectOutputsInput {
 }
 const _collectOutputs = (input: _CollectOutputsInput): Effect.Effect<OutputFile[], InvalidOutputObject> => {
   const { appDir, pathJoin, value } = input
-  if (value === null || value === undefined) return Effect.succeed([])
-  if (Array.isArray(value)) {
-    return Effect.forEach(value, (v) => _collectOutputs({ value: v, appDir, pathJoin })).pipe(
-      Effect.map((groups) => groups.flat())
-    )
-  }
-  if (typeof value !== "object") return Effect.succeed([])
-  if (_isRawYaml(value)) return _splitRawYaml({ content: value.content, dir: appDir, pathSep: pathJoin })
-  if (_isParsedDoc(value)) return _collectOutputs({ value: value.value, appDir, pathJoin })
-  return _objectOutputs({ doc: value, dir: appDir, pathJoin })
+  const recurse = (v: unknown) => _collectOutputs({ value: v, appDir, pathJoin })
+  const flatten = (values: ReadonlyArray<unknown>) =>
+    Effect.forEach(values, recurse).pipe(Effect.map((groups) => groups.flat()))
+  if (Array.isArray(value)) return flatten(value)
+  if (isRawYaml(value) || isParsedDoc(value)) return flatten(unwrapDocs(value))
+  return isRecord(value) ? _objectOutputs({ doc: value, dir: appDir, pathJoin }) : Effect.succeed([])
 }
 
 export interface OutputCollision {

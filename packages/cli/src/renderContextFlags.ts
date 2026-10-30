@@ -1,6 +1,7 @@
-import { RenderContext } from "@konfig.ts/core"
-import { Option } from "effect"
+import { type DiffFormat, RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
+import { Effect, Option } from "effect"
 import { Flag } from "effect/cli"
+import { resolveConfig } from "./configResolver"
 
 export const renderContextFlags = {
   cluster: Flag.String("cluster").pipe(
@@ -23,12 +24,12 @@ interface RenderContextFlagValues {
   readonly flag: Option.Option<Record<string, string>>
 }
 
-export interface RenderContextFromFlagsInput {
+interface RenderContextFromFlagsInput {
   readonly env: string
   readonly flags: RenderContextFlagValues
 }
 
-export const renderContextFromFlags = (input: RenderContextFromFlagsInput): RenderContext => {
+const _renderContextFromFlags = (input: RenderContextFromFlagsInput): RenderContext => {
   const flagMap = Option.match(input.flags.flag, {
     onSome: (record) => new Map<string, unknown>(Object.entries(record)),
     onNone: () => undefined
@@ -40,3 +41,23 @@ export const renderContextFromFlags = (input: RenderContextFromFlagsInput): Rend
     flags: flagMap
   })
 }
+
+export const formatFlag = Flag.Literals(
+  "format",
+  ["summary", "detail", "json"] as const satisfies readonly DiffFormat[]
+)
+  .pipe(
+    Flag.withDescription("Output format"),
+    Flag.withDefault("summary" as const)
+  )
+
+export interface WithRenderContextInput<A, E, R> {
+  readonly args: RenderContextFlagValues & { readonly env: string }
+  readonly run: (input: { readonly cfg: ResolvedKonfigConfig; readonly ctx: RenderContext }) => Effect.Effect<A, E, R>
+}
+
+export const withRenderContext = <A, E, R>({ args, run }: WithRenderContextInput<A, E, R>) =>
+  Effect.gen(function*() {
+    const cfg = yield* resolveConfig()
+    return yield* run({ cfg, ctx: _renderContextFromFlags({ env: args.env, flags: args }) })
+  })

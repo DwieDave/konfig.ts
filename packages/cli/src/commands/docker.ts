@@ -13,6 +13,7 @@ import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { moduleDefault } from "../moduleDefault"
+import { formatFlag } from "../renderContextFlags"
 
 export class SpecImportError extends Data.TaggedError("SpecImportError")<{
   readonly specPath: string
@@ -61,6 +62,25 @@ export const loadSpec = (
 
 export const emitFor = (load: SpecLoad) =>
   emit({ spec: { ...load.app.spec, target: load.targetAbs }, specPath: load.specPath })
+
+export interface DockerVariant {
+  readonly kind: "prod" | "dev"
+  readonly file: "Dockerfile" | "Dockerfile.dev"
+  readonly content: string
+}
+
+export interface VariantsInput {
+  readonly emitted: { readonly dockerfile: string; readonly dockerfileDev?: string | undefined }
+  readonly prodOnly: boolean
+  readonly devOnly: boolean
+}
+
+export const variantsOf = ({ devOnly, emitted, prodOnly }: VariantsInput): ReadonlyArray<DockerVariant> => [
+  ...(devOnly ? [] : [{ kind: "prod", file: "Dockerfile", content: emitted.dockerfile } as const]),
+  ...(prodOnly || !emitted.dockerfileDev
+    ? []
+    : [{ kind: "dev", file: "Dockerfile.dev", content: emitted.dockerfileDev } as const])
+]
 
 export interface WriteAtomicInput {
   readonly fs: FileSystem
@@ -120,11 +140,8 @@ export const previewEffect = (
   Effect.gen(function*() {
     const load = yield* loadSpec(args.target)
     const e = yield* emitFor(load)
-    if (!args.devOnly) yield* Console.log(e.dockerfile)
-    if (!args.prodOnly && e.dockerfileDev) {
-      if (!args.devOnly) yield* Console.log("\n# ---- Dockerfile.dev ----\n")
-      yield* Console.log(e.dockerfileDev)
-    }
+    yield* Effect.forEach(variantsOf({ emitted: e, ...args }), (v) =>
+      Console.log(v.kind === "dev" && !args.devOnly ? `\n# ---- Dockerfile.dev ----\n\n${v.content}` : v.content))
   })
 
 const previewCommand = Command.make(
@@ -169,16 +186,12 @@ export const writeEffect = (
     const outDirAbs = args.outDir._tag === "Some"
       ? p.resolve(process.cwd(), args.outDir.value)
       : load.targetAbs
-    if (!args.devOnly) {
-      const dest = p.join(outDirAbs, "Dockerfile")
-      const r = yield* writeOne({ dest, content: e.dockerfile, force: args.force })
-      yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`)
-    }
-    if (!args.prodOnly && e.dockerfileDev) {
-      const dest = p.join(outDirAbs, "Dockerfile.dev")
-      const r = yield* writeOne({ dest, content: e.dockerfileDev, force: args.force })
-      yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`)
-    }
+    yield* Effect.forEach(variantsOf({ emitted: e, ...args }), (v) =>
+      Effect.gen(function*() {
+        const dest = p.join(outDirAbs, v.file)
+        const r = yield* writeOne({ dest, content: v.content, force: args.force })
+        yield* Console.log(r.written ? `wrote ${dest}` : `unchanged ${dest}`)
+      }))
   })
 
 const writeCommand = Command.make(
@@ -240,23 +253,14 @@ export const diffEffect = (
     const p = yield* Path
     const load = yield* loadSpec(args.target)
     const e = yield* emitFor(load)
-    const fmt = args.format
-    yield* diffOne({
-      dest: p.join(load.targetAbs, "Dockerfile"),
-      emitted: e.dockerfile,
-      kind: "prod",
-      target: args.target,
-      format: fmt
-    })
-    if (e.dockerfileDev) {
-      yield* diffOne({
-        dest: p.join(load.targetAbs, "Dockerfile.dev"),
-        emitted: e.dockerfileDev,
-        kind: "dev",
+    yield* Effect.forEach(variantsOf({ emitted: e, prodOnly: false, devOnly: false }), (v) =>
+      diffOne({
+        dest: p.join(load.targetAbs, v.file),
+        emitted: v.content,
+        kind: v.kind,
         target: args.target,
-        format: fmt
-      })
-    }
+        format: args.format
+      }))
     yield* Console.log(`OK — ${args.target} matches`)
   })
 
@@ -264,10 +268,7 @@ const diffCommand = Command.make(
   "diff",
   {
     target: Argument.String("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
-    format: Flag.Literals("format", ["summary", "detail", "json"] as const satisfies readonly DiffFormat[]).pipe(
-      Flag.withDescription("Output format"),
-      Flag.withDefault("summary" as const)
-    )
+    format: formatFlag
   },
   (args) => diffEffect(args)
 ).pipe(Command.withDescription("Diff would-emit Dockerfiles vs on-disk; non-zero exit on drift"))

@@ -1,3 +1,4 @@
+import { isRecord } from "@konfig.ts/core"
 import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -34,8 +35,7 @@ export class ChartRegistryEntryDecodeError extends Data.TaggedError("ChartRegist
 }
 
 const _hasHelmReleaseMarker = (val: unknown): val is Record<string, unknown> =>
-  val !== null &&
-  typeof val === "object" &&
+  isRecord(val) &&
   HELM_RELEASE_MARKER in val &&
   val[HELM_RELEASE_MARKER] === true
 

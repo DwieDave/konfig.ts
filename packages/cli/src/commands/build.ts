@@ -11,8 +11,7 @@ import {
   writeCacheEntry
 } from "../buildCache"
 import { envOutDir, renderEnv, writeFiles } from "../buildEnv"
-import { resolveConfig } from "../configResolver"
-import { renderContextFlags, renderContextFromFlags } from "../renderContextFlags"
+import { renderContextFlags, withRenderContext } from "../renderContextFlags"
 
 const _formatReport = (
   envName: string,
@@ -163,16 +162,16 @@ export const buildCommand = Command.make(
     ...renderContextFlags
   },
   (args) =>
-    Effect.gen(function*() {
-      const cfg = yield* resolveConfig()
-      const ctx = renderContextFromFlags({ env: args.env, flags: args })
-      return yield* runBuild({
-        cfg,
-        envName: args.env,
-        ctx,
-        logFmt: args.log,
-        verbose: args.verbose,
-        noCache: args.noCache
-      })
+    withRenderContext({
+      args,
+      run: ({ cfg, ctx }) =>
+        runBuild({
+          cfg,
+          envName: args.env,
+          ctx,
+          logFmt: args.log,
+          verbose: args.verbose,
+          noCache: args.noCache
+        })
     })
 ).pipe(Command.withDescription("Render manifests for an env"))
