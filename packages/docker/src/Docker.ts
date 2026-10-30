@@ -1,17 +1,10 @@
 import { isRecord, unsafeCoerce } from "@konfig.ts/core"
 import type { YarnVariant } from "./services/PackageManager"
-import type {
-  BuildAtom,
-  CopyAtom,
-  DockerSpec,
-  HealthcheckAtom,
-  PackageManagerAtom,
-  PlatformAtom,
-  RuntimeAtom,
-  UserAtom
-} from "./spec"
+import { BuildAtom, CopyAtom, HealthcheckAtom, PackageManagerAtom, PlatformAtom, RuntimeAtom, UserAtom } from "./spec"
+import type { DockerSpec } from "./spec"
 
 export const DockerAppTypeId: unique symbol = Symbol.for("@konfig.ts/docker/DockerApp")
+
 export type DockerAppTypeId = typeof DockerAppTypeId
 
 interface Variance {
@@ -38,33 +31,35 @@ const _omitUndef = <T extends object>(o: T): T =>
 export const Docker = {
   app: (spec: DockerSpec): DockerApp => makeDockerApp(spec),
   pm: {
-    bun: (): PackageManagerAtom => ({ _tag: "BunPm" }),
-    npm: (): PackageManagerAtom => ({ _tag: "NpmPm" }),
-    pnpm: (): PackageManagerAtom => ({ _tag: "PnpmPm" }),
+    bun: (): PackageManagerAtom => PackageManagerAtom.cases.BunPm.make({}),
+    npm: (): PackageManagerAtom => PackageManagerAtom.cases.NpmPm.make({}),
+    pnpm: (): PackageManagerAtom => PackageManagerAtom.cases.PnpmPm.make({}),
     yarn: (opts?: { variant?: YarnVariant }): PackageManagerAtom =>
-      _omitUndef({ _tag: "YarnPm", variant: opts?.variant })
+      PackageManagerAtom.cases.YarnPm.make(_omitUndef({ variant: opts?.variant }))
   },
   runtime: {
-    bun: (opts?: { alpine?: boolean }): RuntimeAtom => _omitUndef({ _tag: "BunRuntime", alpine: opts?.alpine }),
-    node: (opts?: { alpine?: boolean }): RuntimeAtom => _omitUndef({ _tag: "NodeRuntime", alpine: opts?.alpine })
+    bun: (opts?: { alpine?: boolean }): RuntimeAtom =>
+      RuntimeAtom.cases.BunRuntime.make(_omitUndef({ alpine: opts?.alpine })),
+    node: (opts?: { alpine?: boolean }): RuntimeAtom =>
+      RuntimeAtom.cases.NodeRuntime.make(_omitUndef({ alpine: opts?.alpine }))
   },
   build: {
-    script: (script: string): BuildAtom => ({ _tag: "BuildScript", script }),
-    command: (argv: ReadonlyArray<string>): BuildAtom => ({ _tag: "BuildCommand", argv }),
-    none: (): BuildAtom => ({ _tag: "BuildNone" })
+    script: (script: string): BuildAtom => BuildAtom.cases.BuildScript.make({ script }),
+    command: (argv: ReadonlyArray<string>): BuildAtom => BuildAtom.cases.BuildCommand.make({ argv }),
+    none: (): BuildAtom => BuildAtom.cases.BuildNone.make({})
   },
   copy: {
     builderArtifact: (input: { readonly src: string; readonly dst: string; readonly chown?: string }): CopyAtom =>
-      _omitUndef({ _tag: "BuilderArtifact", src: input.src, dst: input.dst, chown: input.chown }),
-    workspaceSource: (name: string): CopyAtom => ({ _tag: "WorkspaceSource", name }),
-    workspaceSourceAll: (): CopyAtom => ({ _tag: "WorkspaceSourceAll" }),
+      CopyAtom.cases.BuilderArtifact.make(_omitUndef({ src: input.src, dst: input.dst, chown: input.chown })),
+    workspaceSource: (name: string): CopyAtom => CopyAtom.cases.WorkspaceSource.make({ name }),
+    workspaceSourceAll: (): CopyAtom => CopyAtom.cases.WorkspaceSourceAll.make({}),
     path: (input: {
       readonly src: string
       readonly dst: string
       readonly from?: string
       readonly chown?: string
     }): CopyAtom =>
-      _omitUndef({ _tag: "CopyPath", src: input.src, dst: input.dst, from: input.from, chown: input.chown })
+      CopyAtom.cases.CopyPath.make(_omitUndef({ src: input.src, dst: input.dst, from: input.from, chown: input.chown }))
   },
   healthcheck: {
     httpGet: (input: {
@@ -74,26 +69,24 @@ export const Docker = {
       timeout?: string
       retries?: number
       startPeriod?: string
-    }): HealthcheckAtom => _omitUndef({ _tag: "HealthcheckHttpGet", ...input }),
+    }): HealthcheckAtom => HealthcheckAtom.cases.HealthcheckHttpGet.make(_omitUndef({ ...input })),
     command: (input: {
       readonly argv: ReadonlyArray<string>
       readonly interval?: string
       readonly timeout?: string
       readonly retries?: number
       readonly startPeriod?: string
-    }): HealthcheckAtom => _omitUndef({ _tag: "HealthcheckCommand", ...input })
+    }): HealthcheckAtom => HealthcheckAtom.cases.HealthcheckCommand.make(_omitUndef({ ...input }))
   },
   user: {
     nonRoot: (opts?: { uid?: number; gid?: number; name?: string }): UserAtom =>
-      _omitUndef({ _tag: "UserNonRoot", ...opts }),
-    root: (): UserAtom => ({ _tag: "UserRoot" })
+      UserAtom.cases.UserNonRoot.make(_omitUndef({ ...opts })),
+    root: (): UserAtom => UserAtom.cases.UserRoot.make({})
   },
   platform: {
-    linuxAmd64: (): PlatformAtom => ({ _tag: "PlatformLinuxAmd64" }),
-    linuxArm64: (): PlatformAtom => ({ _tag: "PlatformLinuxArm64" }),
-    multi: (values: ReadonlyArray<"linux/amd64" | "linux/arm64">): PlatformAtom => ({
-      _tag: "PlatformMulti",
-      values
-    })
+    linuxAmd64: (): PlatformAtom => PlatformAtom.cases.PlatformLinuxAmd64.make({}),
+    linuxArm64: (): PlatformAtom => PlatformAtom.cases.PlatformLinuxArm64.make({}),
+    multi: (values: ReadonlyArray<"linux/amd64" | "linux/arm64">): PlatformAtom =>
+      PlatformAtom.cases.PlatformMulti.make({ values })
   }
 } as const

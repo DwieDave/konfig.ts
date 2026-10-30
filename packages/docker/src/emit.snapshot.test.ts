@@ -3,7 +3,7 @@ import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
 import { emit } from "./render/emit"
-import type { DockerSpec } from "./spec"
+import { CopyAtom, type DockerSpec, HealthcheckAtom, PlatformAtom, UserAtom } from "./spec"
 
 const FIXTURES = new URL("../fixtures/", import.meta.url).pathname
 
@@ -11,7 +11,7 @@ const minimal = (target: string): DockerSpec => ({
   target,
   runner: {
     workdir: "/app/packages/app",
-    copy: [{ _tag: "BuilderArtifact", src: "dist", dst: "dist" }],
+    copy: [CopyAtom.cases.BuilderArtifact.make({ src: "dist", dst: "dist" })],
     cmd: ["bun", "run", "dist/main.js"]
   }
 })
@@ -22,15 +22,15 @@ const fullFeatured = (target: string): DockerSpec => ({
   runner: {
     workdir: "/app/packages/app",
     copy: [
-      { _tag: "BuilderArtifact", src: "dist", dst: "dist" },
-      { _tag: "WorkspaceSourceAll" }
+      CopyAtom.cases.BuilderArtifact.make({ src: "dist", dst: "dist" }),
+      CopyAtom.cases.WorkspaceSourceAll.make({})
     ],
     env: { LOG_LEVEL: "info", NODE_ENV: "production" },
     expose: [4000, 9229],
     cmd: ["bun", "run", "dist/main.js"],
-    user: { _tag: "UserNonRoot", uid: 1234, gid: 1234, name: "myapp" },
-    healthcheck: { _tag: "HealthcheckHttpGet", path: "/healthz", port: 4000, interval: "30s" },
-    platform: { _tag: "PlatformLinuxAmd64" }
+    user: UserAtom.cases.UserNonRoot.make({ uid: 1234, gid: 1234, name: "myapp" }),
+    healthcheck: HealthcheckAtom.cases.HealthcheckHttpGet.make({ path: "/healthz", port: 4000, interval: "30s" }),
+    platform: PlatformAtom.cases.PlatformLinuxAmd64.make({})
   },
   dev: {
     cmd: ["bun", "--watch", "main.ts"],
@@ -46,6 +46,7 @@ describe("emit snapshots — bun fixture", () => {
         spec: minimal(`${FIXTURES}bun/packages/app`),
         specPath: "packages/app/docker.ts"
       })
+
       expect(out.dockerfile).toMatchSnapshot("bun-minimal-Dockerfile")
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -55,6 +56,7 @@ describe("emit snapshots — bun fixture", () => {
         spec: fullFeatured(`${FIXTURES}bun/packages/app`),
         specPath: "packages/app/docker.ts"
       })
+
       expect(out.dockerfile).toMatchSnapshot("bun-full-Dockerfile")
       expect(out.dockerfileDev).toMatchSnapshot("bun-full-Dockerfile.dev")
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -67,6 +69,7 @@ describe("emit snapshots — npm fixture", () => {
         spec: minimal(`${FIXTURES}npm/packages/app`),
         specPath: "packages/app/docker.ts"
       })
+
       expect(out.dockerfile).toMatchSnapshot("npm-minimal-Dockerfile")
     }).pipe(Effect.provide(NodeServices.layer)))
 })
@@ -78,6 +81,7 @@ describe("emit snapshots — pnpm-isolated fixture", () => {
         spec: minimal(`${FIXTURES}pnpm-isolated/packages/app`),
         specPath: "packages/app/docker.ts"
       })
+
       expect(out.dockerfile).toMatchSnapshot("pnpm-isolated-minimal-Dockerfile")
     }).pipe(Effect.provide(NodeServices.layer)))
 })
@@ -89,17 +93,20 @@ describe("emit snapshots — pnpm-hoisted fixture", () => {
         spec: minimal(`${FIXTURES}pnpm-hoisted/packages/app`),
         specPath: "packages/app/docker.ts"
       })
+
       expect(out.dockerfile).toMatchSnapshot("pnpm-hoisted-minimal-Dockerfile")
     }).pipe(Effect.provide(NodeServices.layer)))
 })
 
 const production = (target: string): DockerSpec => {
   const base = minimal(target)
+
   return { ...base, runner: { ...base.runner, production: true } }
 }
 
 describe("emit snapshots — production spec (prod-deps stage)", () => {
   const fixtures = ["bun", "npm", "pnpm-isolated", "pnpm-hoisted", "yarn-classic", "yarn-berry"] as const
+
   for (const fixture of fixtures) {
     it.effect(fixture, () =>
       Effect.gen(function*() {
@@ -107,6 +114,7 @@ describe("emit snapshots — production spec (prod-deps stage)", () => {
           spec: production(`${FIXTURES}${fixture}/packages/app`),
           specPath: "packages/app/docker.ts"
         })
+
         expect(out.dockerfile).toMatchSnapshot(`${fixture}-production-Dockerfile`)
       }).pipe(Effect.provide(NodeServices.layer)))
   }
