@@ -437,6 +437,22 @@ describe("writeEffect", () => {
       expect(inTargetExists).toBe(false)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
+  it.effect("creates a missing --out-dir before writing", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const p = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-cmd-" })
+      yield* _makeMonorepo(fs, p, root)
+      const target = p.join(root, "packages", "app")
+      yield* fs.writeFileString(p.join(target, "docker.ts"), minimalSpecBody)
+      const outDir = p.join(root, "not", "yet", "there")
+
+      yield* writeEffect({ target, outDir: Option.some(outDir), only: Option.none(), force: false })
+
+      const written = yield* fs.readFileString(p.join(outDir, "Dockerfile"))
+      expect(written).toContain("konfig-managed: @konfig.ts/docker")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
   it.effect("skips writing Dockerfile when only dev is set", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem

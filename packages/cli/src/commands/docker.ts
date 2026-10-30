@@ -194,6 +194,25 @@ interface WriteArgs {
   readonly force: boolean
 }
 
+interface EnsureOutDirInput {
+  readonly outDir: Option.Option<string>
+  readonly targetAbs: string
+}
+
+const _ensureOutDir = (input: EnsureOutDirInput): Effect.Effect<string, DockerWriteError, FileSystem | Path> =>
+  Option.match(input.outDir, {
+    onNone: () => Effect.succeed(input.targetAbs),
+    onSome: (dir) =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem
+        const p = yield* Path
+        const abs = p.resolve(process.cwd(), dir)
+        yield* fs.makeDirectory(abs, { recursive: true }).pipe(Effect.mapError(_dockerWriteError(abs)))
+
+        return abs
+      })
+  })
+
 export const writeEffect = (
   args: WriteArgs
 ): Effect.Effect<
@@ -209,11 +228,7 @@ export const writeEffect = (
     const p = yield* Path
     const load = yield* loadSpec(args.target)
     const e = yield* emitFor(load)
-
-    const outDirAbs = Option.match(args.outDir, {
-      onNone: () => load.targetAbs,
-      onSome: (dir) => p.resolve(process.cwd(), dir)
-    })
+    const outDirAbs = yield* _ensureOutDir({ outDir: args.outDir, targetAbs: load.targetAbs })
 
     yield* Effect.forEach(variantsOf({ emitted: e, ...args }), (v) =>
       Effect.gen(function*() {
