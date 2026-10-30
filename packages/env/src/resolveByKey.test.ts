@@ -17,3 +17,10 @@ describe("resolveByKey", () => {
       })
     ))
 })
+
+describe("env barrel", () => {
+  it("does not export resolveByKey", async () => {
+    const barrel = await import("./index")
+    expect("resolveByKey" in barrel).toBe(false)
+  })
+})

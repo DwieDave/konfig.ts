@@ -27,7 +27,7 @@ export * as Dep from "./deps"
 
 export { BuiltImageRef } from "./deps"
 
-export { diffFiles, type DiffFormat, formatDiff, hasDifferences, parseYaml, parseYamlAll } from "./diff"
+export { diffFiles, type DiffFormat, formatDiff, hasDifferences, parseYamlAll } from "./diff"
 
 export { isRecord } from "./guards"
 
@@ -56,6 +56,10 @@ export {
   KONFIG_HELM_MIN_VERSION_ENV
 } from "./konfigDefaults"
 
+export { existsOrFalse, findUp, readOrEmpty } from "./fs"
+
+export { sha256Hex } from "./hash"
+
 export { attachLayerToTag } from "./lift"
 
 export type { RawYaml } from "./Manifest"
@@ -66,7 +70,7 @@ export { isParsedDoc, isRawYaml } from "./Manifest"
 
 export * as Module from "./Module"
 
-export { render, renderAllYaml, renderAllYamlEffect } from "./render"
+export { renderAllYaml, renderAllYamlEffect } from "./render"
 
 export { RenderContext } from "./RenderContext"
 
@@ -77,7 +81,6 @@ export { omitUndefined } from "./omitUndefined"
 export { renderManifest } from "./renderManifest"
 
 export {
-  ProcessInvocationError,
   runProcessCollect,
   runProcessExit,
   runProcessString,

@@ -60,8 +60,6 @@ export type ConfigMapRefName<R> = R extends ConfigMapRef<infer N, infer _K> ? N 
 
 export type ConfigMapRefKeys<R> = R extends ConfigMapRef<infer _N, infer K> ? K : never
 
-export type PvcRefName<R> = R extends PvcRef<infer N> ? N : never
-
 const _service = <K extends string, N extends string, S>(input: {
   readonly kind: K
   readonly name: N

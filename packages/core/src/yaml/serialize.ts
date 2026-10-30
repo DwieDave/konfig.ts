@@ -77,13 +77,13 @@ const _normalize = (input: _NormalizeInput): _Out => {
     return value.map((v) => _normalize({ value: v, depth: depth + 1, parentKey: null }))
   }
 
-  if (isRecord(value)) {
-    return _reorderObject({ obj: value, depth, parentKey })
-  }
-
   if (_isString(value)) return _safeString(value)
 
-  return _isLeaf(value) ? value : undefined
+  if (Predicate.isDate(value)) return _safeString(value.toISOString())
+
+  if (_isLeaf(value)) return value
+
+  return isRecord(value) ? _reorderObject({ obj: value, depth, parentKey }) : undefined
 }
 
 // The yaml block-scalar writer drops a whitespace-only line, so such strings

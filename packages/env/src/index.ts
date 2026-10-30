@@ -1,5 +1,3 @@
-export { resolveByKey } from "./_record"
-
 export { type AnyDownwardEntry, Downward, type DownwardEntry } from "./downward"
 
 export { type AnyEnvironment, Environment, type EnvMember } from "./environment"

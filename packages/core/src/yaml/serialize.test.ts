@@ -328,3 +328,30 @@ describe("serialize — non-finite numbers", () => {
     )
   })
 })
+
+describe("serialize — non-plain leaves", () => {
+  it("emits a Date as an ISO string", () => {
+    const out = serialize({
+      value: { kind: "X", metadata: { name: "a" }, spec: { at: new Date("2024-01-01") } }
+    })
+
+    expect(_parse<{ spec: { at: string } }>(out).spec.at).toBe("2024-01-01T00:00:00.000Z")
+  })
+
+  const _roundTrip = (v: Date | bigint | number | boolean | string) =>
+    _parse<{ spec: { v: unknown } }>(serialize({ value: { spec: { v } } }), { intAsBigInt: true }).spec.v
+
+  it("round-trips a Date as its ISO string", () => {
+    fc.assert(fc.property(fc.date({ noInvalidDate: true }), (d) => _roundTrip(d) === d.toISOString()))
+  })
+
+  it("round-trips bigint and number as their numeric value", () => {
+    fc.assert(
+      fc.property(fc.oneof(fc.bigInt(), fc.double({ noNaN: true })), (n) => String(_roundTrip(n)) === String(n))
+    )
+  })
+
+  it("round-trips boolean and string unchanged", () => {
+    fc.assert(fc.property(fc.oneof(fc.boolean(), fc.string()), (v) => _roundTrip(v) === v))
+  })
+})

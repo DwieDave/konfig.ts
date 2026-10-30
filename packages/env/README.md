@@ -79,5 +79,5 @@ is supported:
 
 - **`effect@^4.0.0`** — peer dependency of every package.
 - **`@effect/platform-node@^4.0.0`** — a regular dependency of `@konfig.ts/core`,
-  whose `render()` entrypoint needs the Node filesystem/subprocess services.
+  whose `renderAllYaml()` needs the Node filesystem/subprocess services.
   It is installed automatically with core.

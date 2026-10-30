@@ -87,6 +87,19 @@ export interface Target<
   ) => ApplyHandle<Kind, Name, Ns, R, Extra>
 }
 
+type _KnownKeys<T> = string extends keyof T ? never : keyof T
+
+type _ReservedKeys<ExtraConfig, ExtraCallArgs> =
+  | keyof DefineBaseArgs<string, string, unknown, unknown>
+  | _KnownKeys<ExtraConfig>
+  | _KnownKeys<ExtraCallArgs>
+
+// Opts keys that collide with the define contract would be spread into define args and
+// override it; reserving them as `never` rejects the collision at the wrapper call site.
+type _NoReserved<Opts, Reserved extends PropertyKey> = {
+  readonly [K in keyof Opts & Reserved]: never
+}
+
 const _withProvides = (
   input: { readonly args: object; readonly provides: Layer.Layer<never, never, never> | undefined }
 ) => input.provides === undefined ? input.args : { ...input.args, provides: input.provides }
@@ -155,7 +168,11 @@ export const fixedNs = <
   }))
 
   return <const Name extends string>(
-    args: { readonly name: LiteralName<Name> } & ExtraCallArgs & Opts
+    args:
+      & { readonly name: LiteralName<Name> }
+      & ExtraCallArgs
+      & Opts
+      & _NoReserved<Opts, _ReservedKeys<ExtraConfig, ExtraCallArgs>>
   ): ApplyHandle<Kind, Name, Ns, R, Extra> => wrapper<Name, Ns>({ ...args, namespace: _asLiteralName(namespace) })
 }
 
@@ -194,6 +211,7 @@ export const dynamicNs = <
       }
       & ExtraCallArgs
       & Opts
+      & _NoReserved<Opts, _ReservedKeys<ExtraConfig, ExtraCallArgs>>
   ): ApplyHandle<Kind, Name, Ns, R, Extra> => {
     return _defineWith<Kind, ExtraConfig, ExtraCallArgs, Name, Ns, R, Extra>({
       target,

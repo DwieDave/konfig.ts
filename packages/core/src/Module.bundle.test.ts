@@ -73,3 +73,42 @@ describe("Module.dynamicNs({ target: Bundle.target, ... })", () => {
     })
   })
 })
+
+describe("Module Opts that collide with the define contract", () => {
+  it("rejects Opts keys overlapping name/namespace/build/provides at the call site", () => {
+    const fixed = Module.fixedNs({
+      target: Bundle.target,
+      namespace: "ns",
+      build: (_c, _o: { provides: string }) => []
+    })
+
+    // @ts-expect-error provides collides with DefineBaseArgs
+    fixed({ name: "b", provides: "oops" })
+
+    const dynamic = Module.dynamicNs({
+      target: Bundle.target,
+      build: (_c, _o: { build: string; namespace: number }) => []
+    })
+
+    // @ts-expect-error build and namespace collide with DefineBaseArgs
+    dynamic({ name: "b", namespace: "ns", build: "x" })
+
+    expect(true).toBe(true)
+  })
+
+  it("passes only name, namespace and build to define when Opts is empty", () => {
+    const seen: Array<ReadonlyArray<string>> = []
+
+    const target: Module.Target<Module.HandleKind, Record<never, never>, Record<never, never>> = {
+      define: (args) => {
+        seen.push(Object.keys(args).sort())
+
+        return args.name
+      }
+    }
+
+    Module.fixedNs({ target, namespace: "ns", build: () => [] })({ name: "b" })
+
+    expect(seen).toEqual([["build", "name", "namespace"]])
+  })
+})
