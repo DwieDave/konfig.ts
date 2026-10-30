@@ -8,6 +8,7 @@
         "@effect/platform-node": "catalog:",
         "@effect/tsgo": "0.53.4",
         "effect": "catalog:",
+        "fast-check": "catalog:",
         "knip": "^6.32.0",
         "oxlint": "1.88.0",
         "oxlint-tsgolint": "^7.0.2004",

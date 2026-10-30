@@ -1,7 +1,3 @@
-import { defineConfig } from "vitest/config";
+import { packageVitestConfig } from "../../vitest.shared.mts"
 
-export default defineConfig({
-	test: {
-		exclude: ["dist/**", "node_modules/**"],
-	},
-});
+export default packageVitestConfig()

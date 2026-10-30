@@ -4,7 +4,7 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { ChildProcess } from "effect/process"
 import { runProcessExit } from "../../packages/core/src/subprocess"
-import { packageDirs, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
+import { mapRepoError, packageDirs, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
 
 const INSTALL_WARNING = "warning: 'bun install' failed; run it manually to sync bun.lock"
 
@@ -15,12 +15,12 @@ const _setVersion = (file: string, version: string) =>
     const fs = yield* FileSystem
     const raw = yield* fs
       .readFileString(file)
-      .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot read ${file}`, cause })))
+      .pipe(mapRepoError(`cannot read ${file}`))
     const next = raw.replace(/("version"\s*:\s*)"[^"]*"/, `$1"${version}"`)
     if (next === raw) return false
     yield* fs
       .writeFileString(file, next)
-      .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot write ${file}`, cause })))
+      .pipe(mapRepoError(`cannot write ${file}`))
     return true
   })
 

@@ -26,6 +26,8 @@ jobs:
     name: publish @konfig.ts/* to npm
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      packages: ${{ steps.packages.outputs.list }}
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7
@@ -56,7 +58,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version-file: package.json
 
       - name: Setup Node (trusted publishing needs Node >= 22.14)
         uses: actions/setup-node@v6
@@ -69,6 +71,10 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: List publishable packages in dependency order
+        id: packages
+        run: echo "list=$(bun scripts/cli.ts packages | paste -sd' ' -)" >> "$GITHUB_OUTPUT"
 
       - name: Typecheck
         run: bun run check
@@ -94,7 +100,8 @@ jobs:
 
       - name: Verify published-artifact contents (dry-run pack)
         run: |
-          for dir in packages/core packages/env packages/k8s packages/external-secrets packages/sealed-secrets packages/sops packages/argocd packages/docker packages/cli; do
+          for pkg in $(bun scripts/cli.ts packages); do
+            dir="packages/${pkg}"
             echo "::group::npm pack --dry-run $dir"
             (cd "$dir" && npm pack --dry-run --json) | tee "/tmp/pack-$(basename "$dir").json"
             echo "::endgroup::"
@@ -108,7 +115,7 @@ jobs:
           # can resolve the freshly-published versions.
           # No NODE_AUTH_TOKEN: npm authenticates via this workflow's OIDC
           # identity and attaches provenance automatically (no --provenance).
-          for pkg in core env k8s external-secrets sealed-secrets sops argocd docker cli; do
+          for pkg in $(bun scripts/cli.ts packages); do
             echo "::group::publish @konfig.ts/${pkg}"
             (cd "packages/${pkg}" && npm publish --access public)
             echo "::endgroup::"
@@ -143,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG_VERSION="${GITHUB_REF##*/v}"
-          for pkg in core env k8s external-secrets sealed-secrets sops argocd docker cli; do
+          for pkg in ${{ needs.publish.outputs.packages }}; do
             echo "::group::verify @konfig.ts/${pkg}@${TAG_VERSION}"
             mkdir -p "/tmp/verify-${pkg}"
             npm pack "@konfig.ts/${pkg}@${TAG_VERSION}" --pack-destination "/tmp/verify-${pkg}/"

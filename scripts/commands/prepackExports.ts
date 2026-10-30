@@ -2,7 +2,7 @@ import { Console, Effect, Schema } from "effect"
 import { Argument, Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { decodeField, parseJson, RepoScriptError, StringRecord, UnknownRecord } from "../lib/repo"
+import { decodeField, mapRepoError, parseJson, RepoScriptError, StringRecord, UnknownRecord } from "../lib/repo"
 
 // npm publish ignores publishConfig.exports and src/ is excluded from files[], so the
 // bun/source conditions (pointing at ./src/index.ts for dev) must be stripped pre-publish.
@@ -15,7 +15,7 @@ const _strip = Effect.gen(function*() {
 
   const raw = yield* fs
     .readFileString(pkgJsonPath)
-    .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot read ${pkgJsonPath}`, cause })))
+    .pipe(mapRepoError(`cannot read ${pkgJsonPath}`))
   const pkg = yield* parseJson({ file: pkgJsonPath, text: raw })
   const exportsMap = yield* decodeField({
     schema: Schema.UndefinedOr(UnknownRecord),
@@ -34,7 +34,7 @@ const _strip = Effect.gen(function*() {
 
   yield* fs
     .writeFileString(backup, raw)
-    .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot write ${backup}`, cause })))
+    .pipe(mapRepoError(`cannot write ${backup}`))
 
   const stripped: Record<string, string> = {}
   if (dot.types !== undefined) stripped.types = dot.types
@@ -59,7 +59,7 @@ const _strip = Effect.gen(function*() {
 
   yield* fs
     .writeFileString(pkgJsonPath, `${JSON.stringify(next, null, 2)}\n`)
-    .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot write ${pkgJsonPath}`, cause })))
+    .pipe(mapRepoError(`cannot write ${pkgJsonPath}`))
   yield* Console.log(`prepack-exports: stripped bun/source from ${pkg.name} exports`)
 })
 
@@ -76,13 +76,13 @@ const _restore = Effect.gen(function*() {
   }
   const raw = yield* fs
     .readFileString(backup)
-    .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot read ${backup}`, cause })))
+    .pipe(mapRepoError(`cannot read ${backup}`))
   yield* fs
     .writeFileString(pkgJsonPath, raw)
-    .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot write ${pkgJsonPath}`, cause })))
+    .pipe(mapRepoError(`cannot write ${pkgJsonPath}`))
   yield* fs
     .remove(backup)
-    .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot remove ${backup}`, cause })))
+    .pipe(mapRepoError(`cannot remove ${backup}`))
   yield* Console.log(`prepack-exports: restored ${pkgJsonPath} from backup`)
 })
 

@@ -2,7 +2,7 @@ import { Console, Effect, Schema } from "effect"
 import { Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { decodeField, packageDirs, readJson, REPO_ROOT, RepoScriptError, StringRecord } from "../lib/repo"
+import { decodeField, mapRepoError, packageDirs, readJson, REPO_ROOT, RepoScriptError, StringRecord } from "../lib/repo"
 
 // npm understands neither workspace:* nor catalog: protocols, so both must be
 // resolved to concrete semver before npm publish. The effect family is the one
@@ -105,7 +105,7 @@ export const rewriteWorkspaceDepsCommand = Command.make(
         if (touched) {
           yield* fs
             .writeFileString(pkgJsonPath, `${JSON.stringify(pkg, null, "\t")}\n`)
-            .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot write ${pkgJsonPath}`, cause })))
+            .pipe(mapRepoError(`cannot write ${pkgJsonPath}`))
           yield* Console.log(`rewrote ${path.relative(REPO_ROOT, pkgJsonPath)}`)
         }
       }

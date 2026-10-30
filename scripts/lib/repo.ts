@@ -10,6 +10,9 @@ export class RepoScriptError extends Data.TaggedError("RepoScriptError")<{
   readonly cause?: unknown
 }> {}
 
+export const mapRepoError = (message: string) =>
+  Effect.mapError((cause: unknown) => new RepoScriptError({ message, cause }))
+
 const PackageJson = Schema.StructWithRest(
   Schema.Struct({
     name: Schema.optional(Schema.String),
@@ -25,7 +28,7 @@ const _JsonPackage = Schema.fromJsonString(PackageJson)
 
 export const parseJson = (input: { readonly file: string; readonly text: string }) =>
   Schema.decodeEffect(_JsonPackage)(input.text).pipe(
-    Effect.mapError((cause) => new RepoScriptError({ message: `cannot parse ${input.file}`, cause }))
+    mapRepoError(`cannot parse ${input.file}`)
   )
 
 export const StringRecord = Schema.Record(Schema.String, Schema.String)
@@ -35,7 +38,7 @@ export const decodeField = <S extends Schema.Decoder<unknown>>(
   input: { readonly schema: S; readonly value: unknown; readonly what: string }
 ) =>
   Schema.decodeUnknownEffect(input.schema)(input.value).pipe(
-    Effect.mapError((cause) => new RepoScriptError({ message: `unexpected shape for ${input.what}`, cause }))
+    mapRepoError(`unexpected shape for ${input.what}`)
   )
 
 export const readJson = (file: string) =>
@@ -43,7 +46,7 @@ export const readJson = (file: string) =>
     const fs = yield* FileSystem
     const text = yield* fs
       .readFileString(file)
-      .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot read ${file}`, cause })))
+      .pipe(mapRepoError(`cannot read ${file}`))
     return yield* parseJson({ file, text })
   })
 
@@ -56,7 +59,7 @@ export const packageDirs = Effect.gen(function*() {
   const packagesDir = path.join(REPO_ROOT, "packages")
   const entries = yield* fs
     .readDirectory(packagesDir)
-    .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot list ${packagesDir}`, cause })))
+    .pipe(mapRepoError(`cannot list ${packagesDir}`))
   const dirs: Array<string> = []
   for (const entry of entries.slice().sort()) {
     const dir = path.join(packagesDir, entry)
@@ -76,4 +79,45 @@ export const testPackageNames = Effect.gen(function*() {
 export const coveragePackageNames = Effect.gen(function*() {
   const names = yield* testPackageNames
   return names.filter((name) => !COVERAGE_EXCLUDED_PACKAGES.has(name))
+})
+
+const PackageManifest = Schema.Struct({
+  name: Schema.String,
+  private: Schema.optional(Schema.Boolean),
+  scripts: Schema.optional(StringRecord),
+  dependencies: Schema.optional(StringRecord),
+  devDependencies: Schema.optional(StringRecord),
+  peerDependencies: Schema.optional(StringRecord)
+})
+
+export interface PackageInfo {
+  readonly dir: string
+  readonly name: string
+  readonly isPrivate: boolean
+  readonly scripts: ReadonlySet<string>
+  readonly deps: ReadonlySet<string>
+}
+
+const _toInfo = (input: { readonly dir: string; readonly raw: unknown }) =>
+  decodeField({ schema: PackageManifest, value: input.raw, what: input.dir }).pipe(
+    Effect.map((m): PackageInfo => ({
+      dir: input.dir,
+      name: m.name,
+      isPrivate: m.private === true,
+      scripts: new Set(Object.keys(m.scripts ?? {})),
+      deps: new Set([
+        ...Object.keys(m.dependencies ?? {}),
+        ...Object.keys(m.devDependencies ?? {}),
+        ...Object.keys(m.peerDependencies ?? {})
+      ])
+    }))
+  )
+
+export const packageInfos = Effect.gen(function*() {
+  const path = yield* Path
+  const dirs = yield* packageDirs
+  return yield* Effect.forEach(
+    dirs,
+    (dir) => readJson(path.join(dir, "package.json")).pipe(Effect.flatMap((raw) => _toInfo({ dir, raw })))
+  )
 })

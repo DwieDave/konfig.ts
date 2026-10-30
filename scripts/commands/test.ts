@@ -6,7 +6,7 @@ import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/process"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { availableParallelism } from "node:os"
-import { REPO_ROOT, RepoScriptError, testPackageNames } from "../lib/repo"
+import { mapRepoError, REPO_ROOT, RepoScriptError, testPackageNames } from "../lib/repo"
 
 interface _RunResult {
   readonly pkg: string
@@ -47,7 +47,7 @@ const _run = (input: { readonly pkg: string; readonly summaryFile: string | unde
       return { pkg: input.pkg, output: out + err, code: Number(code) } satisfies _RunResult
     })
   ).pipe(
-    Effect.mapError((cause) => new RepoScriptError({ message: `cannot spawn tests for ${input.pkg}`, cause }))
+    mapRepoError(`cannot spawn tests for ${input.pkg}`)
   )
 
 // Each child gets its own GITHUB_STEP_SUMMARY file; stitched under its package heading afterwards.
@@ -66,7 +66,7 @@ const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFi
     const existing = yield* fs.readFileString(summaryFile).pipe(Effect.orElseSucceed(() => ""))
     yield* fs
       .writeFileString(summaryFile, existing + out)
-      .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot append to ${summaryFile}`, cause })))
+      .pipe(mapRepoError(`cannot append to ${summaryFile}`))
   })
 
 export const testCommand = Command.make(
@@ -87,7 +87,7 @@ export const testCommand = Command.make(
       const tmpDir = inCi
         ? yield* fs
           .makeTempDirectoryScoped({ prefix: "konfig-test-summaries-" })
-          .pipe(Effect.mapError((cause) => new RepoScriptError({ message: "cannot create summary temp dir", cause })))
+          .pipe(mapRepoError("cannot create summary temp dir"))
         : undefined
 
       const results = yield* Effect.forEach(

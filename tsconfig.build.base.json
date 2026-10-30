@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": false,
+    "composite": false,
+    "incremental": false
+  }
+}

@@ -1,64 +1,64 @@
 {
-	"name": "@konfig.ts/cli",
-	"version": "0.4.0",
-	"description": "konfig CLI — build, validate, diff, and set commands for konfig.ts configurations.",
-	"license": "MIT",
-	"author": "David Stahl-Gruber",
-	"homepage": "https://dwiedave.github.io/konfig.ts/",
-	"bugs": "https://github.com/DwieDave/konfig.ts/issues",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/DwieDave/konfig.ts.git",
-		"directory": "packages/cli"
-	},
-	"keywords": [
-		"kubernetes",
-		"k8s",
-		"argocd",
-		"cli",
-		"konfig"
-	],
-	"type": "module",
-	"bin": {
-		"konfig": "./dist/main.mjs"
-	},
-	"files": [
-		"dist",
-		"README.md",
-		"LICENSE"
-	],
-	"engines": {
-		"node": ">=22"
-	},
-	"publishConfig": {
-		"access": "public"
-	},
-	"scripts": {
-		"build": "tsdown ./src/main.ts --format=esm --target=node22 --sourcemap --clean --no-dts && chmod +x dist/main.mjs",
-		"check": "tsc -p tsconfig.check.json --noEmit",
-		"test": "vitest run",
-		"lint": "oxlint",
-		"lint:apply": "oxlint --fix",
-		"prepublishOnly": "bun run build",
-		"test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
-	},
-	"dependencies": {
-		"@effect/platform-node": "catalog:",
-		"@konfig.ts/argocd": "workspace:*",
-		"@konfig.ts/core": "workspace:*",
-		"@konfig.ts/docker": "workspace:*",
-		"json-schema-to-typescript": "^15.0.4"
-	},
-	"peerDependencies": {
-		"effect": "^4.0.0"
-	},
-	"devDependencies": {
-		"@effect/vitest": "catalog:",
-		"@konfig.ts/k8s": "workspace:*",
-		"@types/bun": "catalog:",
-		"@vitest/coverage-v8": "catalog:",
-		"effect": "catalog:",
-		"fast-check": "catalog:",
-		"vitest": "catalog:"
-	}
+  "name": "@konfig.ts/cli",
+  "version": "0.4.0",
+  "description": "konfig CLI — build, validate, diff, and set commands for konfig.ts configurations.",
+  "license": "MIT",
+  "author": "David Stahl-Gruber",
+  "homepage": "https://dwiedave.github.io/konfig.ts/",
+  "bugs": "https://github.com/DwieDave/konfig.ts/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DwieDave/konfig.ts.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "argocd",
+    "cli",
+    "konfig"
+  ],
+  "type": "module",
+  "bin": {
+    "konfig": "./dist/main.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown ./src/main.ts --format=esm --target=node22 --sourcemap --clean --no-dts && chmod +x dist/main.mjs",
+    "check": "tsc -p tsconfig.check.json --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint",
+    "lint:apply": "oxlint --fix",
+    "prepublishOnly": "bun run build",
+    "test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@konfig.ts/argocd": "workspace:*",
+    "@konfig.ts/core": "workspace:*",
+    "@konfig.ts/docker": "workspace:*",
+    "json-schema-to-typescript": "^15.0.4"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.0"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@konfig.ts/k8s": "workspace:*",
+    "@types/bun": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "vitest": "catalog:"
+  }
 }

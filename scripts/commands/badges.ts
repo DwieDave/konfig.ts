@@ -3,7 +3,15 @@ import { Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { renderBadge } from "../lib/badge"
-import { coveragePackageNames, decodeField, readJson, REPO_ROOT, RepoScriptError, StringRecord } from "../lib/repo"
+import {
+  coveragePackageNames,
+  decodeField,
+  mapRepoError,
+  readJson,
+  REPO_ROOT,
+  RepoScriptError,
+  StringRecord
+} from "../lib/repo"
 
 const CoverageSummary = Schema.Struct({
   total: Schema.Struct({
@@ -52,7 +60,7 @@ const _writeBadge = (input: { readonly file: string; readonly svg: string }) =>
     const fs = yield* FileSystem
     yield* fs
       .writeFileString(input.file, input.svg)
-      .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot write ${input.file}`, cause })))
+      .pipe(mapRepoError(`cannot write ${input.file}`))
   })
 
 export const badgesCommand = Command.make(
@@ -69,18 +77,14 @@ export const badgesCommand = Command.make(
       for (const p of yield* coveragePackageNames) {
         const covFile = path.join(REPO_ROOT, "packages", p, "coverage", "coverage-summary.json")
         const cov = yield* Schema.decodeUnknownEffect(CoverageSummary)(yield* readJson(covFile)).pipe(
-          Effect.mapError((cause) =>
-            new RepoScriptError({ message: `unexpected coverage summary shape in ${covFile}`, cause })
-          )
+          mapRepoError(`unexpected coverage summary shape in ${covFile}`)
         )
         linesTotal += cov.total.lines.total
         linesCovered += cov.total.lines.covered
 
         const resultsFile = path.join(REPO_ROOT, "packages", p, "coverage", "test-results.json")
         const results = yield* Schema.decodeUnknownEffect(TestResults)(yield* readJson(resultsFile)).pipe(
-          Effect.mapError((cause) =>
-            new RepoScriptError({ message: `unexpected test results shape in ${resultsFile}`, cause })
-          )
+          mapRepoError(`unexpected test results shape in ${resultsFile}`)
         )
         tests += results.numTotalTests
       }
@@ -100,7 +104,7 @@ export const badgesCommand = Command.make(
       const outDir = path.join(REPO_ROOT, ".github", "badges")
       yield* fs
         .makeDirectory(outDir, { recursive: true })
-        .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot create ${outDir}`, cause })))
+        .pipe(mapRepoError(`cannot create ${outDir}`))
 
       yield* _writeBadge({
         file: path.join(outDir, "coverage.svg"),

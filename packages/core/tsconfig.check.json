@@ -1,18 +1,5 @@
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "plugins": [],
-    "incremental": false,
-    "composite": false,
-    "declaration": false,
-    "declarationMap": false,
-    "sourceMap": false
-  },
-  "include": [
-    "./src/**/*.ts"
-  ],
-  "exclude": [
-    "./node_modules/**/*",
-    "./dist/**/*"
-  ]
+  "extends": ["./tsconfig.json", "../../tsconfig.check.base.json"],
+  "include": ["./src/**/*.ts"],
+  "exclude": ["./node_modules/**/*", "./dist/**/*"]
 }

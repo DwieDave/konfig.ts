@@ -5,6 +5,7 @@ import { Command } from "effect/cli"
 import { join } from "node:path"
 import { badgesCommand } from "./commands/badges"
 import { bumpVersionCommand } from "./commands/bumpVersion"
+import { buildCommand, checkCommand, coverageCommand, packagesCommand } from "./commands/packageScript"
 import { prepackExportsCommand } from "./commands/prepackExports"
 import { rewriteWorkspaceDepsCommand } from "./commands/rewriteWorkspaceDeps"
 import { testCommand } from "./commands/test"
@@ -20,7 +21,11 @@ const root = Command.make(
     prepackExportsCommand,
     rewriteWorkspaceDepsCommand,
     testCommand,
-    badgesCommand
+    badgesCommand,
+    buildCommand,
+    checkCommand,
+    coverageCommand,
+    packagesCommand
   ])
 )
 

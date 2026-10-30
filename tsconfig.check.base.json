@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "plugins": [],
+    "incremental": false,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  }
+}
