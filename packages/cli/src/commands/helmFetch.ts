@@ -1,10 +1,9 @@
+import { Helm } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
 import { Command, Flag } from "effect/cli"
 import { loadChartRegistryEffect } from "../chartRegistry"
 import { resolveCliPaths } from "../cliConfig"
-import { resolveConfig } from "../configResolver"
-import { ensureChartTarball } from "../helmPull"
-import { assertHelmVersion } from "../helmVersion"
+import { digestOf, resolveOptionalConfig } from "../helmShared"
 
 export class MissingAllFlag extends Data.TaggedError("MissingAllFlag") {}
 
@@ -21,11 +20,7 @@ interface FetchOneInput {
 
 export const _fetchOne = (input: FetchOneInput) =>
   Effect.gen(function*() {
-    yield* ensureChartTarball({
-      chart: input,
-      cacheDir: input.cacheDir,
-      digest: input.digest
-    })
+    yield* Helm.ensureChartTarball(input)
     if (input.digest === undefined) {
       yield* Console.log(
         `  warning: ${input.chart}@${input.version} has no recorded digest — cached under a plain name that Helm.release's digest-suffixed cache won't reuse`
@@ -39,13 +34,10 @@ interface HelmFetchFlags {
 
 export const helmFetchEffect = (flags: HelmFetchFlags) =>
   Effect.gen(function*() {
-    // Not Effect.void: resolveCliPaths needs an actual `undefined` value here
-    // (ResolvedKonfigConfig | undefined), not `void`.
-    // oxlint-disable-next-line effecttsgo/effect-succeed-with-void
-    const cfg = yield* resolveConfig().pipe(Effect.catchTag("ConfigNotFound", () => Effect.succeed(undefined)))
+    const cfg = yield* resolveOptionalConfig
     const { cacheDir, chartsDir, minVersion } = yield* resolveCliPaths(cfg)
 
-    yield* assertHelmVersion(minVersion)
+    yield* Helm.assertMinVersion(minVersion)
 
     if (!flags.all) {
       yield* Console.error("Specify --all to fetch all charts")
@@ -65,7 +57,7 @@ export const helmFetchEffect = (flags: HelmFetchFlags) =>
             chart: def.chart,
             version: def.version,
             cacheDir,
-            digest: def.digest === "" ? undefined : def.digest
+            digest: digestOf(def)
           })
         }),
       { concurrency: 4, discard: true }

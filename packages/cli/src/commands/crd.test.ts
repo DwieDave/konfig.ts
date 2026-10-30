@@ -58,7 +58,8 @@ const _helmSpawner = (templateStdout: string): Layer.Layer<ChildProcessSpawner, 
           if (args.includes("template")) return _handle({ stdout: templateStdout, exitCode: 0 })
           if (args[0] === "pull") {
             const dest = args.map(String)[args.indexOf("--destination") + 1] ?? ""
-            yield* fs.writeFile(path.join(dest, "chart-0.0.0.tgz"), new Uint8Array([1]))
+            const chart = args.map(String)[args.indexOf("--version") - 1] ?? "chart"
+            yield* fs.writeFile(path.join(dest, `${chart}-0.0.0.tgz`), new Uint8Array([1]))
           }
           return _handle({ stdout: "", exitCode: 0 })
         })

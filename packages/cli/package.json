@@ -47,8 +47,7 @@
 		"@konfig.ts/argocd": "workspace:*",
 		"@konfig.ts/core": "workspace:*",
 		"@konfig.ts/docker": "workspace:*",
-		"json-schema-to-typescript": "^15.0.4",
-		"semver": "^7.7.2"
+		"json-schema-to-typescript": "^15.0.4"
 	},
 	"peerDependencies": {
 		"effect": "^4.0.0"
@@ -57,7 +56,6 @@
 		"@effect/vitest": "catalog:",
 		"@konfig.ts/k8s": "workspace:*",
 		"@types/bun": "catalog:",
-		"@types/semver": "^7.5.8",
 		"@vitest/coverage-v8": "catalog:",
 		"effect": "catalog:",
 		"fast-check": "catalog:",

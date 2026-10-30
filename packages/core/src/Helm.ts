@@ -190,7 +190,7 @@ const _memoizedHelmVersion: _HelmVersionProbe = Effect.gen(function*() {
 // its ProcessError/ProcessTimeout; HelmVersionTooLow is reserved for a version
 // that was actually read and is too old (or unparseable). A minVersion that is
 // not major.minor[.patch] fails before helm is ever spawned.
-const _assertHelmMinVersion = (
+export const assertMinVersion = (
   minVersion: string
 ): Effect.Effect<
   void,
@@ -294,9 +294,36 @@ export const verifyChartDigest = (input: VerifyChartDigestInput) =>
     }
   })
 
-interface _EnsureCachedTarballInput {
-  readonly opts: HelmReleaseOptions
+export interface EnsureChartTarballInput {
+  readonly repo: string
+  readonly chart: string
+  readonly version: string
   readonly cacheDir: string
+  // Omit when the chart registry entry has no recorded digest: the tarball is
+  // then cached under the plain name and not verified.
+  readonly digest?: string
+}
+
+export interface PullArgsInput {
+  readonly repo: string
+  readonly chart: string
+  readonly version: string
+  readonly destination: string
+}
+
+// Callers must pass schema-validated chart fields; this builder does no validation.
+export const pullArgs = (input: PullArgsInput): ReadonlyArray<string> => [
+  "pull",
+  "--repo",
+  input.repo,
+  input.chart,
+  "--version",
+  input.version,
+  "--destination",
+  input.destination
+]
+
+interface _SlotInput extends EnsureChartTarballInput {
   readonly cachedTgz: string
 }
 type _PullOnce = Effect.Effect<
@@ -324,69 +351,71 @@ const _pullOnce = (cachedTgz: string, pull: _PullOnce): _PullOnce =>
     return shared
   })
 
-const _ensureCachedTarball = (input: _EnsureCachedTarballInput) =>
+const _verifyPinned = (input: _SlotInput) =>
+  input.digest === undefined
+    ? Effect.void
+    : verifyChartDigest({
+      chart: input.chart,
+      version: input.version,
+      digest: input.digest,
+      cachedTgz: input.cachedTgz
+    })
+
+const _singleTarball = (input: _SlotInput & { readonly pullDir: string; readonly files: ReadonlyArray<string> }) => {
+  const candidates = input.files.filter((f) => f.endsWith(".tgz") && f.startsWith(input.chart))
+  const [pulled] = candidates
+  return candidates.length === 1 && pulled !== undefined
+    ? Effect.succeed(pulled)
+    : Effect.fail(
+      new HelmRenderError({
+        chart: input.chart,
+        version: input.version,
+        phase: "pull",
+        cause: `helm pull produced ${candidates.length} matching tarball(s) in ${input.pullDir}, expected exactly 1`
+      })
+    )
+}
+
+const _pullIntoTemp = (input: _SlotInput, pullDir: string) =>
   Effect.gen(function*() {
-    const { opts, cachedTgz } = input
-    const fs = yield* FileSystem
-
-    const cacheExists = yield* fs.exists(cachedTgz)
-    if (cacheExists) {
-      yield* verifyChartDigest({ chart: opts.chart, version: opts.version, digest: opts.digest, cachedTgz })
-      return
-    }
-
-    yield* _pullOnce(cachedTgz, _pullAndVerify(input))
-  })
-
-const _pullAndVerify = (input: _EnsureCachedTarballInput): _PullOnce =>
-  Effect.gen(function*() {
-    const { opts, cacheDir, cachedTgz } = input
     const fs = yield* FileSystem
     const path = yield* Path
+    yield* runProcessExit(ChildProcess.make("helm", pullArgs({ ...input, destination: pullDir })), {
+      timeout: yield* timeout
+    })
+    const files = yield* fs.readDirectory(pullDir)
+    const pulled = yield* _singleTarball({ ...input, pullDir, files })
+    const tempTgz = path.join(pullDir, pulled)
+    yield* _verifyPinned({ ...input, cachedTgz: tempTgz })
+    // `fs.rename` is an atomic replace on POSIX, so a concurrent release
+    // racing to populate the same slot overwrites harmlessly with
+    // byte-identical content.
+    yield* fs.rename(tempTgz, input.cachedTgz)
+  })
 
-    // Pull into a per-invocation temp directory nested inside cacheDir (same
-    // filesystem, so the rename below is atomic), then rename the known
-    // output into place. This replaces diffing directory listings
-    // before/after `helm pull`, which misattributed tarballs when concurrent
-    // releases shared KONFIG_HELM_CACHE.
-    const pullDir = yield* fs.makeTempDirectory({ directory: cacheDir, prefix: ".konfig-helm-pull-" })
-
-    yield* Effect.logInfo(`helm: pulling ${opts.chart}@${opts.version} from ${opts.repo}`)
-    yield* Effect.gen(function*() {
-      const pull = ChildProcess.make("helm", [
-        "pull",
-        "--repo",
-        opts.repo,
-        opts.chart,
-        "--version",
-        opts.version,
-        "--destination",
-        pullDir
-      ])
-      yield* runProcessExit(pull, { timeout: yield* timeout })
-
-      const pulledFiles = yield* fs.readDirectory(pullDir)
-      const candidates = pulledFiles.filter((f) => f.endsWith(".tgz") && f.startsWith(opts.chart))
-      const pulled = candidates[0]
-      if (candidates.length !== 1 || pulled === undefined) {
-        return yield* new HelmRenderError({
-          chart: opts.chart,
-          version: opts.version,
-          phase: "pull",
-          cause: `helm pull produced ${candidates.length} matching tarball(s) in ${pullDir}, expected exactly 1`
-        })
-      }
-
-      // `fs.rename` performs an atomic replace on POSIX, so a second
-      // concurrent release racing to populate the same cache entry
-      // overwrites harmlessly with byte-identical content (helm pull for a
-      // pinned version is deterministic) rather than corrupting the cache.
-      yield* fs.rename(path.join(pullDir, pulled), cachedTgz)
-    }).pipe(
+// Pulled into a per-invocation temp directory nested inside cacheDir (same
+// filesystem, so the rename is atomic) rather than diffing directory listings,
+// which misattributed tarballs when concurrent pulls shared one cache.
+const _pullAndVerify = (input: _SlotInput): _PullOnce =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const pullDir = yield* fs.makeTempDirectory({ directory: input.cacheDir, prefix: ".konfig-helm-pull-" })
+    yield* Effect.logInfo(`helm: pulling ${input.chart}@${input.version} from ${input.repo}`)
+    yield* _pullIntoTemp(input, pullDir).pipe(
       Effect.ensuring(fs.remove(pullDir, { recursive: true, force: true }).pipe(Effect.ignore))
     )
+  })
 
-    yield* verifyChartDigest({ chart: opts.chart, version: opts.version, digest: opts.digest, cachedTgz })
+export const ensureChartTarball = (input: EnsureChartTarballInput) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    yield* fs.makeDirectory(input.cacheDir, { recursive: true })
+    const cachedTgz = path.join(input.cacheDir, cacheFileName(input))
+    const slot = { ...input, cachedTgz }
+    if (yield* fs.exists(cachedTgz)) yield* _verifyPinned(slot)
+    else yield* _pullOnce(cachedTgz, _pullAndVerify(slot))
+    return cachedTgz
   })
 
 type _ReleaseError = HelmRenderError | HelmVersionTooLow | HelmMinVersionInvalid | HelmDigestMismatch
@@ -415,7 +444,7 @@ export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> => {
       const path = yield* Path
 
       if (opts.minVersion !== undefined) {
-        yield* _assertHelmMinVersion(opts.minVersion).pipe(_inPhase(opts, "version-check"))
+        yield* assertMinVersion(opts.minVersion).pipe(_inPhase(opts, "version-check"))
       }
 
       // cacheDir is read from Config (KONFIG_HELM_CACHE) rather than accepted
@@ -434,13 +463,7 @@ export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> => {
         Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR)),
         _inPhase(opts, "pull")
       )
-      yield* fs.makeDirectory(cacheDir, { recursive: true }).pipe(_inPhase(opts, "pull"))
-
-      const cachedTgz = path.join(
-        cacheDir,
-        cacheFileName({ chart: opts.chart, version: opts.version, digest: opts.digest })
-      )
-      yield* _ensureCachedTarball({ opts, cacheDir, cachedTgz }).pipe(_inPhase(opts, "pull"))
+      const cachedTgz = yield* ensureChartTarball({ ...opts, cacheDir }).pipe(_inPhase(opts, "pull"))
 
       const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-" }).pipe(_inPhase(opts, "template"))
       const valuesFile = path.join(tmpDir, "values.yaml")

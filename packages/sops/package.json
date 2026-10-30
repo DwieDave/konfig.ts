@@ -62,8 +62,7 @@
   "dependencies": {
     "@konfig.ts/core": "workspace:*",
     "@konfig.ts/env": "workspace:*",
-    "@konfig.ts/k8s": "workspace:*",
-    "yaml": "catalog:"
+    "@konfig.ts/k8s": "workspace:*"
   },
   "peerDependencies": {
     "effect": "^4.0.0"

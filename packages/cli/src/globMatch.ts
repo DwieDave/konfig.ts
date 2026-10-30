@@ -75,7 +75,7 @@ const _parseAtom = (cursor: Cursor): Parsed => {
   return { source: _escape(c), index: index + 1 }
 }
 
-const globToRegExp = (pattern: string): RegExp =>
+const _globToRegExp = (pattern: string): RegExp =>
   new RegExp(`^${_parseSequence({ pattern, index: 0, inBrace: false }).source}$`)
 
 export interface MatchesGlobInput {
@@ -83,4 +83,4 @@ export interface MatchesGlobInput {
   readonly path: string
 }
 
-export const matchesGlob = ({ path, pattern }: MatchesGlobInput): boolean => globToRegExp(pattern).test(path)
+export const matchesGlob = ({ path, pattern }: MatchesGlobInput): boolean => _globToRegExp(pattern).test(path)
