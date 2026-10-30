@@ -1,6 +1,6 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/api/docker.ts
-# hash: sha256:fadb742f1603f5f22dba449ea1e35166c1c19d7e9783d5ae0f286673d922c301
+# hash: sha256:aff502f87e2c7981b38c2617b89435071eee2851b1f1ade64f04798addf104e6
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -30,7 +30,6 @@ COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/packages/core/node_modules /app/packages/core/node_modules
 COPY --from=deps /app/packages/env/node_modules /app/packages/env/node_modules
 COPY --from=deps /app/examples/full-stack/shared/env-contracts/node_modules /app/examples/full-stack/shared/env-contracts/node_modules
-COPY --from=deps /app/packages/docker/node_modules /app/packages/docker/node_modules
 COPY --from=deps /app/examples/full-stack/apps/api/node_modules /app/examples/full-stack/apps/api/node_modules
 COPY packages/core ./packages/core
 COPY packages/env ./packages/env
