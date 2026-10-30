@@ -1,1 +1,40 @@
-{}
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "fix-bun-root",
+    },
+    "packages/app": {
+      "name": "@fix/app",
+      "version": "0.0.0",
+      "dependencies": {
+        "@fix/util": "workspace:*",
+      },
+    },
+    "packages/other": {
+      "name": "@fix/other",
+      "version": "0.0.0",
+    },
+    "packages/shared": {
+      "name": "@fix/shared",
+      "version": "0.0.0",
+    },
+    "packages/util": {
+      "name": "@fix/util",
+      "version": "0.0.0",
+      "dependencies": {
+        "@fix/shared": "workspace:*",
+      },
+    },
+  },
+  "packages": {
+    "@fix/app": ["@fix/app@workspace:packages/app"],
+
+    "@fix/other": ["@fix/other@workspace:packages/other"],
+
+    "@fix/shared": ["@fix/shared@workspace:packages/shared"],
+
+    "@fix/util": ["@fix/util@workspace:packages/util"],
+  }
+}

@@ -4,3 +4,31 @@
 __metadata:
   version: 8
   cacheKey: 10c0
+
+"@fix/app@workspace:packages/app":
+  version: 0.0.0-use.local
+  resolution: "@fix/app@workspace:packages/app"
+  dependencies:
+    "@fix/util": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
+"@fix/shared@workspace:*, @fix/shared@workspace:packages/shared":
+  version: 0.0.0-use.local
+  resolution: "@fix/shared@workspace:packages/shared"
+  languageName: unknown
+  linkType: soft
+
+"@fix/util@workspace:*, @fix/util@workspace:packages/util":
+  version: 0.0.0-use.local
+  resolution: "@fix/util@workspace:packages/util"
+  dependencies:
+    "@fix/shared": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
+"fix-yarn-berry-root@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "fix-yarn-berry-root@workspace:."
+  languageName: unknown
+  linkType: soft
