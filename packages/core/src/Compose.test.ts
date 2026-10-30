@@ -1,10 +1,13 @@
-import { describe, expect, it } from "@effect/vitest"
+import { NodeServices } from "@effect/platform-node"
+import { describe, expect, it, layer } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { brand } from "./_cast"
-import { composeLayers, makeResidualEntrypoint } from "./Compose"
+import { type Bundle, define } from "./Bundle"
+import { composeLayers, makeResidualEntrypoint, moduleLayer, sealModules } from "./Compose"
 import type { ComposeHandle, DuplicateProvides } from "./Compose"
-import { Secret } from "./deps"
+import { provideSecret, Secret } from "./deps"
 import type { Need, Provide, SecretRef } from "./deps"
+import { RenderError } from "./RenderError"
 
 // --- type-level: DuplicateProvides -----------------------------------------
 type _Expect<T extends true> = T
@@ -79,4 +82,63 @@ describe("makeResidualEntrypoint", () => {
       const result = yield* entrypoint(program)
       expect(result).toBe("ok")
     }))
+})
+
+layer(NodeServices.layer)("sealModules", (it) => {
+  const a = define({ name: "a", build: () => [] })
+  const b = define({ name: "b", build: () => [] })
+
+  it.effect("passes module values to build in order", () =>
+    Effect.gen(function*() {
+      const result = yield* sealModules<Bundle, Need<"App", "a" | "b">, ReadonlyArray<string>>({
+        modules: [a, b],
+        build: (values) => values.map((v) => v.name)
+      })
+
+      expect(result).toEqual(["a", "b"])
+    }))
+
+  it.effect("wires provides into module resolution", () =>
+    Effect.gen(function*() {
+      const consumer = define({
+        name: "c",
+        build: Effect.map(Secret("p"), () => [])
+      })
+
+      const result = yield* sealModules({
+        modules: [consumer],
+        provides: provideSecret("p"),
+        build: (values) => values.length
+      })
+
+      expect(result).toBe(1)
+    }))
+
+  it.effect("surfaces a failing module error", () =>
+    Effect.gen(function*() {
+      const failing = define({ name: "f", build: Effect.fail(new RenderError({ message: "boom" })) })
+      const exit = yield* Effect.exit(sealModules({ modules: [failing], build: () => 1 }))
+      expect(exit._tag).toBe("Failure")
+    }))
+})
+
+describe("moduleLayer", () => {
+  const built = (provides?: Layer.Layer<never>) =>
+    Effect.gen(function*() {
+      const tag = Secret("m")
+
+      const layer = moduleLayer({
+        tag,
+        build: Effect.succeed([1, 2]),
+        toValue: (items) => brand<SecretRef<"m">>(`n${items.length}`),
+        owns: Layer.empty,
+        provides
+      })
+
+      return yield* tag.pipe(Effect.provide(layer))
+    })
+
+  it.effect("builds without provides", () => built().pipe(Effect.map((v) => expect(v).toBe("n2"))))
+
+  it.effect("builds with provides", () => built(Layer.empty).pipe(Effect.map((v) => expect(v).toBe("n2"))))
 })

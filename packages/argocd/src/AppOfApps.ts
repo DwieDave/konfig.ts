@@ -1,5 +1,5 @@
-import { type AnyRenderError, Compose, type Manifest as CoreManifest, unsafeCoerce } from "@konfig.ts/core"
-import { Effect, Layer } from "effect"
+import { type AnyRenderError, Compose, type Manifest as CoreManifest } from "@konfig.ts/core"
+import type { Effect, Layer } from "effect"
 import type { Application, ApplicationHandle } from "./Application"
 
 export interface AppOfAppsTarget {
@@ -40,7 +40,6 @@ export const make = (opts: AppOfAppsMakeOptions): AppOfAppsResult => ({
 
 // any (not unknown) for bivariance at the inference site — same pattern as
 // core's Compose.AnyHandle / Bundle.AnyHandle.
-// oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = ApplicationHandle<any, any, any>
 
 export type ResidualIn<T extends ReadonlyArray<AnyHandle>> = Compose.ResidualIn<T>
@@ -63,24 +62,9 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = n
     & FromModulesOptions<Ms, Extra>
     & Compose.NoDuplicateProvides<Ms, "AppOfApps.fromModules">
     & Compose.ResidualCheck<Exclude<ResidualIn<Ms>, Extra>, "AppOfApps.fromModules">
-): Effect.Effect<AppOfAppsResult, AnyRenderError, CoreManifest.RenderServices> => {
-  const program = Effect.gen(function*() {
-    const apps = yield* Effect.forEach(opts.modules, (mod) => mod)
-
-    return make({
-      name: opts.name,
-      target: opts.target,
-      defaults: opts.defaults,
-      apps
-    })
+): Effect.Effect<AppOfAppsResult, AnyRenderError, CoreManifest.RenderServices> =>
+  Compose.sealModules({
+    modules: opts.modules,
+    provides: opts.provides,
+    build: (apps) => make({ name: opts.name, target: opts.target, defaults: opts.defaults, apps })
   })
-
-  const wired = Compose.composeLayers({ modules: opts.modules, provides: opts.provides })
-
-  return unsafeCoerce<
-    Effect.Effect<AppOfAppsResult, AnyRenderError, CoreManifest.RenderServices>
-  >(
-    Effect.provide(program, wired),
-    "the ResidualCheck phantom intersection proved the residual empty, so R narrows to RenderServices"
-  )
-}

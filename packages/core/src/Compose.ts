@@ -1,22 +1,19 @@
-import { type Effect, Layer } from "effect"
+import { type Context, Effect, Layer } from "effect"
 import { unsafeCoerce } from "./_cast"
 import type { Need } from "./deps"
+import { liftBuild } from "./lift"
 import type { RenderServices } from "./Manifest"
 import type { AnyRenderError } from "./RenderError"
 
-// oxlint-disable-next-line app/no-type-assertion
 export interface ComposeHandle<Out = any, In = any> {
   readonly layer: Layer.Layer<Out, AnyRenderError, In>
 }
 
 // `any` (not `unknown`) needed: Layer is contravariant here, invariant at the inference site.
-// oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = ComposeHandle<any, any>
 
-// oxlint-disable-next-line app/no-type-assertion
 type OutOfHandle<H> = H extends ComposeHandle<infer Out, any> ? Out : never
 
-// oxlint-disable-next-line app/no-type-assertion
 type InOfHandle<H> = H extends ComposeHandle<any, infer In> ? In : never
 
 // Left-fold mirroring the runtime `reduce(Layer.provideMerge)` below: each module's In is
@@ -109,4 +106,42 @@ export const makeResidualEntrypoint = <const Api extends string>(_api: Api) =>
   unsafeCoerce<Effect.Effect<A, E, R & RenderServices>>(
     program,
     "ResidualHintCheck is a phantom intersection; once the call typechecks, the runtime value is the original Effect"
+  )
+
+export interface SealModulesInput<V, R, A> {
+  readonly modules: ReadonlyArray<ComposeHandle & Effect.Effect<V, never, R>>
+  readonly provides?: Layer.Layer<never, AnyRenderError, never> | undefined
+  readonly build: (values: ReadonlyArray<V>) => A
+}
+
+// Resolves every module handle against the composed layers and builds the result.
+// R is narrowed on the layer (callers prove the residual empty via ResidualCheck).
+export const sealModules = <V, R, A>(
+  input: SealModulesInput<V, R, A>
+): Effect.Effect<A, AnyRenderError, RenderServices> =>
+  Effect.forEach(input.modules, (mod) => mod).pipe(
+    Effect.map(input.build),
+    Effect.provide(
+      unsafeCoerce<Layer.Layer<R, AnyRenderError, RenderServices>>(
+        composeLayers({ modules: input.modules, provides: input.provides }),
+        "ResidualCheck proved every module Need is provided by the composed layers, whose only remaining input is RenderServices"
+      )
+    )
+  )
+
+export interface ModuleLayerInput<Tag, Value, R, Owns, Extra> {
+  readonly tag: Context.Service<Tag, Value>
+  readonly build:
+    | Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R>
+    | (() => ReadonlyArray<unknown>)
+  readonly toValue: (manifests: ReadonlyArray<unknown>) => Value
+  readonly owns: Layer.Layer<Owns>
+  readonly provides?: Layer.Layer<Extra> | undefined
+}
+
+export const moduleLayer = <Tag, Value, R, Owns, Extra = never>(
+  input: ModuleLayerInput<Tag, Value, R, Owns, Extra>
+) =>
+  Layer.effect(input.tag, liftBuild(input.build).pipe(Effect.map(input.toValue))).pipe(
+    Layer.provideMerge(Layer.mergeAll(input.owns, input.provides ?? Layer.empty))
   )

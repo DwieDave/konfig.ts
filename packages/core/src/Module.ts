@@ -122,10 +122,8 @@ export interface FixedNsConfig<
   R,
   Extra,
   A = unknown
-> {
-  readonly target: Target<Kind, ExtraConfig, ExtraCallArgs>
+> extends Omit<DynamicNsConfig<Kind, ExtraConfig, ExtraCallArgs, Opts, R, Extra, A>, "build"> {
   readonly namespace: Ns
-  readonly provides?: Layer.Layer<Extra>
   readonly build: (ctx: BuildContext<Ns>, opts: Opts) => BuildResult<A, R>
 }
 
@@ -141,18 +139,21 @@ export const fixedNs = <
 >(
   config: FixedNsConfig<Kind, ExtraConfig, ExtraCallArgs, Ns, Opts, R, Extra> & ExtraConfig
 ) => {
-  const { build, namespace, provides, target, ...extraConfig } = config
+  const { namespace, build, ...dynamicConfig } = config
+
+  const wrapper = dynamicNs<Kind, ExtraConfig, ExtraCallArgs, Opts, R, Extra>(unsafeCoerce<
+    DynamicNsConfig<Kind, ExtraConfig, ExtraCallArgs, Opts, R, Extra> & ExtraConfig
+  >(
+    {
+      ...dynamicConfig,
+      build: (ctx: BuildContext, opts: Opts) => build({ name: ctx.name, namespace }, opts)
+    },
+    "the rest of a generic intersection cannot be re-related to ExtraConfig by TS; it is the caller's extra config minus namespace"
+  ))
 
   return <const Name extends string>(
     args: { readonly name: LiteralName<Name> } & ExtraCallArgs & Opts
-  ): ApplyHandle<Kind, Name, Ns, R, Extra> => {
-    return _defineWith<Kind, ExtraConfig, ExtraCallArgs, Name, Ns, R, Extra>({
-      target,
-      fields: { ...extraConfig, ...args, name: args.name, namespace: _asLiteralName(namespace) },
-      buildResult: build({ name: args.name, namespace }, args),
-      provides
-    })
-  }
+  ): ApplyHandle<Kind, Name, Ns, R, Extra> => wrapper<Name, Ns>({ ...args, namespace: _asLiteralName(namespace) })
 }
 
 export interface DynamicNsConfig<

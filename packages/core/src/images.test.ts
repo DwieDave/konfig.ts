@@ -163,3 +163,10 @@ describe("images — own keys only", () => {
     )
   })
 })
+
+describe("images error messages", () => {
+  it("names the missing env and app", () => {
+    expect(new ImagesEnvMissing({ env: "x" }).message).toBe("images.json has no env \"x\"")
+    expect(new ImagesAppMissing({ env: "x", app: "web" }).message).toBe("images.json has no app \"web\" in env \"x\"")
+  })
+})

@@ -2,7 +2,7 @@ import { type Context, Effect, Layer } from "effect"
 import { unsafeCoerce } from "./_cast"
 import * as Compose from "./Compose"
 import * as Dep from "./deps"
-import { attachLayerToTag, liftBuild } from "./lift"
+import { attachLayerToTag } from "./lift"
 import type * as CoreManifest from "./Manifest"
 import type * as Module from "./Module"
 import type { AnyRenderError } from "./RenderError"
@@ -79,20 +79,20 @@ const _bundleOf = (input: { readonly name: string; readonly namespace: string | 
   manifests: ReadonlyArray<unknown>
 ): Bundle => _make({ name: input.name, namespace: input.namespace, manifests })
 
-const _defineLayer = <Name extends string, R, Extra>(input: DefineLayerInput<Name, R, Extra>) => {
-  const { namespace, opts, tag } = input
-  const nsLayer = _nsLayer(namespace)
-  const bundleBuild = liftBuild(opts.build).pipe(Effect.map(_bundleOf({ name: opts.name, namespace })))
+const _defineLayer = <Name extends string, R, Extra>(input: DefineLayerInput<Name, R, Extra>) =>
+  Compose.moduleLayer({
+    tag: input.tag,
+    build: input.opts.build,
+    toValue: _bundleOf({ name: input.opts.name, namespace: input.namespace }),
+    owns: _nsLayer(input.namespace),
+    provides: input.opts.provides
+  })
 
-  if (opts.provides === undefined) {
-    return Layer.mergeAll(Layer.effect(tag, bundleBuild).pipe(Layer.provide(nsLayer)), nsLayer)
-  }
-
-  const internal = Layer.mergeAll(nsLayer, opts.provides)
-  const bundleLayer = Layer.effect(tag, bundleBuild).pipe(Layer.provide(internal))
-
-  return Layer.mergeAll(bundleLayer, nsLayer, opts.provides)
-}
+export type DefinedBundle<Name extends string, Ns extends string, R, Extra> = BundleHandle<
+  Name,
+  Dep.Provide<"App", Name> | _NsProvides<Ns> | Extra,
+  Exclude<R, _NsExcludes<Ns> | Extra>
+>
 
 export const define = <
   const Name extends string,
@@ -101,22 +101,12 @@ export const define = <
   Extra = never
 >(
   opts: BundleDefineOptions<Name, Ns, R, Extra>
-): BundleHandle<
-  Name,
-  Dep.Provide<"App", Name> | _NsProvides<Ns> | Extra,
-  Exclude<R, _NsExcludes<Ns> | Extra>
-> => {
+): DefinedBundle<Name, Ns, R, Extra> => {
   const name: Name = opts.name
   const tag = Dep.App<Name, Bundle>(name)
   const layer = _defineLayer({ tag, namespace: opts.namespace, opts })
 
-  return unsafeCoerce<
-    BundleHandle<
-      Name,
-      Dep.Provide<"App", Name> | _NsProvides<Ns> | Extra,
-      Exclude<R, _NsExcludes<Ns> | Extra>
-    >
-  >(
+  return unsafeCoerce<DefinedBundle<Name, Ns, R, Extra>>(
     attachLayerToTag({ tag, layer }),
     "narrow generic BundleHandle from the attachLayerToTag helper's loose Tag arg"
   )
@@ -149,7 +139,6 @@ const _makeSet = (opts: BundleSetMakeOptions): BundleSetResult => ({
 })
 
 // `any` (not `unknown`) needed: Layer is contravariant here, invariant at the inference site.
-// oxlint-disable-next-line app/no-type-assertion
 type AnyHandle = BundleHandle<any, any, any>
 
 export type ResidualIn<T extends ReadonlyArray<AnyHandle>> = Compose.ResidualIn<T>
@@ -170,24 +159,9 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = n
     & FromModulesOptions<Ms, Extra>
     & Compose.NoDuplicateProvides<Ms, "Bundle.fromModules">
     & Compose.ResidualCheck<Exclude<ResidualIn<Ms>, Extra>, "Bundle.fromModules">
-): Effect.Effect<BundleSetResult, AnyRenderError, CoreManifest.RenderServices> => {
-  const program = Effect.gen(function*() {
-    const bundles: Bundle[] = []
-
-    for (const mod of opts.modules) {
-      const b = yield* mod
-      bundles.push(b)
-    }
-
-    return _makeSet({ name: opts.name, bundles })
+): Effect.Effect<BundleSetResult, AnyRenderError, CoreManifest.RenderServices> =>
+  Compose.sealModules({
+    modules: opts.modules,
+    provides: opts.provides,
+    build: (bundles) => _makeSet({ name: opts.name, bundles })
   })
-
-  const wired = Compose.composeLayers({ modules: opts.modules, provides: opts.provides })
-
-  return unsafeCoerce<
-    Effect.Effect<BundleSetResult, AnyRenderError, CoreManifest.RenderServices>
-  >(
-    Effect.provide(program, wired),
-    "the ResidualCheck phantom intersection proved the residual empty, so R narrows to RenderServices"
-  )
-}
