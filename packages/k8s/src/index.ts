@@ -3,15 +3,17 @@ import { bindEnvironment } from "./environmentBind"
 import { Secret as _SecretIdentity } from "./identity"
 import { bindSecret } from "./secretBind"
 
+export * as K8s from "./.generated/k8s-types"
+
 export { Backend } from "./api"
 
 export { Container, Pod } from "./container"
 
 export { Port } from "./ports"
 
-export { EnvVar } from "./env"
+export { EnvVar, type RawEnvInput } from "./env"
 
-export { ConfigMap, Namespace } from "./identity"
+export { ConfigMap, Namespace, ServiceAccount, type ServiceAccountInput, type ServiceAccountManifest } from "./identity"
 
 export const Secret = { ..._SecretContract, ..._SecretIdentity, bind: bindSecret }
 
@@ -23,17 +25,49 @@ export const Environment = {
 
 export { NativeSecret } from "./nativeSecret"
 
-export { Service } from "./network"
+export {
+  Ingress,
+  type IngressInput,
+  type IngressTLSInput,
+  Service,
+  type ServiceFromPodSetInput,
+  type ServiceInput
+} from "./network"
 
 export { hashSecretValues } from "./podHash"
 
-export { NetworkPolicy } from "./policy"
+export {
+  ClusterRole,
+  ClusterRoleBinding,
+  type ClusterRoleBindingInput,
+  type ClusterRoleInput,
+  NetworkPolicy,
+  type NetworkPolicyInput,
+  PersistentVolume,
+  PersistentVolumeClaim,
+  type PersistentVolumeClaimInput,
+  type PersistentVolumeInput,
+  Role,
+  RoleBinding,
+  type RoleBindingInput,
+  type RoleInput
+} from "./policy"
 
-export { PvcRef } from "./refs"
+export { ConfigMapRef, PvcRef, SecretRef, ServiceAccountRef } from "./refs"
 
-export { Volume } from "./volume"
+export { type EmptyVolumeInput, Volume, type VolumeFromConfigMapInput, type VolumeFromSecretInput } from "./volume"
 
-export { Deployment } from "./workload"
+export {
+  CronJob,
+  type CronJobInput,
+  Deployment,
+  Job,
+  type JobInput,
+  StatefulSet,
+  type StatefulSetInput
+} from "./workload"
+
+export { type DefinePodSetInput, PodSet } from "./podSet"
 
 export { Selector } from "./selector"
 

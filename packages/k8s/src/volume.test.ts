@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { Container, Pod } from "./container"
 import { Port } from "./ports"
-import { PvcRef } from "./refs"
+import { ConfigMapRef, PvcRef, SecretRef } from "./refs"
 import { Volume } from "./volume"
 
 const claim = PvcRef.of("data-claim")
@@ -15,6 +15,28 @@ describe("Volume.fromPvc / Volume.mountRef", () => {
 
   it("Volume.mountRef returns the bare string at runtime", () => {
     expect(Volume.mountRef("config")).toBe("config")
+  })
+})
+
+describe("Volume.empty / Volume.fromSecret / Volume.fromConfigMap", () => {
+  it("Volume.empty brands the name and emits an emptyDir", () => {
+    const v = Volume.empty({ name: "scratch", medium: "Memory", sizeLimit: "64Mi" })
+    expect(v.name).toBe("scratch")
+    expect(v.emptyDir).toEqual({ medium: "Memory", sizeLimit: "64Mi" })
+  })
+
+  it("Volume.fromSecret maps the ref to secret.secretName", () => {
+    const v = Volume.fromSecret({ name: "creds", ref: SecretRef.of("api-creds"), defaultMode: 0o400 })
+    expect(v.name).toBe("creds")
+    expect(v.secret).toEqual({ secretName: "api-creds", defaultMode: 0o400 })
+  })
+
+  it("Volume.fromConfigMap maps the ref to configMap.name and copies items", () => {
+    const items = [{ key: "app.conf", path: "app.conf" }]
+    const v = Volume.fromConfigMap({ name: "conf", ref: ConfigMapRef.of("app-config"), items })
+    expect(v.configMap).toEqual({ name: "app-config", items })
+    expect(v.configMap?.items).not.toBe(items)
+    expect(v.configMap?.items?.[0]).not.toBe(items[0])
   })
 })
 

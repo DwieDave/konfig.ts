@@ -1,12 +1,13 @@
 import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
-import { ConfigMapRef, SecretRef } from "./refs"
+import { ConfigMapRef, SecretRef, ServiceAccountRef } from "./refs"
 
 describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
   it("constructors return the underlying string", () => {
     expect(SecretRef.of("api-creds")).toBe("api-creds")
     expect(ConfigMapRef.of("oauth-templates")).toBe("oauth-templates")
+    expect(ServiceAccountRef.of("api")).toBe("api")
   })
 
   it.effect("env-var (secretKeyRef) rejects raw string", () =>
@@ -86,5 +87,52 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
       EnvVar.fromConfigMap({ name: "DB_PORT", ref, key: "PROT" })
       const env = EnvVar.fromConfigMap({ name: "DB_PORT", ref, key: "PORT" })
       expect(env.valueFrom?.configMapKeyRef?.key).toBe("PORT")
+    }))
+
+  it.effect("volume from Secret rejects raw string", () =>
+    Effect.gen(function*() {
+      const { Volume } = yield* Effect.promise(() => import("./volume"))
+      // @ts-expect-error — raw string for `ref` is not assignable to SecretRef.
+      Volume.fromSecret({ name: "v", ref: "raw-string" })
+      const v = Volume.fromSecret({ name: "v", ref: SecretRef.of("creds") })
+      expect(v.secret?.secretName).toBe("creds")
+    }))
+
+  it.effect("volume from ConfigMap rejects raw string", () =>
+    Effect.gen(function*() {
+      const { Volume } = yield* Effect.promise(() => import("./volume"))
+      // @ts-expect-error — raw string for `ref` is not assignable to ConfigMapRef.
+      Volume.fromConfigMap({ name: "v", ref: "raw-string" })
+      const v = Volume.fromConfigMap({ name: "v", ref: ConfigMapRef.of("cfg") })
+      expect(v.configMap?.name).toBe("cfg")
+    }))
+
+  it.effect("Pod.imagePullSecret rejects raw string", () =>
+    Effect.gen(function*() {
+      const { Pod } = yield* Effect.promise(() => import("./container"))
+      // @ts-expect-error — raw string is not assignable to SecretRef.
+      Pod.imagePullSecret("raw-string")
+      const ips = Pod.imagePullSecret(SecretRef.of("ghcr-pull"))
+      expect(ips.name).toBe("ghcr-pull")
+    }))
+
+  it.effect("Ingress.tls rejects raw string", () =>
+    Effect.gen(function*() {
+      const { Ingress } = yield* Effect.promise(() => import("./network"))
+      // @ts-expect-error — raw string is not assignable to SecretRef.
+      Ingress.tls({ secretName: "raw-string" })
+      const tls = Ingress.tls({ secretName: SecretRef.of("tls") })
+      expect(tls.secretName).toBe("tls")
+    }))
+
+  it.effect("ServiceAccount.make ref is a ServiceAccountRef, not a raw string", () =>
+    Effect.gen(function*() {
+      const { ServiceAccount } = yield* Effect.promise(() => import("./identity"))
+      const sa = ServiceAccount.make({ name: "api", namespace: "prod" })
+      const ref: ServiceAccountRef<"api"> = sa.ref
+      // @ts-expect-error — a raw string is not a ServiceAccountRef.
+      const _raw: ServiceAccountRef<"api"> = "api"
+      expect(ref).toBe("api")
+      expect(_raw).toBe("api")
     }))
 })

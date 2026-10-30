@@ -10,6 +10,12 @@ export type ConfigMapRef<N extends string = string, K extends string = string> =
 
 export type PvcRef<N extends string = string> = PRef<N>
 
+declare const ServiceAccountRefBrand: unique symbol
+
+export type ServiceAccountRef<N extends string = string> = string & {
+  readonly [ServiceAccountRefBrand]: N
+}
+
 export const SecretRef = {
   of: <N extends string, K extends string = string, Ns extends string = string>(
     name: N
@@ -18,6 +24,10 @@ export const SecretRef = {
 
 export const ConfigMapRef = {
   of: <N extends string, K extends string = string>(name: N): ConfigMapRef<N, K> => brand<ConfigMapRef<N, K>>(name)
+}
+
+export const ServiceAccountRef = {
+  of: <N extends string>(name: N): ServiceAccountRef<N> => brand<ServiceAccountRef<N>>(name)
 }
 
 export const PvcRef = {

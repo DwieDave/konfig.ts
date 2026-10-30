@@ -40,7 +40,7 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 | `Manifest` | `make`, `concat`, `embedYaml`: the `Manifest<A>` carrier and its combinators |
 | `renderAllYaml`, `renderAllYamlEffect`, `renderManifest`, `RenderContext` | Render manifests against a `RenderContext` (env, cluster, k8s version, `flags`) into multi-document YAML |
 | `Dep` | Needs (`Secret`, `SecretValues`, `Namespace`, `Image`, `Application`, `App`) and `provide*` layers |
-| `SecretRef`, `ConfigMapRef`, `PvcRef`, `BuiltImageRef` | Branded reference types (k8s constructs the non-secret ones; `BuiltImageRef` is also a value with `of`); `*RefName`, `*RefKeys` helpers extract the brand parameters |
+| `SecretRef`, `ConfigMapRef`, `PvcRef`, `BuiltImageRef` | Branded reference types (`@konfig.ts/k8s` mints them with `SecretRef.of`, `ConfigMapRef.of`, `PvcRef.of` and its builders' `.ref`; `BuiltImageRef` is also a value with `of`); `*RefName`, `*RefKeys` helpers extract the brand parameters |
 | `Module` | `fixedNs`, `dynamicNs` factories; `Target`, `BuildContext`, `LiteralName` types |
 | `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`) and the type-level tracking of unmet needs behind every `fromModules` (`Compose.ResidualCheck`, `Compose.NoDuplicateProvides`) |
 | `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template`; `cacheFileName`, `ensureChartTarball`, `assertMinVersion`, `timeout` for the CLI's shared cache |

@@ -2,15 +2,135 @@ import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
 import { RenderContext } from "@konfig.ts/core"
 import { Effect } from "effect"
-import { _policyManifest, NetworkPolicy } from "./policy"
+import {
+  ClusterRole,
+  ClusterRoleBinding,
+  NetworkPolicy,
+  PersistentVolume,
+  PersistentVolumeClaim,
+  Role,
+  RoleBinding
+} from "./policy"
 import { Selector } from "./selector"
 
 const ctx = RenderContext.make("test")
 
-layer(NodeServices.layer)("_policyManifest", (it) => {
+layer(NodeServices.layer)("PersistentVolume strict spec", (it) => {
+  it.effect("renders a valid PV with capacity + accessModes + hostPath", () =>
+    Effect.gen(function*() {
+      const pv = PersistentVolume.make({
+        name: "data",
+        spec: {
+          capacity: { storage: "1Gi" },
+          accessModes: ["ReadWriteOnce"],
+          hostPath: { path: "/tmp/data", type: "DirectoryOrCreate" }
+        }
+      })
+
+      const result = yield* pv.render(ctx)
+      expect(result.kind).toBe("PersistentVolume")
+      expect(result.apiVersion).toBe("v1")
+      expect(result.metadata).toEqual({ name: "data" })
+      expect(result.spec?.capacity?.storage).toBe("1Gi")
+      expect(result.spec?.accessModes).toEqual(["ReadWriteOnce"])
+      expect(result.spec?.hostPath).toEqual({ path: "/tmp/data", type: "DirectoryOrCreate" })
+    }))
+
+  it.effect("supports csi volume sources passed through from upstream type", () =>
+    Effect.gen(function*() {
+      const pv = PersistentVolume.make({
+        name: "data",
+        spec: {
+          capacity: { storage: "10Gi" },
+          accessModes: ["ReadWriteOnce"],
+          csi: {
+            driver: "csi.example.com",
+            fsType: "ext4",
+            volumeHandle: "vol-123"
+          },
+          storageClassName: "fast",
+          persistentVolumeReclaimPolicy: "Retain",
+          claimRef: { namespace: "prod", name: "data-pvc" }
+        }
+      })
+
+      const result = yield* pv.render(ctx)
+      expect(result.spec?.csi?.driver).toBe("csi.example.com")
+      expect(result.spec?.claimRef).toEqual({ namespace: "prod", name: "data-pvc" })
+      expect(result.spec?.persistentVolumeReclaimPolicy).toBe("Retain")
+    }))
+
+  // @ts-expect-error — spec missing capacity
+  void PersistentVolume.make({ name: "x", spec: { accessModes: ["ReadWriteOnce"] } })
+
+  // @ts-expect-error — spec missing accessModes
+  void PersistentVolume.make({ name: "x", spec: { capacity: { storage: "1Gi" } } })
+
+  void PersistentVolume.make({
+    name: "x",
+    // @ts-expect-error — accessModes has invalid value
+    spec: { capacity: { storage: "1Gi" }, accessModes: ["NotARealMode"] }
+  })
+
+  void PersistentVolume.make({
+    name: "x",
+    spec: {
+      capacity: { storage: "1Gi" },
+      accessModes: ["ReadWriteOnce"],
+      // @ts-expect-error — persistentVolumeReclaimPolicy has invalid value
+      persistentVolumeReclaimPolicy: "BogusValue"
+    }
+  })
+})
+
+layer(NodeServices.layer)("PersistentVolumeClaim strict spec", (it) => {
+  it.effect("renders a valid PVC with accessModes + resources", () =>
+    Effect.gen(function*() {
+      const pvc = PersistentVolumeClaim.make({
+        name: "data",
+        namespace: "prod",
+        spec: {
+          accessModes: ["ReadWriteOnce"],
+          resources: { requests: { storage: "5Gi" } },
+          storageClassName: "fast",
+          selector: { matchLabels: { tier: "db" } }
+        }
+      })
+
+      const result = yield* pvc.render(ctx)
+      expect(result.kind).toBe("PersistentVolumeClaim")
+      expect(result.metadata).toEqual({ name: "data", namespace: "prod" })
+      expect(result.spec?.resources?.requests?.storage).toBe("5Gi")
+      expect(result.spec?.storageClassName).toBe("fast")
+      expect(result.spec?.selector).toEqual({ matchLabels: { tier: "db" } })
+    }))
+
+  void PersistentVolumeClaim.make({
+    name: "x",
+    namespace: "y",
+    // @ts-expect-error — spec missing accessModes
+    spec: { resources: { requests: { storage: "1Gi" } } }
+  })
+
+  void PersistentVolumeClaim.make({
+    name: "x",
+    namespace: "y",
+    // @ts-expect-error — spec missing resources
+    spec: { accessModes: ["ReadWriteOnce"] }
+  })
+
+  void PersistentVolumeClaim.make({
+    name: "x",
+    namespace: "y",
+    // @ts-expect-error — resources.requests missing storage
+    spec: { accessModes: ["ReadWriteOnce"], resources: { requests: {} } }
+  })
+})
+
+layer(NodeServices.layer)("NetworkPolicy.make", (it) => {
   it.effect("passes the raw spec through unchanged", () =>
     Effect.gen(function*() {
-      const np = _policyManifest({
+      const np = NetworkPolicy.make({
         name: "deny-all",
         namespace: "prod",
         spec: { podSelector: {}, policyTypes: ["Ingress"] }
@@ -115,5 +235,70 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
       expect(result.spec?.ingress).toBeUndefined()
       expect(result.spec?.egress).toBeUndefined()
       expect(result.spec?.podSelector).toEqual({ matchLabels: { app: "db" } })
+    }))
+})
+
+layer(NodeServices.layer)("RBAC resources", (it) => {
+  it.effect("ClusterRole.make renders rules and aggregationRule", () =>
+    Effect.gen(function*() {
+      const cr = ClusterRole.make({
+        name: "reader",
+        rules: [{ apiGroups: [""], resources: ["pods"], verbs: ["get", "list"] }],
+        aggregationRule: { clusterRoleSelectors: [{ matchLabels: { "rbac.example.com/aggregate": "true" } }] }
+      })
+
+      const result = yield* cr.render(ctx)
+      expect(result.kind).toBe("ClusterRole")
+      expect(result.apiVersion).toBe("rbac.authorization.k8s.io/v1")
+      expect(result.metadata).toEqual({ name: "reader" })
+      expect(result.rules).toEqual([{ apiGroups: [""], resources: ["pods"], verbs: ["get", "list"] }])
+      expect(result.aggregationRule).toEqual({
+        clusterRoleSelectors: [{ matchLabels: { "rbac.example.com/aggregate": "true" } }]
+      })
+    }))
+
+  it.effect("ClusterRoleBinding.make renders roleRef and subjects", () =>
+    Effect.gen(function*() {
+      const crb = ClusterRoleBinding.make({
+        name: "reader-binding",
+        roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: "reader" },
+        subjects: [{ kind: "ServiceAccount", name: "api", namespace: "prod" }]
+      })
+
+      const result = yield* crb.render(ctx)
+      expect(result.kind).toBe("ClusterRoleBinding")
+      expect(result.metadata).toEqual({ name: "reader-binding" })
+      expect(result.roleRef).toEqual({ apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: "reader" })
+      expect(result.subjects).toEqual([{ kind: "ServiceAccount", name: "api", namespace: "prod" }])
+    }))
+
+  it.effect("Role.make renders namespaced rules", () =>
+    Effect.gen(function*() {
+      const role = Role.make({
+        name: "pod-reader",
+        namespace: "prod",
+        rules: [{ apiGroups: [""], resources: ["pods"], verbs: ["get"] }]
+      })
+
+      const result = yield* role.render(ctx)
+      expect(result.kind).toBe("Role")
+      expect(result.metadata?.namespace).toBe("prod")
+      expect(result.rules).toEqual([{ apiGroups: [""], resources: ["pods"], verbs: ["get"] }])
+    }))
+
+  it.effect("RoleBinding.make renders roleRef and subjects within a namespace", () =>
+    Effect.gen(function*() {
+      const rb = RoleBinding.make({
+        name: "pod-reader-binding",
+        namespace: "prod",
+        roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: "pod-reader" },
+        subjects: [{ kind: "ServiceAccount", name: "api", namespace: "prod" }]
+      })
+
+      const result = yield* rb.render(ctx)
+      expect(result.kind).toBe("RoleBinding")
+      expect(result.metadata?.namespace).toBe("prod")
+      expect(result.roleRef).toEqual({ apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: "pod-reader" })
+      expect(result.subjects).toEqual([{ kind: "ServiceAccount", name: "api", namespace: "prod" }])
     }))
 })

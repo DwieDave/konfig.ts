@@ -7,3 +7,29 @@ describe("EnvVar.value", () => {
     expect(env).toEqual({ name: "LOG_LEVEL", value: "debug" })
   })
 })
+
+describe("EnvVar.raw", () => {
+  it("passes a literal value through unchanged", () => {
+    const env = EnvVar.raw({ name: "NODE_ENV", value: "production" })
+    expect(env).toEqual({ name: "NODE_ENV", value: "production" })
+  })
+
+  it("passes a valueFrom (e.g. fieldRef) through unchanged, bypassing ref branding", () => {
+    const env = EnvVar.raw({
+      name: "POD_NAME",
+      valueFrom: { fieldRef: { fieldPath: "metadata.name" } }
+    })
+
+    expect(env).toEqual({
+      name: "POD_NAME",
+      valueFrom: { fieldRef: { fieldPath: "metadata.name" } }
+    })
+  })
+
+  it("returns a copy that does not alias its input", () => {
+    const input = { name: "POD_NAME", valueFrom: { fieldRef: { fieldPath: "metadata.name" } } }
+    const env = EnvVar.raw(input)
+    expect(env).not.toBe(input)
+    expect(env.valueFrom).not.toBe(input.valueFrom)
+  })
+})

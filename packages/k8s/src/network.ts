@@ -10,6 +10,7 @@ import { _lowerServicePorts } from "./_lower"
 import type { ContainerSpec } from "./container"
 import { cloneList, copyMap, type NamespacedMetaInput, type StringMap, toObjectMeta } from "./meta"
 import type { ServicePortSpec } from "./ports"
+import type { Selector } from "./selector"
 
 interface ServiceBase extends NamespacedMetaInput {
   readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer"
@@ -31,6 +32,11 @@ export interface ServiceFromContainerInput<Ports extends string> extends Service
   readonly ports: ReadonlyArray<ServicePortSpec<NoInfer<Ports>>>
 }
 
+export interface ServiceFromPodSetInput<L extends StringMap> extends ServiceBase {
+  readonly podSet: Selector<L>
+  readonly ports: ReadonlyArray<K8sServicePort>
+}
+
 const _buildService = (input: ServiceInput): K8sService => ({
   apiVersion: "v1",
   kind: "Service",
@@ -47,13 +53,13 @@ const _buildService = (input: ServiceInput): K8sService => ({
   }
 })
 
-export const _serviceManifest = (input: ServiceInput): Manifest.Manifest<K8sService> =>
-  Manifest.make(() => _buildService(input))
-
 export const Service = {
+  make: (input: ServiceInput): Manifest.Manifest<K8sService> => Manifest.make(() => _buildService(input)),
   fromContainer: <Ports extends string>(
     input: ServiceFromContainerInput<Ports>
-  ): Manifest.Manifest<K8sService> => _serviceManifest(input)
+  ): Manifest.Manifest<K8sService> => Service.make(input),
+  fromPodSet: <L extends StringMap>(input: ServiceFromPodSetInput<L>): Manifest.Manifest<K8sService> =>
+    Service.make({ ...input, selector: input.podSet.labels })
 }
 
 export interface IngressTLSInput {
@@ -81,5 +87,6 @@ const _buildIngress = (input: IngressInput): K8sIngress => ({
 })
 
 export const Ingress = {
-  make: (input: IngressInput): Manifest.Manifest<K8sIngress> => Manifest.make(() => _buildIngress(input))
+  make: (input: IngressInput): Manifest.Manifest<K8sIngress> => Manifest.make(() => _buildIngress(input)),
+  tls: (input: IngressTLSInput): IngressTLSInput => ({ secretName: input.secretName, hosts: cloneList(input.hosts) })
 }

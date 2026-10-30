@@ -8,7 +8,7 @@ sidebar:
 
 import { Aside, Snippet } from "@/components/docs"
 
-`@konfig.ts/k8s` builds Kubernetes resources in TypeScript, with one twist: wherever a resource points at another resource, it takes a branded reference instead of a raw string. An env var that reads from a Secret, a volume that mounts a claim, an Ingress TLS block that names a Secret, an `imagePullSecrets` entry: each of these needs a reference produced by the resource it points at. A workload that references a Secret nobody creates is therefore a compile error, not a failed `argocd sync`. The package also hosts `Environment.bind` and `Secret.bind`, the step that takes an environment contract from `@konfig.ts/env` and turns it into a Deployment env block plus whatever custom resources the chosen secret backend emits.
+`@konfig.ts/k8s` builds Kubernetes resources in TypeScript, with one twist: wherever a resource points at another resource, it takes a branded reference instead of a raw string. An env var that reads from a Secret, a volume that mounts a ConfigMap, an Ingress TLS block that names a Secret, an `imagePullSecrets` entry: each of these needs a reference produced by the resource it points at. A workload that references a Secret nobody creates is therefore a compile error, not a failed `argocd sync`. The package also hosts `Environment.bind` and `Secret.bind`, the step that takes an environment contract from `@konfig.ts/env` and turns it into a Deployment env block plus whatever custom resources the chosen secret backend emits.
 
 ## Install
 
@@ -28,18 +28,23 @@ Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNames
 
 | Export | Purpose |
 | --- | --- |
-| `Container`, `Pod` | `Container.define` and pod specs |
+| `Container`, `Pod`, `PodSet` | `Container.define`; `Pod.define` (mounts must name a declared volume) and `Pod.imagePullSecret(ref)`; `PodSet.define` (a Deployment plus optional Service and NetworkPolicy, all selected by one `Selector`) |
 | `Port` | `Port.make({ name, containerPort })`, `Port.ref(name)` for probes and Services |
-| `EnvVar` | `value`, `secretEnv`, `configMapEnv`, `fromSecret`, `fromConfigMap`; duplicate names in one container are a compile error at `Container.define` |
-| `Secret`, `ConfigMap`, `Namespace` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind` |
+| `EnvVar` | `value`, `secretEnv`, `configMapEnv`, `fromSecret`, `fromConfigMap`, `raw` (unbranded passthrough, e.g. a `fieldRef`); duplicate names in one container are a compile error at `Container.define` |
+| `Secret`, `ConfigMap`, `Namespace`, `ServiceAccount` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind` |
 | `Environment` | `Environment.define` re-exported with `bind` (manifest side) and `runtime` (process side) |
 | `NativeSecret` | `NativeSecret.backend({ type?, immutable?, silenceWarning? })`: built-in backend that emits a plain `Secret` from a source |
-| `Workload` | `Workload.web` (Deployment + Service + optional Ingress, `reloader: "stakater"`) |
-| `Deployment`, `Service`, `NetworkPolicy` | Lower-level resource constructors: `Deployment.make`, `Service.fromContainer`, `NetworkPolicy.fromPodSet` |
-| `Volume`, `Selector` | Typed volumes/mounts; label selectors shared between workloads and NetworkPolicy peers |
-| `PvcRef` | `PvcRef.of(name)` brand constructor for an externally managed claim |
+| `Workload` | `Workload.web` (Deployment + Service + optional Ingress, `reloader: "stakater"`), `Workload.cron` (ServiceAccount + CronJob that runs as it) |
+| `Deployment`, `StatefulSet`, `Job`, `CronJob` | Workload constructors: `Deployment.make`, `Deployment.fromPodSet`, `StatefulSet.make`, `Job.make`, `CronJob.make` |
+| `Service`, `Ingress`, `NetworkPolicy` | `Service.make`, `Service.fromContainer`, `Service.fromPodSet`; `Ingress.make`, `Ingress.tls`; `NetworkPolicy.make`, `NetworkPolicy.fromPodSet` |
+| `Role`, `RoleBinding`, `ClusterRole`, `ClusterRoleBinding`, `PersistentVolume`, `PersistentVolumeClaim` | RBAC and storage constructors (`.make`) |
+| `Volume`, `Selector` | `Volume.empty`, `Volume.fromSecret`, `Volume.fromConfigMap`, `Volume.fromPvc`, `Volume.mountRef`; label selectors shared between workloads and NetworkPolicy peers |
+| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef` | `.of(name)` brand constructors for objects managed outside konfig.ts |
 | `hashSecretValues` | Stamp a pod-spec hash so pods roll on re-render |
 | `Backend` | Kit for backend authors: `Backend.define` (one declaration per backend), `Backend.encrypting` (shared render-time encrypt pipeline), `Backend.plainSecret`, `Backend.secretMeta`; types `Backend.BaseInput`, `Backend.EmitInput`, `Backend.CliOptions` |
+| `K8s` | Type-only namespace of the raw Kubernetes types (`kubernetes-types@~1.30.0`) |
+
+The input types of the builders above are exported as types: `StatefulSetInput`, `JobInput`, `CronJobInput`, `ServiceInput`, `ServiceFromPodSetInput`, `IngressInput`, `IngressTLSInput`, `NetworkPolicyInput`, `RoleInput`, `RoleBindingInput`, `ClusterRoleInput`, `ClusterRoleBindingInput`, `PersistentVolumeInput`, `PersistentVolumeClaimInput`, `ServiceAccountInput`, `ServiceAccountManifest`, `DefinePodSetInput`, `EmptyVolumeInput`, `VolumeFromSecretInput`, `VolumeFromConfigMapInput`, and `RawEnvInput`.
 
 ## Errors
 

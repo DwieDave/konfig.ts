@@ -2,7 +2,8 @@ import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
 import { RenderContext, renderManifest, Yaml } from "@konfig.ts/core"
 import { Effect } from "effect"
-import { ConfigMap, Namespace, Secret } from "./identity"
+import { ConfigMap, Namespace, Secret, ServiceAccount } from "./identity"
+import { SecretRef } from "./refs"
 
 const ctx = RenderContext.make("test")
 
@@ -10,6 +11,11 @@ describe("identity constructors expose .ref for downstream wiring", () => {
   it("Namespace exposes its name as `.ref`", () => {
     const ns = Namespace.make({ name: "api" })
     expect(ns.ref).toBe("api")
+  })
+
+  it("ServiceAccount exposes a branded ServiceAccountRef", () => {
+    const sa = ServiceAccount.make({ name: "api", namespace: "prod" })
+    expect(sa.ref).toBe("api")
   })
 
   it("ConfigMap exposes a branded ConfigMapRef", () => {
@@ -37,6 +43,24 @@ layer(NodeServices.layer)("identity rendering", (it) => {
       expect(yaml).toContain("kind: Namespace")
       expect(yaml).toContain("name: sops")
       expect(yaml).toContain("argocd.argoproj.io/sync-options: Prune=false")
+    }))
+
+  it.effect("rendered ServiceAccount carries imagePullSecrets", () =>
+    Effect.gen(function*() {
+      const sa = ServiceAccount.make({
+        name: "api",
+        namespace: "prod",
+        labels: { team: "platform" },
+        automountServiceAccountToken: false,
+        imagePullSecrets: [{ name: SecretRef.of("registry-creds") }]
+      })
+
+      const out = yield* renderManifest({ manifest: sa, ctx })
+      expect(out.apiVersion).toBe("v1")
+      expect(out.kind).toBe("ServiceAccount")
+      expect(out.metadata).toEqual({ name: "api", namespace: "prod", labels: { team: "platform" } })
+      expect(out.automountServiceAccountToken).toBe(false)
+      expect(out.imagePullSecrets).toEqual([{ name: "registry-creds" }])
     }))
 
   it.effect("rendered ConfigMap carries data, binaryData and immutable", () =>

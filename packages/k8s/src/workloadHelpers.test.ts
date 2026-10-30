@@ -3,9 +3,15 @@ import { it } from "@effect/vitest"
 import { unsafeCoerce } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
-import type { Deployment as K8sDeployment, Ingress as K8sIngress, Service as K8sService } from "./.generated/k8s-types"
+import type {
+  CronJob as K8sCronJob,
+  Deployment as K8sDeployment,
+  Ingress as K8sIngress,
+  Service as K8sService,
+  ServiceAccount as K8sServiceAccount
+} from "./.generated/k8s-types"
 import { ConfigMapRef, SecretRef } from "./refs"
-import { web } from "./workloadHelpers"
+import { cron, web } from "./workloadHelpers"
 
 const coerce = <T, V = unknown>(value: V): T =>
   unsafeCoerce<T, V>({ value: value, reason: "the rendered manifest is the K8s resource its builder emits" })
@@ -185,4 +191,74 @@ describe("Workload.web annotations", () => {
       const [deployment] = yield* manifest.render(ctx)
       expect(coerce<K8sDeployment>(deployment).metadata?.annotations).toBeUndefined()
     }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+describe("Workload.cron", () => {
+  it.effect("renders a ServiceAccount + CronJob with the SA name bound as serviceAccountName", () =>
+    Effect.gen(function*() {
+      const manifest = cron({
+        name: "nightly-job",
+        namespace: "prod",
+        schedule: "0 0 * * *",
+        labels: { team: "data" },
+        annotations: { owner: "data-team" },
+        containers: [{ name: "job", image: "worker:latest" }],
+        imagePullSecrets: [{ name: SecretRef.of("ghcr-pull") }]
+      })
+
+      const rendered = yield* manifest.render(ctx)
+      expect(rendered).toHaveLength(2)
+      const [sa, cronJob] = rendered
+      const account = coerce<K8sServiceAccount>(sa)
+      const job = coerce<K8sCronJob>(cronJob)
+      const pod = job.spec?.jobTemplate.spec?.template
+      expect(account.kind).toBe("ServiceAccount")
+      expect(account.metadata).toEqual({
+        name: "nightly-job",
+        namespace: "prod",
+        labels: { app: "nightly-job", team: "data" },
+        annotations: { owner: "data-team" }
+      })
+      expect(job.kind).toBe("CronJob")
+      expect(job.metadata?.labels).toEqual({ app: "nightly-job", team: "data" })
+      expect(job.spec?.schedule).toBe("0 0 * * *")
+      expect(pod?.metadata?.labels).toEqual({ app: "nightly-job" })
+      expect(pod?.spec?.serviceAccountName).toBe("nightly-job")
+      expect(pod?.spec?.restartPolicy).toBe("OnFailure")
+      expect(pod?.spec?.imagePullSecrets).toEqual([{ name: "ghcr-pull" }])
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("honors explicit concurrencyPolicy, history limits, and restartPolicy", () =>
+    Effect.gen(function*() {
+      const manifest = cron({
+        name: "nightly-job",
+        namespace: "prod",
+        schedule: "*/5 * * * *",
+        concurrencyPolicy: "Forbid",
+        successfulJobsHistoryLimit: 3,
+        failedJobsHistoryLimit: 1,
+        restartPolicy: "Never",
+        containers: [{ name: "job", image: "worker:latest" }]
+      })
+
+      const [, cronJob] = yield* manifest.render(ctx)
+      const job = coerce<K8sCronJob>(cronJob)
+      expect(job.spec?.concurrencyPolicy).toBe("Forbid")
+      expect(job.spec?.successfulJobsHistoryLimit).toBe(3)
+      expect(job.spec?.failedJobsHistoryLimit).toBe(1)
+      expect(job.spec?.jobTemplate.spec?.template.spec?.restartPolicy).toBe("Never")
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it("rejects a concurrencyPolicy outside Allow | Forbid | Replace", () => {
+    const manifest = cron({
+      name: "nightly-job",
+      namespace: "prod",
+      schedule: "0 0 * * *",
+      // @ts-expect-error — "Sometimes" is not a CronJob concurrency policy.
+      concurrencyPolicy: "Sometimes",
+      containers: [{ name: "job", image: "worker:latest" }]
+    })
+
+    expect(manifest).toBeDefined()
+  })
 })

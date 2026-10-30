@@ -115,6 +115,10 @@ export interface DefinedPod<MountNames extends string> {
   readonly initContainers?: ReadonlyArray<ContainerSpec<string, MountNames>>
 }
 
+interface ImagePullSecret {
+  readonly name: SecretRef<string>
+}
+
 export interface PodSpecInput extends
   Omit<
     K8sPodSpec,
@@ -128,7 +132,7 @@ export interface PodSpecInput extends
   readonly containers: ReadonlyArray<ContainerInput>
   readonly initContainers?: ReadonlyArray<ContainerInput>
   readonly volumes?: ReadonlyArray<Volume>
-  readonly imagePullSecrets?: ReadonlyArray<{ readonly name: SecretRef<string> }>
+  readonly imagePullSecrets?: ReadonlyArray<ImagePullSecret>
   readonly serviceAccountName?: string
 }
 
@@ -139,5 +143,6 @@ export const Pod = {
     volumes: input.volumes,
     containers: input.containers,
     initContainers: input.initContainers
-  })
+  }),
+  imagePullSecret: (ref: SecretRef<string>): ImagePullSecret => ({ name: ref })
 }

@@ -12,12 +12,18 @@ const cfg = Volume.fromPvc({ name: "config", claim })
 
 type _CfgN = Expect<Equal<typeof cfg, VolumeT<"config">>>
 
+type _EmptyN = Expect<Equal<ReturnType<typeof Volume.empty<"scratch">>, VolumeT<"scratch">>>
+
+type _SecretN = Expect<Equal<ReturnType<typeof Volume.fromSecret<"creds">>, VolumeT<"creds">>>
+
+type _ConfigMapN = Expect<Equal<ReturnType<typeof Volume.fromConfigMap<"conf">>, VolumeT<"conf">>>
+
 type Vs = readonly [VolumeT<"config">, VolumeT<"data">]
 
 type _Names = Expect<Equal<VolumeNamesOf<Vs>, "config" | "data">>
 
 const goodPod = Pod.define({
-  volumes: [Volume.fromPvc({ name: "config", claim }), Volume.fromPvc({ name: "data", claim })],
+  volumes: [Volume.empty({ name: "config" }), Volume.fromPvc({ name: "data", claim })],
   containers: [
     Container.define({
       name: "app",
@@ -90,4 +96,4 @@ void _crossPod
 
 void _empty
 
-export type _Tests = readonly [_CfgN, _Names, _PodNames]
+export type _Tests = readonly [_CfgN, _EmptyN, _SecretN, _ConfigMapN, _Names, _PodNames]

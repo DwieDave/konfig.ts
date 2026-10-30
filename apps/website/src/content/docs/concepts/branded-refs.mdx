@@ -1,6 +1,6 @@
 ---
 title: Branded refs
-description: SecretRef, ConfigMapRef, PvcRef, BuiltImageRef and PortName; where @konfig.ts/k8s demands them and what that catches.
+description: SecretRef, ConfigMapRef, PvcRef, ServiceAccountRef, BuiltImageRef and PortName; where @konfig.ts/k8s demands them and what that catches.
 sidebar:
   order: 2
 ---
@@ -17,24 +17,25 @@ Every ref serialises to YAML as the bare name; the brand exists only in the type
 | --- | --- | --- |
 | `SecretRef` | name, the keys it holds, its namespace | `Secret.make(...).ref`, `Secret.bind(...).ref`, `Environment.bind(...).members.X.ref`, `yield* Dep.Secret(name)` |
 | `ConfigMapRef` | name, the keys it holds | `ConfigMap.make(...).ref` |
+| `ServiceAccountRef` | name | `ServiceAccount.make(...).ref` |
 | `PvcRef` | name | `PvcRef.of(name)` |
 | `BuiltImageRef` | app name | `yield* Dep.Image(app)`, `BuiltImageRef.of({ app, registry, tag })` |
 | `PortName` | port name | `Port.make({ name, ... })`, `Port.ref(name)` |
 
 Secret and ConfigMap refs also know their keys. `Secret.make` reads them from `data` / `stringData`, `ConfigMap.make` from `data` / `binaryData`. So `EnvVar.fromConfigMap({ ref: featureFlags.ref, key: "NEW_UI" })` only accepts a key that exists, and renaming a key in the ConfigMap breaks every consumer at compile time.
 
-For resources managed outside konfig.ts there are escape hatches: `PvcRef.of(name)` from `@konfig.ts/k8s`, and `brand<SecretRef<name>>(name)` (likewise for the other refs) from `@konfig.ts/core`. They mint a ref with no provider behind it, so use them only for genuinely external objects.
+For resources managed outside konfig.ts there are escape hatches: `SecretRef.of(name)`, `ConfigMapRef.of(name)`, `ServiceAccountRef.of(name)`, and `PvcRef.of(name)`. They mint a ref with no provider behind it, so use them only for genuinely external objects.
 
 ## Enforcement points
 
 The following inputs take a branded ref and reject a raw string:
 
 - Env vars: `EnvVar.fromSecret` and `EnvVar.secretEnv` (the secret name in `secretKeyRef`), `EnvVar.fromConfigMap` (the name in `configMapKeyRef`).
-- Volumes: `Volume.fromPvc({ claim })`, `secret.secretName` (a `SecretRef`) and `configMap.name` (a `ConfigMapRef`).
+- Volumes: `Volume.fromSecret({ ref })`, `Volume.fromConfigMap({ ref })`, `Volume.fromPvc({ claim })`, and on a hand-written volume `secret.secretName` (a `SecretRef`) and `configMap.name` (a `ConfigMapRef`).
 - Reloader: the `secrets` and `configMaps` lists of `reloader` take `SecretRef` / `ConfigMapRef` values.
-- Pull secrets: `imagePullSecrets` on `Workload.web` and the pod spec inputs.
-- TLS: the `tls` array of `Workload.web`'s `ingress`.
-- Ports: probes (`httpGet.port`, `tcpSocket.port`, `grpc.port`) and the `targetPort` of `Workload.web` service ports and `Service.fromContainer` accept a number or a `Port.ref` of a port declared on the containers.
+- Pull secrets: `imagePullSecrets` on `Workload.web`, `Workload.cron`, `ServiceAccount.make`, and the pod spec inputs; `Pod.imagePullSecret(ref)` builds one entry.
+- TLS: `Ingress.tls({ secretName })` and the `tls` array of `Ingress.make` / `Workload.web`'s `ingress`.
+- Ports: probes (`httpGet.port`, `tcpSocket.port`, `grpc.port`) and the `targetPort` of `Workload.web` service ports and `Service.fromContainer` accept a number or a `Port.ref` of a port declared on the containers. Plain `Service.make` and `Service.fromPodSet` take untyped port objects.
 
 ### Namespace match
 
@@ -59,7 +60,13 @@ Kubernetes silently keeps the last env var when two share a name. `Container.def
 
 It renders a Deployment and a Service, plus an Ingress when `ingress` is given. The Deployment's selector is fixed to `{ app: name }` and merged last into the pod labels, so a colliding `podLabels` entry cannot desync the selector from the pods.
 
-For anything outside that shape, use `Deployment.make` directly, as `infra/modules/worker.ts` does with `Deployment.make`.
+`Workload.cron` is the equivalent for scheduled jobs. It renders a ServiceAccount named after the job (built with `ServiceAccount.make`) and a CronJob whose pods run as that ServiceAccount and carry the `{ app: name }` label. It takes:
+
+- `name`, `namespace`, `schedule`, `containers` (required).
+- `labels`, `annotations`, `volumes`, `imagePullSecrets` (optional).
+- `concurrencyPolicy`, `successfulJobsHistoryLimit`, `failedJobsHistoryLimit`, `restartPolicy` (optional; `restartPolicy` defaults to `"OnFailure"`).
+
+For anything outside those two shapes, use `Deployment.make`, `StatefulSet.make`, `Job.make`, `CronJob.make`, `Service.make`, and `Ingress.make` directly, as `infra/modules/worker.ts` does with `Deployment.make`.
 
 ## Rolling on secret change
 

@@ -2,6 +2,8 @@ import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
 import { RenderContext, renderManifest } from "@konfig.ts/core"
 import { Effect } from "effect"
+import { Service } from "./network"
+import { PodSet } from "./podSet"
 import { NetworkPolicy } from "./policy"
 import { Selector } from "./selector"
 import { Deployment } from "./workload"
@@ -53,6 +55,24 @@ layer(NodeServices.layer)("Deployment.fromPodSet", (it) => {
     }))
 })
 
+layer(NodeServices.layer)("Service.fromPodSet", (it) => {
+  it.effect("uses the selector's labels as spec.selector", () =>
+    Effect.gen(function*() {
+      const apiPods = Selector.make({ app: "api" })
+
+      const svc = Service.fromPodSet({
+        name: "api",
+        namespace: "default",
+        podSet: apiPods,
+        ports: [{ port: 80, targetPort: 8080 }]
+      })
+
+      const out = yield* renderManifest({ manifest: svc, ctx })
+      expect(out.spec?.selector).toEqual({ app: "api" })
+      expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: 8080 })
+    }))
+})
+
 layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
   it.effect("uses the selector's labels as spec.podSelector and lowers ingress peers", () =>
     Effect.gen(function*() {
@@ -72,5 +92,56 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
       expect(out.spec?.ingress?.[0]?.from?.[0]?.podSelector?.matchLabels).toEqual({
         app: "postgres"
       })
+    }))
+})
+
+layer(NodeServices.layer)("PodSet", (it) => {
+  it.effect("emits a coherent Deployment + Service + NetworkPolicy from one selector", () =>
+    Effect.gen(function*() {
+      const apiPods = Selector.make({ app: "api", tier: "web" })
+      const dbPods = Selector.make({ app: "postgres" })
+
+      const trio = PodSet.define({
+        podSet: apiPods,
+        deployment: {
+          name: "api",
+          namespace: "default",
+          replicas: 2,
+          template: { spec: { containers: [{ name: "api", image: "x" }] } }
+        },
+        service: { name: "api", namespace: "default", ports: [{ port: 80 }] },
+        netPol: {
+          name: "api-ingress",
+          namespace: "default",
+          ingress: [{ from: [{ podSet: dbPods }] }]
+        }
+      })
+
+      const out = yield* renderManifest({ manifest: trio, ctx })
+      expect(out.map((resource) => resource.kind)).toEqual(["Deployment", "Service", "NetworkPolicy"])
+      const [dep, svc, np] = out
+      expect(dep?.kind === "Deployment" && dep.spec?.selector.matchLabels).toEqual({ app: "api", tier: "web" })
+      expect(svc?.kind === "Service" && svc.spec?.selector).toEqual({ app: "api", tier: "web" })
+      expect(np?.kind === "NetworkPolicy" && np.spec?.podSelector.matchLabels).toEqual({ app: "api", tier: "web" })
+      expect(np?.kind === "NetworkPolicy" && np.spec?.ingress?.[0]?.from?.[0]?.podSelector?.matchLabels).toEqual({
+        app: "postgres"
+      })
+    }))
+
+  it.effect("emits only the Deployment when service and netPol are omitted", () =>
+    Effect.gen(function*() {
+      const apiPods = Selector.make({ app: "api" })
+
+      const solo = PodSet.define({
+        podSet: apiPods,
+        deployment: {
+          name: "api",
+          namespace: "default",
+          template: { spec: { containers: [{ name: "api", image: "x" }] } }
+        }
+      })
+
+      const out = yield* renderManifest({ manifest: solo, ctx })
+      expect(out.map((resource) => resource.kind)).toEqual(["Deployment"])
     }))
 })

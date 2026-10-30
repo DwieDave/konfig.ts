@@ -1,5 +1,6 @@
 import { brand } from "@konfig.ts/core"
 import type { ConfigMapRef, PvcRef, SecretRef } from "@konfig.ts/core"
+import { cloneList } from "./meta"
 
 declare const VolumeNameBrand: unique symbol
 
@@ -30,6 +31,27 @@ export interface Volume<N extends string = string> {
   readonly hostPath?: { readonly path: string; readonly type?: string }
 }
 
+export interface EmptyVolumeInput<N extends string> {
+  readonly name: N
+  readonly medium?: string
+  readonly sizeLimit?: string
+}
+
+export interface VolumeFromSecretInput<N extends string> {
+  readonly name: N
+  readonly ref: SecretRef<string>
+  readonly optional?: boolean
+  readonly defaultMode?: number
+}
+
+export interface VolumeFromConfigMapInput<N extends string> {
+  readonly name: N
+  readonly ref: ConfigMapRef<string>
+  readonly optional?: boolean
+  readonly defaultMode?: number
+  readonly items?: ReadonlyArray<{ readonly key: string; readonly path: string }>
+}
+
 interface VolumeFromPvcInput<N extends string, PvcN extends string> {
   readonly name: N
   readonly claim: PvcRef<PvcN>
@@ -37,6 +59,23 @@ interface VolumeFromPvcInput<N extends string, PvcN extends string> {
 }
 
 export const Volume = {
+  empty: <const N extends string>(input: EmptyVolumeInput<N>): Volume<N> => ({
+    name: _volumeName(input.name),
+    emptyDir: { medium: input.medium, sizeLimit: input.sizeLimit }
+  }),
+  fromSecret: <const N extends string>(input: VolumeFromSecretInput<N>): Volume<N> => ({
+    name: _volumeName(input.name),
+    secret: { secretName: input.ref, optional: input.optional, defaultMode: input.defaultMode }
+  }),
+  fromConfigMap: <const N extends string>(input: VolumeFromConfigMapInput<N>): Volume<N> => ({
+    name: _volumeName(input.name),
+    configMap: {
+      name: input.ref,
+      optional: input.optional,
+      defaultMode: input.defaultMode,
+      items: cloneList(input.items)
+    }
+  }),
   fromPvc: <const N extends string, const PvcN extends string>(
     input: VolumeFromPvcInput<N, PvcN>
   ): Volume<N> => ({

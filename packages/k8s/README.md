@@ -1,7 +1,7 @@
 # @konfig.ts/k8s
 
 Kubernetes resource builders with branded references. Cross-resource links — an
-env var to a Secret, a volume to a PVC, Ingress TLS to a Secret — are
+env var to a Secret, a volume to a ConfigMap, Ingress TLS to a Secret — are
 checked at the type level, so a workload pointing at a Secret nobody creates is
 a compile error, not a failed `argocd sync`.
 
@@ -47,20 +47,33 @@ const workload = Workload.web({
 
 ## What's inside
 
-**Branded refs** — `SecretRef`, `ConfigMapRef`, `PvcRef`.
-Identity constructors (`Secret.make`, `ConfigMap.make`, …) expose a typed
-`.ref`; the enforcement points (env `secretKeyRef`, volumes, `imagePullSecrets`,
-Ingress TLS, reloader lists) take the brand and reject raw strings.
+**Branded refs** — `SecretRef`, `ConfigMapRef`, `ServiceAccountRef`, `PvcRef`.
+Identity constructors (`Secret.make`, `ConfigMap.make`, `ServiceAccount.make`, …)
+expose a typed `.ref`; the enforcement points (env `secretKeyRef`, volumes,
+`imagePullSecrets`, Ingress TLS, reloader lists) take the brand and reject raw
+strings. `SecretRef.of`, `ConfigMapRef.of`, `ServiceAccountRef.of` and
+`PvcRef.of` mint a ref for an object managed outside konfig.ts.
 
-**Env vars** — `EnvVar.value`, `EnvVar.secretEnv` / `EnvVar.configMapEnv` (many vars from one ref), `EnvVar.fromConfigMap`.
+**Env vars** — `EnvVar.value`, `EnvVar.secretEnv` / `EnvVar.configMapEnv` (many vars from one ref),
+`EnvVar.fromSecret`, `EnvVar.fromConfigMap`, and `EnvVar.raw` (unbranded passthrough, e.g. a `fieldRef`).
 Duplicate names in one container's `env` are caught at compile time.
+
+**Volumes** — `Volume.empty`, `Volume.fromSecret({ ref })`, `Volume.fromConfigMap({ ref })`,
+`Volume.fromPvc({ claim })`. Mounts name a volume with `Volume.mountRef(name)`, and
+`Pod.define` rejects a mount whose volume the pod does not declare.
+`Pod.imagePullSecret(ref)` builds an `imagePullSecrets` entry.
 
 **Ports** — `Port.make({ name, containerPort })` and `Port.ref(name)` brand the
 port-name union, so a probe or Service targeting a typo'd port won't compile.
 
-**Workloads** — `Workload.web` (Deployment + Service + optional Ingress) covers
-the common shape. The lower-level `Deployment.make`, `Service.fromContainer`, `NetworkPolicy.fromPodSet`
-and the identity constructors are there for bespoke resources.
+**Workloads** — `Workload.web` (Deployment + Service + optional Ingress) and
+`Workload.cron` (CronJob + private ServiceAccount) cover the common shapes.
+`PodSet.define` derives a Deployment plus an optional Service and NetworkPolicy
+from one `Selector`. The lower-level `Deployment` / `StatefulSet` / `Job` /
+`CronJob` / `Service` / `Ingress` / `NetworkPolicy` and the identity, RBAC
+(`Role`, `RoleBinding`, `ClusterRole`, `ClusterRoleBinding`) and storage
+(`PersistentVolume`, `PersistentVolumeClaim`) constructors are there for bespoke
+resources.
 
 **Env contracts & secrets** — `Environment.bind` and `Secret.bind` turn a
 [`@konfig.ts/env`](../env) contract into the Deployment env block plus a secret
@@ -80,8 +93,8 @@ adds the shared plaintext, CLI, decode and verify pipeline. `Backend.plainSecret
 ## Internals
 
 Built on `@konfig.ts/core`'s `Manifest<A>` carrier; refs and `Dep.*` needs
-propagate through Effect `Layer`s. Generated Kubernetes types come from
-`kubernetes-types@~1.30.0`.
+propagate through Effect `Layer`s. Raw Kubernetes types are re-exported as the
+type-only `K8s` namespace (pinned `kubernetes-types@~1.30.0`).
 
 ## Requirements
 

@@ -1,8 +1,18 @@
 import type { ConfigMapRef, SecretRef } from "@konfig.ts/core"
 import { Manifest } from "@konfig.ts/core"
-import type { ConfigMap as K8sConfigMap, Namespace as K8sNamespace, Secret as K8sSecret } from "./.generated/k8s-types"
+import type {
+  ConfigMap as K8sConfigMap,
+  Namespace as K8sNamespace,
+  Secret as K8sSecret,
+  ServiceAccount as K8sServiceAccount
+} from "./.generated/k8s-types"
 import { copyMap, type MetaLabels, toObjectMeta } from "./meta"
-import { ConfigMapRef as ConfigMapRefValue, SecretRef as SecretRefValue } from "./refs"
+import {
+  ConfigMapRef as ConfigMapRefValue,
+  SecretRef as SecretRefValue,
+  type ServiceAccountRef,
+  ServiceAccountRef as ServiceAccountRefValue
+} from "./refs"
 
 interface WithRefInput<A, R> {
   readonly manifest: Manifest.Manifest<A>
@@ -29,6 +39,33 @@ export const Namespace = {
         metadata: toObjectMeta(input)
       })),
       ref: input.name
+    })
+}
+
+export interface ServiceAccountInput<N extends string> extends MetaLabels {
+  readonly name: N
+  readonly namespace: string
+  readonly automountServiceAccountToken?: boolean
+  readonly imagePullSecrets?: ReadonlyArray<{ readonly name: SecretRef<string> }>
+}
+
+export interface ServiceAccountManifest<N extends string> extends Manifest.Manifest<K8sServiceAccount> {
+  readonly ref: ServiceAccountRef<N>
+}
+
+const _buildServiceAccount = (input: ServiceAccountInput<string>): K8sServiceAccount => ({
+  apiVersion: "v1",
+  kind: "ServiceAccount",
+  metadata: toObjectMeta(input),
+  automountServiceAccountToken: input.automountServiceAccountToken,
+  imagePullSecrets: input.imagePullSecrets?.map((s) => ({ name: s.name }))
+})
+
+export const ServiceAccount = {
+  make: <const N extends string>(input: ServiceAccountInput<N>): ServiceAccountManifest<N> =>
+    _withRef({
+      manifest: Manifest.make(() => _buildServiceAccount(input)),
+      ref: ServiceAccountRefValue.of(input.name)
     })
 }
 

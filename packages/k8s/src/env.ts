@@ -74,6 +74,12 @@ export interface ConfigMapEnvBatchInput<R, Map> extends ConfigMapEnvOptions {
   readonly map: Map
 }
 
+export interface RawEnvInput<N extends string> {
+  readonly name: N
+  readonly value?: string
+  readonly valueFrom?: EnvVarSource
+}
+
 // Env-var name → key in the referenced Secret/ConfigMap. Names are the object keys so they stay literal for
 // Container.define's duplicate-name check.
 export type EnvKeyMap<K extends string> = Readonly<Record<string, K>>
@@ -124,7 +130,8 @@ export const EnvVar = {
     valueFrom: {
       configMapKeyRef: { name: input.ref, key: input.key, optional: input.optional }
     }
-  })
+  }),
+  raw: <const N extends string>(input: RawEnvInput<N>): EnvVar<N> => structuredClone(input)
 }
 
 export type EnvVar<N extends string = string> = EnvVarEntry<N>

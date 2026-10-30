@@ -12,11 +12,24 @@ import {
 import { Effect, Predicate } from "effect"
 import * as fc from "fast-check"
 import type { PodSpecInput } from "./container"
-import { ConfigMap, Namespace, Secret } from "./identity"
-import { _serviceManifest, Ingress } from "./network"
-import { _policyManifest } from "./policy"
+import { ConfigMap, Namespace, Secret, ServiceAccount } from "./identity"
+import { Ingress, Service } from "./network"
+import { PodSet } from "./podSet"
+import {
+  ClusterRole,
+  ClusterRoleBinding,
+  NetworkPolicy,
+  PersistentVolume,
+  PersistentVolumeClaim,
+  type PersistentVolumeClaimInput,
+  type PersistentVolumeInput,
+  Role,
+  RoleBinding
+} from "./policy"
+import { Selector } from "./selector"
 import type { VolumeName } from "./volume"
-import { Deployment } from "./workload"
+import { CronJob, Deployment, Job, StatefulSet } from "./workload"
+import { cron } from "./workloadHelpers"
 
 const volName = (n: string) => brand<VolumeName<string>>(n)
 const ctx = RenderContext.make("test")
@@ -83,8 +96,16 @@ const rendered = <I extends object>(input: I, manifest: Manifest.Manifest<object
   run: () => manifest.render(ctx)
 })
 
-const cases = {
-  Deployment: (l, w) => {
+const rules = (w: string) => [{ apiGroups: [w], resources: [w], verbs: [w] }]
+
+const roleRef = (w: string) => ({ apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: w })
+
+const subjects = (w: string) => [{ kind: "ServiceAccount", name: w, namespace: w }]
+
+const pullSecrets = (w: string) => [{ name: brand<SecretRef<string>>(w) }]
+
+const workloads = {
+  "Deployment.make": (l, w) => {
     const input = {
       ...meta(l),
       selector: { matchLabels: l },
@@ -94,20 +115,77 @@ const cases = {
 
     return rendered(input, Deployment.make(input))
   },
-  NetworkPolicy: (l, w) => {
+  "StatefulSet.make": (l, w) => {
+    const input = {
+      ...meta(l),
+      selector: { matchLabels: l },
+      serviceName: w,
+      template: template(l, w),
+      volumeClaimTemplates: [{ metadata: { name: w, labels: l }, spec: { accessModes: [w] } }],
+      updateStrategy: { type: w, rollingUpdate: { partition: 1 } }
+    }
+
+    return rendered(input, StatefulSet.make(input))
+  },
+  "Job.make": (l, w) => {
+    const input = { ...meta(l), template: template(l, w) }
+
+    return rendered(input, Job.make(input))
+  },
+  "CronJob.make": (l, w) => {
+    const input = {
+      ...meta(l),
+      schedule: "* * * * *",
+      jobTemplate: { metadata: { labels: l, annotations: l }, spec: { template: template(l, w) } }
+    }
+
+    return rendered(input, CronJob.make(input))
+  },
+  "Workload.cron": (l, w) => {
+    const spec = podSpec(l, w)
+
+    const input = {
+      ...meta(l),
+      schedule: "* * * * *",
+      containers: spec.containers,
+      volumes: spec.volumes,
+      imagePullSecrets: pullSecrets(w)
+    }
+
+    return rendered(input, cron(input))
+  },
+  "PodSet.define": (l, w) => {
+    const input = {
+      podSet: Selector.make(l),
+      deployment: { ...meta(l), template: template(l, w) },
+      service: { ...meta(l), ports: [{ port: 80, name: w }] },
+      netPol: { ...meta(l), ingress: [{ from: [{ podSet: Selector.make(l) }], ports: [{ port: 80, protocol: w }] }] }
+    }
+
+    return rendered(input, PodSet.define(input))
+  }
+} satisfies Record<string, (l: Labels, w: string) => Case>
+
+const networking = {
+  "NetworkPolicy.make": (l, w) => {
     const input = {
       ...meta(l),
       spec: { podSelector: { matchLabels: l }, ingress: [{ ports: [{ port: 80, protocol: w }] }] }
     }
 
-    return rendered(input, _policyManifest(input))
+    return rendered(input, NetworkPolicy.make(input))
   },
-  Service: (l, w) => {
+  "Service.make": (l, w) => {
     const input = { ...meta(l), selector: l, ports: [{ port: 80, name: w }] }
 
-    return rendered(input, _serviceManifest(input))
+    return rendered(input, Service.make(input))
   },
-  Ingress: (l, w) => {
+  "Service.fromPodSet": (l, w) => {
+    const input = { ...meta(l), podSet: Selector.make(l), ports: [{ port: 80, name: w }] }
+
+    return rendered(input, Service.fromPodSet(input))
+  },
+  "Ingress.make": (l, w) => {
     const input = {
       ...meta(l),
       ingressClassName: w,
@@ -117,21 +195,88 @@ const cases = {
     }
 
     return rendered(input, Ingress.make(input))
-  },
-  ConfigMap: (l, w) => {
+  }
+} satisfies Record<string, (l: Labels, w: string) => Case>
+
+const identity = {
+  "ConfigMap.make": (l, w) => {
     const input = { ...meta(l), data: l, binaryData: { [w]: w } }
 
     return rendered(input, ConfigMap.make(input))
   },
-  Secret: (l, w) => {
+  "Secret.make": (l, w) => {
     const input = { ...meta(l), data: l, stringData: { [w]: w } }
 
     return rendered(input, Secret.make(input))
   },
-  Namespace: (l) => {
+  "Namespace.make": (l) => {
     const input = { name: "n", labels: l, annotations: l }
 
     return rendered(input, Namespace.make(input))
+  },
+  "ServiceAccount.make": (l, w) => {
+    const input = { ...meta(l), automountServiceAccountToken: false, imagePullSecrets: pullSecrets(w) }
+
+    return rendered(input, ServiceAccount.make(input))
+  }
+} satisfies Record<string, (l: Labels, w: string) => Case>
+
+const storage = {
+  "PersistentVolume.make": (l, w) => {
+    const input: PersistentVolumeInput = {
+      name: "n",
+      labels: l,
+      annotations: l,
+      spec: {
+        capacity: { storage: w },
+        accessModes: ["ReadWriteOnce"],
+        mountOptions: [w],
+        csi: { driver: w, volumeHandle: w, volumeAttributes: l },
+        claimRef: { namespace: w, name: w }
+      }
+    }
+
+    return rendered(input, PersistentVolume.make(input))
+  },
+  "PersistentVolumeClaim.make": (l, w) => {
+    const input: PersistentVolumeClaimInput = {
+      ...meta(l),
+      spec: {
+        accessModes: ["ReadWriteOnce"],
+        resources: { requests: { storage: w } },
+        selector: { matchLabels: l }
+      }
+    }
+
+    return rendered(input, PersistentVolumeClaim.make(input))
+  }
+} satisfies Record<string, (l: Labels, w: string) => Case>
+
+const rbac = {
+  "Role.make": (l, w) => {
+    const input = { ...meta(l), rules: rules(w) }
+
+    return rendered(input, Role.make(input))
+  },
+  "RoleBinding.make": (l, w) => {
+    const input = { ...meta(l), roleRef: roleRef(w), subjects: subjects(w) }
+
+    return rendered(input, RoleBinding.make(input))
+  },
+  "ClusterRole.make": (l, w) => {
+    const input = {
+      name: "n",
+      labels: l,
+      rules: rules(w),
+      aggregationRule: { clusterRoleSelectors: [{ matchLabels: l }] }
+    }
+
+    return rendered(input, ClusterRole.make(input))
+  },
+  "ClusterRoleBinding.make": (l, w) => {
+    const input = { name: "n", annotations: l, roleRef: roleRef(w), subjects: subjects(w) }
+
+    return rendered(input, ClusterRoleBinding.make(input))
   }
 } satisfies Record<string, (l: Labels, w: string) => Case>
 
@@ -155,7 +300,9 @@ const rendersStable = (build: (l: Labels, w: string) => Case) =>
     return JSON.stringify(await runOnce(run)) === first
   })
 
+const cases = { ...workloads, ...networking, ...identity, ...storage, ...rbac }
+
 Object.entries(cases).forEach(([name, build]) => {
-  it(`${name}.make output never aliases its input`, () => fc.assert(noAlias(build)))
-  it(`${name}.make renders are independent of earlier renders`, () => fc.assert(rendersStable(build)))
+  it(`${name} output never aliases its input`, () => fc.assert(noAlias(build)))
+  it(`${name} renders are independent of earlier renders`, () => fc.assert(rendersStable(build)))
 })
