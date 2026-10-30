@@ -3,7 +3,7 @@ import { it } from "@effect/vitest"
 import { Yaml } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
-import { Cause, ConfigProvider, Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Cause, ConfigProvider, Effect, Exit, Layer, Predicate, Redacted, Schema, Sink, Stream } from "effect"
 import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import {
   type ChildProcessHandle,
@@ -15,9 +15,11 @@ import {
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { describe, expect } from "vitest"
 import { SealedSecrets } from "./backend"
-import type { SealedSecret } from "./crd"
+import { SealedSecretSchema } from "./schema"
 
-const coerce = <T>(value: unknown): T => value as T
+const _asSealedSecret = Schema.decodeUnknownEffect(SealedSecretSchema)
+
+const _decodeChunks = Schema.decodeUnknownEffect(Schema.Array(Schema.Uint8Array))
 
 const STUB_SEALED_YAML = `
 apiVersion: bitnami.com/v1alpha1
@@ -62,16 +64,18 @@ const _makeStubSpawner = (sink: SpawnerSink, output = STUB_SEALED_YAML) =>
     makeSpawner((cmd: Command) =>
       Effect.gen(function*() {
         sink.lastCmd = cmd
+
         if (isStandardCommand(cmd)) {
           const stdinCfg = cmd.options.stdin
-          if (stdinCfg !== undefined && typeof stdinCfg !== "string") {
-            const chunks = yield* Stream.runCollect(
-              coerce<Stream.Stream<Uint8Array>>(stdinCfg)
-            )
+
+          if (Stream.isStream(stdinCfg)) {
+            const chunks = yield* _decodeChunks(yield* Stream.runCollect(stdinCfg)).pipe(Effect.orDie)
+
             const merged = Array.from(chunks).flatMap((c) => Array.from(c))
             sink.lastStdin = new TextDecoder().decode(new Uint8Array(merged))
           }
         }
+
         return _handleForOutput(output)
       })
     )
@@ -83,26 +87,37 @@ const dbCreds = Secret.define({
   env: { url: "DATABASE_URL", password: "DATABASE_PASSWORD" }
 })
 
+const _lastCommand = (sink: SpawnerSink) => {
+  const cmd = sink.lastCmd
+
+  return cmd !== undefined && isStandardCommand(cmd)
+    ? { command: cmd.command, args: cmd.args.map((arg) => (Predicate.isString(arg) ? arg : Redacted.value(arg))) }
+    : expect.unreachable("expected a standard command")
+}
+
 const ctx = { env: "prod" } as const
 
 describe("SealedSecrets.backend", () => {
   it.effect("pipes a plaintext Secret to kubeseal and returns the SealedSecret", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
+
       const bound = Secret.bind({
         secret: dbCreds,
         backend: SealedSecrets.backend({ scope: "strict", certPath: "/tmp/cert.pem" }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
-      const rendered = coerce<SealedSecret>(
+
+      const rendered = yield* _asSealedSecret(
         yield* bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink)))
       )
+
       expect(rendered.apiVersion).toBe("bitnami.com/v1alpha1")
       expect(rendered.kind).toBe("SealedSecret")
       expect(rendered.metadata.name).toBe("db-creds")
       expect(rendered.spec.encryptedData.url).toContain("AgB7nF9")
       expect(isStandardCommand(sink.lastCmd!)).toBe(true)
-      const std = sink.lastCmd as { command: string; args: ReadonlyArray<string> }
+      const std = _lastCommand(sink)
       expect(std.command).toBe("kubeseal")
       expect(std.args).toEqual([
         "--cert",
@@ -120,6 +135,7 @@ describe("SealedSecrets.backend", () => {
   it.effect("forwards labels, annotations and type to the plain Secret", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
+
       const bound = Secret.bind({
         secret: dbCreds,
         labels: { app: "db" },
@@ -127,6 +143,7 @@ describe("SealedSecrets.backend", () => {
         backend: SealedSecrets.backend({ certPath: "/tmp/c.pem", type: "kubernetes.io/dockerconfigjson" }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       yield* bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink)))
       expect(sink.lastStdin).toContain("app: db")
       expect(sink.lastStdin).toContain("note: x")
@@ -136,24 +153,28 @@ describe("SealedSecrets.backend", () => {
   it.effect("defaults: scope=strict", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
+
       const bound = Secret.bind({
         secret: dbCreds,
         backend: SealedSecrets.backend({ certPath: "/tmp/cert.pem" }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       yield* bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink)))
-      const std = sink.lastCmd as { args: ReadonlyArray<string> }
+      const std = _lastCommand(sink)
       expect(std.args).toContain("strict")
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("reads cert from $KUBESEAL_CERT when certPath omitted", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
+
       const bound = Secret.bind({
         secret: dbCreds,
         backend: SealedSecrets.backend({ scope: "namespace-wide" }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       yield* bound.manifest!.render(ctx).pipe(
         Effect.provide(
           Layer.mergeAll(
@@ -162,18 +183,20 @@ describe("SealedSecrets.backend", () => {
           )
         )
       )
-      const std = sink.lastCmd as { args: ReadonlyArray<string> }
+      const std = _lastCommand(sink)
       expect(std.args.some((a: string) => a === "/from/env.pem")).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("fails with RenderError when no cert is available", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
+
       const bound = Secret.bind({
         secret: dbCreds,
         backend: SealedSecrets.backend(),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       const exit = yield* Effect.exit(
         bound.manifest!.render(ctx).pipe(
           Effect.provide(
@@ -184,6 +207,7 @@ describe("SealedSecrets.backend", () => {
           )
         )
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -193,8 +217,10 @@ describe("SealedSecrets.backend", () => {
         secret: dbCreds,
         backend: SealedSecrets.backend({ certPath: "/x" })
       })
+
       const exit = yield* Effect.exit(bound.manifest!.render(ctx))
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         expect(Cause.pretty(exit.cause)).toContain("requires a source")
       }
@@ -203,14 +229,17 @@ describe("SealedSecrets.backend", () => {
   it.effect("YAML output of rendered manifest reads like the spec", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
+
       const bound = Secret.bind({
         secret: dbCreds,
         backend: SealedSecrets.backend({ scope: "strict", certPath: "/tmp/c.pem" }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       const rendered = yield* bound.manifest!.render(ctx).pipe(
         Effect.provide(_makeStubSpawner(sink))
       )
+
       const yaml = Yaml.serialize({ value: rendered })
       expect(yaml).toContain("apiVersion: bitnami.com/v1alpha1")
       expect(yaml).toContain("kind: SealedSecret")
@@ -221,15 +250,19 @@ describe("SealedSecrets.backend", () => {
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
       const garbage = "key: [1,2"
+
       const bound = Secret.bind({
         secret: dbCreds,
         backend: SealedSecrets.backend({ scope: "strict", certPath: "/tmp/c.pem" }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       const exit = yield* Effect.exit(
         bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink, garbage)))
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const text = Cause.pretty(exit.cause)
         expect(text).toContain("KubesealParseError")
@@ -240,17 +273,22 @@ describe("SealedSecrets.backend", () => {
   it.effect("BoundaryDecodeError if kubeseal stdout doesn't match SealedSecret schema", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
+
       const malformed =
         `apiVersion: bitnami.com/v1alpha1\nkind: NotASealedSecret\nmetadata:\n  name: x\n  namespace: y\nspec:\n  encryptedData:\n    k: v\n`
+
       const bound = Secret.bind({
         secret: dbCreds,
         backend: SealedSecrets.backend({ scope: "strict", certPath: "/tmp/c.pem" }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       const exit = yield* Effect.exit(
         bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink, malformed)))
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const text = Cause.pretty(exit.cause)
         expect(text).toContain("BoundaryDecodeError")

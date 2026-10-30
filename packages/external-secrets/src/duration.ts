@@ -1,4 +1,4 @@
-import { Data } from "effect"
+import { Data, Predicate } from "effect"
 
 type GoDurationUnit = "ns" | "us" | "µs" | "μs" | "ms" | "s" | "m" | "h"
 
@@ -8,7 +8,7 @@ const goDurationPattern =
   /^[-+]?(?:0|(?:\d+(?:\.\d*)?|\.\d+)(?:ns|us|µs|μs|ms|s|m|h)(?:(?:\d+(?:\.\d*)?|\.\d+)(?:ns|us|µs|μs|ms|s|m|h))*)$/
 
 export const isGoDuration = (value: unknown): value is GoDuration =>
-  typeof value === "string" && goDurationPattern.test(value)
+  Predicate.isString(value) && goDurationPattern.test(value)
 
 export class InvalidRefreshIntervalError extends Data.TaggedError("InvalidRefreshIntervalError")<{
   readonly value: unknown

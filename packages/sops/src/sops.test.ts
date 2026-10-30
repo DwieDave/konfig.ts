@@ -12,8 +12,6 @@ import {
 import { describe, expect } from "vitest"
 import { sopsEncryptStdin } from "./sops"
 
-const coerce = <T>(value: unknown): T => value as T
-
 // A spawner that would happily "succeed" if invoked — proves an invalid recipient never
 // reaches argv/spawn because sopsEncryptStdin validates before spawning sops.
 const _passthroughSpawner: Layer.Layer<ChildProcessSpawner> = Layer.succeed(
@@ -44,14 +42,15 @@ describe("sopsEncryptStdin validates recipients itself (public API, not just via
         sopsEncryptStdin({
           plaintextYaml: "url: u\n",
           recipients: {
-            // Cast bypasses the SopsRecipients type to simulate a caller who skipped decode.
-            age: coerce<readonly string[]>([
+            age: [
               "age1stub00000000000000000000000000000000000000000000000000ends,age1injected00000000000000000000000000000000000000000leak"
-            ])
+            ]
           }
         }).pipe(Effect.provide(_passthroughSpawner))
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("SopsRecipients")

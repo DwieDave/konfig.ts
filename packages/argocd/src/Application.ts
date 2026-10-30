@@ -1,5 +1,5 @@
 import { type AnyRenderError, attachLayerToTag, Dep, liftBuild, Module, unsafeCoerce } from "@konfig.ts/core"
-import { type Context, Effect, Layer } from "effect"
+import { type Context, Effect, Layer, type Types } from "effect"
 
 export interface ArgoSource {
   readonly repoURL: string
@@ -41,15 +41,22 @@ export type Any = Application
 // that into a compile error instead.
 export type LiteralName<T extends string> = Module.LiteralName<T>
 
-export const make = (opts: Application): Application => ({
-  name: opts.name,
-  namespace: opts.namespace,
-  manifests: opts.manifests,
-  source: opts.source,
-  ...(opts.project !== undefined ? { project: opts.project } : {}),
-  ...(opts.syncPolicy !== undefined ? { syncPolicy: opts.syncPolicy } : {}),
-  ...(opts.annotations !== undefined ? { annotations: opts.annotations } : {})
-})
+export const make = (opts: Application): Application => {
+  const draft: Types.Mutable<Application> = {
+    name: opts.name,
+    namespace: opts.namespace,
+    manifests: opts.manifests,
+    source: opts.source
+  }
+
+  if (opts.project !== undefined) draft.project = opts.project
+
+  if (opts.syncPolicy !== undefined) draft.syncPolicy = opts.syncPolicy
+
+  if (opts.annotations !== undefined) draft.annotations = opts.annotations
+
+  return draft
+}
 
 export interface ApplicationHandle<Name extends string, Out, In>
   extends Context.Service<Dep.Need<"App", Name>, Application>
@@ -128,6 +135,7 @@ const _internalLayer = <Name extends string, Ns extends string, Extra>(
   opts: { readonly name: Name; readonly namespace: Ns; readonly provides?: Layer.Layer<Extra> }
 ) => {
   const ownsLayer = _ownsLayer(opts.name, opts.namespace)
+
   return opts.provides !== undefined ? Layer.mergeAll(ownsLayer, opts.provides) : ownsLayer
 }
 
@@ -139,10 +147,11 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
 >(
   opts: ApplicationDefineOptions<Name, Ns, R, Extra>
 ): DefinedHandle<Name, Ns, R, Extra> => {
-  const names: { readonly name: Name; readonly namespace: Ns } = {
+  const names = {
     name: opts.name,
     namespace: opts.namespace
-  }
+  } satisfies { readonly name: Name; readonly namespace: Ns }
+
   const tag = Dep.App<Name, Application>(names.name)
   const layer = _appLayer(tag, names, opts).pipe(Layer.provideMerge(_internalLayer(opts)))
 

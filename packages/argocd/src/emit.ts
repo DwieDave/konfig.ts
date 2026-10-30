@@ -1,5 +1,5 @@
 import { Manifest, Yaml } from "@konfig.ts/core"
-import { Effect } from "effect"
+import { Effect, type Types } from "effect"
 import type { Any as AnyApp } from "./Application"
 import type { AppOfAppsDefaults, AppOfAppsTarget } from "./AppOfApps"
 
@@ -30,12 +30,15 @@ interface _MergeSyncPolicyInput {
   readonly def: AppOfAppsDefaults["syncPolicy"]
   readonly app: AnyApp["syncPolicy"]
 }
+
 const _mergeAutomated = (
   def: NonNullable<AppOfAppsDefaults["syncPolicy"]>["automated"],
   app: NonNullable<AnyApp["syncPolicy"]>["automated"]
 ): NonNullable<AnyApp["syncPolicy"]>["automated"] => {
   if (def === undefined) return app
+
   if (app === undefined) return def
+
   return { ...def, ...app }
 }
 
@@ -44,7 +47,9 @@ const _mergeRetry = (
   app: NonNullable<AnyApp["syncPolicy"]>["retry"]
 ): NonNullable<AnyApp["syncPolicy"]>["retry"] => {
   if (def === undefined) return app
+
   if (app === undefined) return def
+
   return {
     ...def,
     ...app,
@@ -56,8 +61,11 @@ const _mergeRetry = (
 
 export const _mergeSyncPolicy = (input: _MergeSyncPolicyInput): AnyApp["syncPolicy"] => {
   const { def, app } = input
+
   if (def === undefined) return app
+
   if (app === undefined) return def
+
   return {
     automated: _mergeAutomated(def.automated, app.automated),
     syncOptions: app.syncOptions ?? def.syncOptions,
@@ -70,16 +78,16 @@ export interface BuildCRInput {
   readonly target: AppOfAppsTarget
   readonly defaults: AppOfAppsDefaults
 }
+
 const _metadata = (
   input: { readonly app: AnyApp; readonly controllerNamespace: string }
 ): ApplicationCR["metadata"] => {
   const { app, controllerNamespace } = input
-  const hasAnnotations = app.annotations !== undefined && Object.keys(app.annotations).length > 0
-  return {
-    ...(hasAnnotations ? { annotations: app.annotations } : {}),
-    name: app.name,
-    namespace: controllerNamespace
-  }
+  const metadata: Types.Mutable<ApplicationCR["metadata"]> = { name: app.name, namespace: controllerNamespace }
+
+  if (app.annotations !== undefined && Object.keys(app.annotations).length > 0) metadata.annotations = app.annotations
+
+  return metadata
 }
 
 const _source = (app: AnyApp): ApplicationCR["spec"]["source"] => ({
@@ -91,15 +99,19 @@ const _source = (app: AnyApp): ApplicationCR["spec"]["source"] => ({
 const _spec = (input: BuildCRInput): ApplicationCR["spec"] => {
   const { app, defaults } = input
   const syncPolicy = _mergeSyncPolicy({ def: defaults.syncPolicy, app: app.syncPolicy })
-  return {
+
+  const spec: Types.Mutable<ApplicationCR["spec"]> = {
     destination: {
       namespace: app.namespace,
       server: defaults.destination?.server ?? "https://kubernetes.default.svc"
     },
     project: app.project ?? defaults.project ?? "default",
-    source: _source(app),
-    ...(syncPolicy !== undefined ? { syncPolicy } : {})
+    source: _source(app)
   }
+
+  if (syncPolicy !== undefined) spec.syncPolicy = syncPolicy
+
+  return spec
 }
 
 export const buildCR = (input: BuildCRInput): ApplicationCR => ({
@@ -112,6 +124,7 @@ export const buildCR = (input: BuildCRInput): ApplicationCR => ({
 export const emitApplicationCR = (input: BuildCRInput): Manifest.Manifest<string> => {
   const cr = buildCR(input)
   const yaml = Yaml.serialize({ value: cr })
+
   return Manifest.make<string>((_ctx) => Effect.succeed(yaml))
 }
 

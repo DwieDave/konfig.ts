@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
-import { Dep } from "@konfig.ts/core"
+import { brand, Dep } from "@konfig.ts/core"
 import { Effect, Layer } from "effect"
 import { define } from "./Application"
 import { fromModules } from "./AppOfApps"
@@ -30,12 +30,14 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
         source: src("a"),
         build: () => [{ kind: "ConfigMap", metadata: { name: "a" } }]
       })
+
       const b = define({
         name: "b",
         namespace: "ns-b",
         source: src("b"),
         build: () => [{ kind: "ConfigMap", metadata: { name: "b" } }]
       })
+
       const c = define({
         name: "c",
         namespace: "ns-c",
@@ -66,7 +68,7 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
         namespace: "infra",
         source: src("provider"),
         build: () => [],
-        provides: Layer.succeed(Dep.Secret("shared"))("shared" as Dep.SecretRef<"shared">)
+        provides: Layer.succeed(Dep.Secret("shared"))(brand<Dep.SecretRef<"shared">>("shared"))
       })
 
       const consumer = define({
@@ -75,6 +77,7 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
         source: src("consumer"),
         build: Effect.gen(function*() {
           const ref = yield* Dep.Secret("shared")
+
           return [{ kind: "ConfigMap", metadata: { name: ref } }]
         })
       })
@@ -123,6 +126,7 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
         defaults,
         modules: [m] as const
       })
+
       const result = yield* program
       expect(result.name).toBe("root-apps")
     }))
@@ -134,20 +138,24 @@ layer(NodeServices.layer)("AppOfApps.fromModules", (it) => {
       source: src("api"),
       build: () => []
     })
+
     const apiV2 = define({
       name: "api",
       namespace: "app",
       source: src("api"),
       build: () => []
     })
+
     // @ts-expect-error duplicate App "api"
     fromModules({ target, defaults, modules: [apiV1, apiV2] as const })
+
     const web = define({
       name: "web",
       namespace: "app",
       source: src("web"),
       build: () => []
     })
+
     const ok = fromModules({ target, defaults, modules: [apiV1, web] as const })
     expect(Effect.isEffect(ok)).toBe(true)
   })

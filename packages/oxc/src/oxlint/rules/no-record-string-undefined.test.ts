@@ -7,7 +7,7 @@ function _recordType(params: readonly AstNode[]): AstNode {
   return {
     type: "TSTypeReference",
     typeName: { type: "Identifier", name: "Record" },
-    typeArguments: { params }
+    typeArguments: { type: "TSTypeParameterInstantiation", params }
   }
 }
 
@@ -28,8 +28,9 @@ describe("no-record-string-undefined", () => {
     const node: AstNode = {
       type: "TSTypeReference",
       typeName: { type: "Identifier", name: "Array" },
-      typeArguments: { params: [{ type: "TSStringKeyword" }] }
+      typeArguments: { type: "TSTypeParameterInstantiation", params: [{ type: "TSStringKeyword" }] }
     }
+
     const harness = runVisitor({ rule: noRecordStringUndefined, event: "TSTypeReference", node: node })
     expect(harness.reports).toHaveLength(0)
   })

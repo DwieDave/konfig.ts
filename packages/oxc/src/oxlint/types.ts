@@ -1,13 +1,32 @@
+import { Predicate } from "effect"
+
 interface SourceLocation {
   readonly line: number
   readonly column: number
 }
 
+interface NodeLocation {
+  start: SourceLocation
+  end: SourceLocation
+}
+
+type AstValue =
+  | AstNode
+  | NodeLocation
+  | readonly AstValue[]
+  | string
+  | number
+  | boolean
+  | bigint
+  | RegExp
+  | null
+  | undefined
+
 export interface AstNode {
   readonly type: string
-  readonly loc?: { start: SourceLocation; end: SourceLocation }
+  readonly loc?: NodeLocation
   readonly parent?: AstNode
-  readonly [key: string]: unknown
+  readonly [key: string]: AstValue
 }
 
 export interface Identifier extends AstNode {
@@ -56,6 +75,22 @@ export interface TSTypeCast extends AstNode {
   readonly expression: AstNode
   readonly typeAnnotation: AstNode
 }
+
+export const isAstNode = (value: unknown): value is AstNode =>
+  Predicate.hasProperty(value, "type") && Predicate.isString(value.type)
+
+export const isNodeList = (value: unknown): value is readonly AstNode[] =>
+  Array.isArray(value) && value.every(isAstNode)
+
+const SKIPPED_KEYS = new Set(["type", "loc", "parent", "range", "start", "end"])
+
+export const childNodes = (node: AstNode): readonly AstNode[] =>
+  Object.entries(node)
+    .filter(([key]) => !SKIPPED_KEYS.has(key))
+    .flatMap(([, value]) => (Array.isArray(value) ? value : [value]))
+    .filter(isAstNode)
+
+export const isString = Predicate.isString
 
 export const isIdentifier = (node: AstNode): node is Identifier => node.type === "Identifier"
 

@@ -39,13 +39,17 @@ export const _assertEncrypted = (
 ): Effect.Effect<void, RenderError> =>
   Effect.gen(function*() {
     const policy = yield* compilePolicy({ sops: secret.sops, label })
+
     for (const template of secret.spec.secretTemplates) {
       for (const [container, record] of [["stringData", template.stringData], ["data", template.data]] as const) {
         if (record === undefined) continue
+
         for (const [key, value] of Object.entries(record)) {
           const path = ["spec", "secretTemplates", container, key]
+
           if (mustEncrypt({ policy, path }) && !value.startsWith(_ENC_MARKER)) {
             const unencrypted = new SopsUnencryptedValueError({ label, key })
+
             return yield* new RenderError({
               message:
                 `${label}: refusing to emit — value for "${key}" is not sops-encrypted (missing ${_ENC_MARKER} marker)`,
@@ -67,8 +71,10 @@ const _parseVerified = (
       text: yamlText,
       onError: (cause) => new RenderError({ message: `${label}: output was not valid YAML`, cause })
     })
+
     const decoded = yield* _decodeSopsSecret(parsed)
     yield* _assertEncrypted({ secret: decoded, label })
+
     return decoded
   })
 
@@ -103,7 +109,9 @@ const _applyIdentity = ({ decoded, namespace, name }: _RestampInput): SopsSecret
 // Restamping namespace/name is only safe when mac_only_encrypted; otherwise the MAC covers them.
 export const _restampIdentity = (input: _RestampInput): Effect.Effect<SopsSecret, RenderError> => {
   const mismatch = _mismatches(input)
+
   if (!mismatch.namespace && !mismatch.name) return Effect.succeed(input.decoded)
+
   if (input.decoded.sops.mac_only_encrypted !== true) {
     return Effect.fail(
       new RenderError({
@@ -113,6 +121,7 @@ export const _restampIdentity = (input: _RestampInput): Effect.Effect<SopsSecret
       })
     )
   }
+
   return Effect.succeed(_applyIdentity(input))
 }
 
@@ -153,6 +162,7 @@ const _emit = <N extends string, K extends string>(
       const label = `Sops(${input.base.namespace}/${input.base.name})`
       const stringData = yield* resolvePlaintext({ base: input.base, label })
       const yaml = Yaml.serialize({ value: _plainCR(input, stringData) })
+
       const encryptedYaml = yield* sopsEncryptStdin({
         plaintextYaml: yaml,
         recipients: input.opts.recipients,
@@ -166,6 +176,7 @@ const _emit = <N extends string, K extends string>(
             })
           ))
       )
+
       return yield* _parseVerified(encryptedYaml, label)
     })
   )
@@ -182,6 +193,7 @@ const _passthrough = <N extends string, K extends string>(
     Effect.gen(function*() {
       const label = `Sops.passthrough(${input.base.namespace}/${input.base.name})`
       const fs = yield* FileSystem
+
       const contents = yield* fs
         .readFileString(input.file)
         .pipe(
@@ -193,25 +205,34 @@ const _passthrough = <N extends string, K extends string>(
               })
           )
         )
+
       const decoded = yield* _parseVerified(contents, label)
+
       return yield* _restampIdentity({ decoded, namespace: input.base.namespace, name: input.base.name, label })
     })
   )
+
+class _SopsBackend<N extends string, K extends string> extends Data.TaggedClass("Sops")<{
+  readonly requiresSource: true
+  readonly emit: (input: BackendEmitInput<N, K, true>) => Manifest.Manifest<SopsSecret>
+}> {}
+
+class _SopsPassthroughBackend<N extends string, K extends string> extends Data.TaggedClass("Sops.passthrough")<{
+  readonly requiresSource: false
+  readonly emit: (input: BackendEmitInput<N, K, false>) => Manifest.Manifest<SopsSecret>
+}> {}
 
 export const Sops = {
   source: SopsSource.source,
   backend: <N extends string, K extends string>(
     opts: SopsBackendOptions
-  ): SecretBackend<N, K, true, SopsSecret> => ({
-    _tag: "Sops",
-    requiresSource: true,
-    emit: (input: BackendEmitInput<N, K, true>) => _emit({ base: input, opts })
-  }),
+  ): SecretBackend<N, K, true, SopsSecret> =>
+    new _SopsBackend({ requiresSource: true, emit: (input) => _emit({ base: input, opts }) }),
   passthrough: <N extends string, K extends string>(opts: {
     readonly file: string
-  }): SecretBackend<N, K, false, SopsSecret> => ({
-    _tag: "Sops.passthrough",
-    requiresSource: false,
-    emit: (input: BackendEmitInput<N, K, false>) => _passthrough({ base: input, file: opts.file })
-  })
+  }): SecretBackend<N, K, false, SopsSecret> =>
+    new _SopsPassthroughBackend({
+      requiresSource: false,
+      emit: (input) => _passthrough({ base: input, file: opts.file })
+    })
 }

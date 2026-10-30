@@ -1,6 +1,6 @@
 import { Manifest } from "@konfig.ts/core"
 import type { BackendEmitInput, SecretBackend } from "@konfig.ts/k8s"
-import { Effect } from "effect"
+import { Data, Effect } from "effect"
 import type {
   ExternalSecret,
   ExternalSecretDataEntry,
@@ -29,17 +29,19 @@ const _emit = <N extends string, K extends string>(
       : Effect.die(new InvalidRefreshIntervalError({ value: opts.refreshInterval }))
   )
 
-const _isValidInterval = (value: unknown): boolean => value === undefined || isGoDuration(value)
+const _isValidInterval = (value: GoDuration | undefined): boolean => value === undefined || isGoDuration(value)
 
 const _build = <N extends string, K extends string>(
   base: BackendEmitInput<N, K, false>,
   opts: ExternalSecretsBackendOptions<K>
 ): ExternalSecret => {
   const remoteRef = opts.remoteRef ?? _identityRemoteRef
+
   const data: ExternalSecretDataEntry[] = base.keys.map((key) => ({
     secretKey: key,
     remoteRef: remoteRef(key)
   }))
+
   return {
     apiVersion: "external-secrets.io/v1",
     kind: "ExternalSecret",
@@ -61,12 +63,14 @@ const _build = <N extends string, K extends string>(
   }
 }
 
+class _ExternalSecretsBackend<N extends string, K extends string> extends Data.TaggedClass("ExternalSecrets")<{
+  readonly requiresSource: false
+  readonly emit: (input: BackendEmitInput<N, K, false>) => Manifest.Manifest<ExternalSecret>
+}> {}
+
 export const ExternalSecrets = {
   backend: <N extends string, K extends string>(
     opts: ExternalSecretsBackendOptions<K>
-  ): SecretBackend<N, K, false, ExternalSecret> => ({
-    _tag: "ExternalSecrets",
-    requiresSource: false,
-    emit: (input) => _emit(input, opts)
-  })
+  ): SecretBackend<N, K, false, ExternalSecret> =>
+    new _ExternalSecretsBackend({ requiresSource: false, emit: (input) => _emit(input, opts) })
 }

@@ -2,13 +2,38 @@ import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Yaml } from "@konfig.ts/core"
 import { Secret } from "@konfig.ts/k8s"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { describe, expect, it as vitestIt } from "vitest"
 import { ExternalSecrets } from "./backend"
-import type { ExternalSecret } from "./crd"
-import { InvalidRefreshIntervalError } from "./duration"
+import { type GoDuration, InvalidRefreshIntervalError } from "./duration"
 
-const coerce = <T>(value: unknown): T => value as T
+const _optionalString = Schema.optional(Schema.String)
+
+const _ExternalSecretSchema = Schema.Struct({
+  apiVersion: Schema.String,
+  kind: Schema.String,
+  metadata: Schema.Struct({ name: Schema.String, namespace: Schema.String }),
+  spec: Schema.Struct({
+    refreshInterval: _optionalString,
+    secretStoreRef: Schema.Struct({ name: Schema.String, kind: _optionalString }),
+    data: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          secretKey: Schema.String,
+          remoteRef: Schema.Struct({
+            key: Schema.String,
+            property: _optionalString,
+            version: _optionalString,
+            conversionStrategy: _optionalString,
+            decodingStrategy: _optionalString
+          })
+        })
+      )
+    )
+  })
+})
+
+const _asExternalSecret = Schema.decodeUnknownEffect(_ExternalSecretSchema)
 
 const dbCreds = Secret.define({
   name: "db-creds",
@@ -29,7 +54,8 @@ describe("ExternalSecrets.backend", () => {
           remoteRef: (key) => ({ key: `prod/api/${key}` })
         })
       })
-      const rendered = coerce<ExternalSecret>(yield* bound.manifest!.render(ctx))
+
+      const rendered = yield* _asExternalSecret(yield* bound.manifest!.render(ctx))
       expect(rendered.apiVersion).toBe("external-secrets.io/v1")
       expect(rendered.kind).toBe("ExternalSecret")
       expect(rendered.metadata.name).toBe("db-creds")
@@ -51,7 +77,8 @@ describe("ExternalSecrets.backend", () => {
         secret: dbCreds,
         backend: ExternalSecrets.backend({ secretStoreRef: { name: "vault" } })
       })
-      const rendered = coerce<ExternalSecret>(yield* bound.manifest!.render(ctx))
+
+      const rendered = yield* _asExternalSecret(yield* bound.manifest!.render(ctx))
       expect(rendered.spec.secretStoreRef.kind).toBe("SecretStore")
       expect(rendered.spec.refreshInterval).toBeUndefined()
       expect(rendered.spec.data).toEqual([
@@ -70,7 +97,8 @@ describe("ExternalSecrets.backend", () => {
           remoteRef: (key) => ({ key: `prod/api/${key}` })
         })
       })
-      const rendered = yield* bound.manifest!.render(ctx)
+
+      const rendered = yield* _asExternalSecret(yield* bound.manifest!.render(ctx))
       const yaml = Yaml.serialize({ value: rendered })
       expect(yaml).toContain("apiVersion: external-secrets.io/v1")
       expect(yaml).toContain("kind: ExternalSecret")
@@ -85,6 +113,7 @@ describe("ExternalSecrets.backend", () => {
     const b = ExternalSecrets.backend<"db-creds", "url" | "password">({
       secretStoreRef: { name: "x" }
     })
+
     expect(b.requiresSource).toBe(false)
   })
 
@@ -93,6 +122,7 @@ describe("ExternalSecrets.backend", () => {
       secret: dbCreds,
       backend: ExternalSecrets.backend({ secretStoreRef: { name: "x" } })
     })
+
     expect(bound.manifest).toBeDefined()
     expect(bound.envVars).toHaveLength(2)
     expect(bound.ref).toBe("db-creds")
@@ -112,7 +142,8 @@ describe("ExternalSecrets.backend", () => {
           })
         })
       })
-      const rendered = coerce<ExternalSecret>(yield* bound.manifest!.render(ctx))
+
+      const rendered = yield* _asExternalSecret(yield* bound.manifest!.render(ctx))
       expect(rendered.spec.data?.[0]?.remoteRef).toEqual({
         key: "kv/data/api",
         property: "url",
@@ -123,39 +154,39 @@ describe("ExternalSecrets.backend", () => {
 })
 
 describe("ExternalSecrets.backend refreshInterval", () => {
-  const render = (refreshInterval: unknown) =>
+  const render = (refreshInterval: GoDuration | undefined) =>
     Secret.bind({
       secret: dbCreds,
       backend: ExternalSecrets.backend({
         secretStoreRef: { name: "s" },
-        refreshInterval: coerce<"1h">(refreshInterval)
+        refreshInterval: refreshInterval
       })
     }).manifest!.render(ctx)
 
   it.effect("accepts Go durations such as 1h30m", () =>
     Effect.gen(function*() {
-      const rendered = coerce<ExternalSecret>(yield* render("1h30m"))
+      const rendered = yield* _asExternalSecret(yield* render("1h30m"))
       expect(rendered.spec.refreshInterval).toBe("1h30m")
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("dies on an invalid refreshInterval", () =>
     Effect.gen(function*() {
-      const exit = yield* Effect.exit(render("soon"))
+      const exit = yield* Effect.exit(render("1sjunk"))
       const defect = Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isDieReason)?.defect : undefined
       expect(defect).toBeInstanceOf(InvalidRefreshIntervalError)
-      expect(defect).toMatchObject({ value: "soon" })
+      expect(defect).toMatchObject({ value: "1sjunk" })
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("renders without refreshInterval", () =>
     Effect.gen(function*() {
-      const rendered = coerce<ExternalSecret>(yield* render(undefined))
+      const rendered = yield* _asExternalSecret(yield* render(undefined))
       expect(rendered.spec.refreshInterval).toBeUndefined()
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("accepts 0 and 500ms", () =>
     Effect.gen(function*() {
-      const zero = coerce<ExternalSecret>(yield* render("0"))
-      const ms = coerce<ExternalSecret>(yield* render("500ms"))
+      const zero = yield* _asExternalSecret(yield* render("0"))
+      const ms = yield* _asExternalSecret(yield* render("500ms"))
       expect([zero.spec.refreshInterval, ms.spec.refreshInterval]).toEqual(["0", "500ms"])
     }).pipe(Effect.provide(NodeServices.layer)))
 })

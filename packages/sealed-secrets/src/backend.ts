@@ -1,6 +1,6 @@
 import { Manifest, RenderError, Yaml } from "@konfig.ts/core"
 import { type BackendEmitInput, type EmitInput, resolvePlaintext, type SecretBackend } from "@konfig.ts/k8s"
-import { Effect } from "effect"
+import { Data, Effect } from "effect"
 import type { SealedSecret, SealedSecretScope } from "./crd"
 import { resolveCertPath, runKubeseal } from "./kubeseal"
 
@@ -10,15 +10,11 @@ export interface SealedSecretsBackendOptions {
   readonly type?: string
 }
 
-const _toRenderError = <C = unknown>(
+const _toRenderError = (
   base: { readonly namespace: string; readonly name: string },
-  detail: string | ((cause: C) => string)
+  detail: string
 ) =>
-(cause: C) =>
-  new RenderError({
-    message: `SealedSecrets(${base.namespace}/${base.name}): ${typeof detail === "function" ? detail(cause) : detail}`,
-    cause
-  })
+(cause: unknown) => new RenderError({ message: `SealedSecrets(${base.namespace}/${base.name}): ${detail}`, cause })
 
 const _plainSecret = <N extends string, K extends string>(
   input: EmitInput<N, K, SealedSecretsBackendOptions>,
@@ -44,10 +40,12 @@ const _emit = <N extends string, K extends string>(
       const certPath = yield* resolveCertPath({ certPath: input.opts.certPath }).pipe(
         Effect.mapError(_toRenderError(input.base, "cert missing"))
       )
+
       const stringData = yield* resolvePlaintext({
         base: input.base,
         label: `SealedSecrets(${input.base.namespace}/${input.base.name})`
       })
+
       return yield* runKubeseal({
         plainSecretYaml: Yaml.serialize({ value: _plainSecret(input, stringData) }),
         certPath,
@@ -56,15 +54,14 @@ const _emit = <N extends string, K extends string>(
     })
   )
 
+class _SealedSecretsBackend<N extends string, K extends string> extends Data.TaggedClass("SealedSecrets")<{
+  readonly requiresSource: true
+  readonly emit: (input: BackendEmitInput<N, K, true>) => Manifest.Manifest<SealedSecret>
+}> {}
+
 export const SealedSecrets = {
   backend: <N extends string, K extends string>(
-    opts?: SealedSecretsBackendOptions
-  ): SecretBackend<N, K, true, SealedSecret> => {
-    const resolvedOpts = opts ?? {}
-    return {
-      _tag: "SealedSecrets",
-      requiresSource: true,
-      emit: (input: BackendEmitInput<N, K, true>) => _emit({ base: input, opts: resolvedOpts })
-    }
-  }
+    opts: SealedSecretsBackendOptions = {}
+  ): SecretBackend<N, K, true, SealedSecret> =>
+    new _SealedSecretsBackend({ requiresSource: true, emit: (input) => _emit({ base: input, opts }) })
 }

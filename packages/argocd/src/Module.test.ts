@@ -27,6 +27,7 @@ describe("Module.fixedNs({ target: Application.target, ... })", () => {
     const sops = defineSops({ name: "sops-secrets-operator", source })
 
     type NameOf<T> = T extends Application.ApplicationHandle<infer N, infer _Out, infer _In> ? N : never
+
     expectTypeOf<NameOf<typeof sops>>().toEqualTypeOf<"sops-secrets-operator">()
   })
 
@@ -48,6 +49,7 @@ describe("Module.fixedNs({ target: Application.target, ... })", () => {
       source,
       note: "hello"
     })
+
     const app = Effect.runSync(handleEffect(sops))
 
     expect(app.manifests).toEqual([
@@ -69,7 +71,7 @@ describe("Module.fixedNs({ target: Application.target, ... })", () => {
   })
 
   it("rejects bare `string` for name at the call site", () => {
-    const dynamicName = "x" as string
+    const dynamicName: string = "x"
     // @ts-expect-error name must be a literal
     defineSops({ name: dynamicName, source })
   })
@@ -93,6 +95,7 @@ describe("Module.dynamicNs({ target: Application.target, ... })", () => {
     })
 
     type NameOf<T> = T extends Application.ApplicationHandle<infer N, infer _Out, infer _In> ? N : never
+
     expectTypeOf<NameOf<typeof api>>().toEqualTypeOf<"api">()
   })
 
@@ -103,6 +106,7 @@ describe("Module.dynamicNs({ target: Application.target, ... })", () => {
       source,
       image: "ghcr.io/example/api:1.0"
     })
+
     const apiStaging = defineApi({
       name: "api-staging",
       namespace: "staging",
@@ -115,7 +119,7 @@ describe("Module.dynamicNs({ target: Application.target, ... })", () => {
   })
 
   it("rejects bare `string` for namespace at the call site", () => {
-    const dynamicNs = "x" as string
+    const dynamicNs: string = "x"
     defineApi({
       name: "api",
       // @ts-expect-error namespace must be a literal
@@ -140,6 +144,7 @@ describe("Application.module({ ... })", () => {
     const app = Effect.runSync(handleEffect(sops))
 
     type NameOf<T> = T extends Application.ApplicationHandle<infer N, infer _Out, infer _In> ? N : never
+
     expectTypeOf<NameOf<typeof sops>>().toEqualTypeOf<"sops-secrets-operator">()
     expect(app.namespace).toBe("sops")
     expect(app.annotations).toEqual({ "argocd.argoproj.io/sync-wave": "-1" })
@@ -154,9 +159,11 @@ describe("Application.module({ ... })", () => {
       provides: Dep.provideSecret("ghcr-pull"),
       build: (_ctx, _opts: Record<never, never>) => []
     })
+
     const pulls = definePulls({ name: "pulls", source })
 
     type OutOf<T> = T extends Application.ApplicationHandle<infer _N, infer Out, infer _In> ? Out : never
+
     expectTypeOf<Dep.Provide<"Secret", "ghcr-pull">>().toExtend<OutOf<typeof pulls>>()
   })
 
@@ -166,14 +173,17 @@ describe("Application.module({ ... })", () => {
       build: (_ctx) =>
         Effect.gen(function*() {
           yield* Dep.Secret("ghcr-pull")
+
           return []
         })
     })
+
     const definePulls = Application.module({
       namespace: "app",
       provides: Dep.provideSecret("ghcr-pull"),
       build: (_ctx) => []
     })
+
     const target = { repoURL: "ssh://git@example/repo.git", branch: "main", rootPath: "./apps" }
 
     const api = defineApi({ name: "api", source })
@@ -186,7 +196,7 @@ describe("Application.module({ ... })", () => {
   })
 
   it("rejects bare `string` for name at the call site", () => {
-    const dynamicName = "x" as string
+    const dynamicName: string = "x"
     // @ts-expect-error name must be a literal
     defineSops({ name: dynamicName, source })
   })
