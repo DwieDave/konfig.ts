@@ -34,10 +34,13 @@ const _regexVerdict = (input: {
   readonly label: string
 }): Effect.Effect<readonly PathPredicate[], RenderError> => {
   const { raw } = input
+
   if (raw === undefined) return Effect.succeed([])
+
   return _compileRegex({ field: input.field, raw, label: input.label }).pipe(
     Effect.map((regex) => {
       const matches = _anySegment((segment) => regex.test(segment))
+
       return [input.field === "encrypted_regex" ? matches : _negate(matches)]
     })
   )
@@ -48,8 +51,10 @@ const _suffixVerdict = (input: {
   readonly encryptsMatches: boolean
 }): readonly PathPredicate[] => {
   const { suffix } = input
+
   if (suffix === undefined) return []
   const matches = _anySegment((segment) => segment.endsWith(suffix))
+
   return [input.encryptsMatches ? matches : _negate(matches)]
 }
 
@@ -61,6 +66,7 @@ export const compilePolicy = (input: {
     const { sops, label } = input
     const encrypted = yield* _regexVerdict({ field: "encrypted_regex", raw: sops.encrypted_regex, label })
     const unencrypted = yield* _regexVerdict({ field: "unencrypted_regex", raw: sops.unencrypted_regex, label })
+
     return {
       verdicts: [
         ...encrypted,

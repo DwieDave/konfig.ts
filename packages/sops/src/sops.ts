@@ -29,6 +29,7 @@ const _RECIPIENT_FLAGS: ReadonlyArray<readonly [keyof SopsRecipients, string]> =
 const _recipientArgs = (recipients: SopsRecipients): string[] =>
   _RECIPIENT_FLAGS.flatMap(([field, flag]) => {
     const values = recipients[field]
+
     return values !== undefined && values.length > 0 ? [flag, values.join(",")] : []
   })
 
@@ -39,6 +40,7 @@ export interface SopsDecryptInput {
 export const sopsDecrypt = (input: SopsDecryptInput) =>
   Effect.gen(function*() {
     const cmd = ChildProcess.make("sops", ["--decrypt", input.file])
+
     return yield* runProcessString(cmd).pipe(
       Effect.mapError((cause) => new SopsInvocationError({ op: "decrypt", cause }))
     )
@@ -58,6 +60,7 @@ export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
     // regardless of the SopsRecipients type, bypassing any decode a caller performed upstream.
     const recipients = yield* _decodeRecipients(input.recipients)
     const encoded = new TextEncoder().encode(input.plaintextYaml)
+
     const args = [
       "--config",
       "/dev/null",
@@ -71,9 +74,11 @@ export const sopsEncryptStdin = (input: SopsEncryptStdinInput) =>
       ..._recipientArgs(recipients),
       "/dev/stdin"
     ]
+
     const cmd = ChildProcess.make("sops", args, {
       stdin: Stream.succeed<Uint8Array>(encoded)
     })
+
     return yield* runProcessString(cmd).pipe(
       Effect.mapError((cause) => new SopsInvocationError({ op: "encrypt", cause }))
     )

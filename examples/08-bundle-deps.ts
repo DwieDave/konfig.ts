@@ -15,6 +15,7 @@ const web = Bundle.define({
   build: Effect.gen(function*() {
     const ghcrRef = yield* Dep.Secret("ghcr-pull")
     void ghcrRef
+
     return [{ apiVersion: "v1", kind: "ConfigMap", metadata: { name: "web-conf" } }]
   })
 })
@@ -34,6 +35,7 @@ Bundle.fromModules({ modules: [web] as const })
 const report = Effect.gen(function*() {
   const result = yield* checked
   yield* Effect.log(`BundleSet "${result.name}" — ${result.bundles.length} bundles`)
+
   for (const b of result.bundles) {
     yield* Effect.log(`  • ${b.namespace ?? "(cluster)"}/${b.name}`)
   }

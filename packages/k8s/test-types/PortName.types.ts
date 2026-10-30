@@ -2,12 +2,14 @@ import type { ContainerSpec, NamesOf } from "@konfig.ts/k8s"
 import { Container, Port, Service, Workload } from "@konfig.ts/k8s"
 
 type Expect<T extends true> = T
+
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
 type PortsTuple = readonly [
   ReturnType<typeof Port.make<"http">>,
   ReturnType<typeof Port.make<"metrics">>
 ]
+
 type _Names = Expect<Equal<NamesOf<PortsTuple>, "http" | "metrics">>
 
 const api = Container.define({
@@ -18,6 +20,7 @@ const api = Container.define({
     Port.make({ name: "metrics", containerPort: 9090 })
   ]
 })
+
 type _ApiSpec = Expect<Equal<typeof api, ContainerSpec<"http" | "metrics", never>>>
 
 const okProbe = Container.define({
@@ -26,6 +29,7 @@ const okProbe = Container.define({
   ports: [Port.make({ name: "http", containerPort: 8080 })],
   readinessProbe: { httpGet: { path: "/h", port: Port.ref("http") } }
 })
+
 void okProbe
 
 const badProbe = Container.define({
@@ -37,6 +41,7 @@ const badProbe = Container.define({
     httpGet: { path: "/h", port: Port.ref("grpc") }
   }
 })
+
 void badProbe
 
 const numericProbe = Container.define({
@@ -45,6 +50,7 @@ const numericProbe = Container.define({
   ports: [Port.make({ name: "http", containerPort: 8080 })],
   readinessProbe: { httpGet: { path: "/h", port: 8080 } }
 })
+
 void numericProbe
 
 const _okSvc = Service.fromContainer({
@@ -67,6 +73,7 @@ const _badSvc = Service.fromContainer({
 })
 
 void _okSvc
+
 void _badSvc
 
 const _okWeb = Workload.web({
@@ -106,8 +113,11 @@ const _untypedWeb = Workload.web({
 })
 
 void _okWeb
+
 void _badWeb
+
 void _numericWeb
+
 void _untypedWeb
 
 export type _Tests = readonly [_Names, _ApiSpec]

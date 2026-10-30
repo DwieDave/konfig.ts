@@ -32,10 +32,13 @@ layer(NodeServices.layer)("Manifest.make", (it) => {
   it.effect("passes through the render context", () =>
     Effect.gen(function*() {
       const seen: string[] = []
+
       const m = Manifest.make<string>((c) => {
         seen.push(c.env)
+
         return c.env
       })
+
       const result = yield* m.render(ctx)
       expect(seen).toEqual(["test"])
       expect(result).toBe("test")

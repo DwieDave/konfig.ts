@@ -18,14 +18,18 @@ const _findConfig = (start: string) =>
     const path = yield* Path
 
     let current = path.resolve(start)
+
     while (true) {
       const candidate = path.join(current, "konfig.json")
       const exists = yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))
+
       if (exists) return candidate
       const parent = path.dirname(current)
+
       if (parent === current) {
         return yield* new ConfigNotFound({ startedFrom: start })
       }
+
       current = parent
     }
   })
@@ -33,12 +37,15 @@ const _findConfig = (start: string) =>
 const _parseConfig = (configPath: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
+
     const text = yield* fs
       .readFileString(configPath)
       .pipe(Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause })))
+
     const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
       Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause }))
     )
+
     return yield* decodeKonfigConfigEffect(parsed).pipe(
       Effect.mapError((cause) => new ConfigParseError({ path: configPath, cause }))
     )
@@ -53,5 +60,6 @@ export const resolveConfig = (
     const configPath = yield* _findConfig(start)
     const config: KonfigConfig = yield* _parseConfig(configPath)
     const configDir = path.dirname(configPath)
+
     return { configDir, config }
   })

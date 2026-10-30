@@ -37,6 +37,7 @@ describe("helmShared", () => {
           Effect.catchTag("ConfigNotFound", () => Effect.succeed("missing"))
         )
       )
+
       expect(Exit.isSuccess(exit)).toBe(true)
     }))
 })

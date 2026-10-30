@@ -10,6 +10,7 @@ describe("no-type-assertion", () => {
       expression: { type: "Identifier", name: "x" },
       typeAnnotation: { type: "TSStringKeyword" }
     }
+
     const harness = runVisitor({ rule: noTypeAssertion, event: "TSAsExpression", node: node })
     expect(harness.reports).toHaveLength(1)
   })
@@ -20,6 +21,7 @@ describe("no-type-assertion", () => {
       expression: { type: "Identifier", name: "x" },
       typeAnnotation: { type: "TSTypeReference", typeName: { type: "Identifier", name: "const" } }
     }
+
     const harness = runVisitor({ rule: noTypeAssertion, event: "TSAsExpression", node: node })
     expect(harness.reports).toHaveLength(0)
   })
@@ -30,6 +32,7 @@ describe("no-type-assertion", () => {
       expression: { type: "Identifier", name: "x" },
       typeAnnotation: { type: "TSStringKeyword" }
     }
+
     const harness = runVisitor({ rule: noTypeAssertion, event: "TSTypeAssertion", node: node })
     expect(harness.reports).toHaveLength(1)
   })

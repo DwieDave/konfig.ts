@@ -32,6 +32,7 @@ describe("no-sync-schema-apis", () => {
       event: "CallExpression",
       node: _call("Schema", "decodeUnknown")
     })
+
     expect(harness.reports).toHaveLength(0)
   })
 

@@ -15,6 +15,7 @@ const _typo = Pod.define({
     })
   ]
 })
+
 void _typo
 
 const _rawClaim = Volume.fromPvc({
@@ -22,6 +23,7 @@ const _rawClaim = Volume.fromPvc({
   // @ts-expect-error a plain string is not a PvcRef; use PvcRef.of(...) or a Dep.Pvc provider.
   claim: "postgres-data"
 })
+
 void _rawClaim
 
 const _ok = Pod.define({
@@ -35,4 +37,5 @@ const _ok = Pod.define({
     })
   ]
 })
+
 void _ok

@@ -22,9 +22,11 @@ export const hashSecretValues = (input: HashSecretValuesInput): string => {
   _frame(hasher, "konfig/secret-values-hash/v1")
   _frame(hasher, input.salt)
   const keys = Object.keys(input.values).sort()
+
   for (const key of keys) {
     _frame(hasher, key)
     _frame(hasher, Redacted.value(input.values[key]!))
   }
+
   return hasher.digest("hex")
 }

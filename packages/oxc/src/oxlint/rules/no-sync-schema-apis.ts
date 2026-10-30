@@ -24,11 +24,15 @@ function _isSchemaSyncCallee(callee: AstNode): { ns: string; api: string } | nul
   if (!isMemberExpression(callee)) return null
   const object = callee.object
   const property = callee.property
+
   if (!isIdentifier(object) || !isIdentifier(property)) return null
   const ns = object.name
   const api = property.name
+
   if (!SCHEMA_NAMESPACES.has(ns)) return null
+
   if (!SYNC_APIS.has(api)) return null
+
   return { ns, api }
 }
 
@@ -45,6 +49,7 @@ export const noSyncSchemaApis: Rule = {
         if (!isCallExpression(node)) return
         const callee = node.callee
         const hit = _isSchemaSyncCallee(callee)
+
         if (!hit) return
         context.report({
           node: callee,

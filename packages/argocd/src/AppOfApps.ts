@@ -66,6 +66,7 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = n
 ): Effect.Effect<AppOfAppsResult, AnyRenderError, CoreManifest.RenderServices> => {
   const program = Effect.gen(function*() {
     const apps = yield* Effect.forEach(opts.modules, (mod) => mod)
+
     return make({
       name: opts.name,
       target: opts.target,

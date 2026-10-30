@@ -18,6 +18,7 @@ const _wrongTarget = Workload.web({
   // @ts-expect-error "metrics" is not a port of any container in this workload.
   service: { ports: [{ port: 80, targetPort: Port.ref("metrics") }] }
 })
+
 void _wrongTarget
 
 const _ok = Workload.web({
@@ -26,4 +27,5 @@ const _ok = Workload.web({
   deployment: { containers: [api] },
   service: { ports: [{ port: 80, targetPort: Port.ref("http") }] }
 })
+
 void _ok

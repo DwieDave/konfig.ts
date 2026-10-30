@@ -55,12 +55,15 @@ const _extractRelease = (
     const { releaseId, registry, chartsDir, outDir } = input
     const path = yield* Path.Path
     const def = registry.find((r) => r.id === releaseId)
+
     if (!def) {
       yield* Console.error(
         `Release '${releaseId}' not found in ${chartsDir}. Available: ${registry.map((r) => r.id).join(", ")}`
       )
+
       return yield* new ReleaseNotFound({ releaseId })
     }
+
     yield* _extractOne({ def, outDir, cacheDir: input.cacheDir })
     yield* Console.log(`Written to ${path.join(outDir, `${def.id}.ts`)}`)
   })
@@ -73,6 +76,7 @@ const _extractAll = (
 ) =>
   Effect.gen(function*() {
     const { registry, chartsDir, outDir, cacheDir } = input
+
     if (registry.length === 0) return yield* Console.log(`No chart definitions found in ${chartsDir}`)
     yield* Effect.forEach(registry, (def) => _extractOne({ def, outDir, cacheDir }), {
       concurrency: 4,
@@ -86,9 +90,12 @@ export const crdExtractEffect = (flags: CrdExtractFlags) =>
     const paths = yield* loadHelmPaths
     const registry = yield* loadChartRegistryEffect(paths.chartsDir)
     const releaseId = Option.getOrUndefined(flags.release)
+
     if (releaseId !== undefined) return yield* _extractRelease({ ...paths, releaseId, registry })
+
     if (flags.all) return yield* _extractAll({ ...paths, registry })
     yield* Console.error("Specify --release <id> or --all")
+
     return yield* new MissingCrdFlags()
   })
 
@@ -99,16 +106,21 @@ const crdExtractCommand = Command.make("extract", _crdExtractFlags, crdExtractEf
 export const crdVerifyEffect = Effect.gen(function*() {
   const { cacheDir, outDir, chartsDir } = yield* loadHelmPaths
   const registry = yield* loadChartRegistryEffect(chartsDir)
+
   if (registry.length === 0) {
     yield* Console.error(`No chart definitions found in ${chartsDir} — nothing to verify`)
+
     return yield* new EmptyChartRegistry({ chartsDir })
   }
+
   const releases = registry.map((entry) => toExtractOptions({ entry, outDir, cacheDir }))
   yield* Console.log(`Verifying ${releases.length} chart(s) against ${outDir}...`)
   const drifted = yield* verifyCrdsEffect({ releases, committedDir: outDir })
+
   if (drifted.length === 0) return yield* Console.log("OK — all CRD files match")
   yield* Console.error(`CRD drift detected in: ${drifted.join(", ")}`)
   yield* Console.error("Run `konfig crd extract --all` to regenerate")
+
   return yield* new CrdDrift({ drifted })
 })
 

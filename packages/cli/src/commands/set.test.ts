@@ -25,6 +25,7 @@ const _setupConfigDir = Effect.gen(function*() {
   yield* fs.makeDirectory(path.join(root, "infra"), { recursive: true })
   yield* fs.writeFileString(path.join(root, "konfig.json"), _konfigJson)
   yield* fs.writeFileString(path.join(root, "infra", "images.json"), _imagesJson)
+
   return { root, imagesPath: path.join(root, "infra", "images.json") }
 })
 
@@ -37,6 +38,7 @@ describe("setImageEffect", () => {
       yield* setImageEffect({ env: "prod", app: "api", image: "ghcr.io/acme/api:new-sha", from: root })
 
       const written = yield* fs.readFileString(imagesPath)
+
       const expected = [
         "{",
         "\t\"envs\": {",
@@ -49,6 +51,7 @@ describe("setImageEffect", () => {
         "}",
         ""
       ].join("\n")
+
       expect(written).toBe(expected)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -66,6 +69,7 @@ describe("setImageEffect", () => {
       })
 
       const written = yield* fs.readFileString(imagesPath)
+
       const expected = [
         "{",
         "\t\"envs\": {",
@@ -80,6 +84,7 @@ describe("setImageEffect", () => {
         "}",
         ""
       ].join("\n")
+
       expect(written).toBe(expected)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -94,6 +99,7 @@ describe("setImageEffect", () => {
       )
 
       expect(failure).toBeInstanceOf(SetUnknownEnv)
+
       if (failure instanceof SetUnknownEnv) {
         expect(failure._tag).toBe("SetUnknownEnv")
         expect(failure.env).toBe("qa")
@@ -117,6 +123,7 @@ describe("setImageEffect", () => {
         )
 
         expect(failure).toBeInstanceOf(SetUnknownApp)
+
         if (failure instanceof SetUnknownApp) {
           expect(failure._tag).toBe("SetUnknownApp")
           expect(failure.env).toBe("staging")
@@ -140,6 +147,7 @@ describe("setImageEffect", () => {
       )
 
       expect(failure).toBeInstanceOf(SetUnknownApp)
+
       if (failure instanceof SetUnknownApp) {
         expect(failure.env).toBe("prod")
         expect(failure.app).toBe("worker")
@@ -158,6 +166,7 @@ describe("setImageEffect", () => {
       yield* setImageEffect({ env: "prod", app: "web", image: "ghcr.io/acme/web:v2", from: root })
 
       const written = yield* fs.readFileString(imagesPath)
+
       const expected = [
         "{",
         "\t\"envs\": {",
@@ -170,6 +179,7 @@ describe("setImageEffect", () => {
         "}",
         ""
       ].join("\n")
+
       expect(written).toBe(expected)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -223,6 +233,7 @@ describe("setImageEffect", () => {
       )
 
       expect(failure).toBeInstanceOf(ImagesFileError)
+
       if (failure instanceof ImagesFileError) {
         expect(failure.path).toBe(path.join(root, "infra", "images.json"))
       }

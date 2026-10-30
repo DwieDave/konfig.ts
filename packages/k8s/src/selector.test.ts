@@ -21,6 +21,7 @@ layer(NodeServices.layer)("Deployment.fromPodSet", (it) => {
   it.effect("uses the selector's labels for both selector and template", () =>
     Effect.gen(function*() {
       const apiPods = Selector.make({ app: "api", tier: "web" })
+
       const dep = Deployment.fromPodSet({
         name: "api",
         namespace: "default",
@@ -28,6 +29,7 @@ layer(NodeServices.layer)("Deployment.fromPodSet", (it) => {
         replicas: 2,
         template: { spec: { containers: [{ name: "api", image: "x" }] } }
       })
+
       const out = yield* renderManifest({ manifest: dep, ctx })
       expect(out.spec?.selector.matchLabels).toEqual({ app: "api", tier: "web" })
       expect(out.spec?.template.metadata?.labels).toEqual({ app: "api", tier: "web" })
@@ -37,6 +39,7 @@ layer(NodeServices.layer)("Deployment.fromPodSet", (it) => {
   it.effect("merges extra template labels with the selector's labels", () =>
     Effect.gen(function*() {
       const apiPods = Selector.make({ app: "api" })
+
       const dep = Deployment.fromPodSet({
         name: "api",
         namespace: "default",
@@ -46,6 +49,7 @@ layer(NodeServices.layer)("Deployment.fromPodSet", (it) => {
           spec: { containers: [{ name: "api", image: "x" }] }
         }
       })
+
       const out = yield* renderManifest({ manifest: dep, ctx })
       expect(out.spec?.template.metadata?.labels).toEqual({ app: "api", version: "v1" })
     }))
@@ -55,12 +59,14 @@ layer(NodeServices.layer)("Service.fromPodSet", (it) => {
   it.effect("uses the selector's labels as spec.selector", () =>
     Effect.gen(function*() {
       const apiPods = Selector.make({ app: "api" })
+
       const svc = Service.fromPodSet({
         name: "api",
         namespace: "default",
         podSet: apiPods,
         ports: [{ port: 80, targetPort: 8080 }]
       })
+
       const out = yield* renderManifest({ manifest: svc, ctx })
       expect(out.spec?.selector).toEqual({ app: "api" })
       expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: 8080 })
@@ -72,6 +78,7 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
     Effect.gen(function*() {
       const apiPods = Selector.make({ app: "api" })
       const dbPods = Selector.make({ app: "postgres" })
+
       const np = NetworkPolicy.fromPodSet({
         name: "api-ingress",
         namespace: "default",
@@ -79,6 +86,7 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
         policyTypes: ["Ingress"],
         ingress: [{ from: [{ podSet: dbPods }] }]
       })
+
       const out = yield* renderManifest({ manifest: np, ctx })
       expect(out.spec?.podSelector.matchLabels).toEqual({ app: "api" })
       expect(out.spec?.ingress?.[0]?.from?.[0]?.podSelector?.matchLabels).toEqual({
@@ -92,6 +100,7 @@ layer(NodeServices.layer)("PodSet", (it) => {
     Effect.gen(function*() {
       const apiPods = Selector.make({ app: "api", tier: "web" })
       const dbPods = Selector.make({ app: "postgres" })
+
       const trio = PodSet.define({
         podSet: apiPods,
         deployment: {
@@ -107,14 +116,17 @@ layer(NodeServices.layer)("PodSet", (it) => {
           ingress: [{ from: [{ podSet: dbPods }] }]
         }
       })
+
       const out = yield* renderManifest({ manifest: trio, ctx })
       expect(out).toHaveLength(3)
       const [dep, svc, np] = out
       expect(dep.spec?.selector.matchLabels).toEqual({ app: "api", tier: "web" })
       expect(svc?.kind).toBe("Service")
+
       if (svc?.kind === "Service") {
         expect(svc.spec?.selector).toEqual({ app: "api", tier: "web" })
       }
+
       expect(np?.spec?.podSelector.matchLabels).toEqual({ app: "api", tier: "web" })
       expect(np?.spec?.ingress?.[0]?.from?.[0]?.podSelector?.matchLabels).toEqual({
         app: "postgres"

@@ -36,6 +36,7 @@ const _failOnIssues = (input: {
     for (const issue of input.issues) {
       yield* Console.error(`${issue.file} (doc ${issue.doc}) ${issue.path.join(".")}: ${issue.message}`)
     }
+
     return yield* new StructuralValidationFailed({ env: input.envName, issueCount: input.issues.length })
   })
 
@@ -61,8 +62,10 @@ export const runValidate = (input: RunValidateInput) =>
     const { cfg, ctx, envName } = input
     const rendered = yield* renderEnv({ cfg, envName, ctx })
     const issues = yield* _structuralIssues(rendered)
+
     if (issues.length > 0) return yield* _failOnIssues({ envName, issues })
     yield* Console.log(`OK — env '${envName}': ${rendered.files.length} file(s) pass structural validation`)
+
     if (input.strict) yield* _runStrict({ ...input, rendered })
   })
 

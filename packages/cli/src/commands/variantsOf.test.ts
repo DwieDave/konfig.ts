@@ -27,6 +27,7 @@ describe("variantsOf", () => {
   it("dev appears only when dockerfileDev is present", () => {
     fc.assert(fc.property(emittedArb, fc.boolean(), fc.boolean(), (emitted, prodOnly, devOnly) => {
       const hasDev = variantsOf({ emitted, prodOnly, devOnly }).some((v) => v.kind === "dev")
+
       return hasDev === (emitted.dockerfileDev !== undefined && !prodOnly)
     }))
   })

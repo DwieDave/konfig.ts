@@ -26,6 +26,7 @@ layer(NodeServices.layer)("PersistentVolume strict spec", (it) => {
           hostPath: { path: "/tmp/data", type: "DirectoryOrCreate" }
         }
       })
+
       const result = yield* pv.render(ctx)
       expect(result.kind).toBe("PersistentVolume")
       expect(result.spec?.capacity?.storage).toBe("1Gi")
@@ -49,6 +50,7 @@ layer(NodeServices.layer)("PersistentVolume strict spec", (it) => {
           claimRef: { namespace: "prod", name: "data-pvc" }
         }
       })
+
       const result = yield* pv.render(ctx)
       expect(result.spec?.csi?.driver).toBe("csi.example.com")
       expect(result.spec?.claimRef?.namespace).toBe("prod")
@@ -89,6 +91,7 @@ layer(NodeServices.layer)("PersistentVolumeClaim strict spec", (it) => {
           storageClassName: "fast"
         }
       })
+
       const result = yield* pvc.render(ctx)
       expect(result.spec?.resources?.requests?.storage).toBe("5Gi")
     }))
@@ -123,6 +126,7 @@ layer(NodeServices.layer)("NetworkPolicy.make", (it) => {
         namespace: "prod",
         spec: { podSelector: {}, policyTypes: ["Ingress"] }
       })
+
       const result = yield* np.render(ctx)
       expect(result.kind).toBe("NetworkPolicy")
       expect(result.apiVersion).toBe("networking.k8s.io/v1")
@@ -136,6 +140,7 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
     Effect.gen(function*() {
       const apiPods = Selector.make({ app: "api" })
       const dbPods = Selector.make({ app: "db" })
+
       const np = NetworkPolicy.fromPodSet({
         name: "allow-db-from-api",
         namespace: "prod",
@@ -143,6 +148,7 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
         policyTypes: ["Ingress"],
         ingress: [{ from: [{ podSet: apiPods }], ports: [{ port: 5432 }] }]
       })
+
       const result = yield* np.render(ctx)
       expect(result.spec?.podSelector).toEqual({ matchLabels: { app: "db" } })
       expect(result.spec?.policyTypes).toEqual(["Ingress"])
@@ -154,12 +160,14 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
   it.effect("lowers a namespaceSelector peer without a podSelector key", () =>
     Effect.gen(function*() {
       const dbPods = Selector.make({ app: "db" })
+
       const np = NetworkPolicy.fromPodSet({
         name: "allow-from-ns",
         namespace: "prod",
         podSet: dbPods,
         ingress: [{ from: [{ namespaceSelector: { matchLabels: { team: "platform" } } }] }]
       })
+
       const result = yield* np.render(ctx)
       const rule = result.spec?.ingress?.[0]
       expect(rule?.from?.[0]).toEqual({ namespaceSelector: { matchLabels: { team: "platform" } } })
@@ -169,6 +177,7 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
   it.effect("lowers an ipBlock peer on the egress side", () =>
     Effect.gen(function*() {
       const dbPods = Selector.make({ app: "db" })
+
       const np = NetworkPolicy.fromPodSet({
         name: "restrict-egress",
         namespace: "prod",
@@ -176,6 +185,7 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
         policyTypes: ["Egress"],
         egress: [{ to: [{ ipBlock: { cidr: "10.0.0.0/8", except: ["10.0.1.0/24"] } }], ports: [{ port: 443 }] }]
       })
+
       const result = yield* np.render(ctx)
       expect(result.spec?.egress).toEqual([
         { to: [{ ipBlock: { cidr: "10.0.0.0/8", except: ["10.0.1.0/24"] } }], ports: [{ port: 443 }] }
@@ -186,6 +196,7 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
     Effect.gen(function*() {
       const dbPods = Selector.make({ app: "db" })
       const apiPods = Selector.make({ app: "api" })
+
       const np = NetworkPolicy.fromPodSet({
         name: "combo",
         namespace: "prod",
@@ -198,6 +209,7 @@ layer(NodeServices.layer)("NetworkPolicy.fromPodSet", (it) => {
           }]
         }]
       })
+
       const result = yield* np.render(ctx)
       expect(result.spec?.ingress?.[0]?.from?.[0]).toEqual({
         podSelector: { matchLabels: { app: "api" } },
@@ -225,6 +237,7 @@ layer(NodeServices.layer)("RBAC resources", (it) => {
         rules: [{ apiGroups: [""], resources: ["pods"], verbs: ["get", "list"] }],
         aggregationRule: { clusterRoleSelectors: [{ matchLabels: { "rbac.example.com/aggregate": "true" } }] }
       })
+
       const result = yield* cr.render(ctx)
       expect(result.kind).toBe("ClusterRole")
       expect(result.apiVersion).toBe("rbac.authorization.k8s.io/v1")
@@ -242,6 +255,7 @@ layer(NodeServices.layer)("RBAC resources", (it) => {
         roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: "reader" },
         subjects: [{ kind: "ServiceAccount", name: "api", namespace: "prod" }]
       })
+
       const result = yield* crb.render(ctx)
       expect(result.kind).toBe("ClusterRoleBinding")
       expect(result.roleRef).toEqual({ apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: "reader" })
@@ -255,6 +269,7 @@ layer(NodeServices.layer)("RBAC resources", (it) => {
         namespace: "prod",
         rules: [{ apiGroups: [""], resources: ["pods"], verbs: ["get"] }]
       })
+
       const result = yield* role.render(ctx)
       expect(result.kind).toBe("Role")
       expect(result.metadata?.namespace).toBe("prod")
@@ -269,6 +284,7 @@ layer(NodeServices.layer)("RBAC resources", (it) => {
         roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: "pod-reader" },
         subjects: [{ kind: "ServiceAccount", name: "api", namespace: "prod" }]
       })
+
       const result = yield* rb.render(ctx)
       expect(result.kind).toBe("RoleBinding")
       expect(result.metadata?.namespace).toBe("prod")

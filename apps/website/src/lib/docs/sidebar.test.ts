@@ -16,6 +16,7 @@ describe("buildSidebar", () => {
     e("faq", 99),
     e("cli/build")
   ]
+
   const items = buildSidebar(entries, "concepts/dependency-graph", { "getting-started": 0, concepts: 1, cli: 2 })
 
   it("orders groups by config, roots by order, and mixes them", () => {
@@ -30,6 +31,7 @@ describe("buildSidebar", () => {
   it("orders entries inside a group and opens the current one", () => {
     const concepts = items.find((i) => i.kind === "group" && i.group.dir === "concepts")
     expect(concepts?.kind).toBe("group")
+
     if (concepts?.kind !== "group") return
     expect(concepts.group.isOpen).toBe(true)
     expect(concepts.group.entries.map((x) => x.id)).toEqual(["concepts/dependency-graph", "concepts/branded-refs"])

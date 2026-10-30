@@ -22,11 +22,13 @@ describe("private-function-prefix", () => {
   it("exempts an exported top-level function", () => {
     const program: AstNode = { type: "Program" }
     const exportDecl: AstNode = { type: "ExportNamedDeclaration", parent: program }
+
     const fn: AstNode = {
       type: "FunctionDeclaration",
       id: { type: "Identifier", name: "foo" },
       parent: exportDecl
     }
+
     const harness = runVisitor({ rule: privateFunctionPrefix, event: "FunctionDeclaration", node: fn })
     expect(harness.reports).toHaveLength(0)
   })
@@ -42,6 +44,7 @@ describe("private-function-prefix", () => {
 
   it("reports a top-level non-exported arrow-function variable without a leading underscore", () => {
     const program: AstNode = { type: "Program" }
+
     const decl: AstNode = {
       type: "VariableDeclaration",
       parent: program,
@@ -53,6 +56,7 @@ describe("private-function-prefix", () => {
         }
       ]
     }
+
     const harness = runVisitor({ rule: privateFunctionPrefix, event: "VariableDeclaration", node: decl })
     expect(harness.reports).toHaveLength(1)
     expect(harness.reports[0]?.message).toContain("_bar")
@@ -60,6 +64,7 @@ describe("private-function-prefix", () => {
 
   it("does not report a top-level variable that is not a function", () => {
     const program: AstNode = { type: "Program" }
+
     const decl: AstNode = {
       type: "VariableDeclaration",
       parent: program,
@@ -71,6 +76,7 @@ describe("private-function-prefix", () => {
         }
       ]
     }
+
     const harness = runVisitor({ rule: privateFunctionPrefix, event: "VariableDeclaration", node: decl })
     expect(harness.reports).toHaveLength(0)
   })

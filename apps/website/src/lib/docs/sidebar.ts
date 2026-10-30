@@ -38,6 +38,7 @@ export const groupLabel = (dir: string): string =>
 const sortByOrderLabel = <T>(items: ReadonlyArray<T>, order: (t: T) => number, label: (t: T) => string): Array<T> =>
   [...items].sort((a, b) => {
     const diff = order(a) - order(b)
+
     return diff !== 0 ? diff : label(a).localeCompare(label(b))
   })
 
@@ -54,29 +55,38 @@ export const buildSidebar = <E extends DocEntry>(
   const visible = entries.filter((e) => e.data.sidebar?.hidden !== true)
   const roots: Array<E> = []
   const groupMap = new Map<string, Array<E>>()
+
   for (const e of visible) {
     const parts = e.id.split("/")
     const dir = parts[0]
+
     if (parts.length === 1 || dir === undefined) {
       roots.push(e)
       continue
     }
+
     const list = groupMap.get(dir)
+
     if (list === undefined) groupMap.set(dir, [e])
     else list.push(e)
   }
+
   const groups: Array<SidebarGroupData<E>> = [...groupMap.entries()].map(([dir, es]) => ({
     dir,
     label: groupLabel(dir),
     entries: sortByOrderLabel(es, entryOrder, entryLabel),
     isOpen: es.some((e) => e.id === currentId)
   }))
+
   const orderOf = (g: SidebarGroupData<E>): number => {
     const configured = groupOrder[g.dir]
+
     if (configured !== undefined) return configured
     const min = Math.min(...g.entries.map(entryOrder).filter(Number.isFinite))
+
     return Number.isFinite(min) ? min : Infinity
   }
+
   return sortByOrderLabel<SidebarItem<E>>(
     [
       ...roots.map((entry): SidebarItem<E> => ({ kind: "entry", entry })),

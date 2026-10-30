@@ -7,8 +7,10 @@ const splitWords = (s: string): ReadonlyArray<string> => {
   let cur = ""
   let started = false
   let i = 0
+
   while (i < s.length) {
     const c = s[i]!
+
     if (c === "'") {
       const end = s.indexOf("'", i + 1)
       cur += s.slice(i + 1, end)
@@ -29,7 +31,9 @@ const splitWords = (s: string): ReadonlyArray<string> => {
       i++
     }
   }
+
   if (started) out.push(cur)
+
   return out
 }
 

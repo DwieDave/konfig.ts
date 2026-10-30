@@ -1,6 +1,7 @@
 import { brand } from "@konfig.ts/core"
 
 declare const PortNameBrand: unique symbol
+
 export type PortName<N extends string> = string & {
   readonly [PortNameBrand]: N
 }

@@ -29,6 +29,7 @@ const _formatReport = (input: {
   readonly logFmt: LogFormat
 }): string => {
   const { envName, timing, logFmt } = input
+
   if (logFmt === "json") {
     return JSON.stringify({
       env: envName,
@@ -40,9 +41,11 @@ const _formatReport = (input: {
       cached: timing.cached ?? false
     })
   }
+
   if (timing.cached) {
     return `Cached — env '${envName}' inputs unchanged, ${timing.files} file(s) at ${timing.outDir}`
   }
+
   return `Wrote ${timing.files} file(s) to ${timing.outDir} — render ${timing.renderMs}ms, write ${timing.writeMs}ms`
 }
 
@@ -63,12 +66,16 @@ const _validCacheHit = (input: BuildTarget & { readonly inputHash: string; reado
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const entry = yield* readCacheEntry(input)
+
     if (entry === undefined || entry.inputHash !== input.inputHash || entry.outDirAbs !== input.outDir) {
       return undefined
     }
+
     const exists = yield* fs.exists(entry.outDirAbs).pipe(Effect.orElseSucceed(() => false))
+
     if (!exists) return undefined
     const onDiskHash = yield* computeOnDiskOutputHash(entry.outDirAbs)
+
     return onDiskHash === entry.outputHash ? entry : undefined
   })
 
@@ -76,6 +83,7 @@ const _timed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function*() {
     const start = yield* Clock.currentTimeMillis
     const value = yield* effect
+
     return { value, ms: (yield* Clock.currentTimeMillis) - start }
   })
 
@@ -104,11 +112,14 @@ const _persistCacheEntry = (
 
 const _renderAndWrite = (input: RunBuildInput) => {
   const program = renderEnv(input)
+
   return Effect.gen(function*() {
     const render = yield* _timed(
       input.verbose ? program.pipe(Effect.withSpan(`konfig.render.${input.envName}`)) : program
     )
+
     const write = yield* _timed(writeFiles(render.value))
+
     return { rendered: render.value, written: write.value, renderMs: render.ms, writeMs: write.ms }
   })
 }
@@ -117,9 +128,11 @@ const _buildFresh = (input: RunBuildInput & { readonly inputHash: string | undef
   Effect.gen(function*() {
     if (input.logFmt === "text") yield* Console.log(`Rendering env '${input.envName}'...`)
     const { rendered, written, renderMs, writeMs } = yield* _renderAndWrite(input)
+
     if (input.inputHash !== undefined) {
       yield* _persistCacheEntry({ ...input, inputHash: input.inputHash, rendered, fileCount: written.length })
     }
+
     const timing = { renderMs, writeMs, files: written.length, outDir: rendered.outDirAbs }
     yield* Console.log(_formatReport({ envName: input.envName, timing, logFmt: input.logFmt }))
   })
@@ -135,10 +148,13 @@ export const runBuild = (input: RunBuildInput) =>
   Effect.gen(function*() {
     const path = yield* Path
     const outDir = envOutDir({ cfg: input.cfg, envName: input.envName, ctx: input.ctx, pathJoin: path.join })
+
     if (input.noCache) return yield* _buildFresh({ ...input, inputHash: undefined })
     const inputHash = yield* computeInputHash(input)
     const hit = yield* _validCacheHit({ ...input, inputHash, outDir })
+
     if (hit !== undefined) return yield* _reportCached({ ...input, fileCount: hit.fileCount, outDir: hit.outDirAbs })
+
     return yield* _buildFresh({ ...input, inputHash })
   })
 

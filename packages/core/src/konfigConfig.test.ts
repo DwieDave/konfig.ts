@@ -10,6 +10,7 @@ describe("konfig.json schema (T4.1)", () => {
       envs: { prod: { entry: "env/prod.ts" } },
       outDir: { manifests: "manifests" }
     })
+
     expect(cfg.root).toBe("infra/k8s-konfig")
     expect(cfg.cluster).toBe("cluster.ts")
     expect(cfg.modules).toBe("modules")
@@ -38,6 +39,7 @@ describe("konfig.json schema (T4.1)", () => {
         globalPaths: ["shared/**", "package.json", "bun.lock", "tsconfig.base.json"]
       }
     })
+
     expect(cfg.helm?.cacheDir).toBe("../../.konfig/helm-cache")
     expect(cfg.helm?.minVersion).toBe("3.16.0")
     expect(cfg.diff?.baseline).toBe("../k8s/manifests")

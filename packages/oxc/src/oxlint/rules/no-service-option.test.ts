@@ -10,6 +10,7 @@ describe("no-service-option", () => {
       object: { type: "Identifier", name: "Effect" },
       property: { type: "Identifier", name: "serviceOption" }
     }
+
     const harness = runVisitor({ rule: noServiceOption, event: "MemberExpression", node })
     expect(harness.reports).toHaveLength(1)
   })
@@ -20,6 +21,7 @@ describe("no-service-option", () => {
       object: { type: "Identifier", name: "Effect" },
       property: { type: "Identifier", name: "service" }
     }
+
     const harness = runVisitor({ rule: noServiceOption, event: "MemberExpression", node })
     expect(harness.reports).toHaveLength(0)
   })

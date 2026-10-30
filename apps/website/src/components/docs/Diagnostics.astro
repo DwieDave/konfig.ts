@@ -8,7 +8,9 @@ interface Props {
 }
 
 const found = FAILURE_CASES.find((c) => c.id === Astro.props.case)
+
 if (found === undefined) throw new Error(`Diagnostics: unknown case ${JSON.stringify(Astro.props.case)}`)
+
 const snippet = load(found.spec)
 ---
 

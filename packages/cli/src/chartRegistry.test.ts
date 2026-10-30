@@ -11,6 +11,7 @@ const _writeChartFile = (root: string, name: string, body: string) =>
     const path = yield* Path
     const full = path.join(root, name)
     yield* fs.writeFileString(full, body)
+
     return full
   })
 
@@ -132,6 +133,7 @@ export const chart = {
 
       const failure = yield* Effect.flip(loadChartRegistryEffect(root))
       expect(failure).toBeInstanceOf(ChartRegistryEntryDecodeError)
+
       if (failure instanceof ChartRegistryEntryDecodeError) {
         expect(failure.file).toBe("broken.ts")
         expect(failure.message).toContain("malformed chart registry entry in broken.ts")

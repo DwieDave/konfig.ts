@@ -10,6 +10,7 @@ describe("no-ambient-nondeterminism", () => {
       object: { type: "Identifier", name: "Math" },
       property: { type: "Identifier", name: "random" }
     }
+
     const harness = runVisitor({ rule: noAmbientNondeterminism, event: "MemberExpression", node })
     expect(harness.reports).toHaveLength(1)
   })
@@ -20,6 +21,7 @@ describe("no-ambient-nondeterminism", () => {
       callee: { type: "Identifier", name: "Date" },
       arguments: []
     }
+
     const harness = runVisitor({ rule: noAmbientNondeterminism, event: "NewExpression", node })
     expect(harness.reports).toHaveLength(1)
   })
@@ -30,6 +32,7 @@ describe("no-ambient-nondeterminism", () => {
       object: { type: "Identifier", name: "Math" },
       property: { type: "Identifier", name: "max" }
     }
+
     const harness = runVisitor({ rule: noAmbientNondeterminism, event: "MemberExpression", node })
     expect(harness.reports).toHaveLength(0)
   })

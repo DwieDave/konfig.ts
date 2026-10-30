@@ -41,9 +41,11 @@ export const _checkDnsName = (input: _CheckDnsNameInput): string | undefined => 
   const { rule, value } = input
   const pattern = rule === "label" ? _DNS_LABEL : _DNS_SUBDOMAIN
   const maxLength = rule === "label" ? _MAX_LABEL_LENGTH : _MAX_SUBDOMAIN_LENGTH
+
   if (value.length === 0 || value.length > maxLength || !pattern.test(value)) {
     return `'${value}' is not a valid ${_dnsRuleDescription(rule)}`
   }
+
   return undefined
 }
 
@@ -78,12 +80,14 @@ const _checkNames = (input: _CheckNamesInput): ReadonlyArray<{ path: ReadonlyArr
 
   const nameRule: _DnsRule = _LABEL_NAME_KINDS.has(kind) ? "label" : "subdomain"
   const nameError = _checkDnsName({ value: name, rule: nameRule })
+
   if (nameError !== undefined) {
     issues.push({ path: ["metadata", "name"], message: `metadata.name ${nameError}` })
   }
 
   if (namespace !== undefined) {
     const namespaceError = _checkDnsName({ value: namespace, rule: "label" })
+
     if (namespaceError !== undefined) {
       issues.push({ path: ["metadata", "namespace"], message: `metadata.namespace ${namespaceError}` })
     }
@@ -104,13 +108,18 @@ const _docIssues = (input: {
 }) =>
   Effect.gen(function*() {
     const { file, doc, parsed } = input
+
     if (!isRecord(parsed)) return []
     const result = yield* Effect.result(_decodeEnvelope(parsed))
+
     if (Result.isFailure(result)) {
       const message = `does not satisfy KubeManifest envelope: ${String(result.failure)}`
+
       return [{ file, doc, path: [], message }]
     }
+
     const { kind, metadata } = result.success
+
     return _checkNames({ kind, name: metadata.name, namespace: metadata.namespace })
       .map((issue) => ({ file, doc, path: issue.path, message: issue.message }))
   })
@@ -126,13 +135,16 @@ export const validateManifestFile = (
 ): Effect.Effect<ReadonlyArray<ValidationIssue>> =>
   Effect.gen(function*() {
     const docsResult = yield* _parseDocs(input.content)
+
     if (Result.isFailure(docsResult)) {
       return [{ file: input.file, doc: 0, path: [], message: docsResult.failure }]
     }
+
     const perDoc = yield* Effect.forEach(
       docsResult.success,
       (parsed, doc) => _docIssues({ file: input.file, doc, parsed })
     )
+
     return perDoc.flat()
   })
 
@@ -168,6 +180,7 @@ export const runKubeconform = (input: KubeconformInput) =>
       const spawner = yield* ChildProcessSpawner
       const args = ["-summary", "-strict", ...(input.extraArgs ?? []), input.dir]
       const cmd = ChildProcess.make("kubeconform", args)
+
       const [exitCode, stdout, stderr] = yield* spawner.spawn(cmd).pipe(
         Effect.flatMap((handle) =>
           Effect.all(
@@ -182,9 +195,11 @@ export const runKubeconform = (input: KubeconformInput) =>
             })
         )
       )
+
       if (exitCode !== 0) {
         return yield* new KubeconformReportError({ stdout, stderr })
       }
+
       return stdout
     })
   )

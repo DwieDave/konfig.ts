@@ -3,11 +3,14 @@ import { describe, expect, expectTypeOf, it } from "vitest"
 import { type GoDuration, isGoDuration } from "./duration"
 
 const unit = fc.constantFrom("ns", "us", "µs", "ms", "s", "m", "h")
+
 const num = fc.oneof(
   fc.nat().map(String),
   fc.tuple(fc.nat(), fc.nat()).map(([a, b]) => `${a}.${b}`)
 )
+
 const segment = fc.tuple(num, unit).map(([n, u]) => `${n}${u}`)
+
 const duration = fc.tuple(fc.constantFrom("", "-", "+"), fc.array(segment, { minLength: 1, maxLength: 4 }))
   .map(([sign, segs]) => sign + segs.join(""))
 
@@ -23,6 +26,7 @@ describe("isGoDuration", () => {
 
   it("accepts known ESO examples and rejects non-strings", () => {
     for (const d of ["0", "1h30m", "500ms", "1h", "1.5s"]) expect(isGoDuration(d)).toBe(true)
+
     for (const d of ["", "h", "1d", "1", 5, null]) expect(isGoDuration(d)).toBe(false)
   })
 

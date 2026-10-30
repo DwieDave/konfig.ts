@@ -29,7 +29,9 @@ export const Namespace = {
       kind: "Namespace",
       metadata: toObjectMeta(input)
     }
+
     const m = Manifest.make<K8sNamespace>(() => Effect.succeed(resource))
+
     return Object.assign(m, { ref: input.name })
   }
 }
@@ -54,7 +56,9 @@ export const ServiceAccount = {
       automountServiceAccountToken: input.automountServiceAccountToken,
       imagePullSecrets: input.imagePullSecrets?.map((s) => ({ name: s.name }))
     }
+
     const m = Manifest.make<K8sServiceAccount>(() => Effect.succeed(resource))
+
     return Object.assign(m, { ref: ServiceAccountRefValue.of(input.name) })
   }
 }
@@ -85,7 +89,9 @@ export const ConfigMap = {
       binaryData: input.binaryData,
       immutable: input.immutable
     }
+
     const m = Manifest.make<K8sConfigMap>(() => Effect.succeed(resource))
+
     return Object.assign(m, { ref: ConfigMapRefValue.of<N, K>(input.name) })
   }
 }
@@ -128,7 +134,9 @@ export const Secret = {
       stringData: input.stringData,
       immutable: input.immutable
     }
+
     const m = Manifest.make<K8sSecret>(() => Effect.succeed(resource))
+
     return Object.assign(m, { ref: SecretRefValue.of<N, K, Ns>(input.name) })
   }
 }

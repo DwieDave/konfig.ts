@@ -4,6 +4,7 @@ import { Container, Port } from "@konfig.ts/k8s"
 import { Effect } from "effect"
 
 type Expect<T extends true> = T
+
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
 const apiImage = DepNS.BuiltImageRef.of({
@@ -11,9 +12,11 @@ const apiImage = DepNS.BuiltImageRef.of({
   registry: "ghcr.io/example",
   tag: "1.0.0"
 })
+
 type _ApiApp = Expect<Equal<BuiltImageRefApp<typeof apiImage>, "api">>
 
 const apiLayer = DepNS.provideImage({ app: "api", registry: "ghcr.io/x", tag: "1" })
+
 type _ApiLayerOut = Expect<
   Equal<
     typeof apiLayer extends import("effect").Layer.Layer<infer O, any, any> ? O : never,
@@ -34,22 +37,30 @@ const _raw = Container.define({
 })
 
 declare const expectedWorker: BuiltImageRef<"worker">
+
 // @ts-expect-error - BuiltImageRef<"api"> not assignable to BuiltImageRef<"worker">.
 const _wrong: typeof expectedWorker = apiImage
 
 const programNeedsApi = Effect.gen(function*() {
   const ref = yield* DepNS.Image("api")
+
   return String(ref)
 })
+
 type _ProgramR = typeof programNeedsApi extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
+
 type _R = Expect<Equal<_ProgramR, Dep.Need<"Image", "api">>>
 
 const programWithApi = programNeedsApi.pipe(Effect.provide(apiLayer))
+
 type _ResidualR = typeof programWithApi extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
+
 type _Discharged = Expect<Equal<_ResidualR, never>>
 
 void _branded
+
 void _raw
+
 void _wrong
 
 export type _Tests = readonly [_ApiApp, _ApiLayerOut, _R, _Discharged]

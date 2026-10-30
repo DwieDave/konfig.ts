@@ -28,9 +28,11 @@ export const PodSet = {
     input: DefinePodSetInput<L>
   ): Manifest.Manifest<PodSetOutput> => {
     const deployment = Deployment.fromPodSet({ podSet: input.podSet, ...input.deployment })
+
     const service = input.service !== undefined
       ? Service.fromPodSet({ podSet: input.podSet, ...input.service })
       : undefined
+
     const netPol = input.netPol !== undefined
       ? NetworkPolicy.fromPodSet({ podSet: input.podSet, ...input.netPol })
       : undefined
@@ -40,6 +42,7 @@ export const PodSet = {
         const d = yield* deployment.render(ctx)
         const s = service !== undefined ? yield* service.render(ctx) : undefined
         const n = netPol !== undefined ? yield* netPol.render(ctx) : undefined
+
         return _asPodSetOutput(d, s, n)
       })
     )
@@ -53,16 +56,23 @@ const _asPodSetOutput = (
 ): PodSetOutput => {
   if (s !== undefined && n !== undefined) {
     const out: readonly [K8sDeployment, K8sService, K8sNetworkPolicy] = [d, s, n]
+
     return out
   }
+
   if (s !== undefined) {
     const out: readonly [K8sDeployment, K8sService] = [d, s]
+
     return out
   }
+
   if (n !== undefined) {
     const out: readonly [K8sDeployment, K8sNetworkPolicy] = [d, n]
+
     return out
   }
+
   const out: readonly [K8sDeployment] = [d]
+
   return out
 }

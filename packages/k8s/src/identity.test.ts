@@ -36,6 +36,7 @@ layer(NodeServices.layer)("identity rendering", (it) => {
         name: "sops",
         annotations: { "argocd.argoproj.io/sync-options": "Prune=false" }
       })
+
       const out = yield* renderManifest({ manifest: ns, ctx })
       const yaml = Yaml.serialize({ value: out })
       expect(yaml).toContain("apiVersion: v1")
@@ -52,6 +53,7 @@ layer(NodeServices.layer)("identity rendering", (it) => {
         automountServiceAccountToken: false,
         imagePullSecrets: [{ name: SecretRef.of("registry-creds") }]
       })
+
       const out = yield* renderManifest({ manifest: sa, ctx })
       expect(out.automountServiceAccountToken).toBe(false)
       expect(out.imagePullSecrets).toEqual([{ name: "registry-creds" }])
@@ -66,6 +68,7 @@ layer(NodeServices.layer)("identity rendering", (it) => {
         binaryData: { "logo.png": "iVBORw0KGgo=" },
         immutable: true
       })
+
       const out = yield* renderManifest({ manifest: cm, ctx })
       expect(out.data).toEqual({ "app.conf": "debug=false" })
       expect(out.binaryData).toEqual({ "logo.png": "iVBORw0KGgo=" })
@@ -82,6 +85,7 @@ layer(NodeServices.layer)("identity rendering", (it) => {
         stringData: { note: "rotate-monthly" },
         immutable: true
       })
+
       const out = yield* renderManifest({ manifest: s, ctx })
       expect(out.type).toBe("Opaque")
       expect(out.data).toEqual({ password: "cGFzcw==" })

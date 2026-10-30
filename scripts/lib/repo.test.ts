@@ -7,6 +7,7 @@ describe("decodeField", () => {
     const out = await Effect.runPromise(
       decodeField({ schema: Schema.String, value: "ok", what: "name" })
     )
+
     expect(out).toBe("ok")
   })
 
@@ -14,6 +15,7 @@ describe("decodeField", () => {
     const exit = await Effect.runPromiseExit(
       decodeField({ schema: Schema.String, value: 1, what: "name" })
     )
+
     expect(Exit.isFailure(exit)).toBe(true)
     const err = Exit.isFailure(exit) ? JSON.stringify(exit.cause) : ""
     expect(err).toContain("unexpected shape for name")

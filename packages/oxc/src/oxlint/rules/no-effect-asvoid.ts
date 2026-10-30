@@ -12,7 +12,9 @@ export const noEffectAsVoid: Rule = {
     return {
       MemberExpression(node: AstNode) {
         if (!isMemberExpression(node)) return
+
         if (!isIdentifier(node.object) || node.object.name !== "Effect") return
+
         if (isIdentifier(node.property) && node.property.name === "asVoid") {
           context.report({
             node,

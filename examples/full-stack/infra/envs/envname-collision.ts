@@ -10,6 +10,7 @@ const _ok = Environment.define({
   port: Literal.define({ envName: "PORT", value: 8080 }),
   pod: Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name" })
 })
+
 void _ok
 
 // @ts-expect-error envName "SHARED" is claimed by multiple members
@@ -17,6 +18,7 @@ const _literalDup = Environment.define({
   a: Literal.define({ envName: "SHARED", value: "x" }),
   b: Literal.define({ envName: "SHARED", value: "y" })
 })
+
 void _literalDup
 
 // @ts-expect-error envName "DATABASE_URL" is claimed by multiple members
@@ -28,6 +30,7 @@ const _secretLiteralDup = Environment.define({
   }),
   shadow: Literal.define({ envName: "DATABASE_URL", value: "x" })
 })
+
 void _secretLiteralDup
 
 // @ts-expect-error envName "SHARED" is claimed by multiple members
@@ -35,4 +38,5 @@ const _secretSecretDup = Environment.define({
   a: Secret.define({ name: "a", namespace: "app", env: { url: "SHARED" } }),
   b: Secret.define({ name: "b", namespace: "app", env: { val: "SHARED" } })
 })
+
 void _secretSecretDup

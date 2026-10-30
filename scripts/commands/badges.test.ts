@@ -12,6 +12,7 @@ describe("makeStats", () => {
       effectVersion: "4.0.0-rc.109",
       packages: 9
     })
+
     expect(stats.lineCoverage).toBe(95.6)
     expect(stats.linesCovered).toBe(3167)
     expect(Effect.runSync(Schema.decodeEffect(RepoStats)(stats))).toEqual(stats)

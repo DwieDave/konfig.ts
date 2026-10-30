@@ -11,6 +11,7 @@ export const renderBadge = (input: BadgeInput): string => {
   const labelWidth = _textWidth(label)
   const valueWidth = _textWidth(value)
   const width = labelWidth + valueWidth
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="20" role="img" aria-label="${label}: ${value}">
   <linearGradient id="s" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>

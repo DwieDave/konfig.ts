@@ -8,6 +8,7 @@ const FIXTURES = new URL("../../fixtures/", import.meta.url).pathname
 
 const _causeContains = (cause: unknown, needle: string): boolean => {
   const encoded = Schema.encodeExit(Schema.fromJsonString(Schema.Unknown))(cause)
+
   return Exit.isSuccess(encoded) && encoded.value.includes(needle)
 }
 
@@ -158,6 +159,7 @@ describe("closureOf", () => {
     const all: ReadonlyArray<Workspace> = [_ws("@a", {})]
     const exit = Effect.runSyncExit(closureOf({ all, target: "@missing" }))
     expect(Exit.isFailure(exit)).toBe(true)
+
     if (Exit.isFailure(exit)) {
       expect(_causeContains(exit.cause, "WorkspaceNotFound")).toBe(true)
     }
@@ -168,6 +170,7 @@ describe("closureOf", () => {
     const b = _ws("@b", { "@a": "workspace:*" })
     const exit = Effect.runSyncExit(closureOf({ all: [a, b], target: "@a" }))
     expect(Exit.isFailure(exit)).toBe(true)
+
     if (Exit.isFailure(exit)) {
       expect(_causeContains(exit.cause, "CircularWorkspaceDep")).toBe(true)
     }

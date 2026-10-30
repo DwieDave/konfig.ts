@@ -58,6 +58,7 @@ describe("DockerError", () => {
     ]
 
     expect(all).toHaveLength(11)
+
     for (const [err, tag] of all) {
       expect(err._tag).toBe(tag)
     }
@@ -68,6 +69,7 @@ describe("DockerError", () => {
       target: "apps/kanban/server",
       missingWorkspace: "@konfig.ts/core"
     })
+
     expect(err.target).toBe("apps/kanban/server")
     expect(err.missingWorkspace).toBe("@konfig.ts/core")
   })

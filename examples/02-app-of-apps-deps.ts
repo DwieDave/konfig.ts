@@ -26,6 +26,7 @@ const web = Application.define({
   build: Effect.gen(function*() {
     const ghcrRef = yield* Dep.Secret("ghcr-pull")
     void ghcrRef
+
     return []
   })
 })
@@ -54,6 +55,7 @@ AppOfApps.fromModules({ target, defaults: {}, modules: [web] as const })
 const report = Effect.gen(function*() {
   const result = yield* checked
   yield* Effect.log(`AppOfApps "${result.name}" — ${result.apps.length} apps`)
+
   for (const a of result.apps) {
     yield* Effect.log(`  • ${a.namespace}/${a.name}`)
   }

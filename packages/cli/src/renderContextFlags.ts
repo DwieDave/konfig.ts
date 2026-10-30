@@ -34,6 +34,7 @@ const _renderContextFromFlags = (input: RenderContextFromFlagsInput): RenderCont
     onSome: (record) => new Map<string, unknown>(Object.entries(record)),
     onNone: () => undefined
   })
+
   return RenderContext.makeFull({
     env: input.env,
     cluster: Option.getOrUndefined(input.flags.cluster),
@@ -59,5 +60,6 @@ export interface WithRenderContextInput<A, E, R> {
 export const withRenderContext = <A, E, R>({ args, run }: WithRenderContextInput<A, E, R>) =>
   Effect.gen(function*() {
     const cfg = yield* resolveConfig()
+
     return yield* run({ cfg, ctx: _renderContextFromFlags({ env: args.env, flags: args }) })
   })

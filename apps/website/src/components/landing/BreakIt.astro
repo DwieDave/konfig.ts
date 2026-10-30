@@ -7,7 +7,9 @@ import { SITE } from "@/lib/site"
 
 const cases = LANDING_CASE_IDS.map((id) => {
   const c = FAILURE_CASES.find((x) => x.id === id)
+
   if (c === undefined) throw new Error(`landing case ${id} missing from catalog`)
+
   return { ...c, snippet: load(c.spec) }
 })
 ---
@@ -96,24 +98,29 @@ const cases = LANDING_CASE_IDS.map((id) => {
       const tabs = Array.from(this.querySelectorAll("[role='tab']")).filter(
         (el): el is HTMLButtonElement => el instanceof HTMLButtonElement
       )
+
       const panels = Array.from(this.querySelectorAll("[role='tabpanel']")).filter(
         (el): el is HTMLElement => el instanceof HTMLElement
       )
+
       const activate = (index: number, focus: boolean) => {
         tabs.forEach((tab, i) => {
           const selected = i === index
           tab.setAttribute("aria-selected", String(selected))
           tab.tabIndex = selected ? 0 : -1
+
           if (selected && focus) tab.focus()
         })
         panels.forEach((panel, i) => {
           panel.hidden = i !== index
         })
       }
+
       tabs.forEach((tab, i) => {
         tab.addEventListener("click", () => activate(i, false))
         tab.addEventListener("keydown", (e) => {
           const last = tabs.length - 1
+
           if (e.key === "ArrowRight") activate(i === last ? 0 : i + 1, true)
           else if (e.key === "ArrowLeft") activate(i === 0 ? last : i - 1, true)
           else if (e.key === "Home") activate(0, true)
@@ -124,5 +131,6 @@ const cases = LANDING_CASE_IDS.map((id) => {
       })
     }
   }
+
   if (!customElements.get("konfig-tabs")) customElements.define("konfig-tabs", KonfigTabs)
 </script>

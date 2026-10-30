@@ -24,6 +24,7 @@ describe("provide/need round-trip", () => {
           _provided({ need: Dep.Application(name), layer: Dep.provideApplication(name) }),
           _provided({ need: Dep.Pvc(name), layer: Dep.providePvc(name) })
         ]
+
         expect(resolved.every((v) => v === name)).toBe(true)
       })
     )

@@ -28,6 +28,7 @@ export class ProcessError extends Data.TaggedError("ProcessError")<{
   get message(): string {
     const tail = this.stderrTail.trim()
     const suffix = tail.length > 0 ? `: ${tail}` : ""
+
     return this.emptyStdout === true
       ? `command \`${this.command}\` exited ${this.exitCode} but produced no output on stdout${suffix}`
       : `command \`${this.command}\` failed (exit ${this.exitCode})${suffix}`
@@ -44,6 +45,7 @@ export class ProcessTimeout extends Data.TaggedError("ProcessTimeout")<{
   get message(): string {
     const tail = this.stderrTail.trim()
     const suffix = tail.length > 0 ? `; last stderr: ${tail}` : ""
+
     return `command \`${this.command}\` timed out after ${Duration.format(this.elapsed)}` +
       ` — it never exited on its own; if it was waiting for input (e.g. registry credentials)` +
       ` run it once by hand to log in, or raise the timeout${suffix}`
@@ -54,9 +56,11 @@ export type ProcessFailure = ProcessError | ProcessTimeout
 
 export const processDetail = (cause: unknown): string => {
   if (cause instanceof ProcessTimeout) return ` (timed out after ${Duration.format(cause.elapsed)})`
+
   if (!(cause instanceof ProcessError)) return ""
   const tail = cause.stderrTail.trim()
   const head = cause.emptyStdout === true ? ` (exit ${cause.exitCode}, empty stdout)` : ` (exit ${cause.exitCode})`
+
   return tail.length > 0 ? `${head}: ${tail}` : head
 }
 
@@ -111,10 +115,12 @@ const _spawnAndDrain = (input: {
     Effect.gen(function*() {
       const spawner = yield* ChildProcessSpawner
       const handle = yield* spawner.spawn(_withClosedStdin(input.command))
+
       const [exitCode, stdout, stderr] = yield* Effect.all(
         [handle.exitCode, _collect(handle.stdout), _collectStderr(handle.stderr, input.stderrTail)],
         { concurrency: "unbounded" }
       )
+
       return { exitCode, stdout, stderr }
     })
   )
@@ -133,7 +139,9 @@ const _withTimeout = <A, R>(input: {
   readonly timeout: Duration.Input | undefined
 }): Effect.Effect<A, ProcessFailure, R> => {
   const { label, run, stderrTail, timeout } = input
+
   if (timeout === undefined) return run
+
   return run.pipe(
     Effect.timeoutOrElse({
       duration: timeout,
@@ -154,9 +162,11 @@ const _spawnCollect = (input: {
 }): Effect.Effect<_CollectedProcess, ProcessFailure, ChildProcessSpawner> => {
   const label = _commandLabel(input.command)
   const stderrTail = { current: "" }
+
   const run = _spawnAndDrain({ command: input.command, stderrTail }).pipe(
     Effect.mapError((cause) => _spawnFailure({ label, cause }))
   )
+
   return _withTimeout({ run, label, stderrTail, timeout: input.options?.timeout })
 }
 
@@ -186,6 +196,7 @@ export const runProcessString = (
   Effect.gen(function*() {
     const result = yield* _spawnCollect({ command, options })
     yield* _failOnNonZero(command, result)
+
     if (options?.allowEmptyStdout !== true && result.stdout.trim().length === 0) {
       return yield* new ProcessError({
         command: _commandLabel(command),
@@ -194,6 +205,7 @@ export const runProcessString = (
         emptyStdout: true
       })
     }
+
     return result.stdout
   })
 

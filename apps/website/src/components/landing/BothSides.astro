@@ -9,6 +9,7 @@ const secrets = load(SNIPPETS.envSecrets)
 const bind = load(SNIPPETS.envBind)
 const runtimeImports = load(SNIPPETS.envRuntimeImports)
 const runtimeUse = load(SNIPPETS.envRuntimeUse)
+
 const runtime = {
   code: [
     runtimeImports.code,
@@ -190,6 +191,7 @@ const STEPS = [
           if (p.dataset["step"] === id) p.setAttribute("data-active", "")
           else p.removeAttribute("data-active")
         }
+
         for (const i of items) {
           const active = i.dataset["stepItem"] === id
           i.classList.toggle("border-zinc-700", active)
@@ -211,22 +213,27 @@ const STEPS = [
         button.addEventListener("click", (e) => {
           e.stopPropagation()
           const id = button.dataset["reveal"]
+
           if (id === undefined) return
           unlock(id)
           show(id)
           button.setAttribute("aria-expanded", "true")
         })
       }
+
       for (const item of items) {
         const id = item.dataset["stepItem"]
         const header = item.querySelector("[data-goto]")
+
         if (id === undefined || !(header instanceof HTMLElement)) continue
         header.addEventListener("click", () => {
           if (unlocked.has(id)) show(id)
         })
       }
+
       show(panels[0]?.dataset["step"] ?? "")
     }
   }
+
   if (!customElements.get("konfig-steps")) customElements.define("konfig-steps", KonfigSteps)
 </script>

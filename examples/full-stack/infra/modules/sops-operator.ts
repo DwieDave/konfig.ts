@@ -8,6 +8,7 @@ export const defineSopsOperator = Application.module({
   annotations: Sync.wave(-2),
   build: ({ namespace }, _opts: Record<never, never>) => {
     const ns = Namespace.make({ name: namespace })
+
     const release = Helm.release({
       repo: "https://isindir.github.io/sops-secrets-operator/",
       chart: "sops-secrets-operator",
@@ -22,6 +23,7 @@ export const defineSopsOperator = Application.module({
         extraEnv: [{ name: "SOPS_AGE_KEY_FILE", value: "/etc/sops-age/age.key" }]
       }
     })
+
     return [ns, release]
   }
 })

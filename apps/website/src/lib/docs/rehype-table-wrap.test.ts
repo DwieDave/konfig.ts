@@ -16,6 +16,7 @@ describe("rehypeTableWrap", () => {
       type: "root",
       children: [el("table"), el("p", [{ type: "text", value: "hi" }]), el("section", [el("table")])]
     }
+
     rehypeTableWrap()(tree)
     expect(toHtml(tree)).toBe(
       `<div class="${TABLE_WRAP_CLASS}"><table></table></div><p>hi</p><section><div class="${TABLE_WRAP_CLASS}"><table></table></div></section>`

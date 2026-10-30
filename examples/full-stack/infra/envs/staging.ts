@@ -12,55 +12,65 @@ import { defineWorker } from "../modules/worker"
 
 const branch = "main"
 const rootPath = "./infra/k8s/manifests/staging"
+
 const src = (name: string) => ({
   repoURL: cluster.repositoryUrl,
   targetRevision: branch,
   path: `${rootPath}/${name}`
 })
+
 const sopsBase = "infra/secrets"
 
 const sopsOperator = defineSopsOperator({
   name: "sops-secrets-operator",
   source: src("sops-operator")
 })
+
 const imagePulls = defineImagePulls({
   name: "image-pulls",
   source: src("image-pulls"),
   sopsBase
 })
+
 const featureFlags = defineFeatureFlags({
   name: "feature-flags",
   source: src("feature-flags")
 })
+
 const postgres = definePostgres({
   name: "postgres",
   source: src("postgres"),
   storageGi: 5
 })
+
 const apiBuild = defineApiBuild({
   name: "api-build",
   source: src("api-build"),
   registry: "ghcr.io/example",
   tag: "staging"
 })
+
 const workerBuild = defineWorkerBuild({
   name: "worker-build",
   source: src("worker-build"),
   registry: "ghcr.io/example",
   tag: "staging"
 })
+
 const api = defineApi({
   name: "api",
   source: src("api"),
   replicas: 1,
   sopsBase
 })
+
 const worker = defineWorker({
   name: "worker",
   source: src("worker"),
   replicas: 1,
   sopsBase
 })
+
 const redisCache = defineRedisCache({ name: "redis-cache", source: src("redis-cache") })
 
 export default AppOfApps.fromModules({

@@ -37,6 +37,7 @@ describe("Container", () => {
         periodSeconds: 5
       }
     })
+
     expect(c.name).toBe("api")
     expect(c.ports).toHaveLength(1)
     expect(c.ports[0]?.name).toBe("http")
@@ -51,6 +52,7 @@ describe("Container", () => {
       ports: [Port.make({ name: "http", containerPort: 8080 })],
       readinessProbe: { httpGet: { path: "/", port: 8080 } }
     })
+
     expect(c.readinessProbe?.httpGet?.port).toBe(8080)
   })
 })
@@ -78,6 +80,7 @@ describe("Service.fromContainer", () => {
             { port: 9090, targetPort: Port.ref("metrics") }
           ]
         })
+
         const out = yield* renderManifest({ manifest: svc, ctx })
         expect(out.kind).toBe("Service")
         expect(out.spec?.selector).toEqual({ app: "api" })
@@ -96,6 +99,7 @@ describe("Service.fromContainer", () => {
           forContainer: api,
           ports: [{ port: 80, targetPort: 8080 }]
         })
+
         const out = yield* renderManifest({ manifest: svc, ctx })
         expect(out.spec?.ports?.[0]).toEqual({ port: 80, targetPort: 8080 })
       }))

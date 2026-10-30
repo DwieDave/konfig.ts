@@ -23,12 +23,14 @@
   const FADE_MS = 1100
   const GLOW_MS = 320
   const LABEL_GLOW_MS = 900
+
   /** Resource kinds by category, each with a neon accent (tailwind 400 shades) and a name pool. */
   interface Category {
     readonly kinds: ReadonlyArray<string>
     readonly names: ReadonlyArray<string>
     readonly rgb: readonly [number, number, number]
   }
+
   const CATEGORIES: ReadonlyArray<Category> = [
     { kinds: ["Deployment", "StatefulSet", "CronJob", "Job"], names: ["api", "web", "worker", "scheduler", "backup", "migrate"], rgb: [52, 211, 153] }, // emerald-400
     { kinds: ["Service", "Ingress", "HTTPRoute"], names: ["api", "web", "grafana", "public", "internal"], rgb: [56, 189, 248] }, // sky-400
@@ -54,32 +56,43 @@
   }
 
   const pickRandom = <T,>(xs: ReadonlyArray<T>): T | undefined => xs[Math.floor(Math.random() * xs.length)]
+
   /** Random `Kind/name` pair per activation, never repeating the label just shown. */
   let lastLabel = ""
+
   const nextLabel = (failRate = FAIL_RATE): Pick<Cell, "label" | "rgb" | "diag"> => {
     const diag = Math.random() < failRate ? (pickRandom(DIAG_CODES) ?? "TS2322") : undefined
+
     for (let i = 0; i < 8; i++) {
       const cat = pickRandom(CATEGORIES)
       const kind = cat === undefined ? undefined : pickRandom(cat.kinds)
       const name = cat === undefined ? undefined : pickRandom(cat.names)
+
       if (cat === undefined || kind === undefined || name === undefined) continue
       const label = `${kind}/${name}`
+
       if (label === lastLabel) continue
       lastLabel = label
+
       return { label, rgb: diag === undefined ? cat.rgb : RED, diag }
     }
+
     return { label: "Deployment/api", rgb: [52, 211, 153], diag }
   }
 
   /** Easter egg: typing `tsc` (outside form fields) asks every grid on the page to run a sweep. */
   const TSC_EVENT = "konfig:tsc"
+
   const listenForTsc = () => {
     let buffer = ""
     document.addEventListener("keydown", (e) => {
       const t = e.target
+
       if (t instanceof HTMLElement && (t.isContentEditable || t.closest("input, textarea, select, [contenteditable]"))) return
+
       if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return
       buffer = (buffer + e.key.toLowerCase()).slice(-3)
+
       if (buffer === "tsc") {
         buffer = ""
         window.dispatchEvent(new CustomEvent(TSC_EVENT))
@@ -98,10 +111,13 @@
 
     connectedCallback() {
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+
       if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return
       const canvas = this.querySelector("canvas")
+
       if (!(canvas instanceof HTMLCanvasElement)) return
       const ctx = canvas.getContext("2d")
+
       if (ctx === null) return
       this.#canvas = canvas
       this.#ctx = ctx
@@ -109,22 +125,28 @@
       const resize = () => this.#resize()
       const ro = new ResizeObserver(resize)
       ro.observe(this)
+
       const io = new IntersectionObserver(([entry]) => {
         this.#visible = entry?.isIntersecting ?? false
+
         if (!this.#visible) this.#cells = []
         this.#schedule()
       })
+
       io.observe(this)
+
       const onMove = (e: PointerEvent) => {
         if (!this.#visible) return
         this.#pending = { x: e.clientX, y: e.clientY }
         this.#schedule()
       }
+
       const onLeave = () => {
         this.#pending = undefined
         this.#release(performance.now())
         this.#schedule()
       }
+
       const onTsc = () => this.#sweep(performance.now())
       window.addEventListener("pointermove", onMove, { passive: true })
       document.addEventListener("pointerleave", onLeave)
@@ -148,6 +170,7 @@
     #resize() {
       const canvas = this.#canvas
       const ctx = this.#ctx
+
       if (canvas === undefined || ctx === undefined) return
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       const { width, height } = this.getBoundingClientRect()
@@ -171,6 +194,7 @@
       const rowEnd = Math.ceil(bottom / CELL_H)
       const next: Cell[] = []
       let i = 0
+
       for (let row = Math.max(0, rowStart); row < Math.min(rows, rowEnd); row++) {
         for (let col = -cols; col < cols; col++) {
           const enteredAt = now + i * SWEEP_STEP_MS
@@ -178,6 +202,7 @@
           i++
         }
       }
+
       this.#cells = next
       this.#schedule()
     }
@@ -196,6 +221,7 @@
 
     #tick(now: number) {
       const ctx = this.#ctx
+
       if (ctx === undefined) return
       const rect = this.getBoundingClientRect()
       const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
@@ -204,6 +230,7 @@
 
       // Resolve the pending pointer position into a hovered cell.
       const p = this.#pending
+
       if (p !== undefined) {
         const x = p.x - rect.left
         const y = p.y - rect.top
@@ -211,6 +238,7 @@
         const col = Math.floor((x - originX) / cw)
         const row = Math.floor(y / CELL_H)
         const current = this.#cells.find((c) => c.leftAt === undefined)
+
         if (!inside) {
           this.#release(now)
         } else if (current === undefined || current.col !== col || current.row !== row) {
@@ -225,6 +253,7 @@
       // silence its neighbours.
       const content = this.parentElement?.querySelector("[data-grid-content]")
       let quietRows: { top: number; bottom: number } | undefined
+
       if (content instanceof HTMLElement) {
         const cr = content.getBoundingClientRect()
         quietRows = { top: cr.top - rect.top, bottom: cr.bottom - rect.top }
@@ -235,13 +264,17 @@
       ctx.font = `12px ${getComputedStyle(this).fontFamily}`
       ctx.textBaseline = "bottom"
       const alive: Cell[] = []
+
       for (const c of this.#cells) {
         const elapsed = c.leftAt === undefined ? 0 : now - c.leftAt
+
         if (elapsed >= HOLD_MS + FADE_MS) continue
+
         if (now < c.enteredAt) {
           alive.push(c) // scheduled by a sweep, not yet reached
           continue
         }
+
         const k = Math.max(0, elapsed - HOLD_MS) / FADE_MS
         const a = 1 - k * k * (3 - 2 * k) // smoothstep ease-out
         // Entry glow: flash to zinc-400 and settle back to the resting tones.
@@ -262,8 +295,10 @@
         ctx.lineWidth = 1
         ctx.strokeRect(x + 0.5, y + 0.5, cw, CELL_H)
         const lw = ctx.measureText(c.label).width
+
         const inQuietBlock =
           quietRows !== undefined && c.col >= -2 && c.col <= 1 && y + CELL_H / 2 > quietRows.top && y + CELL_H / 2 < quietRows.bottom
+
         if (inQuietBlock) continue
         // Neon label: category hue at full brightness + soft bloom on entry, settling to a dimmed rest.
         const [r, gc, bl] = c.rgb
@@ -273,6 +308,7 @@
         ctx.fillText(c.label, x + 10, y + CELL_H - 8)
         ctx.shadowBlur = 0
         ctx.shadowColor = "transparent"
+
         if (c.diag !== undefined) {
           // Wavy underline under the label (the docs' `.diag` treatment); error badge + code on the line above.
           const ux = x + 10
@@ -280,6 +316,7 @@
           ctx.strokeStyle = `rgba(248, 113, 113, ${0.9 * a})`
           ctx.lineWidth = 1
           ctx.beginPath()
+
           for (let px = 0; px <= lw; px += 1) ctx.lineTo(ux + px, uy + Math.sin(px * 1.6) * 1.2)
           ctx.stroke()
           const by = y + CELL_H - 8 - 17 // baseline of the code line
@@ -300,11 +337,14 @@
           ctx.fillText(c.diag, ux + 15, by)
         }
       }
+
       this.#cells = alive
       const animating = alive.some((c) => c.leftAt !== undefined || now - c.enteredAt < LABEL_GLOW_MS || now < c.enteredAt)
+
       if (animating && this.#visible) this.#schedule()
     }
   }
+
   if (!customElements.get("konfig-grid-interactive")) {
     customElements.define("konfig-grid-interactive", KonfigGridInteractive)
     listenForTsc()

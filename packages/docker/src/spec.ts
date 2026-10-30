@@ -8,11 +8,13 @@ const HEX_RE = /^[0-9a-fA-F]+$/
 // requires a base64 special char or a mixed upper+lower+digit signal.
 const _looksLikeBase64Secret = (s: string): boolean => {
   if (!BASE64_CHARSET_RE.test(s)) return false
+
   if (HEX_RE.test(s)) return false
   const hasSpecial = s.includes("+") || s.includes("/") || s.includes("=")
   const hasUpper = /[A-Z]/.test(s)
   const hasLower = /[a-z]/.test(s)
   const hasDigit = /[0-9]/.test(s)
+
   return hasSpecial || (hasUpper && hasLower && hasDigit)
 }
 
@@ -40,12 +42,14 @@ export const PackageManagerAtom = Schema.TaggedUnion({
   PnpmPm: {},
   YarnPm: { variant: Schema.optionalKey(Schema.Literals(["classic", "berry"])) }
 })
+
 export type PackageManagerAtom = typeof PackageManagerAtom.Type
 
 export const RuntimeAtom = Schema.TaggedUnion({
   BunRuntime: { alpine: Schema.optionalKey(Schema.Boolean) },
   NodeRuntime: { alpine: Schema.optionalKey(Schema.Boolean) }
 })
+
 export type RuntimeAtom = typeof RuntimeAtom.Type
 
 export const BuildAtom = Schema.TaggedUnion({
@@ -53,6 +57,7 @@ export const BuildAtom = Schema.TaggedUnion({
   BuildCommand: { argv: Schema.Array(Schema.String) },
   BuildNone: {}
 })
+
 export type BuildAtom = typeof BuildAtom.Type
 
 export const CopyAtom = Schema.TaggedUnion({
@@ -70,6 +75,7 @@ export const CopyAtom = Schema.TaggedUnion({
     chown: Schema.optionalKey(Schema.String)
   }
 })
+
 export type CopyAtom = typeof CopyAtom.Type
 
 export const HealthcheckAtom = Schema.TaggedUnion({
@@ -89,6 +95,7 @@ export const HealthcheckAtom = Schema.TaggedUnion({
     startPeriod: Schema.optionalKey(Schema.String)
   }
 })
+
 export type HealthcheckAtom = typeof HealthcheckAtom.Type
 
 export const UserAtom = Schema.TaggedUnion({
@@ -99,6 +106,7 @@ export const UserAtom = Schema.TaggedUnion({
   },
   UserRoot: {}
 })
+
 export type UserAtom = typeof UserAtom.Type
 
 const PlatformValue = Schema.Literals(["linux/amd64", "linux/arm64"])
@@ -108,6 +116,7 @@ export const PlatformAtom = Schema.TaggedUnion({
   PlatformLinuxArm64: {},
   PlatformMulti: { values: Schema.Array(PlatformValue) }
 })
+
 export type PlatformAtom = typeof PlatformAtom.Type
 
 export const RunnerSpec = Schema.Struct({
@@ -128,6 +137,7 @@ export const RunnerSpec = Schema.Struct({
   ),
   removePaths: Schema.optionalKey(Schema.Array(Schema.String))
 })
+
 export type RunnerSpec = typeof RunnerSpec.Type
 
 export const DevSpec = Schema.Struct({
@@ -136,6 +146,7 @@ export const DevSpec = Schema.Struct({
   expose: Schema.optionalKey(ExposeField),
   workdir: Schema.optionalKey(Schema.String)
 })
+
 export type DevSpec = typeof DevSpec.Type
 
 export const DockerSpec = Schema.Struct({
@@ -147,8 +158,10 @@ export const DockerSpec = Schema.Struct({
   runner: RunnerSpec,
   dev: Schema.optionalKey(DevSpec)
 })
+
 export type DockerSpec = typeof DockerSpec.Type
 
 export const decodeDockerSpec = Schema.decodeUnknownEffect(DockerSpec)
+
 // oxlint-disable-next-line app/no-sync-schema-apis
 export const decodeDockerSpecSync = Schema.decodeUnknownSync(DockerSpec)

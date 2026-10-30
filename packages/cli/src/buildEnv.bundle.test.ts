@@ -13,6 +13,7 @@ const _writeEnvFile = (root: string, entry: string, body: string) =>
     const full = path.join(root, entry)
     yield* fs.makeDirectory(path.dirname(full), { recursive: true })
     yield* fs.writeFileString(full, body)
+
     return full
   })
 
@@ -33,6 +34,7 @@ const api = Bundle.define({
 });
 export default Bundle.fromModules({ modules: [api] as const });
 `
+
       yield* _writeEnvFile(root, "infra/env/test.ts", envBody)
 
       const cfg: ResolvedKonfigConfig = {
@@ -49,6 +51,7 @@ export default Bundle.fromModules({ modules: [api] as const });
           cacheInclude: []
         }
       }
+
       const ctx = RenderContext.make("test")
 
       const rendered = yield* renderEnv({ cfg, envName: "test", ctx })

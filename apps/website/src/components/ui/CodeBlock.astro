@@ -106,6 +106,7 @@ const errorCount = diagnostics.length
   // Diagnostics live inside a horizontally scrolling frame, which would clip
   // their tooltips. On hover/focus we lift the tip to viewport coordinates.
   const MARGIN = 12
+
   const place = (diag: HTMLElement, tip: HTMLElement) => {
     const r = diag.getBoundingClientRect()
     tip.style.position = "fixed"
@@ -114,22 +115,27 @@ const errorCount = diagnostics.length
     tip.style.right = "auto"
     tip.style.display = "block"
     const t = tip.getBoundingClientRect()
+
     if (t.right > window.innerWidth - MARGIN) {
       tip.style.left = `${Math.max(MARGIN, window.innerWidth - MARGIN - t.width)}px`
     }
+
     if (t.bottom > window.innerHeight - MARGIN) {
       tip.style.top = `${Math.max(MARGIN, r.top - 6 - t.height)}px`
     }
   }
+
   const hide = (tip: HTMLElement) => {
     tip.style.display = ""
     tip.style.position = ""
     tip.style.top = ""
     tip.style.left = ""
   }
+
   const wire = (diag: Element) => {
     if (!(diag instanceof HTMLElement)) return
     const tip = diag.querySelector(".diag-tip")
+
     if (!(tip instanceof HTMLElement)) return
     const show = () => place(diag, tip)
     const off = () => hide(tip)
@@ -145,5 +151,6 @@ const errorCount = diagnostics.length
     })
     document.addEventListener("scroll", off, { passive: true, capture: true })
   }
+
   document.querySelectorAll(".diag").forEach(wire)
 </script>

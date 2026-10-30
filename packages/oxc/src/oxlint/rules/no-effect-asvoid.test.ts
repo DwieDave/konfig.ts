@@ -10,6 +10,7 @@ describe("no-effect-asvoid", () => {
       object: { type: "Identifier", name: "Effect" },
       property: { type: "Identifier", name: "asVoid" }
     }
+
     const harness = runVisitor({ rule: noEffectAsVoid, event: "MemberExpression", node })
     expect(harness.reports).toHaveLength(1)
   })
@@ -20,6 +21,7 @@ describe("no-effect-asvoid", () => {
       object: { type: "Identifier", name: "Effect" },
       property: { type: "Identifier", name: "map" }
     }
+
     const harness = runVisitor({ rule: noEffectAsVoid, event: "MemberExpression", node })
     expect(harness.reports).toHaveLength(0)
   })

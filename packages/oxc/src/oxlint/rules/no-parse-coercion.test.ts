@@ -20,6 +20,7 @@ describe("no-parse-coercion", () => {
         }
       ]
     }
+
     const harness = runVisitor({ rule: noParseCoercion, event: "CallExpression", node })
     expect(harness.reports).toHaveLength(1)
     expect(harness.reports[0]?.message).toContain("Schema")
@@ -31,6 +32,7 @@ describe("no-parse-coercion", () => {
       callee: { type: "Identifier", name: "unsafeCoerce" },
       arguments: [{ type: "Identifier", name: "value" }]
     }
+
     const harness = runVisitor({ rule: noParseCoercion, event: "CallExpression", node })
     expect(harness.reports).toHaveLength(0)
   })

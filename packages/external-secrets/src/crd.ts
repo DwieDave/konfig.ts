@@ -19,6 +19,7 @@ export interface ExternalSecretDataEntry {
 }
 
 export type ExternalSecretCreationPolicy = "Owner" | "Orphan" | "Merge" | "None"
+
 export type ExternalSecretDeletionPolicy = "Delete" | "Merge" | "Retain"
 
 export interface ExternalSecretTarget {

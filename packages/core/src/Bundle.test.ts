@@ -33,14 +33,17 @@ describe("Bundle.define", () => {
         namespace: "app",
         build: Effect.gen(function*() {
           const ref = yield* Dep.Secret("shared")
+
           return [{ kind: "ConfigMap", metadata: { name: ref } }]
         })
       })
 
       const providerLayer = Dep.provideSecret("shared")
+
       const b = yield* handle.pipe(
         Effect.provide(Layer.provideMerge(handle.layer, providerLayer))
       )
+
       expect(b.manifests[0]).toEqual({
         kind: "ConfigMap",
         metadata: { name: "shared" }
@@ -70,6 +73,7 @@ layer(NodeServices.layer)("Bundle.fromModules", (it) => {
         namespace: "ns-a",
         build: () => [{ kind: "ConfigMap", metadata: { name: "a" } }]
       })
+
       const b = define({
         name: "b",
         namespace: "ns-b",
@@ -89,11 +93,13 @@ layer(NodeServices.layer)("Bundle.fromModules", (it) => {
         build: () => [],
         provides: Dep.provideSecret("shared")
       })
+
       const consumer = define({
         name: "consumer",
         namespace: "app",
         build: Effect.gen(function*() {
           const ref = yield* Dep.Secret("shared")
+
           return [{ kind: "ConfigMap", metadata: { name: ref } }]
         })
       })

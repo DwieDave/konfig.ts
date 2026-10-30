@@ -48,6 +48,7 @@ describe("encryption policy", () => {
       const policy = yield* _policy({ encrypted_suffix: "_a", unencrypted_suffix: "_b" })
       fc.assert(fc.property(_path, (path) => {
         const demands = path.some((s) => s.endsWith("_a")) || !path.some((s) => s.endsWith("_b"))
+
         return mustEncrypt({ policy, path }) === demands
       }))
     }))

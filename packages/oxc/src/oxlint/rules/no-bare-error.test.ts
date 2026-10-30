@@ -9,6 +9,7 @@ describe("no-bare-error", () => {
       type: "NewExpression",
       callee: { type: "Identifier", name: "Error" }
     }
+
     const harness = runVisitor({ rule: noBareError, event: "NewExpression", node })
     expect(harness.reports).toHaveLength(1)
     expect(harness.reports[0]?.message).toContain("Data.TaggedError")
@@ -20,6 +21,7 @@ describe("no-bare-error", () => {
       callee: { type: "Identifier", name: "Error" },
       parent: { type: "ThrowStatement" }
     }
+
     const harness = runVisitor({ rule: noBareError, event: "NewExpression", node })
     expect(harness.reports).toHaveLength(0)
   })
@@ -29,6 +31,7 @@ describe("no-bare-error", () => {
       type: "NewExpression",
       callee: { type: "Identifier", name: "RenderError" }
     }
+
     const harness = runVisitor({ rule: noBareError, event: "NewExpression", node })
     expect(harness.reports).toHaveLength(0)
   })

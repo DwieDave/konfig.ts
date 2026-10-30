@@ -2,6 +2,7 @@ import { brand } from "@konfig.ts/core"
 import type { ConfigMapRef, PvcRef, SecretRef } from "@konfig.ts/core"
 
 declare const VolumeNameBrand: unique symbol
+
 export type VolumeName<N extends string> = string & {
   readonly [VolumeNameBrand]: N
 }

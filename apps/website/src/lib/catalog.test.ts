@@ -7,9 +7,11 @@ describe("catalog", () => {
       const s = load(c.spec)
       expect(s.code.length, c.id).toBeGreaterThan(0)
       expect(s.diagnostics.length, c.id).toBe(c.spec.diagnostics?.length ?? 0)
+
       for (const d of s.diagnostics) {
         expect(d.colEnd, `${c.id} range`).toBeGreaterThan(d.colStart)
       }
+
       expect(s.code, `${c.id} keeps no expect-error lines`).not.toContain("@ts-expect-error")
     }
   })

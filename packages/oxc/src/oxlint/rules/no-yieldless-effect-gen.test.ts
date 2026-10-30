@@ -31,6 +31,7 @@ describe("no-yieldless-effect-gen", () => {
       type: "BlockStatement",
       body: [{ type: "ExpressionStatement", expression: { type: "YieldExpression" } }]
     }
+
     const call = _effectGenCall(_genFn(body))
     const harness = runVisitor({ rule: noYieldlessEffectGen, event: "CallExpression", node: call })
     expect(harness.reports).toHaveLength(0)
@@ -44,7 +45,9 @@ describe("no-yieldless-effect-gen", () => {
       type: "BlockStatement",
       body: [{ type: "ExpressionStatement", expression: { type: "YieldExpression" } }]
     }
+
     const innerCall = _effectGenCall(_genFn(innerBody))
+
     const outerBody: AstNode = {
       type: "BlockStatement",
       body: [
@@ -56,6 +59,7 @@ describe("no-yieldless-effect-gen", () => {
         }
       ]
     }
+
     const outerCall = _effectGenCall(_genFn(outerBody))
     const harness = runVisitor({ rule: noYieldlessEffectGen, event: "CallExpression", node: outerCall })
     expect(harness.reports).toHaveLength(1)
@@ -71,6 +75,7 @@ describe("no-yieldless-effect-gen", () => {
       },
       arguments: [_genFn({ type: "BlockStatement", body: [] })]
     }
+
     const harness = runVisitor({ rule: noYieldlessEffectGen, event: "CallExpression", node: call })
     expect(harness.reports).toHaveLength(0)
   })
@@ -85,12 +90,14 @@ describe("no-yieldless-effect-gen", () => {
         body: []
       }
     })
+
     const nonGenCall = _effectGenCall({
       type: "FunctionExpression",
       generator: false,
       params: [],
       body: { type: "BlockStatement", body: [] }
     })
+
     const harness1 = runVisitor({ rule: noYieldlessEffectGen, event: "CallExpression", node: arrowCall })
     const harness2 = runVisitor({ rule: noYieldlessEffectGen, event: "CallExpression", node: nonGenCall })
     expect(harness1.reports).toHaveLength(0)

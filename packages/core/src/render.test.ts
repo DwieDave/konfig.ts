@@ -33,6 +33,7 @@ describe("render — layer composition", () => {
     const extra = Layer.succeed(Marker, { tag: "marker" } as const)
     const built = _buildLayers(extra)
     expect(built).not.toBe(NodeServices.layer)
+
     return Effect.gen(function*() {
       const m = yield* Marker
       expect(m.tag).toBe("marker")
@@ -47,6 +48,7 @@ describe("render — _compose wiring", () => {
 
     let seenEnv: string | undefined
     let seenTag: string | undefined
+
     const program = (ctx: RenderContext) =>
       Effect.gen(function*() {
         const m = yield* Marker
@@ -64,6 +66,7 @@ describe("render — _compose wiring", () => {
 
   it.effect("defaults the composed ctx env to 'prod' when no env option is given", () => {
     let seenEnv: string | undefined
+
     const program = (ctx: RenderContext) =>
       Effect.sync(() => {
         seenEnv = ctx.env

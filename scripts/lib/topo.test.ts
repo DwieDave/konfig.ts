@@ -26,6 +26,7 @@ describe("topoOrder", () => {
       fc.property(dagArb, (pkgs) => {
         const out = topoOrder(pkgs).map((p) => p.name)
         expect([...out].sort()).toEqual(pkgs.map((p) => p.name).sort())
+
         for (const p of pkgs) {
           for (const d of p.deps) expect(out.indexOf(d)).toBeLessThan(out.indexOf(p.name))
         }

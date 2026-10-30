@@ -31,6 +31,7 @@ describe("Environment.runtime (decoder)", () => {
           )
         )
       )
+
       expect(Redacted.value(decoded.db.url)).toBe("postgres://localhost/api")
       expect(Redacted.value(decoded.db.password)).toBe("hunter2")
       expect(decoded.port).toBe(8080)

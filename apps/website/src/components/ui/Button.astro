@@ -6,8 +6,10 @@ interface Props {
   readonly variant?: "primary" | "secondary" | undefined
   readonly class?: string | undefined
 }
+
 const { href, external = false, size = "sm", variant = "secondary", class: className } = Astro.props
 const sizeClass = size === "md" ? "h-11 rounded-lg px-5 text-sm" : "h-9 rounded-lg px-4 text-sm"
+
 const variantClass =
   variant === "primary"
     ? "bg-white text-zinc-950 hover:bg-zinc-200 border border-transparent"

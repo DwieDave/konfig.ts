@@ -18,12 +18,14 @@ const isElement = (node: Parents["children"][number]): node is Element => node.t
 const isWrapper = (node: Parents): boolean => {
   if (node.type !== "element") return false
   const className = node.properties["className"]
+
   return Array.isArray(className) && className.includes(TABLE_WRAP_CLASS)
 }
 
 const wrapTables = (parent: Parents): void => {
   parent.children = parent.children.map((child) => {
     if (!isElement(child)) return child
+
     if (child.tagName === "table" && !isWrapper(parent)) {
       const wrapper: Element = {
         type: "element",
@@ -31,9 +33,12 @@ const wrapTables = (parent: Parents): void => {
         properties: { className: [TABLE_WRAP_CLASS] },
         children: [child]
       }
+
       return wrapper
     }
+
     wrapTables(child)
+
     return child
   })
 }

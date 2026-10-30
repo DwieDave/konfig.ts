@@ -20,11 +20,13 @@ interface WalkInput {
 
 const _formatNode = (input: { readonly node: GraphNode; readonly suffix: string }): string => {
   const build = input.node.hasBuildScript ? `  ${BUILD_TOKEN}` : ""
+
   return `${input.node.name}  ${input.node.relDir}${build}${input.suffix}`
 }
 
 const _connector = (input: { readonly isRoot: boolean; readonly isLast: boolean }): string => {
   if (input.isRoot) return ""
+
   return input.isLast ? "└── " : "├── "
 }
 
@@ -37,13 +39,17 @@ const _childLinks = (input: { readonly ctx: TreeContext; readonly name: string }
 const _walk = (input: WalkInput): void => {
   const { ctx, name, prefix, isLast, isRoot, edgeKind } = input
   const node = ctx.byName.get(name)
+
   if (!node) return
   const connector = _connector({ isRoot, isLast })
   const kindTag = edgeKind === "dev" ? "  (dev)" : ""
+
   if (ctx.seen.has(name)) {
     ctx.lines.push(`${prefix}${connector}${node.name}${kindTag}  (see above)`)
+
     return
   }
+
   ctx.seen.add(name)
   ctx.lines.push(`${prefix}${connector}${_formatNode({ node, suffix: kindTag })}`)
   const links = _childLinks({ ctx, name })
@@ -65,6 +71,7 @@ const _roots = (input: {
   readonly edges: ReadonlyArray<GraphEdge>
 }): string[] => {
   const rev = reverseAdjacency(input.edges)
+
   return input.nodes.filter((n) => (rev.get(n.name)?.length ?? 0) === 0).map((n) => n.name).sort()
 }
 
@@ -80,6 +87,7 @@ export const renderTree = (input: {
     seen: new Set(),
     lines: []
   }
+
   const roots = input.target === undefined ? _roots(input) : [input.target]
   roots.forEach((name, i) =>
     _walk({
@@ -91,5 +99,6 @@ export const renderTree = (input: {
       edgeKind: null
     })
   )
+
   return ctx.lines.join("\n")
 }

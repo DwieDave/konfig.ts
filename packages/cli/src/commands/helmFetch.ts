@@ -20,6 +20,7 @@ interface FetchOneInput {
 export const _fetchOne = (input: FetchOneInput) =>
   Effect.gen(function*() {
     yield* Helm.ensureChartTarball(input)
+
     if (input.digest === undefined) {
       yield* Console.log(
         `  warning: ${input.chart}@${input.version} has no recorded digest — cached under a plain name that Helm.release's digest-suffixed cache won't reuse`
@@ -41,10 +42,13 @@ const _fetchDef = (input: { readonly def: ChartRegistryEntry; readonly cacheDir:
 export const helmFetchEffect = (flags: HelmFetchFlags) =>
   Effect.gen(function*() {
     const { cacheDir, chartsDir } = yield* loadHelmPaths
+
     if (!flags.all) {
       yield* Console.error("Specify --all to fetch all charts")
+
       return yield* new MissingAllFlag()
     }
+
     const registry = yield* loadChartRegistryEffect(chartsDir)
     yield* Effect.forEach(registry, (def) => _fetchDef({ def, cacheDir }), { concurrency: 4, discard: true })
     yield* Console.log(`Done. Cache at ${cacheDir}`)

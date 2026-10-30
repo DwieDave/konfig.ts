@@ -78,13 +78,16 @@ const hasNestedItems = items.some((item) => (item.children?.length ?? 0) > 0)
     // Group duplicate links by heading id so a change only updates the links
     // that actually need to change.
     const linksById = new Map<string, HTMLAnchorElement[]>()
+
     for (const link of links) {
       const id = link.dataset.tocLink
+
       if (id === undefined) {
         continue
       }
 
       const linksForHeading = linksById.get(id)
+
       if (linksForHeading === undefined) {
         linksById.set(id, [link])
       } else {
@@ -96,8 +99,10 @@ const hasNestedItems = items.some((item) => (item.children?.length ?? 0) > 0)
     // as the position means nested sections can replace their parent instead
     // of leaving the parent active for the entire group.
     const tocTargets = new Map<string, Element>()
+
     for (const id of linksById.keys()) {
       const section = document.getElementById(id)
+
       if (section !== null) {
         tocTargets.set(id, section)
       }
@@ -153,6 +158,7 @@ const hasNestedItems = items.some((item) => (item.children?.length ?? 0) > 0)
         // section once it enters the viewport. This also gives the TOC a
         // useful initial state when the page opens near the top.
         let nextId = currentId
+
         if (nextId === undefined && firstVisibleOffset < window.innerHeight) {
           nextId = firstVisibleId
         }
@@ -165,6 +171,7 @@ const hasNestedItems = items.some((item) => (item.children?.length ?? 0) > 0)
       // Scroll events can fire many times per frame. Coalesce them so the
       // layout reads above happen at most once per animation frame.
       let pendingFrame: number | undefined
+
       function scheduleHighlight(): void {
         if (pendingFrame !== undefined) {
           return

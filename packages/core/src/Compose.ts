@@ -15,6 +15,7 @@ type AnyHandle = ComposeHandle<any, any>
 
 // oxlint-disable-next-line app/no-type-assertion
 type OutOfHandle<H> = H extends ComposeHandle<infer Out, any> ? Out : never
+
 // oxlint-disable-next-line app/no-type-assertion
 type InOfHandle<H> = H extends ComposeHandle<any, infer In> ? In : never
 
@@ -75,6 +76,7 @@ export const composeLayers = (
   { modules, provides }: ComposeLayersInput
 ): Layer.Layer<never, AnyRenderError, never> => {
   type AnyLayer = Layer.Layer<never, AnyRenderError, never>
+
   return modules.reduce<AnyLayer>(
     (acc, mod) =>
       Layer.provideMerge(

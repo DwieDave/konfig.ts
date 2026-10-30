@@ -27,6 +27,7 @@ const _collect = (stream: Stream.Stream<Uint8Array, PlatformError>) => Stream.mk
 
 const _commandFor = (input: { readonly pkg: string; readonly summaryFile: string | undefined }) => {
   const { args, cmd, cwd } = _spawnArgsFor(input.pkg)
+
   return ChildProcess.make(cmd, args, {
     cwd,
     stdin: "ignore",
@@ -40,10 +41,12 @@ const _run = (input: { readonly pkg: string; readonly summaryFile: string | unde
     Effect.gen(function*() {
       const spawner = yield* ChildProcessSpawner
       const handle = yield* spawner.spawn(_commandFor(input))
+
       const [code, out, err] = yield* Effect.all(
         [handle.exitCode, _collect(handle.stdout), _collect(handle.stderr)],
         { concurrency: "unbounded" }
       )
+
       return { pkg: input.pkg, output: out + err, code: Number(code) } satisfies _RunResult
     })
   ).pipe(
@@ -54,15 +57,19 @@ const _run = (input: { readonly pkg: string; readonly summaryFile: string | unde
 const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFile: string | undefined }>) =>
   Effect.gen(function*() {
     const summaryFile = process.env.GITHUB_STEP_SUMMARY
+
     if (summaryFile === undefined) return
     const fs = yield* FileSystem
     let out = ""
+
     for (const r of results) {
       const block = r.summaryFile === undefined
         ? ""
         : yield* fs.readFileString(r.summaryFile).pipe(Effect.orElseSucceed(() => ""))
+
       out += `\n## 📦 ${r.pkg === _SCRIPTS_PSEUDO_PACKAGE ? r.pkg : `@konfig.ts/${r.pkg}`}\n${block}`
     }
+
     const existing = yield* fs.readFileString(summaryFile).pipe(Effect.orElseSucceed(() => ""))
     yield* fs
       .writeFileString(summaryFile, existing + out)
@@ -78,12 +85,14 @@ const _runOne = (input: { readonly pkg: string; readonly tmpDir: string | undefi
     const summaryFile = tmpDir === undefined ? undefined : path.join(tmpDir, `${pkg}.md`)
     const result = yield* _run({ pkg, summaryFile })
     yield* Console.log(`\n📦 ${_labelFor(pkg)}\n${result.output}`)
+
     return { ...result, summaryFile }
   })
 
 export const _summaryTmpDir = Effect.gen(function*() {
   if (process.env.GITHUB_STEP_SUMMARY === undefined) return undefined
   const fs = yield* FileSystem
+
   return yield* fs
     .makeTempDirectoryScoped({ prefix: "konfig-test-summaries-" })
     .pipe(mapRepoError("cannot create summary temp dir"))
@@ -96,6 +105,7 @@ const _runAll = (concurrency: number) =>
     const results = yield* Effect.forEach(packages, (pkg) => _runOne({ pkg, tmpDir }), { concurrency })
     yield* _stitchSummary(results)
     const failed = results.filter((r) => r.code !== 0)
+
     if (failed.length > 0) {
       return yield* new RepoScriptError({
         message: `test suites failed: ${failed.map((r) => r.pkg).join(", ")}`

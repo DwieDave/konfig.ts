@@ -1,8 +1,4 @@
-import type {
-  SealedSecretSchema,
-  SealedSecretSpecSchema,
-  SealedSecretTemplateSchema
-} from "./schema"
+import type { SealedSecretSchema, SealedSecretSpecSchema, SealedSecretTemplateSchema } from "./schema"
 
 export type SealedSecretScope = "strict" | "namespace-wide" | "cluster-wide"
 

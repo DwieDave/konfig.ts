@@ -39,9 +39,11 @@ const _readImages = (file: string) =>
     const fs = yield* FileSystem
     const toError = _imagesFileError(file)
     const text = yield* fs.readFileString(file).pipe(Effect.mapError(toError))
+
     const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
       Effect.mapError(toError)
     )
+
     return yield* decodeImagesEffect(parsed).pipe(Effect.mapError(toError))
   })
 
@@ -49,16 +51,20 @@ const _assertTarget = (input: { readonly current: ImagesConfig } & Pick<SetImage
   Effect.gen(function*() {
     const { current, env, app } = input
     const envApps = current.envs[env]
+
     if (envApps === undefined || !(env in current.envs)) {
       const known = Object.keys(current.envs)
       yield* Effect.logError(`unknown env '${env}'. Known: ${known.join(", ")}`)
+
       return yield* new SetUnknownEnv({ env, known })
     }
+
     if (!(app in envApps) && !(input.create ?? false)) {
       const known = Object.keys(envApps)
       yield* Effect.logError(
         `unknown app '${app}' in env '${env}'. Known: ${known.join(", ")} (pass --create to add it)`
       )
+
       return yield* new SetUnknownApp({ env, app, known })
     }
   })
@@ -80,9 +86,11 @@ export const setImageEffect = (args: SetImageArgs) =>
     const file = path.join(cfg.configDir, cfg.config.root, "images.json")
     const current = yield* _readImages(file)
     yield* _assertTarget({ ...args, current })
+
     const decoded = yield* decodeImagesEffect(_withImage({ ...args, current })).pipe(
       Effect.mapError(_imagesFileError(file))
     )
+
     yield* fs.writeFileString(file, _formatImagesConfig(decoded)).pipe(Effect.mapError(_imagesFileError(file)))
     yield* Effect.log(`set ${args.env}.${args.app} = ${args.image}`)
   })

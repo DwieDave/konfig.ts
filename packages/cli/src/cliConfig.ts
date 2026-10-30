@@ -40,12 +40,15 @@ export const resolveCliPaths = (cfg?: ResolvedKonfigConfig) =>
     const cacheDir = yield* Config.String(KONFIG_HELM_CACHE_ENV).pipe(
       Config.withDefault(_resolve(cfg?.config.helm?.cacheDir, DEFAULT_HELM_CACHE_DIR))
     )
+
     const outDir = yield* Config.String(KONFIG_CRD_OUT_DIR_ENV).pipe(
       Config.withDefault(_resolve(cfg?.config.crd?.outDir, DEFAULT_CRD_OUT_DIR))
     )
+
     const chartsDir = yield* Config.String(KONFIG_CHARTS_DIR_ENV).pipe(
       Config.withDefault(_resolve(cfg?.config.charts, DEFAULT_CHARTS_DIR))
     )
+
     const minVersion = yield* Config.String(KONFIG_HELM_MIN_VERSION_ENV).pipe(
       Config.withDefault(cfg?.config.helm?.minVersion ?? DEFAULT_HELM_MIN_VERSION)
     )

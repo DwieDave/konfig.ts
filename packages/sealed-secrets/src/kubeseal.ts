@@ -46,26 +46,33 @@ export const resolveCertPath = (
 ): Effect.Effect<string, KubesealCertMissing> =>
   Effect.gen(function*() {
     const fromOpt = input.certPath
+
     if (fromOpt !== undefined && fromOpt.length > 0) return fromOpt
     const fromEnv = yield* Config.String("KUBESEAL_CERT").pipe(Config.option, Effect.orDie)
+
     if (Option.isSome(fromEnv) && fromEnv.value.length > 0) return fromEnv.value
+
     return yield* new KubesealCertMissing({ hint: "checked opts.certPath, then $KUBESEAL_CERT" })
   })
 
 export const runKubeseal = (input: RunKubesealInput) =>
   Effect.gen(function*() {
     const encoded = new TextEncoder().encode(input.plainSecretYaml)
+
     const cmd = ChildProcess.make(
       "kubeseal",
       ["--cert", input.certPath, "--scope", input.scope, "--format", "yaml"],
       { stdin: Stream.succeed(encoded) }
     )
+
     const stdout = yield* runProcessString(cmd).pipe(
       Effect.mapError((cause) => new KubesealInvocationError({ cause }))
     )
+
     const parsed = yield* parseYamlWith({
       text: stdout,
       onError: (cause) => new KubesealParseError({ output: stdout, cause })
     })
+
     return yield* _decodeSealedSecret(parsed)
   }).pipe(Effect.scoped)

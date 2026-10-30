@@ -6,9 +6,11 @@ import { SNIPPETS, load } from "@/lib/catalog"
 
 const head = load(SNIPPETS.apiModuleHead)
 const tail = load(SNIPPETS.apiModuleTail)
+
 const api = {
   code: [head.code, "", "      // … Environment.bind + Container.define, see the section above …", "", tail.code].join("\n")
 }
+
 const prod = load(SNIPPETS.prodEnv)
 ---
 
@@ -108,15 +110,20 @@ const prod = load(SNIPPETS.prodEnv)
   class KonfigTypeDiagram extends HTMLElement {
     connectedCallback() {
       const svg = this.querySelector("[data-role='connectors']")
+
       if (!(svg instanceof SVGSVGElement)) return
+
       const draw = () => {
         const box = svg.getBoundingClientRect()
+
         if (box.width === 0) return
         svg.setAttribute("viewBox", `0 0 ${box.width} 32`)
+
         for (const part of PARTS) {
           const source = this.querySelector(`.mental-model-type-line [data-part='${part}']`)
           const target = this.querySelector(`[data-legend='${part}']`)
           const path = svg.querySelector(`[data-connector='${part}']`)
+
           if (!(source instanceof HTMLElement) || !(target instanceof HTMLElement) || !(path instanceof SVGPathElement)) continue
           const s = source.getBoundingClientRect()
           const t = target.getBoundingClientRect()
@@ -125,11 +132,14 @@ const prod = load(SNIPPETS.prodEnv)
           path.setAttribute("d", `M${x0} 0 C${x0} 18, ${x1} 14, ${x1} 32`)
         }
       }
+
       draw()
+
       if ("ResizeObserver" in window) new ResizeObserver(draw).observe(this)
       window.addEventListener("resize", draw)
       document.fonts?.ready.then(draw)
     }
   }
+
   if (!customElements.get("konfig-type-diagram")) customElements.define("konfig-type-diagram", KonfigTypeDiagram)
 </script>

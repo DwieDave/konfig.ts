@@ -9,6 +9,7 @@ export interface EnvEntryPathInput {
 export const envEntryPath = (input: EnvEntryPathInput): string => {
   const { cfg, envName, pathJoin } = input
   const envSpec = cfg.config.envs[envName]
+
   return envSpec === undefined
     ? pathJoin(cfg.configDir, cfg.config.root, "env", `${envName}.ts`)
     : pathJoin(cfg.configDir, cfg.config.root, envSpec.entry)

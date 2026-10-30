@@ -10,6 +10,7 @@ describe("no-banned-type-assertions", () => {
       expression: { type: "Identifier", name: "x" },
       typeAnnotation: { type: "TSAnyKeyword" }
     }
+
     const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
     expect(harness.reports).toHaveLength(1)
     expect(harness.reports[0]?.message).toContain("as any")
@@ -22,6 +23,7 @@ describe("no-banned-type-assertions", () => {
         expression: { type: "Identifier", name: "x" },
         typeAnnotation: { type: ann }
       }
+
       const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
       expect(harness.reports).toHaveLength(1)
     }
@@ -37,6 +39,7 @@ describe("no-banned-type-assertions", () => {
       },
       typeAnnotation: { type: "TSNumberKeyword" }
     }
+
     const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
     expect(harness.reports).toHaveLength(1)
     expect(harness.reports[0]?.message).toContain("Double type assertions")
@@ -48,6 +51,7 @@ describe("no-banned-type-assertions", () => {
       expression: { type: "Identifier", name: "x" },
       typeAnnotation: { type: "TSStringKeyword" }
     }
+
     const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
     expect(harness.reports).toHaveLength(0)
   })
@@ -58,6 +62,7 @@ describe("no-banned-type-assertions", () => {
       expression: { type: "Identifier", name: "x" },
       typeAnnotation: { type: "TSArrayType", elementType: { type: "TSAnyKeyword" } }
     }
+
     const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
     expect(harness.reports).toHaveLength(1)
     expect(harness.reports[0]?.message).toContain("as any")
@@ -76,6 +81,7 @@ describe("no-banned-type-assertions", () => {
         }
       }
     }
+
     const harness = runVisitor({ rule: noBannedTypeAssertions, event: "TSAsExpression", node: node })
     expect(harness.reports).toHaveLength(0)
   })

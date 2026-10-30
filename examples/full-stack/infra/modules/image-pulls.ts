@@ -21,6 +21,7 @@ export const defineImagePulls = Application.module({
         file: `${opts.sopsBase}/SopsSecret-ghcr-pull.yaml`
       })
     })
+
     return bound.manifest === undefined ? [] : [bound.manifest]
   }
 })

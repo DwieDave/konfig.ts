@@ -9,6 +9,7 @@ describe("no-node-child-process", () => {
       type: "ImportDeclaration",
       source: { type: "Literal", value: "node:child_process" }
     }
+
     const harness = runVisitor({ rule: noNodeChildProcess, event: "ImportDeclaration", node })
     expect(harness.reports).toHaveLength(1)
     expect(harness.reports[0]?.message).toContain("node:child_process")
@@ -19,6 +20,7 @@ describe("no-node-child-process", () => {
       type: "ImportDeclaration",
       source: { type: "Literal", value: "node:fs" }
     }
+
     const harness = runVisitor({ rule: noNodeChildProcess, event: "ImportDeclaration", node })
     expect(harness.reports).toHaveLength(0)
   })

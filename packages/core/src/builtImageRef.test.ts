@@ -29,6 +29,7 @@ describe("BuiltImageRef + Dep.Image", () => {
         Effect.map((ref) => ({ image: String(ref) })),
         Effect.provide(buildLayer)
       )
+
       expect(result.image).toBe("ghcr.io/example/worker:2.3.4")
     }))
 

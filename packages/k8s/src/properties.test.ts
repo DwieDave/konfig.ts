@@ -18,6 +18,7 @@ describe("hashSecretValues properties", () => {
     selector: ([key]) => key,
     maxLength: 6
   })
+
   const toValues = (pairs: ReadonlyArray<readonly [string, string]>) =>
     Object.fromEntries(pairs.map(([key, value]) => [key, Redacted.make(value)]))
 

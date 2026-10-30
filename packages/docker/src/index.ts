@@ -46,12 +46,19 @@ export {
 export type { ImageRef, NodeModulesLayout, PackageManager } from "./services/PackageManager"
 
 export { bun as bunPm } from "./services/pm/bun"
+
 export { npm as npmPm } from "./services/pm/npm"
+
 export { pnpm as pnpmPm, type PnpmOptions } from "./services/pm/pnpm"
+
 export { yarn as yarnPm, type YarnOptions } from "./services/pm/yarn"
+
 export type { Runtime, RuntimeImageInput } from "./services/Runtime"
+
 export { bun as bunRuntime } from "./services/runtime/bun"
+
 export { node as nodeRuntime } from "./services/runtime/node"
+
 export {
   allWorkspaces,
   type ClosureInput,
@@ -65,7 +72,9 @@ export {
 } from "./services/WorkspaceGraph"
 
 export { Docker } from "./Docker"
+
 export { buildIR, type BuildIRInput, lower, type LowerContext, prepareContext, validateSpec } from "./ir/lower"
+
 export { emit, type EmitInput, type EmittedDockerfiles } from "./render/emit"
 
 export {
@@ -78,4 +87,5 @@ export {
   type RenderHeaderInput,
   sha256Hex
 } from "./render/header"
+
 export { render } from "./render/Renderer"

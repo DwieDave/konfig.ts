@@ -11,6 +11,7 @@ const version = readCoreVersion()
 const effectLine = stats.effectVersion.replace(/\.\d+$/, "")
 
 const BUILT_ON = ["Effect", "Bun", "Argo CD", "Helm", "sops", "sealed-secrets", "external-secrets"] as const
+
 const STATS = [
   { label: "tests", value: String(stats.tests) },
   { label: "line coverage", value: `${Math.round(stats.lineCoverage)}%` },
@@ -179,25 +180,32 @@ const STATS = [
     connectedCallback() {
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
       const words = Array.from(this.querySelectorAll("[data-word]")).filter((el): el is HTMLElement => el instanceof HTMLElement)
+
       if (words.length < 2) return
       let index = 0
+
       const fit = (el: HTMLElement) => {
         this.style.width = `${el.scrollWidth}px`
       }
+
       const first = words[0]
+
       if (first !== undefined) fit(first)
       document.fonts?.ready.then(() => {
         const active = words[index]
+
         if (active !== undefined) fit(active)
       })
       window.addEventListener("resize", () => {
         const active = words[index]
+
         if (active !== undefined) fit(active)
       })
       this.#timer = setInterval(() => {
         const current = words[index]
         index = (index + 1) % words.length
         const next = words[index]
+
         if (current === undefined || next === undefined) return
         current.removeAttribute("data-active")
         current.setAttribute("data-leaving", "")
@@ -211,5 +219,6 @@ const STATS = [
       if (this.#timer !== undefined) clearInterval(this.#timer)
     }
   }
+
   if (!customElements.get("konfig-rotating-word")) customElements.define("konfig-rotating-word", KonfigRotatingWord)
 </script>

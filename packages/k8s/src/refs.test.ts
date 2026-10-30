@@ -15,11 +15,13 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
       const { EnvVar } = yield* Effect.promise(() => import("./env"))
       // @ts-expect-error — raw string for `ref` is not assignable to SecretRef.
       EnvVar.fromSecret({ name: "API_KEY", ref: "raw-string", key: "k" })
+
       const env = EnvVar.fromSecret({
         name: "API_KEY",
         ref: SecretRef.of("api-creds"),
         key: "k"
       })
+
       expect(env.valueFrom?.secretKeyRef?.name).toBe("api-creds")
     }))
 
@@ -37,17 +39,20 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
     Effect.gen(function*() {
       const { EnvVar } = yield* Effect.promise(() => import("./env"))
       const { Secret } = yield* Effect.promise(() => import("./identity"))
+
       const dbCreds = Secret.make({
         name: "db-creds",
         namespace: "app",
         stringData: { url: "u" }
       })
+
       const env = EnvVar.fromSecretForPod({
         name: "DATABASE_URL",
         ref: dbCreds.ref,
         key: "url",
         podNamespace: "app"
       })
+
       expect(env.valueFrom?.secretKeyRef).toEqual({
         name: "db-creds",
         key: "url"
@@ -60,11 +65,13 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
       Effect.gen(function*() {
         const { EnvVar } = yield* Effect.promise(() => import("./env"))
         const { Secret } = yield* Effect.promise(() => import("./identity"))
+
         const monCreds = Secret.make({
           name: "grafana",
           namespace: "monitoring",
           stringData: { token: "t" }
         })
+
         EnvVar.fromSecretForPod({
           name: "GRAFANA",
           // @ts-expect-error — SecretRef<*, *, "monitoring"> not assignable to SecretRef<*, *, "app">.
@@ -75,12 +82,14 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
 
         // Escape hatch wires it through, runtime is unchanged.
         const escaped = SecretRef.unsafeReNamespace(monCreds.ref)
+
         const env = EnvVar.fromSecretForPod({
           name: "GRAFANA",
           ref: escaped,
           key: "token",
           podNamespace: "app"
         })
+
         expect(env.valueFrom?.secretKeyRef?.name).toBe("grafana")
       })
   )
@@ -90,11 +99,13 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
       const { EnvVar } = yield* Effect.promise(() => import("./env"))
       // @ts-expect-error — raw string for `ref` is not assignable to ConfigMapRef.
       EnvVar.fromConfigMap({ name: "CFG", ref: "raw-string", key: "k" })
+
       const env = EnvVar.fromConfigMap({
         name: "CFG",
         ref: ConfigMapRef.of("cfg"),
         key: "k"
       })
+
       expect(env.valueFrom?.configMapKeyRef?.name).toBe("cfg")
     }))
 

@@ -10,6 +10,7 @@ const _runScript = (input: { readonly pkg: PackageInfo; readonly script: string 
     Effect.gen(function*() {
       const spawner = yield* ChildProcessSpawner
       yield* Console.log(`\n> ${input.pkg.name} ${input.script}`)
+
       const handle = yield* spawner.spawn(
         ChildProcess.make("bun", ["run", "--cwd", input.pkg.dir, input.script], {
           cwd: REPO_ROOT,
@@ -19,6 +20,7 @@ const _runScript = (input: { readonly pkg: PackageInfo; readonly script: string 
           extendEnv: true
         })
       )
+
       return Number(yield* handle.exitCode)
     })
   )
@@ -26,10 +28,12 @@ const _runScript = (input: { readonly pkg: PackageInfo; readonly script: string 
 const _runAll = (script: string) =>
   Effect.gen(function*() {
     const pkgs = topoOrder(yield* packageInfos).filter((p) => p.scripts.has(script))
+
     for (const pkg of pkgs) {
       const code = yield* _runScript({ pkg, script }).pipe(
         mapRepoError(`cannot spawn ${script} for ${pkg.name}`)
       )
+
       if (code !== 0) return yield* new RepoScriptError({ message: `${script} failed in ${pkg.name}` })
     }
   })

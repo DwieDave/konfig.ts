@@ -45,6 +45,7 @@ const defineApi = Module.dynamicNs({
   build: ({ name, namespace }, opts: { readonly image: string }) =>
     Effect.gen(function*() {
       const issuer = yield* Dep.Secret("oidc-issuer")
+
       return [
         {
           kind: "Deployment",
@@ -58,6 +59,7 @@ const defineApi = Module.dynamicNs({
 })
 
 const auth = defineAuth({ name: "auth-secrets", source: argoSrc("./apps/auth") })
+
 const api = defineApi({
   name: "api",
   namespace: "prod",
@@ -66,6 +68,7 @@ const api = defineApi({
 })
 
 void auth
+
 void api
 
 // ── bundle target ────────────────────────────────────────
@@ -80,4 +83,5 @@ const defineCertManager = Module.fixedNs({
 })
 
 const certManager = defineCertManager({ name: "cert-manager", version: "v1.14" })
+
 void certManager

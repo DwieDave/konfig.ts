@@ -16,7 +16,8 @@ export const noAny: Rule = {
   meta: {
     type: "problem",
     docs: {
-      description: "Ban the `any` type on values. `any` silently disables checking — use `unknown`, an Effect Schema, or a precise type. Type-level erasure (`type AnyX = Foo<any>`) and assertion-position `any` (handled by no-banned-type-assertions) are exempt."
+      description:
+        "Ban the `any` type on values. `any` silently disables checking — use `unknown`, an Effect Schema, or a precise type. Type-level erasure (`type AnyX = Foo<any>`) and assertion-position `any` (handled by no-banned-type-assertions) are exempt."
     }
   },
   create(context) {

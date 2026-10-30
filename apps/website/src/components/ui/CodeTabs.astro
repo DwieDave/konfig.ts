@@ -89,11 +89,13 @@ const uid = tabs.map((t) => t.id).join("-")
     connectedCallback() {
       const tabs = Array.from(this.querySelectorAll("[role='tab']")).filter((el): el is HTMLButtonElement => el instanceof HTMLButtonElement)
       const panels = Array.from(this.querySelectorAll("[role='tabpanel']")).filter((el): el is HTMLElement => el instanceof HTMLElement)
+
       const activate = (index: number, focus: boolean) => {
         tabs.forEach((tab, i) => {
           const selected = i === index
           tab.setAttribute("aria-selected", String(selected))
           tab.tabIndex = selected ? 0 : -1
+
           if (selected && focus) tab.focus()
         })
         panels.forEach((panel, i) => {
@@ -101,10 +103,12 @@ const uid = tabs.map((t) => t.id).join("-")
           else panel.removeAttribute("data-active")
         })
       }
+
       tabs.forEach((tab, i) => {
         tab.addEventListener("click", () => activate(i, false))
         tab.addEventListener("keydown", (e) => {
           const last = tabs.length - 1
+
           if (e.key === "ArrowRight") activate(i === last ? 0 : i + 1, true)
           else if (e.key === "ArrowLeft") activate(i === 0 ? last : i - 1, true)
           else return
@@ -113,5 +117,6 @@ const uid = tabs.map((t) => t.id).join("-")
       })
     }
   }
+
   if (!customElements.get("konfig-code-tabs")) customElements.define("konfig-code-tabs", KonfigCodeTabs)
 </script>

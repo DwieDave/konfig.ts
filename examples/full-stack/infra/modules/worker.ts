@@ -51,6 +51,7 @@ export const defineWorker = Application.module({
         ...bound.manifests,
         deployment
       ]
+
       return out
     })
 })

@@ -24,6 +24,7 @@ type ProbeInput = K8sContainer["readinessProbe"] | ProbeTarget<string>
 
 const _lowerProbe = (probe: ProbeInput): K8sContainer["readinessProbe"] => {
   if (probe === undefined) return undefined
+
   return {
     ...structuredClone(probe),
     httpGet: probe.httpGet === undefined ? undefined : {

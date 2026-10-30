@@ -17,6 +17,7 @@ describe("stripExportsMap", () => {
       dot,
       publishConfig: { exports: {} }
     })
+
     expect("publishConfig" in next).toBe(false)
   })
 

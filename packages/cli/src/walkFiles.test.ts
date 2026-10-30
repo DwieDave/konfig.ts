@@ -20,9 +20,11 @@ describe("walkFiles", () => {
           fsNode.writeFileSync(nodePath.join(root, "a", "b", f), "")
           fsNode.writeFileSync(nodePath.join(root, "skip", f), "")
         })
+
         const found = await Effect.runPromise(
           walkFiles({ dir: root, skipDir: ({ name }) => name === "skip" }).pipe(Effect.provide(NodeServices.layer))
         )
+
         fsNode.rmSync(root, { recursive: true })
         expect(found.sort()).toEqual(files.map((f) => nodePath.join(root, "a", "b", f)).sort())
       }),

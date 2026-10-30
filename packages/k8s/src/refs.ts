@@ -11,9 +11,13 @@ export type SecretRef<
   K extends string = string,
   Ns extends string = string
 > = SRef<N, K, Ns>
+
 export type ConfigMapRef<N extends string = string, K extends string = string> = CMRef<N, K>
+
 export type ServiceAccountRef<N extends string = string> = SARef<N>
+
 export type PvcRef<N extends string = string> = PRef<N>
+
 export type { ConfigMapRefName, PvcRefName, SecretRefName } from "@konfig.ts/core"
 
 export const SecretRef = {

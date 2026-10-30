@@ -1,4 +1,5 @@
 export { ExternalSecrets, type ExternalSecretsBackendOptions } from "./backend"
+
 export {
   type ExternalSecret,
   type ExternalSecretCreationPolicy,
@@ -10,4 +11,5 @@ export {
   type SecretStoreKind,
   type SecretStoreRef
 } from "./crd"
+
 export { type GoDuration } from "./duration"

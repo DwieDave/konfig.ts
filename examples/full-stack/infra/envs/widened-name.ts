@@ -15,9 +15,11 @@ const _ok = Application.define({
   source: src("api"),
   build: () => []
 })
+
 void _ok
 
 const dynamicName: string = Effect.runSync(Config.String("MY_APP_NAME").pipe(Config.withDefault("api")))
+
 const _widened = Application.define({
   // @ts-expect-error Application name must be a string literal — wrapper widened `Name` to `string`.
   name: dynamicName,
@@ -25,9 +27,11 @@ const _widened = Application.define({
   source: src("api"),
   build: () => []
 })
+
 void _widened
 
 const dynamicNs: string = Effect.runSync(Config.String("MY_NS").pipe(Config.withDefault("app")))
+
 const _widenedNs = Application.define({
   name: "api",
   // @ts-expect-error Application namespace must be a string literal.
@@ -35,6 +39,7 @@ const _widenedNs = Application.define({
   source: src("api"),
   build: () => []
 })
+
 void _widenedNs
 
 void Effect.succeed

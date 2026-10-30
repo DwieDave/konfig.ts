@@ -17,5 +17,6 @@ export const writeTree = (files: Files) =>
       fs.makeDirectory(`${dir}/${rel.split("/").slice(0, -1).join("/")}`, { recursive: true }).pipe(
         Effect.andThen(fs.writeFileString(`${dir}/${rel}`, content))
       ), { discard: true })
+
     return dir
   })

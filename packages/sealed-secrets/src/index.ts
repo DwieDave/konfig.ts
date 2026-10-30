@@ -1,5 +1,7 @@
 export { SealedSecrets, type SealedSecretsBackendOptions } from "./backend"
+
 export { type SealedSecret, type SealedSecretScope, type SealedSecretSpec, type SealedSecretTemplate } from "./crd"
+
 export {
   KubesealCertMissing,
   KubesealInvocationError,

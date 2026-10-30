@@ -4,8 +4,10 @@ import { Schema } from "effect"
 // Recipients flow into `sops --<kind> a,b,c` argv; must contain no comma or shell metachar.
 const _AGE_RECIPIENT = /^age1[0-9a-z]{58}$/
 const _AWS_KMS_ARN = /^arn:aws:kms:[a-z0-9-]+:[0-9]+:(?:key\/[0-9a-fA-F-]+|alias\/[A-Za-z0-9/_-]+)$/
+
 const _GCP_KMS_PATH =
   /^projects\/[A-Za-z0-9-]+\/locations\/[A-Za-z0-9-]+\/keyRings\/[A-Za-z0-9_-]+\/cryptoKeys\/[A-Za-z0-9_-]+(?:\/cryptoKeyVersions\/[0-9]+)?$/
+
 const _AZURE_KV_URL = /^https:\/\/[A-Za-z0-9-]+\.vault\.azure\.net\/keys\/[A-Za-z0-9-]+\/[A-Za-z0-9]+$/
 const _PGP_FINGERPRINT = /^[0-9A-Fa-f]{8,40}$/
 

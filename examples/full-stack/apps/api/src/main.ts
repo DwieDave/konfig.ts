@@ -11,6 +11,7 @@ const config = await Effect.runPromise(
         yield* Effect.logError(
           `api: check that every env var declared in apiEnv is set (HTTP_PORT, LOG_LEVEL, NODE_ENV, POD_NAME, DATABASE_*, S3_*, JWT_SIGNING_KEY)`
         )
+
         return process.exit(78)
       })
     )
@@ -25,9 +26,11 @@ Bun.serve({
   port,
   fetch(req) {
     const url = new URL(req.url)
+
     if (url.pathname === "/healthz") {
       return new Response("ok", { status: 200 })
     }
+
     return Response.json({
       service: "api",
       pod: podName,

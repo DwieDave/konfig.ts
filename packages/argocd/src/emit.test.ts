@@ -180,6 +180,7 @@ describe("syncPolicy merge (defaults + app both defined)", () => {
       ...appBase,
       syncPolicy: { automated: { prune: false } }
     })
+
     const withDefaults: AppOfApps.AppOfAppsDefaults = {
       ...defaults,
       syncPolicy: { automated: { selfHeal: true, allowEmpty: true } }
@@ -199,6 +200,7 @@ describe("syncPolicy merge (defaults + app both defined)", () => {
       ...appBase,
       syncPolicy: { retry: { limit: 3, backoff: { duration: "5s" } } }
     })
+
     const withDefaults: AppOfApps.AppOfAppsDefaults = {
       ...defaults,
       syncPolicy: { retry: { backoff: { factor: 2, maxDuration: "3m" } } }
@@ -217,6 +219,7 @@ describe("syncPolicy merge (defaults + app both defined)", () => {
       ...appBase,
       syncPolicy: { syncOptions: ["CreateNamespace=true"] }
     })
+
     const withDefaults: AppOfApps.AppOfAppsDefaults = {
       ...defaults,
       syncPolicy: { syncOptions: ["Validate=false"] }
@@ -263,6 +266,7 @@ describe("applicationCRFilename", () => {
       manifests: [],
       source: { repoURL: "", targetRevision: "", path: "" }
     })
+
     expect(applicationCRFilename(app)).toBe("Application-cert-manager.yaml")
   })
 
@@ -273,6 +277,7 @@ describe("applicationCRFilename", () => {
       manifests: [],
       source: { repoURL: "", targetRevision: "", path: "" }
     })
+
     expect(applicationCRFilename(app)).toBe("Application-sub-app-v2.yaml")
   })
 })

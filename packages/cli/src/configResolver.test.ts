@@ -50,6 +50,7 @@ describe("resolveConfig", () => {
 
       const failure = yield* Effect.flip(resolveConfig(root))
       expect(failure).toBeInstanceOf(ConfigNotFound)
+
       if (failure instanceof ConfigNotFound) {
         expect(failure._tag).toBe("ConfigNotFound")
       }
@@ -65,6 +66,7 @@ describe("resolveConfig", () => {
 
       const failure = yield* Effect.flip(resolveConfig(root))
       expect(failure).toBeInstanceOf(ConfigParseError)
+
       if (failure instanceof ConfigParseError) {
         expect(failure._tag).toBe("ConfigParseError")
         expect(failure.path).toBe(path.join(path.resolve(root), "konfig.json"))

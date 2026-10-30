@@ -10,6 +10,7 @@ import { buildSidebar, entryHref, entryLabel, entrySlug, flatten } from "@/lib/d
 
 export async function getStaticPaths() {
   const entries = await getCollection("docs")
+
   return entries.map((entry) => ({
     params: { slug: entrySlug(entry.id) },
     props: { entry, entries }

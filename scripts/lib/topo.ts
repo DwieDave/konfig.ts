@@ -13,6 +13,7 @@ const _step = (
 ) => {
   const doneNames = new Set(input.done.map((p) => p.name))
   const ready = input.pending.filter((pkg) => _isReady({ pkg, done: doneNames, known: input.known }))
+
   return ready.length === 0
     ? { pending: [], done: [...input.done, ...input.pending] }
     : { pending: input.pending.filter((p) => !ready.includes(p)), done: [...input.done, ...ready] }

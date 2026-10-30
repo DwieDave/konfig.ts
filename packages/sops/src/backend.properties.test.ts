@@ -29,6 +29,7 @@ describe("_assertEncrypted properties", () => {
         const exit = Effect.runSyncExit(
           _assertEncrypted({ secret: secret({ name: "a", namespace: "b", stringData }), label: "L" })
         )
+
         expect(Exit.isSuccess(exit)).toBe(true)
       })
     )
@@ -40,6 +41,7 @@ describe("_assertEncrypted properties", () => {
         const exit = Effect.runSyncExit(
           _assertEncrypted({ secret: secret({ name: "a", namespace: "b", stringData: { [k]: plain } }), label: "L" })
         )
+
         expect(Exit.isFailure(exit)).toBe(true)
       })
     )
@@ -56,6 +58,7 @@ describe("_restampIdentity properties", () => {
         const decoded = secret({ ...from, stringData: { k: "ENC[x" }, macOnly: true })
         const once = run(decoded, to)
         expect(Exit.isSuccess(once)).toBe(true)
+
         if (!Exit.isSuccess(once)) return
         const twice = run(once.value, to)
         expect(Exit.isSuccess(twice) && twice.value).toEqual(once.value)

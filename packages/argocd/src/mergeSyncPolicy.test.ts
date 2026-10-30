@@ -53,11 +53,13 @@ describe("_mergeSyncPolicy properties", () => {
   it("automated flags: app wins, defaults fill the gaps", () => {
     fc.assert(fc.property(definedPolicy, definedPolicy, (def, app) => {
       const merged = _mergeSyncPolicy({ def, app })?.automated
+
       const expected = def.automated === undefined
         ? app.automated
         : app.automated === undefined
         ? def.automated
         : { ...def.automated, ...app.automated }
+
       expect(merged).toEqual(expected)
     }))
   })
@@ -65,10 +67,13 @@ describe("_mergeSyncPolicy properties", () => {
   it("retry backoff is merged, undefined only when both are", () => {
     fc.assert(fc.property(definedPolicy, definedPolicy, (def, app) => {
       const merged = _mergeSyncPolicy({ def, app })?.retry
+
       if (def.retry === undefined || app.retry === undefined) {
         expect(merged).toBe(def.retry ?? app.retry)
+
         return
       }
+
       expect(merged?.limit).toBe(app.retry.limit ?? def.retry.limit)
       expect(merged?.backoff === undefined).toBe(def.retry.backoff === undefined && app.retry.backoff === undefined)
     }))

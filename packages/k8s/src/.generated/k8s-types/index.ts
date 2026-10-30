@@ -23,6 +23,7 @@ export type {
 } from "kubernetes-types/apps/v1"
 
 export type { CronJob, Job, JobSpec } from "kubernetes-types/batch/v1"
+
 export type {
   ConfigMap,
   Container,
@@ -43,7 +44,9 @@ export type {
   Volume,
   VolumeMount
 } from "kubernetes-types/core/v1"
+
 export type { ObjectMeta } from "kubernetes-types/meta/v1"
+
 export type {
   Ingress,
   IngressBackend,
@@ -55,4 +58,5 @@ export type {
   NetworkPolicyIngressRule,
   NetworkPolicyPeer
 } from "kubernetes-types/networking/v1"
+
 export type { ClusterRole, ClusterRoleBinding, Role, RoleBinding } from "kubernetes-types/rbac/v1"

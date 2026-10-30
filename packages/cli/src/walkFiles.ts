@@ -17,8 +17,11 @@ const _walkEntry = (input: WalkFilesInput & { readonly name: string }): Effect.E
     const path = yield* Path
     const full = path.join(input.dir, input.name)
     const stat = yield* _statOrNull(fs, full)
+
     if (stat?.type === "File") return [full]
+
     if (stat?.type !== "Directory" || input.skipDir?.({ name: input.name, full }) === true) return []
+
     return yield* walkFiles({ dir: full, skipDir: input.skipDir })
   })
 
@@ -27,5 +30,6 @@ export const walkFiles = (input: WalkFilesInput): Effect.Effect<string[], never,
     const fs = yield* FileSystem
     const names = yield* fs.readDirectory(input.dir).pipe(Effect.orElseSucceed((): string[] => []))
     const groups = yield* Effect.forEach(names, (name) => _walkEntry({ ...input, name }))
+
     return groups.flat()
   })

@@ -27,11 +27,13 @@ export const readBaselineDir = (baselineDir: string) =>
     const fs = yield* FileSystem
     const path = yield* Path
     const paths = (yield* walkFiles({ dir: baselineDir })).filter((p) => p.endsWith(".yaml"))
+
     const entries = yield* Effect.forEach(paths, (full) =>
       fs.readFileString(full).pipe(
         Effect.orElseSucceed(() => ""),
         Effect.map((content) => [path.relative(baselineDir, full), content] as const)
       ))
+
     return Object.fromEntries(entries)
   })
 
@@ -44,20 +46,27 @@ interface RunDiffInput {
 const _runDiff = ({ args, cfg, ctx }: RunDiffInput) =>
   Effect.gen(function*() {
     const path = yield* Path
+
     if (cfg.config.diff === undefined) {
       return yield* new DiffBaselineMissing({ env: args.env })
     }
+
     const rendered = yield* renderEnv({ cfg, envName: args.env, ctx })
     const baselineDirAbs = path.join(cfg.configDir, cfg.config.root, cfg.config.diff.baseline, args.env)
     const left = yield* readBaselineDir(baselineDirAbs)
+
     const right = Object.fromEntries(
       rendered.files.map((file) => [path.relative(rendered.outDirAbs, file.path), file.content])
     )
+
     const result = diffFiles({ left, right })
+
     if (hasDifferences(result)) {
       yield* Console.log(formatDiff({ result, format: args.format }))
+
       return yield* new DiffNonEmpty({ env: args.env })
     }
+
     yield* Console.log(`OK — env '${args.env}' matches baseline`)
   })
 

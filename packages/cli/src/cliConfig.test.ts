@@ -80,10 +80,12 @@ describe("resolveCliPaths", () => {
     Effect.gen(function*() {
       const path = yield* Path
       const base = _fakeConfig(path)
+
       const cfg: ResolvedKonfigConfig = {
         ...base,
         config: { ...base.config, helm: { cacheDir: "/var/cache/helm", minVersion: "3.20.0" } }
       }
+
       const paths = yield* resolveCliPaths(cfg)
       expect(paths.cacheDir).toBe(path.resolve("/var/cache/helm"))
     }).pipe(_withEnv({}), Effect.provide(NodeServices.layer)))

@@ -6,6 +6,7 @@ import { defineWorker } from "../modules/worker"
 
 const branch = "main"
 const rootPath = "./infra/k8s/manifests/broken"
+
 const src = (name: string) => ({
   repoURL: cluster.repositoryUrl,
   targetRevision: branch,
@@ -18,6 +19,7 @@ const api = defineApi({
   replicas: 1,
   sopsBase: "infra/secrets"
 })
+
 const worker = defineWorker({
   name: "worker",
   source: src("worker"),

@@ -10,6 +10,7 @@ describe("toObjectMeta", () => {
       const out = toObjectMeta({ name, labels, annotations })
       expect(out).toEqual({ name, labels, annotations })
       expect("namespace" in out).toBe(false)
+
       if (labels !== undefined) expect(out.labels).not.toBe(labels)
     }))
   })
@@ -18,7 +19,9 @@ describe("toObjectMeta", () => {
     fc.assert(fc.property(fc.string(), fc.string(), map, map, (name, namespace, labels, annotations) => {
       const out = toObjectMeta({ name, namespace, labels, annotations })
       expect(out).toEqual({ name, namespace, labels, annotations })
+
       if (labels !== undefined) expect(out.labels).not.toBe(labels)
+
       if (annotations !== undefined) expect(out.annotations).not.toBe(annotations)
     }))
   })
@@ -33,7 +36,9 @@ describe("toLabelsMeta", () => {
     fc.assert(fc.property(map, map, (labels, annotations) => {
       const out = toLabelsMeta({ labels, annotations })
       expect(out).toEqual({ labels, annotations })
+
       if (labels !== undefined) expect(out?.labels).not.toBe(labels)
+
       if (annotations !== undefined) expect(out?.annotations).not.toBe(annotations)
     }))
   })

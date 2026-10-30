@@ -39,5 +39,6 @@ export const loadHelmPaths = Effect.gen(function*() {
   const cfg = yield* resolveOptionalConfig
   const paths = yield* resolveCliPaths(cfg)
   yield* Helm.assertMinVersion(paths.minVersion)
+
   return paths
 })

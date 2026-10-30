@@ -17,10 +17,12 @@ describe("hashSecretValues", () => {
       salt: "prod/api",
       values: { url: Redacted.make("u"), password: Redacted.make("p") }
     })
+
     const b = hashSecretValues({
       salt: "prod/api",
       values: { url: Redacted.make("u"), password: Redacted.make("p") }
     })
+
     expect(a).toBe(b)
   })
 
@@ -29,10 +31,12 @@ describe("hashSecretValues", () => {
       salt: "prod/api",
       values: { url: Redacted.make("u"), password: Redacted.make("p") }
     })
+
     const b = hashSecretValues({
       salt: "prod/api",
       values: { password: Redacted.make("p"), url: Redacted.make("u") }
     })
+
     expect(a).toBe(b)
   })
 
@@ -71,6 +75,7 @@ describe("Secret.bind values service", () => {
       secret: dbCreds,
       source: SecretSource.literal({ data: { url: "u", password: "p" } })
     })
+
     expect(b.values).toBeDefined()
     expect(b.layer).toBeDefined()
   })
@@ -89,6 +94,7 @@ describe("Secret.bind values service", () => {
           data: { url: "postgres://x", password: "hunter2" }
         })
       })
+
       const v = yield* b.values!
       expect(Redacted.value(v.url)).toBe("postgres://x")
       expect(Redacted.value(v.password)).toBe("hunter2")
@@ -128,6 +134,7 @@ describe("Environment.bind valuesLayer", () => {
           }
         }
       })
+
       const dbV = yield* bound.members.db.values!
       const sV = yield* bound.members.session.values!
       expect(Redacted.value(dbV.url)).toBe("u")

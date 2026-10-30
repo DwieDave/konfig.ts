@@ -37,6 +37,7 @@ describe("Literal", () => {
         value: 8080,
         schema: Config.Port("PORT")
       })
+
       const v = yield* port
       expect(v).toBe(9090)
     }).pipe(
@@ -51,6 +52,7 @@ describe("Literal", () => {
       value: { ratio: 0.25 },
       serialize: (v) => `${v.ratio * 100}%`
     })
+
     expect(flag.serialized).toBe("25%")
   })
 

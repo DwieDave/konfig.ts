@@ -2,9 +2,11 @@ import { Context, Layer, type Redacted } from "effect"
 import { brand } from "./_cast"
 
 declare const NeedBrand: unique symbol
+
 export interface Need<K extends string, N extends string> {
   readonly [NeedBrand]: { readonly kind: K; readonly name: N }
 }
+
 export type Provide<K extends string, N extends string> = Need<K, N>
 
 declare const SecretRefBrand: unique symbol
@@ -26,12 +28,15 @@ export type SecretRef<
     readonly namespace: Ns
   }
 }
+
 export type ConfigMapRef<N extends string, K extends string = string> = string & {
   readonly [ConfigMapRefBrand]: { readonly name: N; readonly keys: K }
 }
+
 export type ServiceAccountRef<N extends string> = string & {
   readonly [ServiceAccountRefBrand]: N
 }
+
 export type PvcRef<N extends string> = string & {
   readonly [PvcRefBrand]: N
 }
@@ -45,11 +50,16 @@ export type BuiltImageRef<App extends string> = string & {
 export type BuiltImageRefApp<R> = R extends BuiltImageRef<infer App> ? App : never
 
 export type SecretRefName<R> = R extends SecretRef<infer N, infer _K, infer _Ns> ? N : never
+
 export type SecretRefKeys<R> = R extends SecretRef<infer _N, infer K, infer _Ns> ? K : never
+
 export type SecretRefNamespace<R> = R extends SecretRef<infer _N, infer _K, infer Ns> ? Ns
   : never
+
 export type ConfigMapRefName<R> = R extends ConfigMapRef<infer N, infer _K> ? N : never
+
 export type ConfigMapRefKeys<R> = R extends ConfigMapRef<infer _N, infer K> ? K : never
+
 export type PvcRefName<R> = R extends PvcRef<infer N> ? N : never
 
 const _service = <K extends string, N extends string, S>(input: {

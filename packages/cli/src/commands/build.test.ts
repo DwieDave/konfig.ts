@@ -133,6 +133,7 @@ describe("runBuild", () => {
         ..._cfgFor(root),
         config: { ..._cfgFor(root).config, cacheInclude: ["shared"] }
       }
+
       const ctx = RenderContext.make("prod")
 
       yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", verbose: false, noCache: false })

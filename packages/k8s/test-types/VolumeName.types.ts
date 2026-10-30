@@ -2,12 +2,15 @@ import type { DefinedPod, Volume as VolumeT, VolumeNamesOf } from "@konfig.ts/k8
 import { Container, Pod, Port, Volume } from "@konfig.ts/k8s"
 
 type Expect<T extends true> = T
+
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
 const cfg = Volume.empty({ name: "config" })
+
 type _CfgN = Expect<Equal<typeof cfg, VolumeT<"config">>>
 
 type Vs = readonly [VolumeT<"config">, VolumeT<"data">]
+
 type _Names = Expect<Equal<VolumeNamesOf<Vs>, "config" | "data">>
 
 const goodPod = Pod.define({
@@ -24,6 +27,7 @@ const goodPod = Pod.define({
     })
   ]
 })
+
 type _PodNames = Expect<Equal<typeof goodPod, DefinedPod<"config" | "data">>>
 
 const _typo = Pod.define({
@@ -50,6 +54,7 @@ const _otherPod = Pod.define({
     })
   ]
 })
+
 const _crossPod = Pod.define({
   volumes: [Volume.empty({ name: "config" })],
   containers: [
@@ -75,8 +80,11 @@ const _empty = Pod.define({
 })
 
 void _typo
+
 void _otherPod
+
 void _crossPod
+
 void _empty
 
 export type _Tests = readonly [_CfgN, _Names, _PodNames]

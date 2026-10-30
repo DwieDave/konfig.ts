@@ -20,6 +20,7 @@ describe("Application.define handle (Context.Tag + .layer)", () => {
 
       const program = Effect.gen(function*() {
         const app = yield* handle
+
         return app
       }).pipe(Effect.provide(handle.layer))
 
@@ -41,6 +42,7 @@ describe("Application.define handle (Context.Tag + .layer)", () => {
       const program = Effect.gen(function*() {
         const ns = yield* Dep.Namespace("foo-ns")
         const appName = yield* Dep.Application("layer-test")
+
         return { ns, appName }
       }).pipe(Effect.provide(handle.layer))
 

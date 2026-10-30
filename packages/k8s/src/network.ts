@@ -69,6 +69,7 @@ export const Service = {
         internalTrafficPolicy: input.internalTrafficPolicy
       }
     }
+
     return Manifest.make<K8sService>(() => Effect.succeed(resource))
   },
   fromContainer: <Ports extends string>(
@@ -117,6 +118,7 @@ export const Ingress = {
         defaultBackend: input.defaultBackend
       }
     }
+
     return Manifest.make<K8sIngress>(() => Effect.succeed(resource))
   },
   tls: (input: {

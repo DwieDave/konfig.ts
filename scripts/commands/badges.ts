@@ -36,6 +36,7 @@ export const RepoStats = Schema.Struct({
   effectVersion: Schema.String,
   packages: Schema.Finite
 })
+
 export type RepoStats = typeof RepoStats.Type
 
 export const makeStats = (input: {
@@ -71,6 +72,7 @@ const _readDecoded = <S extends Schema.Decoder<unknown>>(input: {
 }) =>
   Effect.gen(function*() {
     const json = yield* readJson(input.file)
+
     return yield* Schema.decodeEffect(input.schema)(json).pipe(
       mapRepoError(`unexpected ${input.what} shape in ${input.file}`)
     )
@@ -81,37 +83,46 @@ const _collectTotals = Effect.gen(function*() {
   let linesTotal = 0
   let linesCovered = 0
   let tests = 0
+
   for (const p of yield* coveragePackageNames) {
     const dir = path.join(REPO_ROOT, "packages", p, "coverage")
+
     const cov = yield* _readDecoded({
       schema: CoverageSummary,
       file: path.join(dir, "coverage-summary.json"),
       what: "coverage summary"
     })
+
     const results = yield* _readDecoded({
       schema: TestResults,
       file: path.join(dir, "test-results.json"),
       what: "test results"
     })
+
     linesTotal += cov.total.lines.total
     linesCovered += cov.total.lines.covered
     tests += results.numTotalTests
   }
+
   return { linesTotal, linesCovered, tests }
 })
 
 const _readEffectVersion = Effect.gen(function*() {
   const path = yield* Path
   const rootPkg = yield* readJson(path.join(REPO_ROOT, "package.json"))
+
   const catalog = yield* decodeField({
     schema: Schema.UndefinedOr(StringRecord),
     value: rootPkg.catalog,
     what: "root catalog"
   })
+
   const effectVersion = catalog?.effect
+
   if (effectVersion === undefined) {
     return yield* new RepoScriptError({ message: "no effect entry in the root catalog" })
   }
+
   return effectVersion
 })
 

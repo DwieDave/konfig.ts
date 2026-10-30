@@ -2,14 +2,19 @@ import type { Selector as SelectorT, SelectorLabels } from "@konfig.ts/k8s"
 import { Deployment, PodSet, Selector, Service } from "@konfig.ts/k8s"
 
 type Expect<T extends true> = T
+
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
 const apiPods = Selector.make({ app: "api", tier: "web" })
+
 type ApiLabels = SelectorLabels<typeof apiPods>
+
 type _ApiLabels = Expect<Equal<ApiLabels, { readonly app: "api"; readonly tier: "web" }>>
 
 const dbPods = Selector.make({ app: "postgres" })
+
 type DbLabels = SelectorLabels<typeof dbPods>
+
 type _DbLabels = Expect<Equal<DbLabels, { readonly app: "postgres" }>>
 
 type _NotAssignable = Expect<
@@ -50,8 +55,11 @@ const _okTrio = PodSet.define({
 const _wrongAssign: typeof apiPods = dbPods
 
 void _okDep
+
 void _okSvc
+
 void _okTrio
+
 void _wrongAssign
 
 export type _Tests = readonly [_ApiLabels, _DbLabels, _NotAssignable]

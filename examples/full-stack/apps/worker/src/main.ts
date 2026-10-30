@@ -11,6 +11,7 @@ const config = await Effect.runPromise(
         yield* Effect.logError(
           `worker: check that every env var declared in workerEnv is set (BATCH_SIZE, CONCURRENCY, NODE_ENV, POD_NAME, DATABASE_*)`
         )
+
         return process.exit(78)
       })
     )

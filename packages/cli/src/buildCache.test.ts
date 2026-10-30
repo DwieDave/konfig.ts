@@ -21,10 +21,12 @@ describe("computeOutputHash", () => {
       { path: "out/a.yaml", content: "kind: A\n" },
       { path: "out/b.yaml", content: "kind: B\n" }
     ]
+
     const b = [
       { path: "out/b.yaml", content: "kind: B\n" },
       { path: "out/a.yaml", content: "kind: A\n" }
     ]
+
     expect(computeOutputHash(a)).toBe(computeOutputHash(b))
   })
 
@@ -78,11 +80,13 @@ describe("computeInputHash: render-context sensitivity", () => {
         envName: "prod",
         ctx: RenderContext.makeFull({ env: "prod", k8sVersion: "1.30" })
       })
+
       const bumped = yield* computeInputHash({
         cfg,
         envName: "prod",
         ctx: RenderContext.makeFull({ env: "prod", k8sVersion: "1.31" })
       })
+
       const same = yield* computeInputHash({
         cfg,
         envName: "prod",
@@ -264,11 +268,13 @@ describe("computeInputHash: render-context sensitivity", () => {
         envName: "prod",
         ctx: RenderContext.make("prod")
       })
+
       const withCluster = yield* computeInputHash({
         cfg,
         envName: "prod",
         ctx: RenderContext.makeFull({ env: "prod", cluster: "eu-1" })
       })
+
       const withFlags = yield* computeInputHash({
         cfg,
         envName: "prod",
@@ -305,6 +311,7 @@ describe("readCacheEntry / writeCacheEntry", () => {
         fileCount: 3,
         timestamp: "2026-01-01T00:00:00.000Z"
       }
+
       yield* writeCacheEntry({ cfg, envName: "prod", ctx, entry: written })
 
       const read = yield* readCacheEntry({ cfg, envName: "prod", ctx })
@@ -324,6 +331,7 @@ describe("readCacheEntry / writeCacheEntry", () => {
         fileCount: 1,
         timestamp: "2026-01-01T00:00:00.000Z"
       }
+
       yield* writeCacheEntry({ cfg, envName: "prod", ctx: RenderContext.make("prod"), entry })
 
       const differentCtx = yield* readCacheEntry({
@@ -331,6 +339,7 @@ describe("readCacheEntry / writeCacheEntry", () => {
         envName: "prod",
         ctx: RenderContext.makeFull({ env: "prod", cluster: "eu-1" })
       })
+
       expect(differentCtx).toBeUndefined()
 
       const sameCtx = yield* readCacheEntry({ cfg, envName: "prod", ctx: RenderContext.make("prod") })
@@ -511,14 +520,19 @@ describe("input hash ordering invariance", () => {
       const infra = path.join(root, "infra")
       const names = ["a.txt", "b.txt", "c.txt", "d.txt"]
       const ctx = RenderContext.make("prod")
+
       const hashWithOrder = (order: ReadonlyArray<string>) =>
         Effect.gen(function*() {
           yield* fs.remove(infra, { recursive: true, force: true })
           yield* fs.makeDirectory(infra, { recursive: true })
+
           for (const name of order) yield* fs.writeFileString(path.join(infra, name), `content ${name}\n`)
+
           return yield* computeInputHash({ cfg: _cfgFor(root, ["infra/*.txt"]), envName: "prod", ctx })
         })
+
       const baseline = yield* hashWithOrder(names)
+
       for (const order of fc.sample(fc.shuffledSubarray(names, { minLength: names.length }), 12)) {
         expect(yield* hashWithOrder(order)).toBe(baseline)
       }

@@ -20,6 +20,7 @@ describe("no-silent-error-swallow", () => {
         }
       ]
     }
+
     const harness = runVisitor({ rule: noSilentErrorSwallow, event: "CallExpression", node })
     expect(harness.reports).toHaveLength(1)
   })
@@ -34,6 +35,7 @@ describe("no-silent-error-swallow", () => {
       },
       arguments: [{ type: "Identifier", name: "recover" }]
     }
+
     const harness = runVisitor({ rule: noSilentErrorSwallow, event: "CallExpression", node })
     expect(harness.reports).toHaveLength(0)
   })

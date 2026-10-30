@@ -61,6 +61,7 @@ const _webDeployment = <Cs extends ReadonlyArray<ContainerInput>>(
   // selectorLabels spread LAST so a colliding pod label can't desync spec.selector (zero endpoints).
   const podLabels = { ...input.deployment.podLabels, ...selectorLabels }
   const reloaderAnns = _reloaderAnnotations(input.reloader)
+
   return Deployment.make({
     name: input.name,
     namespace: input.namespace,
@@ -120,6 +121,7 @@ export const web = <const Cs extends ReadonlyArray<ContainerInput>>(
   }
 
   const ingress = _webIngress({ input, selectorLabels, ingress: input.ingress })
+
   return M.make((ctx) =>
     Effect.all([deployment.render(ctx), service.render(ctx), ingress.render(ctx)], {
       concurrency: "unbounded"
@@ -169,12 +171,15 @@ export const cron = (
   input: CronInput
 ): Manifest.Manifest<readonly [K8sServiceAccount, K8sCronJob]> => {
   const labels = { app: input.name, ...input.labels }
+
   const sa = ServiceAccount.make({
     name: input.name,
     namespace: input.namespace,
     labels,
     annotations: input.annotations
   })
+
   const cronJob = _cronJob(input, labels)
+
   return M.make((ctx) => Effect.all([sa.render(ctx), cronJob.render(ctx)], { concurrency: "unbounded" }))
 }
