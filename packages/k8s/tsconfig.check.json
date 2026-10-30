@@ -1,6 +1,6 @@
 {
-  "extends": ["./tsconfig.json", "../../tsconfig.check.base.json"],
-  "compilerOptions": { "rootDir": "." },
-  "include": ["./src/**/*.ts", "./test-types/**/*.ts"],
-  "exclude": ["./node_modules/**/*", "./dist/**/*"]
+  "extends": [
+    "./tsconfig.json",
+    "../../tsconfig.check.base.json"
+  ]
 }

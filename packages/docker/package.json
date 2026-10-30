@@ -50,15 +50,15 @@
     }
   },
   "scripts": {
-    "build": "tsdown ./src/index.ts --format=esm --target=node22 --sourcemap --clean --no-dts && tsc -p tsconfig.build.json",
-    "check": "tsc -p tsconfig.check.json --noEmit",
-    "test": "vitest run",
-    "lint": "oxlint",
+    "build": "bun ../../scripts/cli.ts pkg build",
+    "check": "bun ../../scripts/cli.ts pkg check",
+    "test": "bun ../../scripts/cli.ts pkg test",
+    "lint": "bun ../../scripts/cli.ts pkg lint",
     "lint:apply": "oxlint --fix",
     "prepublishOnly": "bun run build",
-    "prepack": "bun ../../scripts/cli.ts prepack-exports strip",
-    "postpack": "bun ../../scripts/cli.ts prepack-exports restore",
-    "test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
+    "prepack": "bun ../../scripts/cli.ts pkg prepack",
+    "postpack": "bun ../../scripts/cli.ts pkg postpack",
+    "test:coverage": "bun ../../scripts/cli.ts pkg test:coverage"
   },
   "dependencies": {
     "@konfig.ts/core": "workspace:*",

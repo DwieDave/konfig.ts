@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "${configDir}/dist",
+    "rootDir": "${configDir}",
+    "customConditions": [
+      "source"
+    ]
+  },
+  "include": [
+    "${configDir}/src/**/*.ts",
+    "${configDir}/src/.generated/**/*.ts",
+    "${configDir}/test-types/**/*.ts"
+  ],
+  "exclude": [
+    "${configDir}/node_modules/**/*",
+    "${configDir}/dist/**/*"
+  ]
+}

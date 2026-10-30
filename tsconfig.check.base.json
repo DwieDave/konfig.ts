@@ -6,5 +6,14 @@
     "declaration": false,
     "declarationMap": false,
     "sourceMap": false
-  }
+  },
+  "include": [
+    "${configDir}/src/**/*.ts",
+    "${configDir}/src/.generated/**/*.ts",
+    "${configDir}/test-types/**/*.ts"
+  ],
+  "exclude": [
+    "${configDir}/node_modules/**/*",
+    "${configDir}/dist/**/*"
+  ]
 }
