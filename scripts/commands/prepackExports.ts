@@ -1,8 +1,8 @@
-import { Console, Effect } from "effect"
+import { Console, Effect, Schema } from "effect"
 import { Argument, Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { parseJson, RepoScriptError } from "../lib/repo"
+import { decodeField, parseJson, RepoScriptError, StringRecord, UnknownRecord } from "../lib/repo"
 
 // npm publish ignores publishConfig.exports and src/ is excluded from files[], so the
 // bun/source conditions (pointing at ./src/index.ts for dev) must be stripped pre-publish.
@@ -16,9 +16,17 @@ const _strip = Effect.gen(function*() {
   const raw = yield* fs
     .readFileString(pkgJsonPath)
     .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot read ${pkgJsonPath}`, cause })))
-  const pkg = yield* parseJson(pkgJsonPath, raw)
-  const exportsMap = pkg.exports as Record<string, Record<string, string>> | undefined
-  const dot = exportsMap?.["."]
+  const pkg = yield* parseJson({ file: pkgJsonPath, text: raw })
+  const exportsMap = yield* decodeField({
+    schema: Schema.UndefinedOr(UnknownRecord),
+    value: pkg.exports,
+    what: `${pkgJsonPath} exports`
+  })
+  const dot = yield* decodeField({
+    schema: Schema.UndefinedOr(StringRecord),
+    value: exportsMap?.["."],
+    what: `${pkgJsonPath} exports["."]`
+  })
   if (dot === undefined) {
     yield* Console.error(`prepack-exports: ${pkg.name ?? pkgJsonPath} has no exports["."]; nothing to strip`)
     return
@@ -33,7 +41,13 @@ const _strip = Effect.gen(function*() {
   if (dot.import !== undefined) stripped.import = dot.import
   const next: Record<string, unknown> = { ...pkg, exports: { ...exportsMap, ".": stripped } }
 
-  const publishConfig = { ...(pkg.publishConfig as Record<string, unknown> | undefined) }
+  const publishConfig = {
+    ...(yield* decodeField({
+      schema: Schema.UndefinedOr(UnknownRecord),
+      value: pkg.publishConfig,
+      what: `${pkgJsonPath} publishConfig`
+    }))
+  }
   if ("exports" in publishConfig) {
     delete publishConfig.exports
     if (Object.keys(publishConfig).length === 0) {

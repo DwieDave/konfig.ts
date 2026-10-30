@@ -1,8 +1,10 @@
-import { Console, Effect } from "effect"
+import { Console, Effect, Stream } from "effect"
 import { Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { spawn } from "node:child_process"
+import type { PlatformError } from "effect/PlatformError"
+import { ChildProcess } from "effect/process"
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { availableParallelism } from "node:os"
 import { REPO_ROOT, RepoScriptError, testPackageNames } from "../lib/repo"
 
@@ -21,27 +23,32 @@ const _spawnArgsFor = (pkg: string) =>
     ? { cmd: "bunx", args: ["vitest", "run"], cwd: `${REPO_ROOT}/scripts` }
     : { cmd: "bun", args: ["run", "--cwd", `packages/${pkg}`, "test"], cwd: REPO_ROOT }
 
-const _run = (input: { readonly pkg: string; readonly summaryFile: string | undefined }) =>
-  Effect.callback<_RunResult, RepoScriptError>((resume) => {
-    const { args, cmd, cwd } = _spawnArgsFor(input.pkg)
-    const child = spawn(cmd, args, {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: input.summaryFile === undefined
-        ? process.env
-        : { ...process.env, GITHUB_STEP_SUMMARY: input.summaryFile }
-    })
-    const chunks: Array<Buffer> = []
-    child.stdout.on("data", (chunk) => chunks.push(chunk))
-    child.stderr.on("data", (chunk) => chunks.push(chunk))
-    child.on("error", (cause) => {
-      resume(Effect.fail(new RepoScriptError({ message: `cannot spawn tests for ${input.pkg}`, cause })))
-    })
-    child.on("close", (code) => {
-      resume(Effect.succeed({ pkg: input.pkg, output: Buffer.concat(chunks).toString("utf8"), code: code ?? 1 }))
-    })
-    return Effect.sync(() => child.kill())
+const _collect = (stream: Stream.Stream<Uint8Array, PlatformError>) => Stream.mkString(Stream.decodeText(stream))
+
+const _commandFor = (input: { readonly pkg: string; readonly summaryFile: string | undefined }) => {
+  const { args, cmd, cwd } = _spawnArgsFor(input.pkg)
+  return ChildProcess.make(cmd, args, {
+    cwd,
+    stdin: "ignore",
+    extendEnv: true,
+    env: input.summaryFile === undefined ? {} : { GITHUB_STEP_SUMMARY: input.summaryFile }
   })
+}
+
+const _run = (input: { readonly pkg: string; readonly summaryFile: string | undefined }) =>
+  Effect.scoped(
+    Effect.gen(function*() {
+      const spawner = yield* ChildProcessSpawner
+      const handle = yield* spawner.spawn(_commandFor(input))
+      const [code, out, err] = yield* Effect.all(
+        [handle.exitCode, _collect(handle.stdout), _collect(handle.stderr)],
+        { concurrency: "unbounded" }
+      )
+      return { pkg: input.pkg, output: out + err, code: Number(code) } satisfies _RunResult
+    })
+  ).pipe(
+    Effect.mapError((cause) => new RepoScriptError({ message: `cannot spawn tests for ${input.pkg}`, cause }))
+  )
 
 // Each child gets its own GITHUB_STEP_SUMMARY file; stitched under its package heading afterwards.
 const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFile: string | undefined }>) =>
@@ -83,16 +90,16 @@ export const testCommand = Command.make(
           .pipe(Effect.mapError((cause) => new RepoScriptError({ message: "cannot create summary temp dir", cause })))
         : undefined
 
-      const results = yield* Effect.all(
-        packages.map((pkg) =>
+      const results = yield* Effect.forEach(
+        packages,
+        (pkg) =>
           Effect.gen(function*() {
             const summaryFile = tmpDir === undefined ? undefined : path.join(tmpDir, `${pkg}.md`)
             const result = yield* _run({ pkg, summaryFile })
             const label = pkg === _SCRIPTS_PSEUDO_PACKAGE ? pkg : `@konfig.ts/${pkg}`
             yield* Console.log(`\n📦 ${label}\n${result.output}`)
             return { ...result, summaryFile }
-          })
-        ),
+          }),
         { concurrency }
       )
 

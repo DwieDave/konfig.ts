@@ -3,34 +3,34 @@ import { Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { renderBadge } from "../lib/badge"
-import { coveragePackageNames, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
+import { coveragePackageNames, decodeField, readJson, REPO_ROOT, RepoScriptError, StringRecord } from "../lib/repo"
 
 const CoverageSummary = Schema.Struct({
   total: Schema.Struct({
     lines: Schema.Struct({
-      total: Schema.Number,
-      covered: Schema.Number
+      total: Schema.Finite,
+      covered: Schema.Finite
     })
   })
 })
 
 const TestResults = Schema.Struct({
-  numTotalTests: Schema.Number,
-  numPassedTests: Schema.Number
+  numTotalTests: Schema.Finite,
+  numPassedTests: Schema.Finite
 })
 
 /** Shape of `.github/badges/stats.json`, consumed by apps/website at build time. */
 export const RepoStats = Schema.Struct({
-  tests: Schema.Number,
-  lineCoverage: Schema.Number,
-  linesCovered: Schema.Number,
-  linesTotal: Schema.Number,
+  tests: Schema.Finite,
+  lineCoverage: Schema.Finite,
+  linesCovered: Schema.Finite,
+  linesTotal: Schema.Finite,
   effectVersion: Schema.String,
-  packages: Schema.Number
+  packages: Schema.Finite
 })
 export type RepoStats = typeof RepoStats.Type
 
-export const _makeStats = (input: {
+export const makeStats = (input: {
   readonly tests: number
   readonly linesCovered: number
   readonly linesTotal: number
@@ -86,7 +86,11 @@ export const badgesCommand = Command.make(
       }
 
       const rootPkg = yield* readJson(path.join(REPO_ROOT, "package.json"))
-      const catalog = rootPkg.catalog as Record<string, string> | undefined
+      const catalog = yield* decodeField({
+        schema: Schema.UndefinedOr(StringRecord),
+        value: rootPkg.catalog,
+        what: "root catalog"
+      })
       const effectVersion = catalog?.effect
       if (effectVersion === undefined) {
         return yield* new RepoScriptError({ message: "no effect entry in the root catalog" })
@@ -113,7 +117,7 @@ export const badgesCommand = Command.make(
 
       // Machine-readable copy of the same numbers, consumed by apps/website at build time.
       const packages = (yield* coveragePackageNames).length
-      const stats = _makeStats({ tests, linesCovered, linesTotal, effectVersion, packages })
+      const stats = makeStats({ tests, linesCovered, linesTotal, effectVersion, packages })
       yield* _writeBadge({ file: path.join(outDir, "stats.json"), svg: `${JSON.stringify(stats, null, 2)}\n` })
 
       yield* Console.log(`line coverage ${pct.toFixed(1)}% (${linesCovered}/${linesTotal})`)

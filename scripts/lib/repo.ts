@@ -10,7 +10,7 @@ export class RepoScriptError extends Data.TaggedError("RepoScriptError")<{
   readonly cause?: unknown
 }> {}
 
-export const PackageJson = Schema.StructWithRest(
+const PackageJson = Schema.StructWithRest(
   Schema.Struct({
     name: Schema.optional(Schema.String),
     version: Schema.optional(Schema.String),
@@ -19,13 +19,23 @@ export const PackageJson = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)]
 )
 
-export type PackageJson = typeof PackageJson.Type
+type PackageJson = typeof PackageJson.Type
 
 const _JsonPackage = Schema.fromJsonString(PackageJson)
 
-export const parseJson = (file: string, text: string) =>
-  Schema.decodeEffect(_JsonPackage)(text).pipe(
-    Effect.mapError((cause) => new RepoScriptError({ message: `cannot parse ${file}`, cause }))
+export const parseJson = (input: { readonly file: string; readonly text: string }) =>
+  Schema.decodeEffect(_JsonPackage)(input.text).pipe(
+    Effect.mapError((cause) => new RepoScriptError({ message: `cannot parse ${input.file}`, cause }))
+  )
+
+export const StringRecord = Schema.Record(Schema.String, Schema.String)
+export const UnknownRecord = Schema.Record(Schema.String, Schema.Unknown)
+
+export const decodeField = <S extends Schema.Decoder<unknown>>(
+  input: { readonly schema: S; readonly value: unknown; readonly what: string }
+) =>
+  Schema.decodeUnknownEffect(input.schema)(input.value).pipe(
+    Effect.mapError((cause) => new RepoScriptError({ message: `unexpected shape for ${input.what}`, cause }))
   )
 
 export const readJson = (file: string) =>
@@ -34,7 +44,7 @@ export const readJson = (file: string) =>
     const text = yield* fs
       .readFileString(file)
       .pipe(Effect.mapError((cause) => new RepoScriptError({ message: `cannot read ${file}`, cause })))
-    return yield* parseJson(file, text)
+    return yield* parseJson({ file, text })
   })
 
 /** Packages without a test:coverage script, skipped only where coverage output is read. */
