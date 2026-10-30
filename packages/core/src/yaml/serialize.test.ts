@@ -3,7 +3,7 @@ import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import * as YAML from "yaml"
 import { unsafeCoerce } from "../_cast"
-import { filenameFor, serialize } from "./serialize"
+import { filenameFor, FilenameInputError, serialize } from "./serialize"
 
 type _ParseOptions = YAML.ParseOptions & YAML.DocumentOptions & YAML.SchemaOptions
 
@@ -312,11 +312,11 @@ describe("filenameFor (FR-2.5)", () => {
   })
 
   it("throws when kind is missing", () => {
-    expect(() => filenameFor({ metadata: { name: "x" } })).toThrow()
+    expect(() => filenameFor({ metadata: { name: "x" } })).toThrow(FilenameInputError)
   })
 
   it("throws when metadata.name is missing", () => {
-    expect(() => filenameFor({ kind: "Pod", metadata: {} })).toThrow()
+    expect(() => filenameFor({ kind: "Pod", metadata: {} })).toThrow(FilenameInputError)
   })
 })
 

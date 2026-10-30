@@ -1,4 +1,4 @@
-import { Predicate, Schema } from "effect"
+import { Data, Predicate, Schema } from "effect"
 import * as YAML from "yaml"
 import { isRecord } from "../guards"
 import type { YamlRecord } from "./record"
@@ -149,6 +149,14 @@ const _finish = ({ text, trailingNewline }: _FinishInput): string => {
 
 const _isNonEmpty = Schema.is(Schema.NonEmptyString)
 
+export class FilenameInputError extends Data.TaggedError("FilenameInputError")<{
+  readonly reason: string
+}> {
+  override get message() {
+    return `filenameFor: ${this.reason}`
+  }
+}
+
 // Caller invariant: kind and metadata.name must be non-empty strings (validate/decode first).
 // Throws synchronously as a defect — deliberately not routed through AnyRenderError.
 export const filenameFor = (resource: {
@@ -160,11 +168,11 @@ export const filenameFor = (resource: {
   const namespace = resource.metadata?.namespace
 
   if (!_isNonEmpty(kind)) {
-    throw new Error(`filenameFor: resource has no string kind`)
+    throw new FilenameInputError({ reason: "resource has no string kind" })
   }
 
   if (!_isNonEmpty(name)) {
-    throw new Error(`filenameFor: resource '${kind}' has no metadata.name`)
+    throw new FilenameInputError({ reason: `resource '${kind}' has no metadata.name` })
   }
 
   const suffix = _isNonEmpty(namespace) ? `@${_sanitizeNameForFilename(namespace)}` : ""
