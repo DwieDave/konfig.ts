@@ -1,5 +1,6 @@
 import { Effect, type Layer } from "effect"
 import { unsafeCoerce } from "./_cast"
+import { liftEffect } from "./lift"
 import type { AnyRenderError } from "./RenderError"
 
 // Forces name/namespace fields to stay literal: the dep graph keys providers by literal
@@ -32,10 +33,6 @@ export interface BuildContext<Ns extends string = string> {
 export type BuildResult<A = unknown, R = never> =
   | Effect.Effect<ReadonlyArray<A>, AnyRenderError, R>
   | ReadonlyArray<A>
-
-const _liftBuild = <A, R>(
-  result: BuildResult<A, R>
-): Effect.Effect<ReadonlyArray<A>, AnyRenderError, R> => Effect.isEffect(result) ? result : Effect.succeed(result)
 
 // HKT encoding: each backend maps (_Name, _Ns, _R, _Extra) to its native handle type.
 export interface HandleKind {
@@ -132,7 +129,7 @@ export const fixedNs = <
         ...args,
         name: args.name,
         namespace: asLiteralName(namespace),
-        build: _liftBuild(buildResult),
+        build: liftEffect(buildResult),
         ...(provides !== undefined ? { provides } : {})
       },
       "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
@@ -184,7 +181,7 @@ export const dynamicNs = <
       {
         ...extraConfig,
         ...args,
-        build: _liftBuild(buildResult),
+        build: liftEffect(buildResult),
         ...(provides !== undefined ? { provides } : {})
       },
       "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"

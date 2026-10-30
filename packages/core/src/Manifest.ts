@@ -5,6 +5,7 @@ import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import type * as Scope from "effect/Scope"
 import { unsafeCoerce } from "./_cast"
 import { isRecord } from "./guards"
+import { liftEffect } from "./lift"
 import type { RenderContext } from "./RenderContext"
 import { type AnyRenderError, EmbedYamlReadError } from "./RenderError"
 
@@ -37,10 +38,7 @@ export const make = <A>(run: MakeRun<A>): Manifest<A> => ({
     variance,
     "phantom variance witness — A only appears in covariant position"
   ),
-  render: (ctx) => {
-    const result = run(ctx)
-    return Effect.isEffect(result) ? result : Effect.succeed(result)
-  }
+  render: (ctx) => liftEffect<A, AnyRenderError, RenderServices>(run(ctx))
 })
 
 export const RENDER_CONCURRENCY = 4
@@ -95,6 +93,11 @@ export interface ParsedDoc {
   readonly value: unknown
   readonly origin?: string
 }
+
+export const isRawYaml = (u: unknown): u is RawYaml =>
+  isRecord(u) && u._tag === "RawYaml" && typeof u.content === "string"
+
+export const isParsedDoc = (u: unknown): u is ParsedDoc => isRecord(u) && u._tag === "ParsedDoc" && "value" in u
 
 export const embedYaml = (source: EmbedYamlSource): Manifest<RawYaml> =>
   make<RawYaml>((_ctx) => {

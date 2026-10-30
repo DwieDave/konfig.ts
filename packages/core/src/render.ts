@@ -1,9 +1,9 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
-import { parseYamlAll } from "./diff"
 import type * as Manifest from "./Manifest"
 import { RenderContext } from "./RenderContext"
 import type { AnyRenderError } from "./RenderError"
+import { unwrapDocs } from "./unwrapDocs"
 import * as Yaml from "./yaml"
 
 export interface RenderOptions<RIn = never, E = never> {
@@ -47,15 +47,6 @@ const _isPresent = (doc: unknown): boolean => doc !== null && doc !== undefined
 
 const _flatten = (rendered: unknown): ReadonlyArray<unknown> => Array.isArray(rendered) ? rendered : [rendered]
 
-// Helm.release yields ParsedDoc wrappers and Manifest.embedYaml a RawYaml one;
-// unwrap both so the output is the documents, not the wrapper objects.
-const _unwrapDocs = (doc: unknown): ReadonlyArray<unknown> => {
-  if (doc === null || typeof doc !== "object" || !("_tag" in doc)) return [doc]
-  if (doc._tag === "ParsedDoc" && "value" in doc) return [doc.value]
-  if (doc._tag === "RawYaml" && "content" in doc && typeof doc.content === "string") return parseYamlAll(doc.content)
-  return [doc]
-}
-
 export interface RenderAllYamlEffectInput {
   // Defaults to RenderContext.make("prod").
   readonly ctx?: RenderContext
@@ -72,7 +63,7 @@ export const renderAllYamlEffect = (
     const docs: Array<string> = []
     for (const m of input.manifests) {
       const rendered = yield* m.render(ctx)
-      for (const doc of _flatten(rendered).flatMap(_unwrapDocs).filter(_isPresent)) {
+      for (const doc of _flatten(rendered).flatMap(unwrapDocs).filter(_isPresent)) {
         docs.push(Yaml.serialize({ value: doc }))
       }
     }

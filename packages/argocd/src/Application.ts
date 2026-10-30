@@ -1,18 +1,5 @@
-import { type AnyRenderError, Dep, Module, unsafeCoerce } from "@konfig.ts/core"
+import { type AnyRenderError, attachLayerToTag, Dep, liftBuild, Module, unsafeCoerce } from "@konfig.ts/core"
 import { type Context, Effect, Layer } from "effect"
-
-// Mutate-attach `layer` to the Context.Tag so yield* and .layer share one
-// reference; the sole unsafe cast in the dep-graph machinery — kept covered
-// by Application.test.ts.
-const _attachLayerToTag = <
-  Tag extends object,
-  Out,
-  Err,
-  In
->(
-  tag: Tag,
-  layer: Layer.Layer<Out, Err, In>
-): Tag & { readonly layer: Layer.Layer<Out, Err, In> } => Object.assign(tag, { layer })
 
 export interface ArgoSource {
   readonly repoURL: string
@@ -54,17 +41,7 @@ export type Any = Application
 // that into a compile error instead.
 export type LiteralName<T extends string> = Module.LiteralName<T>
 
-export interface ApplicationMakeOptions {
-  readonly name: string
-  readonly namespace: string
-  readonly manifests: ReadonlyArray<unknown>
-  readonly source: ArgoSource
-  readonly project?: string
-  readonly syncPolicy?: SyncPolicy
-  readonly annotations?: Readonly<Record<string, string>>
-}
-
-export const make = (opts: ApplicationMakeOptions): Application => ({
+export const make = (opts: Application): Application => ({
   name: opts.name,
   namespace: opts.namespace,
   manifests: opts.manifests,
@@ -114,14 +91,7 @@ const _ownsLayer = <Name extends string, Ns extends string>(
   name: Name,
   namespace: Ns
 ): Layer.Layer<Dep.Provide<"Application", Name> | Dep.Provide<"Namespace", Ns>> =>
-  Layer.mergeAll(
-    Layer.succeed(Dep.Application(name))(name),
-    Layer.succeed(Dep.Namespace(namespace))(namespace)
-  )
-
-const _buildEffect = <R>(
-  build: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> | (() => ReadonlyArray<unknown>)
-): Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> => Effect.isEffect(build) ? build : Effect.sync(build)
+  Layer.mergeAll(Dep.provideApplication(name), Dep.provideNamespace(namespace))
 
 const _appLayer = <Name extends string, Ns extends string, R, Extra>(
   tag: Context.Service<Dep.Need<"App", Name>, Application>,
@@ -130,7 +100,7 @@ const _appLayer = <Name extends string, Ns extends string, R, Extra>(
 ): Layer.Layer<Dep.Need<"App", Name>, AnyRenderError, R> =>
   Layer.effect(
     tag,
-    _buildEffect(opts.build).pipe(
+    liftBuild(opts.build).pipe(
       Effect.map((manifests) =>
         make({
           name: names.name,
@@ -145,6 +115,15 @@ const _appLayer = <Name extends string, Ns extends string, R, Extra>(
     )
   )
 
+type DefinedHandle<Name extends string, Ns extends string, R, Extra> = ApplicationHandle<
+  Name,
+  | Dep.Provide<"App", Name>
+  | Dep.Provide<"Application", Name>
+  | Dep.Provide<"Namespace", Ns>
+  | Extra,
+  Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
+>
+
 export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["define"] = <
   const Name extends string,
   const Ns extends string,
@@ -152,14 +131,7 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
   Extra = never
 >(
   opts: ApplicationDefineOptions<Name, Ns, R, Extra>
-): ApplicationHandle<
-  Name,
-  | Dep.Provide<"App", Name>
-  | Dep.Provide<"Application", Name>
-  | Dep.Provide<"Namespace", Ns>
-  | Extra,
-  Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
-> => {
+): DefinedHandle<Name, Ns, R, Extra> => {
   const names: { readonly name: Name; readonly namespace: Ns } = {
     name: opts.name,
     namespace: opts.namespace
@@ -173,16 +145,10 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
 
   const layer = appLayer.pipe(Layer.provideMerge(internalLayer))
 
-  return unsafeCoerce<
-    ApplicationHandle<
-      Name,
-      | Dep.Provide<"App", Name>
-      | Dep.Provide<"Application", Name>
-      | Dep.Provide<"Namespace", Ns>
-      | Extra,
-      Exclude<R, Dep.Need<"Application", Name> | Dep.Need<"Namespace", Ns> | Extra>
-    >
-  >(_attachLayerToTag(tag, layer), "narrow generic ApplicationHandle from the attachLayerToTag helper's loose Tag arg")
+  return unsafeCoerce<DefinedHandle<Name, Ns, R, Extra>>(
+    attachLayerToTag({ tag, layer }),
+    "narrow generic ApplicationHandle from the attachLayerToTag helper's loose Tag arg"
+  )
 }
 
 export const target: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs> = { define }

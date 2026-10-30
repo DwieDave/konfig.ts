@@ -2,14 +2,10 @@ import { type Context, Effect, Layer } from "effect"
 import { unsafeCoerce } from "./_cast"
 import * as Compose from "./Compose"
 import * as Dep from "./deps"
+import { attachLayerToTag, liftBuild } from "./lift"
 import type * as CoreManifest from "./Manifest"
 import type * as Module from "./Module"
 import type { AnyRenderError } from "./RenderError"
-
-const _attachLayerToTag = <Tag extends object, Out, Err, In>(
-  tag: Tag,
-  layer: Layer.Layer<Out, Err, In>
-): Tag & { readonly layer: Layer.Layer<Out, Err, In> } => Object.assign(tag, { layer })
 
 export interface Bundle {
   readonly name: string
@@ -17,13 +13,7 @@ export interface Bundle {
   readonly manifests: ReadonlyArray<unknown>
 }
 
-export interface BundleMakeOptions {
-  readonly name: string
-  readonly namespace?: string
-  readonly manifests: ReadonlyArray<unknown>
-}
-
-export const make = (opts: BundleMakeOptions): Bundle => ({
+export const make = (opts: Bundle): Bundle => ({
   name: opts.name,
   manifests: opts.manifests,
   ...(opts.namespace !== undefined ? { namespace: opts.namespace } : {})
@@ -88,13 +78,11 @@ export const define = <
 
   const nsLayer = namespace === undefined
     ? Layer.empty
-    : Layer.succeed(Dep.Namespace(namespace))(namespace)
+    : Dep.provideNamespace(namespace)
 
   const internalLayer = opts.provides !== undefined ? Layer.mergeAll(nsLayer, opts.provides) : nsLayer
 
-  const buildEffect: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> = Effect.isEffect(opts.build)
-    ? opts.build
-    : Effect.sync(opts.build)
+  const buildEffect: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> = liftBuild(opts.build)
 
   const bundleLayer = Layer.effect(
     tag,
@@ -120,7 +108,7 @@ export const define = <
       Exclude<R, _NsExcludes<Ns> | Extra>
     >
   >(
-    _attachLayerToTag(tag, layer),
+    attachLayerToTag({ tag, layer }),
     "narrow generic BundleHandle from the attachLayerToTag helper's loose Tag arg"
   )
 }

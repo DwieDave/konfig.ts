@@ -77,8 +77,10 @@ export {
   KONFIG_HELM_MIN_VERSION_ENV,
   KONFIG_HELM_TIMEOUT_ENV
 } from "./konfigDefaults"
+export { attachLayerToTag, liftBuild, liftEffect } from "./lift"
 export type { EmbedYamlSource, ParsedDoc, RawYaml } from "./Manifest"
 export * as Manifest from "./Manifest"
+export { isParsedDoc, isRawYaml } from "./Manifest"
 export * as Module from "./Module"
 export {
   render,
@@ -111,4 +113,5 @@ export {
   runProcessString,
   type RunProcessStringOptions
 } from "./subprocess"
+export { unwrapDocs } from "./unwrapDocs"
 export * as Yaml from "./yaml"
