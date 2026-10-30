@@ -1,6 +1,6 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/worker/docker.ts
-# hash: sha256:611463d0a03c36fc8232062bdc033f9639d00cf34c47ffb5ea28ec92d905a459
+# hash: sha256:591790b889fd6ed406dc783b5be56cbab2313171a53c5554fbf323583131d2af
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -22,7 +22,8 @@ COPY packages/oxc/package.json ./packages/oxc/
 COPY packages/sealed-secrets/package.json ./packages/sealed-secrets/
 COPY packages/sops/package.json ./packages/sops/
 COPY apps/website/package.json ./apps/website/
-RUN bun install --ignore-scripts
+RUN bun install --frozen-lockfile --ignore-scripts
+RUN mkdir -p packages/core/node_modules packages/env/node_modules examples/full-stack/shared/env-contracts/node_modules packages/docker/node_modules examples/full-stack/apps/worker/node_modules
 
 FROM base AS builder
 WORKDIR /app
@@ -30,6 +31,7 @@ COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/packages/core/node_modules /app/packages/core/node_modules
 COPY --from=deps /app/packages/env/node_modules /app/packages/env/node_modules
 COPY --from=deps /app/examples/full-stack/shared/env-contracts/node_modules /app/examples/full-stack/shared/env-contracts/node_modules
+COPY --from=deps /app/packages/docker/node_modules /app/packages/docker/node_modules
 COPY --from=deps /app/examples/full-stack/apps/worker/node_modules /app/examples/full-stack/apps/worker/node_modules
 COPY packages/core ./packages/core
 COPY packages/env ./packages/env
@@ -60,16 +62,21 @@ COPY apps/website/package.json ./apps/website/
 RUN bun install --ignore-scripts --frozen-lockfile --production --filter @example/worker
 RUN rm -rf '/app/node_modules/typescript'
 RUN rm -rf '/app/node_modules/.bun/typescript@'*
+RUN mkdir -p packages/core/node_modules packages/env/node_modules examples/full-stack/shared/env-contracts/node_modules examples/full-stack/apps/worker/node_modules
+
+FROM builder AS sources
+WORKDIR /app
+RUN rm -rf /app/packages/core/node_modules /app/packages/env/node_modules /app/examples/full-stack/shared/env-contracts/node_modules /app/examples/full-stack/apps/worker/node_modules
 
 FROM base AS runner
-WORKDIR /app/apps/worker
+WORKDIR /app/examples/full-stack/apps/worker
 RUN addgroup -S -g 1001 app && adduser -S -u 1001 -G app app
 ENV NODE_ENV=production
 COPY --from=prod-deps --chown=app:app /app/node_modules /app/node_modules
-COPY --from=builder --chown=app:app /app/packages/core /app/packages/core
-COPY --from=builder --chown=app:app /app/packages/env /app/packages/env
-COPY --from=builder --chown=app:app /app/examples/full-stack/shared/env-contracts /app/examples/full-stack/shared/env-contracts
-COPY --from=builder --chown=app:app /app/examples/full-stack/apps/worker /app/examples/full-stack/apps/worker
+COPY --from=sources --chown=app:app /app/packages/core /app/packages/core
+COPY --from=sources --chown=app:app /app/packages/env /app/packages/env
+COPY --from=sources --chown=app:app /app/examples/full-stack/shared/env-contracts /app/examples/full-stack/shared/env-contracts
+COPY --from=sources --chown=app:app /app/examples/full-stack/apps/worker /app/examples/full-stack/apps/worker
 COPY --from=prod-deps --chown=app:app /app/packages/core/node_modules /app/packages/core/node_modules
 COPY --from=prod-deps --chown=app:app /app/packages/env/node_modules /app/packages/env/node_modules
 COPY --from=prod-deps --chown=app:app /app/examples/full-stack/shared/env-contracts/node_modules /app/examples/full-stack/shared/env-contracts/node_modules

@@ -5,7 +5,7 @@ import { Docker } from "@konfig.ts/docker"
 export default Docker.app({
   runner: {
     production: true,
-    workdir: "/app/apps/worker",
+    workdir: "/app/examples/full-stack/apps/worker",
     copy: [Docker.copy.workspaceSourceAll()],
     cmd: ["bun", "run", "src/main.ts"],
     removePaths: ["/app/node_modules/typescript", "/app/node_modules/.bun/typescript@*"]

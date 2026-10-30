@@ -1,6 +1,6 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/worker/docker.ts
-# hash: sha256:c692493d11b5efe073e6c020fba431ad990229df2f942f1657493253db2af3d6
+# hash: sha256:b917c3d19d3dc7c318f4043411502c20f24225c102d26502f15291b876fdfc66
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS dev
@@ -22,7 +22,7 @@ COPY packages/oxc/package.json ./packages/oxc/
 COPY packages/sealed-secrets/package.json ./packages/sealed-secrets/
 COPY packages/sops/package.json ./packages/sops/
 COPY apps/website/package.json ./apps/website/
-RUN bun install
+RUN bun install --frozen-lockfile
 COPY packages/core ./packages/core
 COPY packages/env ./packages/env
 COPY examples/full-stack/shared/env-contracts ./examples/full-stack/shared/env-contracts

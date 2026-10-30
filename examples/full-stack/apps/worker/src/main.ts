@@ -1,10 +1,10 @@
-// workerEnv drives both Environment.bind (infra/modules/worker.ts) and Environment.runtime here.
+// workerEnv drives both Environment.bind (infra/modules/worker.ts) and runtime here.
 import { workerEnv } from "@example/env-contracts"
-import { Environment } from "@konfig.ts/k8s"
+import { runtime } from "@konfig.ts/env"
 import { Cause, Effect, Schedule } from "effect"
 
 const config = await Effect.runPromise(
-  Environment.runtime(workerEnv).pipe(
+  runtime(workerEnv).pipe(
     Effect.catchCause((cause): Effect.Effect<never> =>
       Effect.gen(function*() {
         yield* Effect.logError(`worker: failed to decode env contract — ${Cause.pretty(cause)}`)

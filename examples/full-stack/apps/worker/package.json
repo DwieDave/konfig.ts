@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@example/env-contracts": "workspace:*",
+    "@konfig.ts/env": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

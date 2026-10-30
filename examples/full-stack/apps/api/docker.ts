@@ -4,7 +4,7 @@ import { Docker } from "@konfig.ts/docker"
 export default Docker.app({
   runner: {
     production: true,
-    workdir: "/app/apps/api",
+    workdir: "/app/examples/full-stack/apps/api",
     copy: [Docker.copy.workspaceSourceAll()],
     expose: 8080,
     cmd: ["bun", "run", "src/main.ts"],

@@ -82,6 +82,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@example/env-contracts": "workspace:*",
+        "@konfig.ts/env": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -94,6 +95,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@example/env-contracts": "workspace:*",
+        "@konfig.ts/env": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {

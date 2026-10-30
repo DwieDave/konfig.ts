@@ -1,10 +1,10 @@
-// apiEnv drives both Environment.bind (infra/modules/api.ts) and Environment.runtime here, kept symmetric.
+// apiEnv drives both Environment.bind (infra/modules/api.ts) and runtime here, kept symmetric.
 import { apiEnv } from "@example/env-contracts"
-import { Environment } from "@konfig.ts/k8s"
+import { runtime } from "@konfig.ts/env"
 import { Cause, Effect, Redacted } from "effect"
 
 const config = await Effect.runPromise(
-  Environment.runtime(apiEnv).pipe(
+  runtime(apiEnv).pipe(
     Effect.catchCause((cause): Effect.Effect<never> =>
       Effect.gen(function*() {
         yield* Effect.logError(`api: failed to decode env contract — ${Cause.pretty(cause)}`)
