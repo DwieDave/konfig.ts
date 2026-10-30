@@ -6,7 +6,7 @@ import type { PlatformError } from "effect/PlatformError"
 import type { EnvTarget } from "./buildEnv"
 import { resolveCliPaths } from "./cliConfig"
 import { envEntryPath } from "./envEntry"
-import { existsOrFalse, findUp } from "./fsUtil"
+import { existsOrFalse, findUp, readOrEmpty } from "./fsUtil"
 import { matchesGlob } from "./globMatch"
 import { walkFiles } from "./walkFiles"
 
@@ -184,7 +184,7 @@ const _lockfilesIn = (dir: string) =>
 
     return yield* Effect.filter(
       _LOCKFILES.map((name) => path.join(dir, name)),
-      (file) => existsOrFalse(file).pipe(Effect.orElseSucceed(() => false))
+      (file) => existsOrFalse(file).pipe(Effect.orDie)
     )
   })
 
@@ -237,12 +237,11 @@ export const computeOnDiskOutputHash = (
   outDirAbs: string
 ): Effect.Effect<string, never, FileSystem | Path> =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
     const paths = yield* walkFiles({ dir: outDirAbs })
 
     const files = yield* Effect.forEach(paths, (path) =>
-      fs.readFileString(path).pipe(
-        Effect.orElseSucceed(() => ""),
+      readOrEmpty(path).pipe(
+        Effect.orDie,
         Effect.map((content) => ({ path, content }))
       ))
 
@@ -261,12 +260,11 @@ const _cacheFilePath = (input: EnvTarget & { readonly path: Path }): string =>
 
 export const readCacheEntry = (input: EnvTarget) =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
     const path = yield* Path
     const cacheFile = _cacheFilePath({ ...input, path })
 
     if (!(yield* existsOrFalse(cacheFile))) return undefined
-    const text = yield* fs.readFileString(cacheFile).pipe(Effect.orElseSucceed(() => ""))
+    const text = yield* readOrEmpty(cacheFile).pipe(Effect.orDie)
 
     if (text === "") return undefined
 

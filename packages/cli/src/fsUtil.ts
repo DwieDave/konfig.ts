@@ -1,8 +1,8 @@
-import { existsOrFalse, findUp } from "@konfig.ts/core"
+import { existsOrFalse, findUp, readOrEmpty } from "@konfig.ts/core"
 import { Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 
-export { existsOrFalse, findUp }
+export { existsOrFalse, findUp, readOrEmpty }
 
 interface ReadJsonFileInput<A, E> {
   readonly path: string

@@ -36,11 +36,11 @@ const _shouldReport = (
   input: { readonly node: FunctionNode; readonly ancestors: ReadonlyArray<ESTree.Node>; readonly scope: Scope }
 ): boolean => {
   const { ancestors, node, scope } = input
-  const isExported = ancestors.some((ancestor) => EXPORT_TYPES.has(ancestor.type))
-  const isCallback = _isInlineCallback(ancestors) && !_isEffectFnWrapper(node)
   const isNested = ancestors.some((ancestor) => FUNCTION_TYPES.has(ancestor.type))
+  const isExported = !isNested && ancestors.some((ancestor) => EXPORT_TYPES.has(ancestor.type))
+  const isCallback = _isInlineCallback(ancestors) && !_isEffectFnWrapper(node)
 
-  return node.params.length > 1 && !isCallback && !isNested && (scope === "all" || isExported)
+  return node.params.length > 1 && !isCallback && (scope === "all" || isExported)
 }
 
 export const noMultipleFunctionParams = defineRule({
@@ -48,7 +48,7 @@ export const noMultipleFunctionParams = defineRule({
     type: "problem",
     docs: {
       description:
-        "Multi-arg functions must accept a single object parameter. Default scope: 'exports' — internal helpers may take positional args. Exported Effect.fn wrappers count as exports. Callback TYPE annotations (TSFunctionType) and TS declare-function are exempt: a multi-arg callback contract is the caller's choice."
+        "Multi-arg functions must accept a single object parameter. Default scope: 'exports' — internal helpers may take positional args. Exported Effect.fn wrappers count as exports. Nested helpers are checked like top-level ones (never exports), while inline callbacks passed to calls stay exempt. Callback TYPE annotations (TSFunctionType) and TS declare-function are exempt: a multi-arg callback contract is the caller's choice."
     },
     schema: [{ type: "object", properties: { scope: { enum: ["all", "exports"] } }, additionalProperties: false }]
   },

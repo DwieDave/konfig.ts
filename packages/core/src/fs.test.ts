@@ -46,7 +46,7 @@ describe("fs helpers", () => {
       const dir = yield* _tmp
       yield* fs.makeDirectory(`${dir}/a/b`, { recursive: true })
       yield* fs.writeFileString(`${dir}/a/marker`, "")
-      const hasMarker = (d: string) => fs.exists(path.join(d, "marker")).pipe(Effect.orElseSucceed(() => false))
+      const hasMarker = (d: string) => fs.exists(path.join(d, "marker")).pipe(Effect.orDie)
       expect(yield* findUp({ from: `${dir}/a/b`, test: hasMarker })).toEqual(Option.some(path.resolve(`${dir}/a`)))
       expect(yield* findUp({ from: `${dir}/a/b`, test: () => Effect.succeed(false) })).toEqual(Option.none())
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))

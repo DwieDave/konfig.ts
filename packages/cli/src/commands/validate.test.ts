@@ -34,7 +34,8 @@ const _kubeconformSpawner = (
 
           if (dir !== undefined) {
             captured.filesInDir = yield* fs.readDirectory(dir, { recursive: true }).pipe(
-              Effect.orElseSucceed(() => [])
+              Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])),
+              Effect.orDie
             )
           }
 

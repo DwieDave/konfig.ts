@@ -1,6 +1,7 @@
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import type { PlatformError } from "effect/PlatformError"
 
 interface WalkFilesInput {
   readonly dir: string
@@ -9,20 +10,26 @@ interface WalkFilesInput {
 
 type WalkEnv = FileSystem | Path
 
+const _orIfNotFound = <A, B, R>(input: { readonly effect: Effect.Effect<A, PlatformError, R>; readonly value: B }) =>
+  input.effect.pipe(
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(input.value)),
+    Effect.orDie
+  )
+
 const _statOrNull = ({ full, fs }: { readonly fs: FileSystem; readonly full: string }) =>
-  fs.stat(full).pipe(Effect.orElseSucceed(() => null))
+  _orIfNotFound({ effect: fs.stat(full), value: null })
 
 const _walkEntry = (input: WalkFilesInput & { readonly name: string }): Effect.Effect<string[], never, WalkEnv> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
     const full = path.join(input.dir, input.name)
-    const link = yield* fs.readLink(full).pipe(Effect.orElseSucceed(() => null))
+    const link = yield* Effect.option(fs.readLink(full))
     const stat = yield* _statOrNull({ fs, full })
 
     if (stat?.type === "File") return [full]
 
-    if (link !== null || stat?.type !== "Directory" || input.skipDir?.({ name: input.name, full }) === true) return []
+    if (Option.isSome(link) || stat?.type !== "Directory" || input.skipDir?.({ name: input.name, full }) === true) return []
 
     return yield* walkFiles({ dir: full, skipDir: input.skipDir })
   })
@@ -30,7 +37,7 @@ const _walkEntry = (input: WalkFilesInput & { readonly name: string }): Effect.E
 export const walkFiles = (input: WalkFilesInput): Effect.Effect<string[], never, WalkEnv> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
-    const names = yield* fs.readDirectory(input.dir).pipe(Effect.orElseSucceed((): string[] => []))
+    const names = yield* _orIfNotFound({ effect: fs.readDirectory(input.dir), value: [] })
     const groups = yield* Effect.forEach(names, (name) => _walkEntry({ ...input, name }))
 
     return groups.flat()

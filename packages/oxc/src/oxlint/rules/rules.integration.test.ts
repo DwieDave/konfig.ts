@@ -125,8 +125,19 @@ _suite({
     { name: "allows single param", source: "export function f(a) {}", reports: 0 },
     { name: "allows inline callbacks", source: "export const x = items.map((a, b) => a)", reports: 0 },
     {
-      name: "allows nested functions",
-      source: "export function f(a) { const g = (x, y) => x }",
+      name: "reports nested helpers under scope all",
+      source: "const f = () => { const inner = (a: number, b: number) => a + b }",
+      reports: 1,
+      options: [{ scope: "all" }]
+    },
+    {
+      name: "allows nested helpers under scope exports",
+      source: "export const f = () => { const inner = (a: number, b: number) => a + b }",
+      reports: 0
+    },
+    {
+      name: "allows nested inline callbacks",
+      source: "const f = () => items.map((a, b) => a)",
       reports: 0,
       options: [{ scope: "all" }]
     },
@@ -144,6 +155,13 @@ _suite({
   rule: noNodeChildProcess,
   cases: [
     { name: "reports node:child_process", source: "import { exec } from 'node:child_process'", reports: 1 },
+    { name: "reports bare child_process", source: "import { execSync } from 'child_process'", reports: 1 },
+    { name: "reports require", source: "const c = require('child_process')", reports: 1 },
+    { name: "reports require of node:", source: "const c = require('node:child_process')", reports: 1 },
+    { name: "reports dynamic import", source: "const c = await import('node:child_process')", reports: 1 },
+    { name: "reports export-from", source: "export * from 'child_process'", reports: 1 },
+    { name: "reports named export-from", source: "export { exec } from 'node:child_process'", reports: 1 },
+    { name: "allows other require", source: "const c = require('node:fs')", reports: 0 },
     { name: "allows other builtins", source: "import fs from 'node:fs'", reports: 0 }
   ]
 })
@@ -197,8 +215,18 @@ _suite({
     },
     { name: "reports orElseSucceed(() => undefined)", source: "Effect.orElseSucceed(() => undefined)", reports: 1 },
     { name: "reports Effect.ignore", source: "pipe(a, Effect.ignore)", reports: 1 },
+    { name: "reports orElseSucceed false", source: "fs.exists(p).pipe(Effect.orElseSucceed(() => false))", reports: 1 },
+    { name: "reports typed empty array", source: "Effect.orElseSucceed((): string[] => [])", reports: 1 },
+    { name: "reports empty string", source: "Effect.orElseSucceed(() => \"\")", reports: 1 },
+    { name: "reports null", source: "Effect.orElseSucceed(() => null)", reports: 1 },
+    { name: "reports catch succeeding a constant", source: "Effect.catch(() => Effect.succeed(0))", reports: 1 },
+    {
+      name: "allows catch via a reason predicate",
+      source: "Effect.catchIf(isNotFound, () => Effect.succeed(false))",
+      reports: 0
+    },
     { name: "allows meaningful recovery", source: "Effect.catch(recover)", reports: 0 },
-    { name: "allows orElseSucceed with a value", source: "Effect.orElseSucceed(() => 1)", reports: 0 }
+    { name: "allows orElseSucceed with a value", source: "Effect.orElseSucceed(() => fallback)", reports: 0 }
   ]
 })
 
@@ -224,6 +252,22 @@ _suite({
       source: "import { asserts as a } from 'effect/Schema'\na(S)(x)",
       reports: 1
     },
+    {
+      name: "reports Result.getOrThrow over decodeResult",
+      source: "Result.getOrThrow(Schema.decodeResult(S)(x))",
+      reports: 1
+    },
+    {
+      name: "reports Option.getOrThrow over decodeOption",
+      source: "Option.getOrThrow(Schema.decodeOption(S)(x))",
+      reports: 1
+    },
+    {
+      name: "reports getOrThrow over a stored decoder",
+      source: "const d = Schema.decodeResult(S)\nResult.getOrThrow(d(x))",
+      reports: 1
+    },
+    { name: "allows getOrThrow over a non-Schema Result", source: "Result.getOrThrow(other(x))", reports: 0 },
     { name: "allows the Effect variant", source: "Schema.decodeEffect(S)(x)", reports: 0 },
     { name: "allows unrelated namespaces", source: "Other.decodeSync(S)(x)", reports: 0 },
     {

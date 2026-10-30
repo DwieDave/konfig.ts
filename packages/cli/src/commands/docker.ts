@@ -12,7 +12,7 @@ import { Console, Data, Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { existsOrFalse } from "../fsUtil"
+import { existsOrFalse, readOrEmpty } from "../fsUtil"
 import { moduleDefault } from "../moduleDefault"
 import { formatFlag } from "../renderContextFlags"
 
@@ -130,14 +130,16 @@ export const writeOne = (
 ): Effect.Effect<{ written: boolean }, DockerWriteRefused | DockerWriteError, FileSystem | Path> =>
   Effect.gen(function*() {
     const { content, dest, force } = input
-    const fs = yield* FileSystem
 
     const existed = yield* existsOrFalse(dest).pipe(
       Effect.mapError((cause) => new DockerWriteError({ path: dest, cause }))
     )
 
     if (existed) {
-      const existing = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
+      const existing = yield* readOrEmpty(dest).pipe(
+        Effect.mapError((cause) => new DockerWriteError({ path: dest, cause }))
+      )
+
       const head = extractHeader(existing)
 
       if (!head.managed && !force) {
@@ -276,8 +278,7 @@ const _lineDiff = (input: { readonly left: string; readonly right: string; reado
 export const diffOne = (input: DiffOneInput): Effect.Effect<void, DiffDrift, FileSystem | Path> =>
   Effect.gen(function*() {
     const { dest, emitted, format, kind, target } = input
-    const fs = yield* FileSystem
-    const onDisk = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
+    const onDisk = yield* readOrEmpty(dest).pipe(Effect.orDie)
 
     if (onDisk === emitted) return
     yield* Console.log(_lineDiff({ left: onDisk, right: emitted, format }))

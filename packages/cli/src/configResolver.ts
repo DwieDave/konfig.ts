@@ -23,7 +23,10 @@ const _hasConfig = (dir: string) =>
   Effect.gen(function*() {
     const path = yield* Path
 
-    return yield* existsOrFalse(path.join(dir, _CONFIG_FILE)).pipe(Effect.orElseSucceed(() => false))
+    return yield* existsOrFalse(path.join(dir, _CONFIG_FILE)).pipe(
+      Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(false)),
+      Effect.orDie
+    )
   })
 
 const _findConfig = (start: string) =>
