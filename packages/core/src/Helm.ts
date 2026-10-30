@@ -1,4 +1,17 @@
-import { Cause, Config, Data, Deferred, Duration, Effect, Exit, Option, Schema, Stream } from "effect"
+import {
+  Cause,
+  Config,
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Option,
+  Predicate,
+  Schema,
+  SchemaIssue,
+  Stream
+} from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
@@ -8,10 +21,9 @@ import { createHash } from "node:crypto"
 import * as YAML from "yaml"
 import { parseYamlAll } from "./diff"
 import {
-  DEFAULT_HELM_CACHE_DIR,
   DEFAULT_HELM_TIMEOUT_SECONDS,
   DEFAULT_HELM_VERSION_TIMEOUT_SECONDS,
-  KONFIG_HELM_CACHE_ENV,
+  helmCacheDirConfig,
   KONFIG_HELM_TIMEOUT_ENV
 } from "./konfigDefaults"
 import { make, type Manifest, type ParsedDoc } from "./Manifest"
@@ -20,7 +32,8 @@ import {
   HelmMinVersionInvalid,
   HelmRenderError,
   type HelmRenderPhase,
-  HelmVersionTooLow
+  HelmVersionTooLow,
+  type YamlParseError
 } from "./RenderError"
 import { compareSemver, parseSemver } from "./semver"
 import { type ProcessFailure, runProcessExit, runProcessString } from "./subprocess"
@@ -132,18 +145,18 @@ const _stampNamespace = ({ doc, namespace, clusterKinds }: _StampInput): ParsedD
   if (!_isNamedDoc(doc) || clusterKinds.has(doc.kind)) return doc
   const ns = doc.metadata?.["namespace"]
 
-  return ns === undefined || ns === "" ? { ...doc, metadata: { ...doc.metadata, namespace } } : doc
+  return Predicate.isNullish(ns) || ns === "" ? { ...doc, metadata: { ...doc.metadata, namespace } } : doc
 }
 
 // Uses parseYamlAll (not a naive /^---$/m split) so a `---` inside a block scalar can't
 // spuriously split one manifest into two. Docs stay parsed (ParsedDoc, not
 // RawYaml): re-stringifying here only for the CLI to parse and serialize again
 // roughly doubled the CPU spent per helm doc.
-const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<ParsedDoc[]> =>
-  Effect.sync(() => {
+export const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<ParsedDoc[], YamlParseError> =>
+  Effect.gen(function*() {
     const { output, chart, version, namespace } = input
     const origin = `helm:${chart}@${version}`
-    const docs = parseYamlAll(output)
+    const docs = yield* parseYamlAll(output)
     const clusterKinds = _scopedKinds({ docs, extra: input.clusterScopedKinds ?? [] })
 
     return docs.map((doc) =>
@@ -158,9 +171,32 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<ParsedDoc
 // gives up with ProcessTimeout. Without a bound, a `helm pull` that prompts for
 // registry credentials sits forever on a closed stdin. KONFIG_HELM_TIMEOUT takes
 // a bare number of seconds ("300") or an effect duration ("5 minutes").
-export const timeout: Config.Config<Duration.Duration> = Config.Number(KONFIG_HELM_TIMEOUT_ENV).pipe(
+const _invalidTimeout = (value: Duration.Duration) =>
+  Effect.fail(
+    new Config.ConfigError(
+      new Schema.SchemaError(
+        new SchemaIssue.Pointer(
+          [KONFIG_HELM_TIMEOUT_ENV],
+          new SchemaIssue.InvalidValue({
+            message: `${KONFIG_HELM_TIMEOUT_ENV} must be a positive, finite duration`
+          }, value)
+        )
+      )
+    )
+  )
+
+const _validTimeout = (value: Duration.Duration) =>
+  Duration.isFinite(value) && Duration.isGreaterThan(value, Duration.zero)
+    ? Effect.succeed(value)
+    : _invalidTimeout(value)
+
+const _timeoutFromEnv: Config.Config<Duration.Duration> = Config.Number(KONFIG_HELM_TIMEOUT_ENV).pipe(
   Config.map(Duration.seconds),
   Config.orElse(() => Config.Duration(KONFIG_HELM_TIMEOUT_ENV)),
+  Config.mapEffect(_validTimeout)
+)
+
+export const timeout: Config.Config<Duration.Duration> = _timeoutFromEnv.pipe(
   Config.withDefault(Duration.seconds(DEFAULT_HELM_TIMEOUT_SECONDS))
 )
 
@@ -180,37 +216,42 @@ const _helmVersionProbe: _HelmVersionProbe = Effect.gen(function*() {
   )
 })
 
-// `helm version --short` is spawned once per process, not once per release:
-// the binary doesn't change under a running render. Keyed by the spawner
-// service (not truly module-global) so a test that swaps in a different mock
-// spawner per case isn't served the previous case's answer. Only a successful
-// probe is remembered; a failure (timeout, transient spawn error) is retried by
-// the next caller instead of being replayed for the whole process.
-interface _VersionSlot {
-  value: string | undefined
+type _VersionError = ProcessFailure | Config.ConfigError
+
+type _VersionDeferred = Deferred.Deferred<string, _VersionError>
+
+const _helmVersionBySpawner = new WeakMap<ChildProcessSpawner["Service"], _VersionDeferred>()
+
+interface _VersionSettle {
+  readonly spawner: ChildProcessSpawner["Service"]
+  readonly deferred: _VersionDeferred
 }
 
-const _helmVersionBySpawner = new WeakMap<ChildProcessSpawner["Service"], _VersionSlot>()
+const _settleVersion = (input: _VersionSettle) => (exit: Exit.Exit<string, _VersionError>) =>
+  Effect.sync(() => {
+    if (Exit.isFailure(exit)) _helmVersionBySpawner.delete(input.spawner)
+  }).pipe(Effect.andThen(Deferred.done(input.deferred, exit)))
 
-const _slotFor = (spawner: ChildProcessSpawner["Service"]): _VersionSlot => {
-  const existing = _helmVersionBySpawner.get(spawner)
+const _awaitVersion = (input: { readonly deferred: _VersionDeferred; readonly retry: _HelmVersionProbe }) =>
+  Effect.exit(Deferred.await(input.deferred)).pipe(
+    Effect.flatMap((exit) => Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause) ? input.retry : exit)
+  )
 
-  if (existing !== undefined) return existing
-  const slot: _VersionSlot = { value: undefined }
-  _helmVersionBySpawner.set(spawner, slot)
+const _memoizedHelmVersion: _HelmVersionProbe = Effect.uninterruptibleMask((restore) =>
+  Effect.gen(function*() {
+    const spawner = yield* ChildProcessSpawner
+    const existing = _helmVersionBySpawner.get(spawner)
 
-  return slot
-}
+    if (existing !== undefined) {
+      return yield* restore(_awaitVersion({ deferred: existing, retry: _memoizedHelmVersion }))
+    }
 
-const _memoizedHelmVersion: _HelmVersionProbe = Effect.gen(function*() {
-  const slot = _slotFor(yield* ChildProcessSpawner)
+    const deferred = yield* Deferred.make<string, _VersionError>()
+    _helmVersionBySpawner.set(spawner, deferred)
 
-  if (slot.value !== undefined) return slot.value
-  const stdout = yield* _helmVersionProbe
-  slot.value = stdout
-
-  return stdout
-})
+    return yield* Effect.onExit(restore(_helmVersionProbe), _settleVersion({ spawner, deferred }))
+  })
+)
 
 // A failed `helm version` (not on PATH, permission denied, timeout) surfaces as
 // its ProcessError/ProcessTimeout; HelmVersionTooLow is reserved for a version
@@ -273,16 +314,25 @@ const _hashFile = (filePath: string) =>
     return `sha256:${hash.digest("hex")}`
   })
 
+const _logCleanupFailure = (error: PlatformError) => Effect.logDebug(`helm: cleanup failed: ${error.message}`)
+
 interface _VerifiedDigest {
   readonly mtimeMs: number
   readonly size: bigint
   readonly digest: string
 }
 
-// Digests already computed in this process, keyed by tarball path and
-// invalidated by (mtime, size). A render of N releases against a warm cache
-// hashes each distinct chart once instead of once per release.
-const _verifiedDigests = new Map<string, _VerifiedDigest>()
+const _verifiedDigests = new WeakMap<FileSystem, Map<string, _VerifiedDigest>>()
+
+const _digestsFor = (fs: FileSystem): Map<string, _VerifiedDigest> => {
+  const existing = _verifiedDigests.get(fs)
+
+  if (existing !== undefined) return existing
+  const fresh = new Map<string, _VerifiedDigest>()
+  _verifiedDigests.set(fs, fresh)
+
+  return fresh
+}
 
 const _hashFileCached = (filePath: string) =>
   Effect.gen(function*() {
@@ -291,11 +341,11 @@ const _hashFileCached = (filePath: string) =>
     const mtimeMs = Option.map(info.mtime, (d) => d.getTime())
 
     if (Option.isNone(mtimeMs)) return yield* _hashFile(filePath)
-    const hit = _verifiedDigests.get(filePath)
+    const hit = _digestsFor(fs).get(filePath)
 
     if (hit !== undefined && hit.mtimeMs === mtimeMs.value && hit.size === info.size) return hit.digest
     const digest = yield* _hashFile(filePath)
-    _verifiedDigests.set(filePath, { mtimeMs: mtimeMs.value, size: info.size, digest })
+    _digestsFor(fs).set(filePath, { mtimeMs: mtimeMs.value, size: info.size, digest })
 
     return digest
   })
@@ -318,8 +368,8 @@ export const verifyChartDigest = (input: VerifyChartDigestInput) =>
     const actual = yield* _hashFileCached(input.cachedTgz)
 
     if (expected !== actual) {
-      _verifiedDigests.delete(input.cachedTgz)
-      yield* fs.remove(input.cachedTgz).pipe(Effect.ignore)
+      _digestsFor(fs).delete(input.cachedTgz)
+      yield* fs.remove(input.cachedTgz).pipe(Effect.catch(_logCleanupFailure))
 
       return yield* new HelmDigestMismatch({
         chart: input.chart,
@@ -347,12 +397,12 @@ export interface PullArgsInput {
   readonly destination: string
 }
 
+const _OCI_PREFIX = "oci://"
+
 // Callers must pass schema-validated chart fields; this builder does no validation.
 export const pullArgs = (input: PullArgsInput): ReadonlyArray<string> => [
   "pull",
-  "--repo",
-  input.repo,
-  input.chart,
+  ...(input.repo.startsWith(_OCI_PREFIX) ? [`${input.repo}/${input.chart}`] : ["--repo", input.repo, input.chart]),
   "--version",
   input.version,
   "--destination",
@@ -439,21 +489,20 @@ const _singleTarball = (input: _SlotInput & { readonly pullDir: string; readonly
     )
 }
 
-const _pullIntoTemp = (input: _SlotInput, pullDir: string) =>
+const _pullIntoTemp = (input: { readonly slot: _SlotInput; readonly pullDir: string }) =>
   Effect.gen(function*() {
+    const { pullDir, slot } = input
     const fs = yield* FileSystem
     const path = yield* Path
-    yield* runProcessExit(ChildProcess.make("helm", pullArgs({ ...input, destination: pullDir })), {
+    yield* runProcessExit(ChildProcess.make("helm", pullArgs({ ...slot, destination: pullDir })), {
       timeout: yield* timeout
     })
     const files = yield* fs.readDirectory(pullDir)
-    const pulled = yield* _singleTarball({ ...input, pullDir, files })
-    const tempTgz = path.join(pullDir, pulled)
-    yield* _verifyPinned({ ...input, cachedTgz: tempTgz })
+    const pulled = yield* _singleTarball({ ...slot, pullDir, files })
     // `fs.rename` is an atomic replace on POSIX, so a concurrent release
     // racing to populate the same slot overwrites harmlessly with
-    // byte-identical content.
-    yield* fs.rename(tempTgz, input.cachedTgz)
+    yield* fs.rename(path.join(pullDir, pulled), slot.cachedTgz)
+    yield* _verifyPinned(slot)
   })
 
 // Pulled into a per-invocation temp directory nested inside cacheDir (same
@@ -464,8 +513,8 @@ const _pullAndVerify = (input: _SlotInput): _PullOnce =>
     const fs = yield* FileSystem
     const pullDir = yield* fs.makeTempDirectory({ directory: input.cacheDir, prefix: ".konfig-helm-pull-" })
     yield* Effect.logInfo(`helm: pulling ${input.chart}@${input.version} from ${input.repo}`)
-    yield* _pullIntoTemp(input, pullDir).pipe(
-      Effect.ensuring(fs.remove(pullDir, { recursive: true, force: true }).pipe(Effect.ignore))
+    yield* _pullIntoTemp({ slot: input, pullDir }).pipe(
+      Effect.ensuring(fs.remove(pullDir, { recursive: true, force: true }).pipe(Effect.catch(_logCleanupFailure)))
     )
   })
 
@@ -485,19 +534,28 @@ export const ensureChartTarball = (input: EnsureChartTarballInput) =>
 
 type _ReleaseError = HelmRenderError | HelmVersionTooLow | HelmMinVersionInvalid | HelmDigestMismatch
 
+const _releaseErrorTags: ReadonlySet<string> = new Set([
+  "HelmRenderError",
+  "HelmVersionTooLow",
+  "HelmMinVersionInvalid",
+  "HelmDigestMismatch"
+])
+
+const _isReleaseError = (cause: unknown): cause is _ReleaseError =>
+  Predicate.hasProperty(cause, "_tag") && Predicate.isString(cause._tag) && _releaseErrorTags.has(cause._tag)
+
 // HelmVersionTooLow and HelmDigestMismatch already name the chart and carry a
 // precise message, so they pass through; everything else is wrapped with the
 // phase it failed in.
 const _inPhase =
-  (opts: HelmReleaseOptions, phase: HelmRenderPhase) =>
+  (input: { readonly opts: HelmReleaseOptions; readonly phase: HelmRenderPhase }) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, _ReleaseError, R> =>
     Effect.mapError(
       self,
       (cause): _ReleaseError =>
-        cause instanceof HelmVersionTooLow || cause instanceof HelmMinVersionInvalid ||
-          cause instanceof HelmDigestMismatch || cause instanceof HelmRenderError
+        _isReleaseError(cause)
           ? cause
-          : new HelmRenderError({ chart: opts.chart, version: opts.version, phase, cause })
+          : new HelmRenderError({ chart: input.opts.chart, version: input.opts.version, phase: input.phase, cause })
     )
 
 // cacheDir is read from Config (KONFIG_HELM_CACHE) rather than accepted
@@ -508,24 +566,20 @@ const _inPhase =
 // resolved cache directory without threading it through every call site.
 // `minVersion` stays a plain, opt-in field: it is a per-chart floor a chart
 // author chooses, not a shared filesystem path.
-const _resolveCacheDir = (opts: HelmReleaseOptions) =>
-  Effect.gen(function*() {
-    const path = yield* Path
-
-    return yield* Config.String(KONFIG_HELM_CACHE_ENV).pipe(
-      Config.withDefault(path.resolve(DEFAULT_HELM_CACHE_DIR)),
-      _inPhase(opts, "pull")
-    )
-  })
+const _resolveCacheDir = (opts: HelmReleaseOptions) => helmCacheDirConfig.pipe(_inPhase({ opts, phase: "pull" }))
 
 const _writeValues = (opts: HelmReleaseOptions) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
-    const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-" }).pipe(_inPhase(opts, "template"))
+
+    const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-" }).pipe(
+      _inPhase({ opts, phase: "template" })
+    )
+
     const valuesFile = path.join(tmpDir, "values.yaml")
     yield* fs.writeFileString(valuesFile, YAML.stringify(opts.values, { lineWidth: 0 })).pipe(
-      _inPhase(opts, "template")
+      _inPhase({ opts, phase: "template" })
     )
 
     return valuesFile
@@ -560,20 +614,20 @@ const _runTemplate = (
 
     return yield* timeout.pipe(
       Effect.flatMap((t) => runProcessString(template, { allowEmptyStdout: false, timeout: t })),
-      _inPhase(opts, "template")
+      _inPhase({ opts, phase: "template" })
     )
   })
 
 const _preflight = (opts: HelmReleaseOptions) =>
   opts.minVersion === undefined
     ? Effect.void
-    : assertMinVersion(opts.minVersion).pipe(_inPhase(opts, "version-check"))
+    : assertMinVersion(opts.minVersion).pipe(_inPhase({ opts, phase: "version-check" }))
 
 const _releaseDocs = (opts: HelmReleaseOptions) =>
   Effect.gen(function*() {
     yield* _preflight(opts)
     const cacheDir = yield* _resolveCacheDir(opts)
-    const cachedTgz = yield* ensureChartTarball({ ...opts, cacheDir }).pipe(_inPhase(opts, "pull"))
+    const cachedTgz = yield* ensureChartTarball({ ...opts, cacheDir }).pipe(_inPhase({ opts, phase: "pull" }))
     const valuesFile = yield* _writeValues(opts)
     const output = yield* _runTemplate({ opts, cachedTgz, valuesFile })
 
@@ -583,7 +637,7 @@ const _releaseDocs = (opts: HelmReleaseOptions) =>
       version: opts.version,
       namespace: opts.namespace,
       clusterScopedKinds: opts.clusterScopedKinds
-    }).pipe(_inPhase(opts, "parse"))
+    }).pipe(_inPhase({ opts, phase: "parse" }))
   })
 
 export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> =>

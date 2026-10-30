@@ -67,7 +67,7 @@ resolved cache directory. Outside the CLI (a bare Effect program calling
 | Deps        | `Dep.*` kinds + `Dep.provide*` helpers; branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `ServiceAccountRef` / `BuiltImageRef`                                               |
 | Modules     | `Module.fixedNs`, `Module.dynamicNs`                                                                                                                                          |
 | Helm        | `Helm.release` — chart pull + SHA-256 digest verification; `Helm.cacheFileName`, `Helm.verifyChartDigest`, the shared cache-naming/verification building blocks it's built on |
-| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYaml`, `redact`                                                                                       |
+| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYaml`, `parseYamlAll`, `redact`                                                                                       |
 | Config      | `KonfigConfig`, `ImagesConfig`, and their decoders; `konfigDefaults.ts`'s `DEFAULT_*`/`KONFIG_*_ENV` constants                                                                |
 | Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `brand` / `unsafeCoerce` escape hatches                                                                                   |
 | Errors      | the tagged union `AnyRenderError` (`HelmDigestMismatch`, `BoundaryDecodeError`, …)                                                                                            |

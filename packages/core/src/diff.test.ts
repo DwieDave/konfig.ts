@@ -1,5 +1,8 @@
+import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import { deepEqual, diffFiles, formatDiff, hasDifferences, redact } from "./diff"
+import { deepEqual, diffFiles as diffFilesEffect, formatDiff, hasDifferences, redact } from "./diff"
+
+const diffFiles = (input: Parameters<typeof diffFilesEffect>[0]) => Effect.runSync(diffFilesEffect(input))
 
 describe("redact (FR-3.2)", () => {
   it("strips helm.sh/chart label", () => {

@@ -31,6 +31,23 @@ describe("pullArgs", () => {
       })
     )
   })
+
+  it("property: oci:// repos address the chart by URL and never emit --repo", () => {
+    const word = fc.stringMatching(/^[a-z0-9.-]{1,12}$/)
+    fc.assert(
+      fc.property(word, word, word, word, (host, chart, version, destination) => {
+        const repo = `oci://${host}`
+        expect(pullArgs({ repo, chart, version, destination })).toEqual([
+          "pull",
+          `${repo}/${chart}`,
+          "--version",
+          version,
+          "--destination",
+          destination
+        ])
+      })
+    )
+  })
 })
 
 const _sha = (bytes: Uint8Array) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`

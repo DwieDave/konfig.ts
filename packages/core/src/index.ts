@@ -41,8 +41,7 @@ export {
   hasDifferences,
   parseYaml,
   parseYamlAll,
-  redact,
-  type RedactOptions
+  redact
 } from "./diff"
 
 export { isRecord } from "./guards"
@@ -84,6 +83,7 @@ export {
   DEFAULT_HELM_MIN_VERSION,
   DEFAULT_HELM_TIMEOUT_SECONDS,
   DEFAULT_HELM_VERSION_TIMEOUT_SECONDS,
+  helmCacheDirConfig,
   KONFIG_CHARTS_DIR_ENV,
   KONFIG_CRD_OUT_DIR_ENV,
   KONFIG_HELM_CACHE_ENV,
@@ -92,6 +92,8 @@ export {
 } from "./konfigDefaults"
 
 export { attachLayerToTag, liftBuild, liftEffect } from "./lift"
+
+export { moduleLayer } from "./Compose"
 
 export type { EmbedYamlSource, ParsedDoc, RawYaml } from "./Manifest"
 
@@ -121,8 +123,11 @@ export {
   HelmMinVersionInvalid,
   HelmRenderError,
   HelmVersionTooLow,
-  RenderError
+  RenderError,
+  YamlParseError
 } from "./RenderError"
+
+export { type OmitUndefined, omitUndefined } from "./omitUndefined"
 
 export { renderManifest } from "./renderManifest"
 
@@ -130,13 +135,18 @@ export {
   processDetail,
   ProcessError,
   type ProcessFailure,
+  ProcessInvocationError,
   type ProcessOptions,
   ProcessTimeout,
+  runProcessCollect,
   runProcessExit,
   runProcessString,
-  type RunProcessStringOptions
+  type RunProcessStringOptions,
+  runProcessWithStdin
 } from "./subprocess"
 
 export { unwrapDocs } from "./unwrapDocs"
+
+export { objectMetaSchema, parseYamlWith, stringRecordSchema } from "./yamlSchema"
 
 export * as Yaml from "./yaml"

@@ -202,7 +202,7 @@ const _collectOutputs = (input: _CollectOutputsInput): Effect.Effect<OutputFile[
 
   if (Array.isArray(value)) return flatten(value)
 
-  if (isRawYaml(value) || isParsedDoc(value)) return flatten(unwrapDocs(value))
+  if (isRawYaml(value) || isParsedDoc(value)) return unwrapDocs(value).pipe(Effect.orDie, Effect.flatMap(flatten))
 
   return Option.match(_decodeKindName(value), {
     onNone: () => Effect.succeed([]),

@@ -43,15 +43,15 @@ describe("attachLayerToTag", () => {
 describe("unwrapDocs", () => {
   it("unwraps ParsedDoc", () => {
     fc.assert(fc.property(fc.jsonValue(), (value) => {
-      expect(unwrapDocs(ParsedDoc.make({ value }))).toEqual([value])
+      expect(Effect.runSync(unwrapDocs(ParsedDoc.make({ value })))).toEqual([value])
     }))
   })
   it("parses RawYaml", () => {
-    expect(unwrapDocs(RawYaml.make({ content: "a: 1" }))).toEqual([{ a: 1 }])
+    expect(Effect.runSync(unwrapDocs(RawYaml.make({ content: "a: 1" })))).toEqual([{ a: 1 }])
   })
   it("passes null, primitives and unknown tags through", () => {
     for (const v of [null, 1, "s", true, undefined, _tagged("Other", {})]) {
-      expect(unwrapDocs(v)).toEqual([v])
+      expect(Effect.runSync(unwrapDocs(v))).toEqual([v])
     }
   })
   it("guards reject malformed input", () => {

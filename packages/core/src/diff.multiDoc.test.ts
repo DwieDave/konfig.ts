@@ -1,6 +1,8 @@
-import { Predicate } from "effect"
+import { Effect, Predicate } from "effect"
 import { describe, expect, it } from "vitest"
-import { diffFiles, hasDifferences, parseYamlAll, redact } from "./diff"
+import { diffFiles as diffFilesEffect, hasDifferences, parseYamlAll } from "./diff"
+
+const diffFiles = (input: Parameters<typeof diffFilesEffect>[0]) => Effect.runSync(diffFilesEffect(input))
 
 const MULTI_DOC_LEFT = `apiVersion: v1
 kind: ConfigMap
@@ -52,14 +54,14 @@ spec:
 
 describe("parseYamlAll", () => {
   it("returns a tuple of parsed docs in source order", () => {
-    const docs = parseYamlAll(MULTI_DOC_LEFT)
+    const docs = Effect.runSync(parseYamlAll(MULTI_DOC_LEFT))
     expect(docs).toHaveLength(2)
     expect(docs[0]).toMatchObject({ kind: "ConfigMap" })
     expect(docs[1]).toMatchObject({ kind: "Service" })
   })
 
   it("drops empty / whitespace-only fragments", () => {
-    const docs = parseYamlAll("---\n---\napiVersion: v1\nkind: Foo\n---\n")
+    const docs = Effect.runSync(parseYamlAll("---\n---\napiVersion: v1\nkind: Foo\n---\n"))
     expect(docs).toHaveLength(1)
   })
 })
@@ -125,29 +127,6 @@ describe("diffFiles multi-doc handling", () => {
         expect(missingRight.left).toMatchObject({ kind: "Namespace" })
       }
     }
-  })
-})
-
-describe("redact numeric normalization", () => {
-  it("treats '1.0' (string) and 1 (number) as equal when normalizeNumerics is on", () => {
-    const left = { "x.yaml": "value: 1.0\n" }
-    const right = { "x.yaml": "value: 1\n" }
-    const lax = diffFiles({ left, right, options: { normalizeNumerics: true } })
-    expect(hasDifferences(lax)).toBe(false)
-  })
-
-  it("default behavior keeps the YAML library's coercion (1.0 → 1 number unifies anyway)", () => {
-    const out = redact({ value: { x: "1.0" } })
-    expect(out).toEqual({ x: "1.0" })
-  })
-
-  it("normalizes a numeric string deep inside a map", () => {
-    const out = redact({
-      value: { spec: { replicas: "3" } },
-      options: { normalizeNumerics: true }
-    })
-
-    expect(out).toEqual({ spec: { replicas: 3 } })
   })
 })
 

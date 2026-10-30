@@ -45,7 +45,7 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 | `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`) and the type-level tracking of unmet needs behind every `fromModules` (`Compose.makeResidualEntrypoint`, `Compose.NoDuplicateProvides`) |
 | `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template` |
 | `Yaml` | `serialize` (stable key order) and `filenameFor` |
-| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYaml`, `parseYamlAll`, `deepEqual`, `redact` | Structural YAML diff with `Secret` data redaction |
+| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYaml`, `parseYamlAll` (fails with `YamlParseError`), `deepEqual`, `redact` | Structural YAML diff with `Secret` data redaction |
 | `KonfigConfig`, `EnvEntry`, `OutDir`, `CrdConfig`, `HelmConfig`, `DiffConfig`, `ServicesConfig`, `ClusterSpec`, `decodeKonfigConfigSync`, `decodeKonfigConfigEffect` | Schemas and decoders for `konfig.json`; `ResolvedKonfigConfig` pairs the decoded config with its directory |
 | `ImagesConfig`, `EnvImages`, `decodeImagesSync`, `decodeImagesEffect`, `imagesFor`, `lookupEnv`, `lookupEnvEffect`, `requireImage`, `requireImageEffect` | Schema and lookups for `images.json` |
 | `boundary`, `strictDecoderOf`, `brand`, `unsafeCoerce` | Schema decode at boundaries; annotated escape hatches |

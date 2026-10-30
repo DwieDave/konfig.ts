@@ -176,3 +176,44 @@ describe("Helm.release minVersion semantics", () => {
       expect(calls).toBe(2)
     }))
 })
+
+describe("Helm version probe memoization", () => {
+  it.effect("spawns `helm version` once under concurrent assertMinVersion calls", () =>
+    Effect.gen(function*() {
+      const spawns = { count: 0 }
+
+      const spawner = Layer.succeed(
+        ChildProcessSpawner,
+        makeSpawner((_command: Command) =>
+          Effect.sync(() => {
+            spawns.count += 1
+          }).pipe(Effect.andThen(Effect.yieldNow), Effect.as(_handle({ stdout: "v3.17.0\n" })))
+        )
+      )
+
+      yield* Effect.all(Array.from({ length: 4 }, () => Helm.assertMinVersion("3.16.0")), { concurrency: "unbounded" })
+        .pipe(Effect.provide(spawner))
+      expect(spawns.count).toBe(1)
+    }))
+
+  it.effect("does not cache a failed probe", () =>
+    Effect.gen(function*() {
+      const spawns = { count: 0 }
+
+      const spawner = Layer.succeed(
+        ChildProcessSpawner,
+        makeSpawner((_command: Command) =>
+          Effect.sync(() => {
+            spawns.count += 1
+
+            return _handle({ stdout: "", stderr: "boom", exitCode: 1 })
+          })
+        )
+      )
+
+      const probe = Effect.exit(Helm.assertMinVersion("3.16.0")).pipe(Effect.provide(spawner))
+      yield* probe
+      yield* probe
+      expect(spawns.count).toBe(2)
+    }))
+})

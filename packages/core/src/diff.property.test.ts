@@ -1,7 +1,9 @@
-import { Predicate } from "effect"
+import { Effect, Predicate } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { deepEqual, diffFiles, hasDifferences, type Json, redact, redactedEqual } from "./diff"
+import { deepEqual, diffFiles as diffFilesEffect, hasDifferences, type Json, redact, redactedEqual } from "./diff"
+
+const diffFiles = (input: Parameters<typeof diffFilesEffect>[0]) => Effect.runSync(diffFilesEffect(input))
 
 /** A small alphabet of Kubernetes-shaped documents, YAML-stringified. */
 const arbDoc = fc.record({
@@ -59,19 +61,16 @@ const arbValue: fc.Arbitrary<Json> = fc.letrec<{ value: Json }>((tie) => ({
 })).value
 
 describe("redactedEqual mirrors deepEqual over redact", () => {
-  const check = (options: { readonly normalizeNumerics?: boolean }): void => {
+  it("agrees on arbitrary value pairs", () => {
     fc.assert(
       fc.property(arbValue, arbValue, (a, b) => {
-        const expected = deepEqual({ a: redact({ value: a, options }), b: redact({ value: b, options }) })
-        expect(redactedEqual({ a, b, options })).toBe(expected)
-        expect(redactedEqual({ a, b: a, options })).toBe(true)
+        const expected = deepEqual({ a: redact({ value: a }), b: redact({ value: b }) })
+        expect(redactedEqual({ a, b })).toBe(expected)
+        expect(redactedEqual({ a, b: a })).toBe(true)
       }),
       { numRuns: 2000 }
     )
-  }
-
-  it("without numeric normalization", () => check({}))
-  it("with numeric normalization", () => check({ normalizeNumerics: true }))
+  })
 })
 
 describe("diff.ts — property tests", () => {
@@ -132,15 +131,13 @@ describe("diff.ts — property tests", () => {
 
 describe("redact", () => {
   it("is idempotent", () => {
-    for (const options of [{}, { normalizeNumerics: true }]) {
-      fc.assert(
-        fc.property(arbValue, (value) => {
-          const once = redact({ value, options })
-          expect(redact({ value: once, options })).toEqual(once)
-        }),
-        { numRuns: 1000 }
-      )
-    }
+    fc.assert(
+      fc.property(arbValue, (value) => {
+        const once = redact({ value })
+        expect(redact({ value: once })).toEqual(once)
+      }),
+      { numRuns: 1000 }
+    )
   })
 
   it("never leaks Secret data values and keeps their keys", () => {

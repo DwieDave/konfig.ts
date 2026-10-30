@@ -59,7 +59,7 @@ const _runDiff = ({ args, cfg, ctx }: RunDiffInput) =>
       rendered.files.map((file) => [path.relative(rendered.outDirAbs, file.path), file.content])
     )
 
-    const result = diffFiles({ left, right })
+    const result = yield* diffFiles({ left, right }).pipe(Effect.orDie)
 
     if (hasDifferences(result)) {
       yield* Console.log(formatDiff({ result, format: args.format }))

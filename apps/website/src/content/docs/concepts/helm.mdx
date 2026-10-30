@@ -17,7 +17,7 @@ Options:
 
 | Option | Meaning |
 | --- | --- |
-| `repo` | Chart repository URL passed to `helm pull --repo`. |
+| `repo` | Chart repository URL passed to `helm pull --repo`, or an `oci://` registry reference (see below). |
 | `chart` | Chart name inside the repository. |
 | `version` | Exact chart version. Required; there is no "latest". |
 | `digest` | `sha256:<hex>` (the prefix is optional) of the chart tarball. Required. |
@@ -32,11 +32,15 @@ The result is a manifest producing one raw YAML document per document in the tem
 
 ## Digest verification
 
+OCI registries are supported: set `repo` to `oci://<host>/<path>` and the chart is pulled by URL instead of `--repo`. For every source, `digest` is the SHA-256 of the pulled `.tgz` file, not the OCI manifest digest shown by registry tooling.
+
 Chart tarballs are cached on disk so they are pulled once. The cache directory is resolved from `KONFIG_HELM_CACHE`, then the `helm.cacheDir` field in `konfig.json`, then the built-in default `.konfig/helm-cache` (see [konfig.json](/konfig.ts/docs/cli/configuration/) for the precedence rule). During `build`, `validate`, and `diff` the resolved directory is passed through as `KONFIG_HELM_CACHE` to every `Helm.release()` call the render makes. Each entry is named `<chart>-<version>-<first 12 hex chars of digest>.tgz`.
 
-On a cache miss, `helm pull --repo <repo> <chart> --version <version>` runs into a private temporary directory inside the cache dir (prefix `.konfig-helm-pull-`). Exactly one `<chart>*.tgz` must appear there (otherwise `HelmRenderError`), and it is renamed into place, so concurrent renders of the same chart cannot corrupt each other. The file is then hashed with SHA-256 and compared with `digest`.
+On a cache miss, `helm pull --repo <repo> <chart> --version <version>` (for an `oci://` repo: `helm pull <repo>/<chart> --version <version>`) runs into a private temporary directory inside the cache dir (prefix `.konfig-helm-pull-`). Exactly one `<chart>*.tgz` must appear there (otherwise `HelmRenderError`), and it is renamed into place, so concurrent renders of the same chart cannot corrupt each other. The file is then hashed with SHA-256 and compared with `digest`.
 
 On a cache hit the file is hashed **again** before use, so a tampered cache directory cannot slip a different chart into your manifests. A mismatch in either path removes the cached file and fails with `HelmDigestMismatch { chart, version, expected, actual }`, whose message reads `Helm chart <chart>@<version> digest mismatch: expected sha256:..., got sha256:...`.
+
+Helm output that is not valid YAML (syntax errors, duplicate keys) fails in the `parse` phase. `KONFIG_HELM_TIMEOUT` must be a positive, finite number of seconds or duration; `0`, negative and `NaN` values are a `ConfigError` naming the variable.
 
 Every `Helm.release` failure except `HelmVersionTooLow` and `HelmMinVersionInvalid` is reported as `HelmRenderError { chart, version, cause }`. A digest mismatch, a failed pull, or a failed template therefore arrives as the `cause` of a `HelmRenderError`. Both tags are members of the `AnyRenderError` union.
 

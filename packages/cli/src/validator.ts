@@ -125,10 +125,7 @@ const _docIssues = (input: {
   })
 
 const _parseDocs = (content: string) =>
-  Effect.result(Effect.try({
-    try: () => parseYamlAll(content),
-    catch: (cause) => `YAML parse error: ${String(cause)}`
-  }))
+  Effect.result(parseYamlAll(content).pipe(Effect.mapError((cause) => `YAML parse error: ${String(cause)}`)))
 
 export const validateManifestFile = (
   input: ValidateInput

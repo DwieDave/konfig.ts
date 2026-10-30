@@ -102,7 +102,7 @@ const _buildCrds = (parsedDocs: ReadonlyArray<unknown>): CrdDocument[] =>
   })
 
 export const _parseCrdDocs = (yamlText: string): Effect.Effect<CrdDocument[], never> =>
-  Effect.try(() => parseYamlAll(yamlText)).pipe(
+  parseYamlAll(yamlText).pipe(
     Effect.orElseSucceed((): ReadonlyArray<unknown> => []),
     Effect.map(_buildCrds)
   )

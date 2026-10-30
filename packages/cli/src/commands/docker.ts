@@ -1,7 +1,7 @@
 import { diffFiles, type DiffFormat, formatDiff, hasDifferences } from "@konfig.ts/core"
 import {
-  DockerWriteError,
-  DockerWriteRefused,
+  type AnyDockerError,
+  type DockerApp,
   emit,
   extractHeader,
   findRoot,
@@ -24,13 +24,23 @@ export class SpecNotADockerApp extends Data.TaggedError("SpecNotADockerApp")<{
   readonly specPath: string
 }> {}
 
+export class DockerWriteRefused extends Data.TaggedError("DockerWriteRefused")<{
+  readonly path: string
+  readonly reason: string
+}> {}
+
+export class DockerWriteError extends Data.TaggedError("DockerWriteError")<{
+  readonly path: string
+  readonly cause: unknown
+}> {}
+
 export class DiffDrift extends Data.TaggedError("DiffDrift")<{
   readonly target: string
   readonly kind: "prod" | "dev"
 }> {}
 
-export interface SpecLoad {
-  readonly app: import("@konfig.ts/docker").DockerApp
+interface SpecLoad {
+  readonly app: DockerApp
   readonly targetAbs: string
   readonly specPath: string
   readonly root: string
@@ -40,7 +50,7 @@ export const loadSpec = (
   targetArg: string
 ): Effect.Effect<
   SpecLoad,
-  SpecImportError | SpecNotADockerApp | import("@konfig.ts/docker").AnyDockerError,
+  SpecImportError | SpecNotADockerApp | AnyDockerError,
   FileSystem | Path
 > =>
   Effect.gen(function*() {
@@ -66,42 +76,49 @@ export const loadSpec = (
   })
 
 export const emitFor = (load: SpecLoad) =>
-  emit({ spec: { ...load.app.spec, target: load.targetAbs }, specPath: load.specPath })
+  emit({ spec: load.app.spec, target: load.targetAbs, specPath: load.specPath })
 
-export interface DockerVariant {
+interface DockerVariant {
   readonly kind: "prod" | "dev"
   readonly file: "Dockerfile" | "Dockerfile.dev"
   readonly content: string
 }
 
-export interface VariantsInput {
+type DockerKind = DockerVariant["kind"]
+
+interface VariantsInput {
   readonly emitted: { readonly dockerfile: string; readonly dockerfileDev?: string | undefined }
-  readonly prodOnly: boolean
-  readonly devOnly: boolean
+  readonly only: Option.Option<DockerKind>
 }
 
-export const variantsOf = ({ devOnly, emitted, prodOnly }: VariantsInput): ReadonlyArray<DockerVariant> => [
-  ...(devOnly ? [] : [{ kind: "prod", file: "Dockerfile", content: emitted.dockerfile } as const]),
-  ...(prodOnly || !emitted.dockerfileDev
-    ? []
-    : [{ kind: "dev", file: "Dockerfile.dev", content: emitted.dockerfileDev } as const])
-]
+export const variantsOf = ({ emitted, only }: VariantsInput): ReadonlyArray<DockerVariant> =>
+  [
+    { kind: "prod", file: "Dockerfile", content: emitted.dockerfile } as const,
+    ...(emitted.dockerfileDev
+      ? [{ kind: "dev", file: "Dockerfile.dev", content: emitted.dockerfileDev } as const]
+      : [])
+  ].filter((v) => Option.match(only, { onNone: () => true, onSome: (kind) => kind === v.kind }))
 
-export interface WriteAtomicInput {
-  readonly fs: FileSystem
+const onlyFlag = Flag.Literals("only", ["prod", "dev"] as const).pipe(
+  Flag.withDescription("emit only the prod or the dev Dockerfile"),
+  Flag.optional
+)
+
+interface WriteAtomicInput {
   readonly path: string
   readonly content: string
 }
 
-export const writeAtomic = (input: WriteAtomicInput): Effect.Effect<void, DockerWriteError> =>
+export const writeAtomic = (input: WriteAtomicInput): Effect.Effect<void, DockerWriteError, FileSystem> =>
   Effect.gen(function*() {
-    const { content, fs, path } = input
+    const { content, path } = input
+    const fs = yield* FileSystem
     const tmp = `${path}.tmp.${process.pid}`
     yield* fs.writeFileString(tmp, content)
     yield* fs.rename(tmp, path)
   }).pipe(Effect.mapError((cause) => new DockerWriteError({ path: input.path, cause })))
 
-export interface WriteOneInput {
+interface WriteOneInput {
   readonly dest: string
   readonly content: string
   readonly force: boolean
@@ -129,52 +146,45 @@ export const writeOne = (
       if (head.managed && existing === content) return { written: false }
     }
 
-    yield* writeAtomic({ fs, path: dest, content })
+    yield* writeAtomic({ path: dest, content })
 
     return { written: true }
   })
 
-export interface PreviewArgs {
+interface PreviewArgs {
   readonly target: string
-  readonly prodOnly: boolean
-  readonly devOnly: boolean
+  readonly only: Option.Option<DockerKind>
 }
 
 export const previewEffect = (
   args: PreviewArgs
 ): Effect.Effect<
   void,
-  SpecImportError | SpecNotADockerApp | import("@konfig.ts/docker").AnyDockerError,
+  SpecImportError | SpecNotADockerApp | AnyDockerError,
   FileSystem | Path
 > =>
   Effect.gen(function*() {
     const load = yield* loadSpec(args.target)
     const e = yield* emitFor(load)
     yield* Effect.forEach(variantsOf({ emitted: e, ...args }), (v) =>
-      Console.log(v.kind === "dev" && !args.devOnly ? `\n# ---- Dockerfile.dev ----\n\n${v.content}` : v.content))
+      Console.log(
+        v.kind === "dev" && Option.isNone(args.only) ? `\n# ---- Dockerfile.dev ----\n\n${v.content}` : v.content
+      ))
   })
 
 const previewCommand = Command.make(
   "preview",
   {
     target: Argument.String("target").pipe(Argument.withDescription("workspace dir relative to cwd")),
-    prodOnly: Flag.Boolean("prod-only").pipe(
-      Flag.withDescription("only emit the prod Dockerfile"),
-      Flag.withDefault(false)
-    ),
-    devOnly: Flag.Boolean("dev-only").pipe(
-      Flag.withDescription("only emit the dev Dockerfile"),
-      Flag.withDefault(false)
-    )
+    only: onlyFlag
   },
   (args) => previewEffect(args)
 ).pipe(Command.withDescription("Render Dockerfile(s) for a target to stdout"))
 
-export interface WriteArgs {
+interface WriteArgs {
   readonly target: string
   readonly outDir: Option.Option<string>
-  readonly prodOnly: boolean
-  readonly devOnly: boolean
+  readonly only: Option.Option<DockerKind>
   readonly force: boolean
 }
 
@@ -184,7 +194,7 @@ export const writeEffect = (
   void,
   | SpecImportError
   | SpecNotADockerApp
-  | import("@konfig.ts/docker").AnyDockerError
+  | AnyDockerError
   | DockerWriteRefused
   | DockerWriteError,
   FileSystem | Path
@@ -215,8 +225,7 @@ const writeCommand = Command.make(
       Flag.withDescription("destination directory (default: <target>)"),
       Flag.optional
     ),
-    prodOnly: Flag.Boolean("prod-only").pipe(Flag.withDefault(false)),
-    devOnly: Flag.Boolean("dev-only").pipe(Flag.withDefault(false)),
+    only: onlyFlag,
     force: Flag.Boolean("force").pipe(
       Flag.withDescription("overwrite a destination file even if it is not konfig-managed"),
       Flag.withDefault(false)
@@ -238,15 +247,11 @@ export const diffOne = (input: DiffOneInput): Effect.Effect<void, DiffDrift, Fil
     const { dest, emitted, format, kind, target } = input
     const fs = yield* FileSystem
     const onDisk = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
-    const head = extractHeader(onDisk)
-    const emittedHead = extractHeader(emitted)
 
-    if (head.managed && emittedHead.managed && head.hash === emittedHead.hash) return
-
-    const result = diffFiles({
+    const result = yield* diffFiles({
       left: { [dest]: onDisk },
       right: { [dest]: emitted }
-    })
+    }).pipe(Effect.orDie)
 
     if (!hasDifferences(result)) return
     yield* Console.log(formatDiff({ result, format }))
@@ -254,7 +259,7 @@ export const diffOne = (input: DiffOneInput): Effect.Effect<void, DiffDrift, Fil
     return yield* new DiffDrift({ target, kind })
   })
 
-export interface DiffArgs {
+interface DiffArgs {
   readonly target: string
   readonly format: DiffFormat
 }
@@ -263,14 +268,14 @@ export const diffEffect = (
   args: DiffArgs
 ): Effect.Effect<
   void,
-  SpecImportError | SpecNotADockerApp | import("@konfig.ts/docker").AnyDockerError | DiffDrift,
+  SpecImportError | SpecNotADockerApp | AnyDockerError | DiffDrift,
   FileSystem | Path
 > =>
   Effect.gen(function*() {
     const p = yield* Path
     const load = yield* loadSpec(args.target)
     const e = yield* emitFor(load)
-    yield* Effect.forEach(variantsOf({ emitted: e, prodOnly: false, devOnly: false }), (v) =>
+    yield* Effect.forEach(variantsOf({ emitted: e, only: Option.none() }), (v) =>
       diffOne({
         dest: p.join(load.targetAbs, v.file),
         emitted: v.content,

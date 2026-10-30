@@ -9,12 +9,28 @@ export class RenderError extends Data.TaggedError("RenderError")<{
 export class EmbedYamlReadError extends Data.TaggedError("EmbedYamlReadError")<{
   readonly path: string
   readonly cause: unknown
-}> {}
+}> {
+  get message(): string {
+    return `Failed to read embedded YAML at ${this.path}${_causeDetail(this.cause)}`
+  }
+}
 
 export class BoundaryDecodeError extends Data.TaggedError("BoundaryDecodeError")<{
   readonly schema: string
   readonly cause: unknown
-}> {}
+}> {
+  get message(): string {
+    return `Failed to decode ${this.schema}${_causeDetail(this.cause)}`
+  }
+}
+
+export class YamlParseError extends Data.TaggedError("YamlParseError")<{
+  readonly reasons: ReadonlyArray<string>
+}> {
+  get message(): string {
+    return `Invalid YAML: ${this.reasons.join("; ")}`
+  }
+}
 
 export class HelmVersionTooLow extends Data.TaggedError("HelmVersionTooLow")<{
   readonly required: string
@@ -88,6 +104,7 @@ export class CrdExtractError extends Data.TaggedError("CrdExtractError")<{
 export type AnyRenderError =
   | RenderError
   | EmbedYamlReadError
+  | YamlParseError
   | BoundaryDecodeError
   | HelmVersionTooLow
   | HelmMinVersionInvalid

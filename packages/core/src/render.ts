@@ -60,17 +60,14 @@ export const renderAllYamlEffect = (
 ): Effect.Effect<string, AnyRenderError, Manifest.RenderServices> =>
   Effect.gen(function*() {
     const ctx = input.ctx ?? RenderContext.make(_resolveEnv(undefined))
-    const docs: Array<string> = []
+    const rendered = yield* Effect.forEach(input.manifests, (m) => m.render(ctx))
+    const groups = yield* Effect.forEach(rendered.flatMap((r) => Arr.ensure(r)), unwrapDocs)
 
-    for (const m of input.manifests) {
-      const rendered = yield* m.render(ctx)
-
-      for (const doc of Arr.ensure(rendered).flatMap(unwrapDocs).filter(Predicate.isNotNullish)) {
-        docs.push(Yaml.serialize({ value: doc }))
-      }
-    }
-
-    return docs.join("---\n")
+    return groups
+      .flat()
+      .filter(Predicate.isNotNullish)
+      .map((doc) => Yaml.serialize({ value: doc }))
+      .join("---\n")
   })
 
 export interface RenderAllYamlInput {

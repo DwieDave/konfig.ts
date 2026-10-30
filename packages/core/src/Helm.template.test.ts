@@ -1,6 +1,19 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { ConfigProvider, Effect, flow, Layer, Option, Redacted, Schema, Sink, Stream } from "effect"
+import {
+  Cause,
+  ConfigProvider,
+  Duration,
+  Effect,
+  Exit,
+  flow,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+  Sink,
+  Stream
+} from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { Command, StandardCommand } from "effect/process/ChildProcess"
@@ -16,7 +29,9 @@ import {
 import * as crypto from "node:crypto"
 import { unsafeCoerce } from "./_cast"
 import * as Helm from "./Helm"
+import { _parseHelmOutput } from "./Helm"
 import { RenderContext } from "./RenderContext"
+import { HelmRenderError, YamlParseError } from "./RenderError"
 
 const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
@@ -332,4 +347,78 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
         expect(pullDestinations).not.toContain(cacheDir)
       }).pipe(Effect.provide(NodeServices.layer))
   )
+})
+
+describe("Helm output parsing", () => {
+  it.effect("stamps the namespace onto docs whose metadata.namespace is null", () =>
+    Effect.gen(function*() {
+      const docs = yield* _parseHelmOutput({
+        output: "kind: ConfigMap\nmetadata:\n  name: a\n  namespace: null\n",
+        chart: "c",
+        version: "1.0.0",
+        namespace: "myns"
+      })
+
+      expect(_docOf(docs[0]?.value).metadata?.namespace).toBe("myns")
+    }))
+
+  it.effect("fails with YamlParseError on malformed output", () =>
+    Effect.gen(function*() {
+      const err = yield* Effect.flip(
+        _parseHelmOutput({ output: "a: [", chart: "c", version: "1", namespace: undefined })
+      )
+
+      expect(err).toBeInstanceOf(YamlParseError)
+      expect(new YamlParseError({ reasons: ["x"] }).message).toContain("x")
+    }))
+
+  it.effect("surfaces malformed helm output as HelmRenderError in the parse phase", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-parse-test-" })
+      const tarball = Buffer.from("fake-chart-tarball")
+
+      const m = Helm.release({
+        repo: "https://example.com/charts",
+        chart: "mychart",
+        version: "2.0.0",
+        digest: `sha256:${_sha256Hex(tarball)}`,
+        values: {}
+      })
+
+      const err = yield* Effect.flip(m.render(RenderContext.make("test"))).pipe(
+        Effect.provide(Layer.mergeAll(NodeServices.layer, _spawnerFor({ tarball, templateStdout: "a: [\n" }))),
+        Effect.provideService(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({ KONFIG_HELM_CACHE: cacheDir })
+        ),
+        Effect.scoped
+      )
+
+      expect(err).toBeInstanceOf(HelmRenderError)
+      expect(err).toHaveProperty("phase", "parse")
+    }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+describe("Helm.timeout validation", () => {
+  const _run = (value: string) =>
+    Helm.timeout.pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ KONFIG_HELM_TIMEOUT: value })),
+      Effect.exit
+    )
+
+  it.effect("rejects 0, negative and NaN with an error naming the variable", () =>
+    Effect.gen(function*() {
+      for (const bad of ["0", "-5", "NaN"]) {
+        const exit = yield* _run(bad)
+        expect(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "ok").toContain("KONFIG_HELM_TIMEOUT")
+      }
+    }))
+
+  it.effect("accepts a positive number of seconds and an effect duration", () =>
+    Effect.gen(function*() {
+      expect(Exit.isSuccess(yield* _run("90"))).toBe(true)
+      const exit = yield* _run("2 minutes")
+      expect(Exit.isSuccess(exit) && Duration.toSeconds(exit.value)).toBe(120)
+    }))
 })
