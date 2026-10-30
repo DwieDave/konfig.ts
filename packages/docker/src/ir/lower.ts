@@ -31,11 +31,13 @@ import {
 import type { CopyAtom, DevSpec, DockerSpec, HealthcheckAtom, RunnerSpec, UserAtom } from "../spec"
 import { MIN_FILTERED_INSTALL, supportsFilteredInstall } from "./bunVersion"
 import type { Dockerfile, DockerfileBundle, Instruction, Stage } from "./DockerfileIR"
+import { shGlobQuote, shJoin } from "./shell"
 
 export interface LowerContext {
   readonly root: RootDir
   readonly allWorkspaces: ReadonlyArray<Workspace>
   readonly closure: ReadonlyArray<Workspace>
+  readonly buildClosure: ReadonlyArray<Workspace>
   readonly target: Workspace
   readonly detectedPm: DetectedPm
   readonly hasPatchesDir: boolean
@@ -67,10 +69,11 @@ export const prepareContext = (
     if (!target) return yield* new WorkspaceNotFound({ target: spec.target })
     const detectedPm = yield* detectPm(root)
     const closure = yield* closureOf({ all, target: target.name })
+    const buildClosure = yield* closureOf({ all, target: target.name, includeDev: true })
     const hasPatchesDir = yield* fs
       .exists(p.join(root, "patches"))
       .pipe(Effect.orElseSucceed(() => false))
-    return { root, allWorkspaces: all, closure, target, detectedPm, hasPatchesDir }
+    return { root, allWorkspaces: all, closure, buildClosure, target, detectedPm, hasPatchesDir }
   })
 
 type PmKind = "Bun" | "Npm" | "Pnpm" | "Yarn"
@@ -162,10 +165,6 @@ export const validateSpec = (
 
 const HARDENED_DEFAULT_USER = { uid: 1001, gid: 1001, name: "app" } as const
 
-// POSIX-shell single-quote a token: closes quote, emits an escaped literal
-// quote, reopens quote — safe for arbitrary paths in a Dockerfile RUN line.
-const _shSingleQuote = (s: string): string => `'${s.replaceAll("'", "'\\''")}'`
-
 const _envToInstruction = (env: Record<string, string> | undefined): Instruction | undefined => {
   if (!env) return undefined
   const entries = Object.entries(env).sort(([a], [b]) => a.localeCompare(b))
@@ -242,22 +241,45 @@ const _copyAtomToInstruction = (
   return undefined
 }
 
-const _userInstructions = (user: UserAtom | undefined): {
+interface UserInput {
+  readonly user: UserAtom | undefined
+  readonly alpine: boolean
+}
+
+interface AccountIds {
+  readonly uid: number
+  readonly gid: number
+  readonly name: string
+}
+
+const _alpineAccountCmd = (a: AccountIds): string =>
+  `addgroup -S -g ${a.gid} ${a.name} && adduser -S -u ${a.uid} -G ${a.name} ${a.name}`
+
+const _debianAccountCmd = (a: AccountIds): string =>
+  `groupadd --system --gid ${a.gid} ${a.name} && useradd --system --uid ${a.uid} --gid ${a.name} --no-create-home --shell /usr/sbin/nologin ${a.name}`
+
+const _userInstructions = (input: UserInput): {
   readonly setupRun: Instruction | undefined
   readonly user: Instruction | undefined
   readonly chown: string | undefined
 } => {
-  const effective: UserAtom = user ?? { _tag: "UserNonRoot" }
+  const effective: UserAtom = input.user ?? { _tag: "UserNonRoot" }
   if (effective._tag === "UserRoot") return { setupRun: undefined, user: undefined, chown: undefined }
-  const uid = effective.uid ?? HARDENED_DEFAULT_USER.uid
-  const gid = effective.gid ?? HARDENED_DEFAULT_USER.gid
-  const name = effective.name ?? HARDENED_DEFAULT_USER.name
-  const setupRun: Instruction = {
-    _tag: "Run",
-    cmd: `addgroup -S -g ${gid} ${name} && adduser -S -u ${uid} -G ${name} ${name}`
+  const ids: AccountIds = {
+    uid: effective.uid ?? HARDENED_DEFAULT_USER.uid,
+    gid: effective.gid ?? HARDENED_DEFAULT_USER.gid,
+    name: effective.name ?? HARDENED_DEFAULT_USER.name
   }
-  return { setupRun, user: { _tag: "User", user: name }, chown: `${name}:${name}` }
+  const cmd = input.alpine ? _alpineAccountCmd(ids) : _debianAccountCmd(ids)
+  return {
+    setupRun: { _tag: "Run", cmd },
+    user: { _tag: "User", user: ids.name },
+    chown: `${ids.name}:${ids.name}`
+  }
 }
+
+const _runnerIsAlpine = (runner: RunnerSpec, pm: PmContext): boolean =>
+  runner.baseImage ? /alpine/i.test(`${runner.baseImage.image}:${runner.baseImage.tag}`) : pm.alpine
 
 interface PmContext {
   readonly pmKind: PmKind
@@ -269,12 +291,26 @@ interface PmContext {
   readonly runtimeImage: ImageRef
   readonly depsImage: ImageRef
   readonly alpine: boolean
+  readonly rootFiles: ReadonlyArray<string>
 }
+
+const _presentRootFiles = (
+  root: string,
+  pm: PackageManager
+): Effect.Effect<ReadonlyArray<string>, never, FileSystem | Path> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const p = yield* Path
+    return yield* Effect.filter(
+      [...pm.lockfileNames, ...pm.auxFiles],
+      (f) => fs.exists(p.join(root, f)).pipe(Effect.orElseSucceed(() => false))
+    )
+  })
 
 const _resolveDefaults = (
   spec: DockerSpec,
   ctx: LowerContext
-): Effect.Effect<PmContext, AnyDockerError> =>
+): Effect.Effect<PmContext, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
     const pmKind: PmKind = _specPmKind(spec) ?? ctx.detectedPm.kind
     const runtimeKind: RuntimeKind = _specRuntimeKind(spec) ?? _defaultRuntimeFor(pmKind)
@@ -302,6 +338,7 @@ const _resolveDefaults = (
     const runtime = _runtimeImpl(runtimeKind)
     const runtimeImage = runtime.imageRef({ version: runtimeVersion, alpine })
     const depsImage = pm.depsImage({ runtimeImage, pmVersion })
+    const rootFiles = yield* _presentRootFiles(ctx.root, pm)
     return {
       pmKind,
       runtimeKind,
@@ -311,7 +348,8 @@ const _resolveDefaults = (
       runtimeImpl: runtime,
       runtimeImage,
       depsImage,
-      alpine
+      alpine,
+      rootFiles
     }
   })
 
@@ -337,18 +375,8 @@ const _baseStage = (img: ImageRef): Stage => ({
   instructions: []
 })
 
-const _lockfilesToCopy = (ctx: LowerContext, pm: PmContext): ReadonlyArray<string> =>
-  ctx.detectedPm.presentLockfiles.length > 0
-    ? ctx.detectedPm.presentLockfiles
-    : pm.pmImpl.lockfileNames
-
 const _rootCopyInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] => {
-  const rootFiles: ReadonlyArray<string> = [
-    "package.json",
-    ..._lockfilesToCopy(ctx, pm),
-    ...pm.pmImpl.auxFiles
-  ]
-  const instructions: Instruction[] = [{ _tag: "Copy", src: rootFiles, dst: "./" }]
+  const instructions: Instruction[] = [{ _tag: "Copy", src: ["package.json", ...pm.rootFiles], dst: "./" }]
   if (ctx.hasPatchesDir) {
     instructions.push({ _tag: "Copy", src: ["patches"], dst: "./patches" })
   }
@@ -405,21 +433,12 @@ const _prodInstallCmd = (pm: PmContext): ReadonlyArray<string> => [
 const _prodDepsInstallInstructions = (ctx: LowerContext, pm: PmContext): Instruction[] =>
   pm.pmKind === "Bun" ? _bunProdDepsInstructions(ctx, pm) : _rewriteProdDepsInstructions(ctx, pm)
 
-// Quote a path for `rm -rf`, leaving `*` and `?` bare so the shell expands
-// them (needed for versioned store dirs such as node_modules/.bun/<name>@<ver>).
-// Every other character sits inside single quotes, so the only unquoted bytes
-// are glob metacharacters — nothing a shell could parse as a command.
-// Paths without globs render exactly as `_shSingleQuote` does.
-const _shGlobQuote = (path: string): string =>
-  path
-    .split(/([*?])/)
-    .map((part) => (part === "*" || part === "?" ? part : part === "" ? "" : _shSingleQuote(part)))
-    .join("")
-
+// Glob metacharacters stay bare so versioned store dirs such as
+// node_modules/.bun/<name>@<ver> expand in the shell.
 // Applied after install (not in the runner) so the deletion actually
 // shrinks the layer rather than just adding a deletion marker.
 const _removePathInstructions = (paths: ReadonlyArray<string> | undefined): Instruction[] =>
-  (paths ?? []).map((path): Instruction => ({ _tag: "Run", cmd: `rm -rf ${_shGlobQuote(path)}` }))
+  (paths ?? []).map((path): Instruction => ({ _tag: "Run", cmd: `rm -rf ${shGlobQuote(path)}` }))
 
 const _prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
   const instructions: Instruction[] = [
@@ -477,7 +496,7 @@ const _builderStage = (
       })
     }
   }
-  for (const ws of ctx.closure) {
+  for (const ws of ctx.buildClosure) {
     instructions.push({ _tag: "Copy", src: [ws.relDir], dst: `./${ws.relDir}` })
   }
   instructions.push({ _tag: "Workdir", path: `/app/${ctx.target.relDir}` })
@@ -487,7 +506,7 @@ const _builderStage = (
   if (build._tag === "BuildScript") {
     instructions.push({ _tag: "Run", cmd: `${pm.pmKind.toLowerCase()} run ${build.script}` })
   } else if (build._tag === "BuildCommand") {
-    instructions.push({ _tag: "Run", cmd: build.argv.join(" ") })
+    instructions.push({ _tag: "Run", cmd: shJoin(build.argv) })
   }
   return {
     name: "builder",
@@ -601,7 +620,7 @@ const _runnerStage = (
   pm: PmContext
 ): Stage => {
   const runner: RunnerSpec = spec.runner
-  const user = _userInstructions(runner.user)
+  const user = _userInstructions({ user: runner.user, alpine: _runnerIsAlpine(runner, pm) })
   const expandedCopy = _expandWorkspaceSourceAll(runner.copy, ctx.closure)
   const usesWorkspaceSource = expandedCopy.some((c) => c._tag === "WorkspaceSource")
   const chown = user.chown ? { chown: user.chown } : {}
@@ -641,7 +660,7 @@ const _devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext, dev: DevS
   for (const path of spec.sharedRootFiles ?? []) {
     instructions.push({ _tag: "Copy", src: [path], dst: `./${path}` })
   }
-  for (const ws of ctx.closure) {
+  for (const ws of ctx.buildClosure) {
     instructions.push({ _tag: "Copy", src: [ws.relDir], dst: `./${ws.relDir}` })
   }
   instructions.push({ _tag: "Workdir", path: dev.workdir ?? `/app/${ctx.target.relDir}` })

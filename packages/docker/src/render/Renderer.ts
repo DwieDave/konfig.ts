@@ -28,10 +28,7 @@ const _renderEnv = (i: Extract<Instruction, { _tag: "Env" }>): string => {
   return `ENV ${pairs}`
 }
 
-const _quoteIfNeeded = (v: string): string => {
-  if (/[\s"'\\]/.test(v)) return JSON.stringify(v)
-  return v
-}
+const _quoteIfNeeded = (v: string): string => /[\s"'\\$]/.test(v) ? JSON.stringify(v).replaceAll("$", "\\$") : v
 
 const _renderHealthcheck = (h: HealthcheckIR): string => {
   if (h._tag === "None") return "HEALTHCHECK NONE"

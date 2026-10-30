@@ -8,6 +8,11 @@ export class WorkspaceNotFound extends Data.TaggedError("WorkspaceNotFound")<{
   readonly target: string
 }> {}
 
+export class PackageJsonInvalid extends Data.TaggedError("PackageJsonInvalid")<{
+  readonly path: string
+  readonly cause: unknown
+}> {}
+
 export class UnsupportedPm extends Data.TaggedError("UnsupportedPm")<{
   readonly reason: string
   readonly candidates?: ReadonlyArray<string>
@@ -66,6 +71,7 @@ export class DockerWriteError extends Data.TaggedError("DockerWriteError")<{
 export type AnyDockerError =
   | MonorepoRootNotFound
   | WorkspaceNotFound
+  | PackageJsonInvalid
   | UnsupportedPm
   | CircularWorkspaceDep
   | EngineVersionMissing

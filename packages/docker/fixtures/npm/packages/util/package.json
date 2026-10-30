@@ -2,6 +2,6 @@
   "name": "@fix/util",
   "version": "0.0.0",
   "dependencies": {
-    "@fix/shared": "workspace:*"
+    "@fix/shared": "^0.0.0"
   }
 }

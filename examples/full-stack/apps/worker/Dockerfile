@@ -1,11 +1,11 @@
 # konfig-managed: @konfig.ts/docker
 # spec: examples/full-stack/apps/worker/docker.ts
-# hash: sha256:ed626b14f7ba278649f7ea2803fff9186b5e32b508ac906dc1dbb5958d4e1366
+# hash: sha256:14cf26db421a20d46168cf4287d35c108f9f83912ef69f18dfcf325a6e82d375
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
 WORKDIR /app
-COPY package.json bun.lock bunfig.toml ./
+COPY package.json bun.lock ./
 COPY examples/full-stack/apps/api/package.json ./examples/full-stack/apps/api/
 COPY examples/full-stack/shared/env-contracts/package.json ./examples/full-stack/shared/env-contracts/
 COPY examples/full-stack/apps/worker/package.json ./examples/full-stack/apps/worker/
@@ -30,16 +30,18 @@ COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/packages/core/node_modules /app/packages/core/node_modules
 COPY --from=deps /app/packages/env/node_modules /app/packages/env/node_modules
 COPY --from=deps /app/examples/full-stack/shared/env-contracts/node_modules /app/examples/full-stack/shared/env-contracts/node_modules
+COPY --from=deps /app/packages/docker/node_modules /app/packages/docker/node_modules
 COPY --from=deps /app/examples/full-stack/apps/worker/node_modules /app/examples/full-stack/apps/worker/node_modules
 COPY packages/core ./packages/core
 COPY packages/env ./packages/env
 COPY examples/full-stack/shared/env-contracts ./examples/full-stack/shared/env-contracts
+COPY packages/docker ./packages/docker
 COPY examples/full-stack/apps/worker ./examples/full-stack/apps/worker
 WORKDIR /app/examples/full-stack/apps/worker
 
 FROM base AS prod-deps
 WORKDIR /app
-COPY package.json bun.lock bunfig.toml ./
+COPY package.json bun.lock ./
 COPY examples/full-stack/apps/api/package.json ./examples/full-stack/apps/api/
 COPY examples/full-stack/shared/env-contracts/package.json ./examples/full-stack/shared/env-contracts/
 COPY examples/full-stack/apps/worker/package.json ./examples/full-stack/apps/worker/

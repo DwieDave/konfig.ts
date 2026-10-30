@@ -87,13 +87,13 @@ The generator never writes a floating `latest` tag. The base image version comes
 
 The closure is the set of workspace packages the target depends on, directly or transitively. It is computed in two steps.
 
-First, `findRoot` walks up from the target to the nearest directory that has a `pnpm-workspace.yaml` or a `package.json` with a `workspaces` field. If there is none, the error is `MonorepoRootNotFound`.
+First, `findRoot` walks up from the target to the nearest directory that has a `pnpm-workspace.yaml` or a `package.json` with a `workspaces` field. If there is none, the error is `MonorepoRootNotFound`. Workspace globs support `*`, `**`, partial segments such as `web-*`, and `!` negations. A `package.json` that is not valid JSON fails with `PackageJsonInvalid`, naming the file.
 
-Then `closureOf` follows `dependencies` and `peerDependencies` whose version starts with `workspace:` or `link:`. It rejects cycles with `CircularWorkspaceDep`. `devDependencies` are deliberately excluded, so build-only tooling never lands in the runner.
+Then `closureOf` follows every `dependencies` and `peerDependencies` entry whose name is a workspace package, whatever the version range (`workspace:*`, `^1.0.0`, `link:`). It rejects cycles with `CircularWorkspaceDep`. The runtime closure excludes `devDependencies`, so build-only tooling never lands in the runner. The `builder` and `dev` stages use a build closure that also follows workspace `devDependencies`, so shared tsconfigs and build tools are present when the build runs.
 
 The closure drives every generated `COPY`. The `deps` stage copies every workspace's `package.json` so the lockfile resolves, while the `builder`, `prod-deps`, and `runner` stages copy only closure members.
 
-Some root files are copied automatically: the root `package.json`, the lockfile(s) present, the package manager's config files (`bunfig.toml`, `.npmrc`, `pnpm-workspace.yaml`, `.yarnrc`, `.yarnrc.yml`), and a root `patches/` directory. Any other root file the build step needs, such as a shared `tsconfig.base.json`, goes in `sharedRootFiles`. Those are copied into the `builder` and `dev` stages. Naming one that does not exist fails with `SharedRootFileMissing`.
+Some root files are copied automatically: the root `package.json`, the lockfile(s) present, the package manager's config files that exist on disk (`bunfig.toml`, `.npmrc`, `pnpm-workspace.yaml`, `.yarnrc`, `.yarnrc.yml`), and a root `patches/` directory. Any other root file the build step needs, such as a shared `tsconfig.base.json`, goes in `sharedRootFiles`. Those are copied into the `builder` and `dev` stages. Naming one that does not exist fails with `SharedRootFileMissing`.
 
 ## Stages of the production Dockerfile
 

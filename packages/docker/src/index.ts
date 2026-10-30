@@ -9,6 +9,7 @@ export {
   DockerWriteRefused,
   EngineVersionMissing,
   MonorepoRootNotFound,
+  PackageJsonInvalid,
   SharedRootFileMissing,
   SpecDecodeError,
   UnsupportedPm,

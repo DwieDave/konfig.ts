@@ -3,8 +3,15 @@ import { Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { parse as parseYaml } from "yaml"
-import { CircularWorkspaceDep, MonorepoRootNotFound, UnsupportedPm, WorkspaceNotFound } from "../DockerError"
+import {
+  CircularWorkspaceDep,
+  MonorepoRootNotFound,
+  PackageJsonInvalid,
+  UnsupportedPm,
+  WorkspaceNotFound
+} from "../DockerError"
 import type { NodeModulesLayout } from "./PackageManager"
+import { hasWildcard, segmentMatches } from "./workspaceGlob"
 
 const ROOT_BRAND: unique symbol = Symbol.for("@konfig.ts/docker/RootDir")
 export type RootDir = string & { readonly [ROOT_BRAND]: true }
@@ -52,20 +59,28 @@ export interface DetectedPm {
   readonly presentLockfiles: ReadonlyArray<string>
 }
 
+interface DecodeInput {
+  readonly path: string
+  readonly text: string
+}
+
+const _decodePkgJson = (input: DecodeInput): Effect.Effect<PackageJson, PackageJsonInvalid> =>
+  _decodePkgJsonString(input.text).pipe(
+    Effect.mapError((cause) => new PackageJsonInvalid({ path: input.path, cause }))
+  )
+
 const _readPkgJsonIfExists = (
   fs: FileSystem,
   p: Path,
   cur: string
-): Effect.Effect<PackageJson | undefined, never> =>
+): Effect.Effect<PackageJson | undefined, PackageJsonInvalid> =>
   Effect.gen(function*() {
     const pkgPath = p.join(cur, "package.json")
     const exists = yield* fs.exists(pkgPath).pipe(Effect.orElseSucceed(() => false))
     if (!exists) return undefined
-    const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
-    if (text === "") return undefined
-    return yield* _decodePkgJsonString(text).pipe(
-      Effect.orElseSucceed(() => undefined)
-    )
+    const text = yield* fs.readFileString(pkgPath).pipe(Effect.option)
+    if (text._tag === "None") return undefined
+    return yield* _decodePkgJson({ path: pkgPath, text: text.value })
   })
 
 const _isMonorepoRoot = (pkg: PackageJson | undefined, hasPnpmYaml: boolean): boolean => {
@@ -74,7 +89,9 @@ const _isMonorepoRoot = (pkg: PackageJson | undefined, hasPnpmYaml: boolean): bo
   return true
 }
 
-export const findRoot = (from: string): Effect.Effect<RootDir, MonorepoRootNotFound, FileSystem | Path> =>
+export const findRoot = (
+  from: string
+): Effect.Effect<RootDir, MonorepoRootNotFound | PackageJsonInvalid, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
@@ -117,43 +134,60 @@ const _collectDescendantDirs = (
     return acc
   })
 
-const _expandWorkspaceGlob = (
-  fs: FileSystem,
-  p: Path,
-  root: string,
-  pattern: string
-): Effect.Effect<ReadonlyArray<string>, never> =>
-  Effect.gen(function*() {
-    const parts = pattern.split("/").filter((s) => s.length > 0)
-    let currents: ReadonlyArray<string> = [""]
-    for (const part of parts) {
-      const next: string[] = []
-      for (const cur of currents) {
-        const absDir = p.join(root, cur)
-        if (part === "*") {
-          const children = yield* fs
-            .readDirectory(absDir)
-            .pipe(Effect.orElseSucceed((): string[] => []))
-          for (const ch of children) {
-            next.push(p.join(cur, ch))
-          }
-        } else if (part === "**") {
-          const descendants = yield* _collectDescendantDirs(fs, p, root, cur)
-          for (const d of descendants) next.push(d)
-        } else {
-          next.push(p.join(cur, part))
-        }
-      }
-      currents = next
-    }
-    const filtered: string[] = []
-    for (const c of currents) {
-      const pkgPath = p.join(root, c, "package.json")
-      const ex = yield* fs.exists(pkgPath).pipe(Effect.orElseSucceed(() => false))
-      if (ex) filtered.push(c)
-    }
-    return filtered
-  }).pipe(Effect.orElseSucceed(() => []))
+interface GlobEnv {
+  readonly fs: FileSystem
+  readonly p: Path
+  readonly root: string
+}
+
+interface SegmentStep {
+  readonly cur: string
+  readonly part: string
+}
+
+const _listChildren = (env: GlobEnv, dir: string): Effect.Effect<ReadonlyArray<string>> =>
+  env.fs.readDirectory(env.p.join(env.root, dir)).pipe(Effect.orElseSucceed((): string[] => []))
+
+const _wildcardChildren = (env: GlobEnv, step: SegmentStep): Effect.Effect<ReadonlyArray<string>> =>
+  _listChildren(env, step.cur).pipe(
+    Effect.map((children) =>
+      children
+        .filter((ch) => ch !== "node_modules" && segmentMatches({ segment: step.part, name: ch }))
+        .map((ch) => env.p.join(step.cur, ch))
+    )
+  )
+
+const _expandSegment = (env: GlobEnv, step: SegmentStep): Effect.Effect<ReadonlyArray<string>> => {
+  if (step.part === "**") return _collectDescendantDirs(env.fs, env.p, env.root, step.cur)
+  if (hasWildcard(step.part)) return _wildcardChildren(env, step)
+  return Effect.succeed([env.p.join(step.cur, step.part)])
+}
+
+const _expandWorkspaceGlob = (env: GlobEnv, pattern: string): Effect.Effect<ReadonlyArray<string>> =>
+  Effect.reduce(
+    pattern.split("/").filter((s) => s.length > 0),
+    (): ReadonlyArray<string> => [""],
+    (currents, part) =>
+      Effect.forEach(currents, (cur) => _expandSegment(env, { cur, part })).pipe(
+        Effect.map((groups) => groups.flat())
+      )
+  )
+
+const _withPackageJson = (env: GlobEnv, dirs: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
+  Effect.filter(
+    dirs,
+    (d) => env.fs.exists(env.p.join(env.root, d, "package.json")).pipe(Effect.orElseSucceed(() => false))
+  )
+
+const _applyPattern = (env: GlobEnv, acc: ReadonlySet<string>, pattern: string): Effect.Effect<ReadonlySet<string>> =>
+  pattern.startsWith("!")
+    ? _expandWorkspaceGlob(env, pattern.slice(1)).pipe(
+      Effect.map((dirs) => new Set([...acc].filter((d) => !dirs.includes(d))))
+    )
+    : _expandWorkspaceGlob(env, pattern).pipe(
+      Effect.flatMap((dirs) => _withPackageJson(env, dirs)),
+      Effect.map((dirs) => new Set([...acc, ...dirs]))
+    )
 
 const PnpmWorkspaceYamlSchema = Schema.Struct({
   packages: Schema.optionalKey(Schema.Array(Schema.String))
@@ -165,7 +199,7 @@ const _readWorkspacePatterns = (
   root: RootDir,
   fs: FileSystem,
   p: Path
-): Effect.Effect<ReadonlyArray<string>, never> =>
+): Effect.Effect<ReadonlyArray<string>, PackageJsonInvalid> =>
   Effect.gen(function*() {
     const pnpmPath = p.join(root, "pnpm-workspace.yaml")
     const pnpmExists = yield* fs.exists(pnpmPath).pipe(Effect.orElseSucceed(() => false))
@@ -190,44 +224,30 @@ const _parseWorkspacePackage = (
   fs: FileSystem,
   p: Path,
   relDir: string
-): Effect.Effect<Workspace | undefined, never> =>
+): Effect.Effect<Workspace | undefined, PackageJsonInvalid> =>
   Effect.gen(function*() {
     const pkgPath = p.join(root, relDir, "package.json")
-    const text = yield* fs.readFileString(pkgPath).pipe(Effect.orElseSucceed(() => ""))
-    if (text === "") return undefined
-    return yield* _decodePkgJsonString(text).pipe(
-      Effect.map((pkg): Workspace | undefined => {
-        if (!pkg.name) return undefined
-        return {
-          name: pkg.name,
-          relDir,
-          pkg,
-          hasBuildScript: Boolean(pkg.scripts?.build)
-        }
-      }),
-      Effect.orElseSucceed(() => undefined)
-    )
+    const text = yield* fs.readFileString(pkgPath).pipe(Effect.option)
+    if (text._tag === "None") return undefined
+    const pkg = yield* _decodePkgJson({ path: pkgPath, text: text.value })
+    if (!pkg.name) return undefined
+    return { name: pkg.name, relDir, pkg, hasBuildScript: Boolean(pkg.scripts?.build) }
   })
 
 export const allWorkspaces = (
   root: RootDir
-): Effect.Effect<ReadonlyArray<Workspace>, never, FileSystem | Path> =>
+): Effect.Effect<ReadonlyArray<Workspace>, PackageJsonInvalid, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
+    const env: GlobEnv = { fs, p, root }
     const patterns = yield* _readWorkspacePatterns(root, fs, p)
-    const dirSet = new Set<string>()
-    for (const pat of patterns) {
-      const dirs = yield* _expandWorkspaceGlob(fs, p, root, pat)
-      for (const d of dirs) dirSet.add(d)
-    }
-    const out: Workspace[] = []
-    for (const d of dirSet) {
-      const ws = yield* _parseWorkspacePackage(root, fs, p, d)
-      if (ws) out.push(ws)
-    }
-    out.sort((a, b) => a.name.localeCompare(b.name))
-    return out
+    const dirSet = yield* Effect.reduce(patterns, (): ReadonlySet<string> =>
+      new Set<string>(), (acc, pat) =>
+      _applyPattern(env, acc, pat))
+    const parsed = yield* Effect.forEach([...dirSet], (d) =>
+      _parseWorkspacePackage(root, fs, p, d))
+    return parsed.filter((w): w is Workspace => w !== undefined).sort((a, b) => a.name.localeCompare(b.name))
   })
 
 const _parseCorepackField = (
@@ -286,7 +306,7 @@ const _detectPnpmLayout = (
 
 export const detectPm = (
   root: RootDir
-): Effect.Effect<DetectedPm, UnsupportedPm, FileSystem | Path> =>
+): Effect.Effect<DetectedPm, UnsupportedPm | PackageJsonInvalid, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
@@ -340,25 +360,15 @@ export const detectPm = (
     }
   })
 
-const WORKSPACE_PROTOCOLS = ["workspace:", "link:"] as const
-
-const _workspaceDeps = (pkg: PackageJson): ReadonlyArray<string> => {
-  const out: string[] = []
-  const merge = (rec?: Readonly<Record<string, string>>): void => {
-    if (!rec) return
-    for (const [name, spec] of Object.entries(rec)) {
-      if (WORKSPACE_PROTOCOLS.some((p) => spec.startsWith(p))) out.push(name)
-    }
-  }
-  // devDependencies are build-time only and must not leak into the runner closure.
-  merge(pkg.dependencies)
-  merge(pkg.peerDependencies)
-  return out
-}
+const _depNames = (pkg: PackageJson, includeDev: boolean): ReadonlyArray<string> =>
+  [pkg.dependencies, pkg.peerDependencies, includeDev ? pkg.devDependencies : undefined].flatMap((rec) =>
+    Object.keys(rec ?? {})
+  )
 
 export interface ClosureInput {
   readonly all: ReadonlyArray<Workspace>
   readonly target: string
+  readonly includeDev?: boolean
 }
 
 export const closureOf = (
@@ -382,7 +392,7 @@ export const closureOf = (
       if (visited.has(ws.name)) return undefined
       if (onStack.has(ws.name)) return cycleErr([...stack, ws.name])
       onStack.add(ws.name)
-      const deps = _workspaceDeps(ws.pkg)
+      const deps = _depNames(ws.pkg, input.includeDev ?? false)
       for (const depName of deps) {
         const dep = byName.get(depName)
         if (!dep) continue

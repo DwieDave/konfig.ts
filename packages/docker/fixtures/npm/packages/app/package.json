@@ -2,7 +2,7 @@
   "name": "@fix/app",
   "version": "0.0.0",
   "dependencies": {
-    "@fix/util": "workspace:*"
+    "@fix/util": "^0.0.0"
   },
   "scripts": {
     "build": "echo build"
