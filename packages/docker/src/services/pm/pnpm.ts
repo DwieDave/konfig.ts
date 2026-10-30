@@ -5,7 +5,7 @@ export interface PnpmOptions {
 }
 
 export const pnpm = (opts: PnpmOptions): PackageManager => ({
-  _tag: "Pnpm",
+  kind: "Pnpm",
   lockfileNames: ["pnpm-lock.yaml"],
   auxFiles: ["pnpm-workspace.yaml", ".npmrc"],
   installCommand: ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"],

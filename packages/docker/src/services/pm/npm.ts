@@ -1,7 +1,7 @@
 import type { PackageManager } from "../PackageManager"
 
 export const npm: PackageManager = {
-  _tag: "Npm",
+  kind: "Npm",
   lockfileNames: ["package-lock.json"],
   auxFiles: [".npmrc"],
   installCommand: ["npm", "ci", "--ignore-scripts"],

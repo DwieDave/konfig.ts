@@ -6,6 +6,6 @@ export interface RuntimeImageInput {
 }
 
 export interface Runtime {
-  readonly _tag: "Bun" | "Node"
+  readonly kind: "Bun" | "Node"
   readonly imageRef: (input: RuntimeImageInput) => ImageRef
 }

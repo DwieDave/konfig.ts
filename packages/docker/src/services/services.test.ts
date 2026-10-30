@@ -8,7 +8,7 @@ import { node as nodeRuntime } from "./runtime/node"
 describe("PackageManager bun", () => {
   it("matches snapshot", () => {
     expect({
-      tag: bunPm._tag,
+      tag: bunPm.kind,
       lockfiles: bunPm.lockfileNames,
       aux: bunPm.auxFiles,
       install: bunPm.installCommand,
@@ -39,7 +39,7 @@ describe("PackageManager bun", () => {
 describe("PackageManager npm", () => {
   it("matches snapshot", () => {
     expect({
-      tag: npmPm._tag,
+      tag: npmPm.kind,
       lockfiles: npmPm.lockfileNames,
       aux: npmPm.auxFiles,
       install: npmPm.installCommand,
@@ -68,7 +68,7 @@ describe("PackageManager pnpm", () => {
   it("isolated layout snapshot", () => {
     const p = pnpmPm({ layout: "isolated" })
     expect({
-      tag: p._tag,
+      tag: p.kind,
       lockfiles: p.lockfileNames,
       aux: p.auxFiles,
       install: p.installCommand,

@@ -4,12 +4,13 @@ import { Effect, Exit } from "effect"
 import * as fc from "fast-check"
 import { describe, expect } from "vitest"
 import { type Files, pkgJson as pkg, rootPkgJson as rootPkg, writeTree } from "../testing/tree"
-import { allWorkspaces, closureOf, findRoot, type Workspace } from "./WorkspaceGraph"
+import { allWorkspaces, closureOf, findRoot, type PackageJson, type Workspace } from "./WorkspaceGraph"
 
 const relDirsOf = (files: Files) =>
   Effect.gen(function*() {
     const dir = yield* writeTree(files)
     const root = yield* findRoot(dir)
+
     return (yield* allWorkspaces(root)).map((w) => w.relDir)
   })
 
@@ -22,6 +23,7 @@ describe("workspace globs", () => {
         "apps/web-b/package.json": pkg({ name: "b" }),
         "apps/api/package.json": pkg({ name: "c" })
       })
+
       expect(dirs).toEqual(["apps/web-a", "apps/web-b"])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -32,6 +34,7 @@ describe("workspace globs", () => {
         "packages/a/package.json": pkg({ name: "a" }),
         "packages/legacy/package.json": pkg({ name: "legacy" })
       })
+
       expect(dirs).toEqual(["packages/a"])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -42,6 +45,7 @@ describe("workspace globs", () => {
         "packages/a/package.json": pkg({ name: "a" }),
         "packages/a/test/fixture/package.json": pkg({ name: "fx" })
       })
+
       expect(dirs).toEqual(["packages/a"])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
@@ -53,6 +57,7 @@ describe("malformed package.json", () => {
         "package.json": rootPkg({ workspaces: ["packages/*"] }),
         "packages/a/package.json": "{ not json"
       })
+
       const root = yield* findRoot(dir)
       const err = yield* Effect.flip(allWorkspaces(root))
       expect(err._tag).toBe("PackageJsonInvalid")
@@ -60,7 +65,7 @@ describe("malformed package.json", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 
-const ws = (name: string, pkgFields: object): Workspace => ({
+const ws = (name: string, pkgFields: Partial<PackageJson>): Workspace => ({
   name,
   relDir: `packages/${name}`,
   pkg: { name, ...pkgFields },
@@ -78,6 +83,7 @@ describe("closureOf protocol-agnostic", () => {
           ws("util", { dependencies: { shared: r2, external: "^1.0.0" } }),
           ws("shared", {})
         ]
+
         const result = Effect.runSyncExit(closureOf({ all, target: "app" }))
         expect(Exit.isSuccess(result) && result.value.map((w) => w.name)).toEqual(["shared", "util", "app"])
       })
@@ -86,10 +92,13 @@ describe("closureOf protocol-agnostic", () => {
 
   it("devDependencies join only the build closure", () => {
     const all = [ws("app", { devDependencies: { tsconfig: "^1.0.0" } }), ws("tsconfig", {})]
+
     const run = (includeDev: boolean) => {
       const r = Effect.runSyncExit(closureOf({ all, target: "app", includeDev }))
+
       return Exit.isSuccess(r) ? r.value.map((w) => w.name) : []
     }
+
     expect(run(false)).toEqual(["app"])
     expect(run(true)).toEqual(["tsconfig", "app"])
   })

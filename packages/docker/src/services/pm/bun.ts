@@ -2,7 +2,7 @@ import type { PackageManager } from "../PackageManager"
 
 // Both lockfile formats are valid for Bun; detectPm reports which exists.
 export const bun: PackageManager = {
-  _tag: "Bun",
+  kind: "Bun",
   lockfileNames: ["bun.lock", "bun.lockb"],
   auxFiles: ["bunfig.toml"],
   installCommand: ["bun", "install", "--ignore-scripts"],

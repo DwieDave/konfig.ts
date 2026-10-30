@@ -1,10 +1,19 @@
+import { Match } from "effect"
+
 const _escapeRegExp = (s: string): string => s.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+
+const _charPattern = (c: string): string =>
+  Match.value(c).pipe(
+    Match.when("*", () => "[^/]*"),
+    Match.when("?", () => "[^/]"),
+    Match.orElse(_escapeRegExp)
+  )
 
 const _segmentToRegExp = (segment: string): RegExp =>
   new RegExp(
     `^${
       segment.split("")
-        .map((c) => (c === "*" ? "[^/]*" : c === "?" ? "[^/]" : _escapeRegExp(c)))
+        .map((c) => _charPattern(c))
         .join("")
     }$`
   )
