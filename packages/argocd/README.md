@@ -37,7 +37,7 @@ const postgres = definePostgres({ name: "postgres", source: src("postgres"), sto
 const api = defineApi({ name: "api", source: src("api"), replicas: 2 })
 
 export default AppOfApps.fromModules({
-  target: { repoURL, branch: "main", rootPath: "./manifests/prod" },
+  target: {},
   defaults: { destination: { server: "https://kubernetes.default.svc" } },
   modules: [postgres, api] // providers first; the order documents intent
 })
@@ -51,7 +51,7 @@ provides it, `fromModules` refuses to compile:
 
 | Export                                             | Purpose                                                                                                                                                    |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Application.define`                               | build an `ApplicationHandle<Name, Out, In>` — an Effect Context tag that also carries a `Layer<Out, _, In>`                                                |
+| `Application.define`                               | build a module handle — an Effect Context tag that also carries a `Layer<Out, _, In>`                                                |
 | `Application.target`                               | adapter passed to `Module.fixedNs` / `Module.dynamicNs`                                                                                                    |
 | `Application.LiteralName<T>`                       | rejects a `string`-widened `name` at the call site                                                                                                         |
 | `AppOfApps.fromModules`                            | compose module handles into a sealed, renderable app-of-apps; the compile-time dep check fires here (group-level `provides?: Layer` fills remaining needs) |

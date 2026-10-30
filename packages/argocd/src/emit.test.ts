@@ -4,11 +4,7 @@ import type { AppOfAppsDefaults, AppOfAppsTarget } from "./AppOfApps"
 import { applicationCRFilename, serializeApplicationCR } from "./emit"
 import { Sync } from "./sync"
 
-const target: AppOfAppsTarget = {
-  repoURL: "ssh://git@github.com/example/infra.git",
-  branch: "main",
-  rootPath: "./infra/k8s/manifests/prod"
-}
+const target: AppOfAppsTarget = {}
 
 const defaults: AppOfAppsDefaults = {
   destination: { server: "https://kubernetes.default.svc" }

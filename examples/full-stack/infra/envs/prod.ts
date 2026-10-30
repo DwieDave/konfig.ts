@@ -11,13 +11,12 @@ import { defineWorker } from "../modules/worker"
 
 // Modules are listed in dependency order (providers first); see broken.ts for the missing-provider error case.
 
-const branch = "main"
-const rootPath = "./infra/k8s/manifests/prod"
+const basePath = "./infra/k8s/manifests/prod"
 
 const src = (name: string) => ({
   repoURL: cluster.repositoryUrl,
-  targetRevision: branch,
-  path: `${rootPath}/${name}`
+  targetRevision: "main",
+  path: `${basePath}/${name}`
 })
 
 const sopsBase = "infra/secrets"
@@ -75,7 +74,7 @@ const worker = defineWorker({
 const redisCache = defineRedisCache({ name: "redis-cache", source: src("redis-cache") })
 
 export default AppOfApps.fromModules({
-  target: { repoURL: cluster.repositoryUrl, branch, rootPath },
+  target: {},
   defaults: { destination: { server: "https://kubernetes.default.svc" } },
   modules: [
     sopsOperator,

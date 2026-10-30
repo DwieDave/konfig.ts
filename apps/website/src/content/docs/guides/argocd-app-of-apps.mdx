@@ -29,13 +29,10 @@ The options of `Application.define`:
 
 ## Two shapes: target and source
 
-Two locations matter. The target says where the whole rendered environment lives in git; it is used once, to build the child Application CRs:
+The target only configures the controller namespace; it is used once, when building the child Application CRs:
 
 ```ts
 interface AppOfAppsTarget {
-  readonly repoURL: string
-  readonly branch: string
-  readonly rootPath: string            // directory Argo's root app syncs
   readonly controllerNamespace?: string // metadata.namespace of the CRs, default "argocd"
 }
 ```
@@ -50,9 +47,9 @@ interface ArgoSource {
 }
 ```
 
-In practice every module's source is a subdirectory of the target. The example derives it with a small helper so each child points at `<rootPath>/<module name>`. Here is the whole env file of the production environment.
+In practice every module's source is a subdirectory of the rendered environment. The example derives it with a small helper so each child points at `<basePath>/<module name>`. Here is the whole env file of the production environment.
 
-<Snippet file="infra/envs/prod.ts" startAt="const branch = " title="infra/envs/prod.ts" />
+<Snippet file="infra/envs/prod.ts" startAt="const basePath = " title="infra/envs/prod.ts" />
 
 The repository URL comes from a plain TypeScript constant shared by every environment.
 
@@ -110,27 +107,27 @@ For the example above the tree looks like this:
     ...
 ```
 
-<Aside type="note" title="rootPath is a git path, outDir is a filesystem path">
-The target's `rootPath` is what ends up in `spec.source.path` of the CRs. It must be the path of the rendered directory inside the repository Argo CD clones. `outDir.manifests` in `konfig.json` is where the CLI writes locally. In a real repository keep the two pointing at the same committed directory. The example does not: its `konfig.json` writes to `.generated/manifests` (kept out of git for the offline demo) while `rootPath` is `./infra/k8s/manifests/prod`, so treat the example paths as placeholders.
+<Aside type="note" title="source.path is a git path, outDir is a filesystem path">
+Each Application's `source.path` is what ends up in `spec.source.path` of its CR. It must be the path of the rendered directory inside the repository Argo CD clones. `outDir.manifests` in `konfig.json` is where the CLI writes locally. In a real repository keep the two pointing at the same committed directory. The example does not: its `konfig.json` writes to `.generated/manifests` (kept out of git for the offline demo) while the source path is `./infra/k8s/manifests/prod`, so treat the example paths as placeholders.
 </Aside>
 
 ## Pointing Argo CD at it
 
 <Steps>
 
-1. Render and commit the output (with `outDir.manifests` set to `infra/k8s/manifests` so it matches `rootPath`).
+1. Render and commit the output (with `outDir.manifests` set to `infra/k8s/manifests` so it matches each source `path`).
 
    ```bash
    konfig build prod
    git add infra/k8s/manifests/prod && git commit -m "render prod"
    ```
 
-2. Create one root Application by hand. Its `spec.source.path` is `<rootPath>/<result name>`, for example `infra/k8s/manifests/prod/apps`, on the target's branch.
+2. Create one root Application by hand. Its `spec.source.path` is `<base path>/<result name>`, for example `infra/k8s/manifests/prod/apps`.
 
 3. Sync the root app. Argo CD creates the child Applications from the CRs in that directory; each child syncs its own directory in sync-wave order.
 
 </Steps>
 
-Because every child CR is generated from the same target, changing the branch or root path in one place moves the whole environment. Removing a module removes its CR on the next build, and with `automated.prune` in the root Application's sync policy Argo CD deletes the child.
+Because every child CR is generated from the same env file, changing the source helper in one place moves the whole environment. Removing a module removes its CR on the next build, and with `automated.prune` in the root Application's sync policy Argo CD deletes the child.
 
 Next: [Image promotion](/konfig.ts/docs/guides/image-promotion/) shows how the `apiBuild` and `workerBuild` modules above get their tags in CI.

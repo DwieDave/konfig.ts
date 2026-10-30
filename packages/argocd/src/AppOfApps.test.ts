@@ -3,20 +3,16 @@ import * as Application from "./Application"
 import * as AppOfApps from "./AppOfApps"
 import { Sync } from "./sync"
 
-const target: AppOfApps.AppOfAppsTarget = {
-  repoURL: "ssh://git@github.com/example/infra.git",
-  branch: "main",
-  rootPath: "./infra/k8s/manifests/prod"
-}
+const target: AppOfApps.AppOfAppsTarget = {}
 
 const defaults: AppOfApps.AppOfAppsDefaults = {
   destination: { server: "https://kubernetes.default.svc" }
 }
 
 const _appSource = (name: string): Application.ArgoSource => ({
-  repoURL: target.repoURL,
-  targetRevision: target.branch,
-  path: `${target.rootPath}/${name}`
+  repoURL: "ssh://git@github.com/example/infra.git",
+  targetRevision: "main",
+  path: `./infra/k8s/manifests/prod/${name}`
 })
 
 describe("Application.make", () => {
@@ -67,7 +63,7 @@ describe("AppOfApps.make", () => {
 
     const aoa = AppOfApps.make({ target, defaults, apps: [certManager, web] })
     expect(aoa.apps).toHaveLength(2)
-    expect(aoa.target.branch).toBe("main")
+    expect(aoa.target).toEqual({})
     expect(aoa.defaults.destination?.server).toBe("https://kubernetes.default.svc")
   })
 })

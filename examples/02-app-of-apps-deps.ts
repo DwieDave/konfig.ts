@@ -31,11 +31,7 @@ const web = Application.define({
   })
 })
 
-const target = {
-  repoURL: "ssh://git@github.com/example/infra.git",
-  branch: "main",
-  rootPath: "./apps"
-}
+const target = {}
 
 // (A) Happy path — `infra` precedes `web`, so its Provide<Secret, "ghcr-pull">
 // supplies `web`'s Need. The residual-dep check fires right here in

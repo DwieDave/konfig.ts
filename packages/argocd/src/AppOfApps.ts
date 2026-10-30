@@ -3,9 +3,6 @@ import { type Effect, type Layer, Schema } from "effect"
 import { type Application, Application as ApplicationSchema, type ApplicationHandle, SyncPolicy } from "./Application"
 
 export const AppOfAppsTarget = Schema.Struct({
-  repoURL: Schema.String,
-  branch: Schema.String,
-  rootPath: Schema.String,
   controllerNamespace: Schema.optionalKey(Schema.String)
 })
 

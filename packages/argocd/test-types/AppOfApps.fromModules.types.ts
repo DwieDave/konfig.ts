@@ -90,4 +90,13 @@ void _okCall
 
 void _badCall
 
+const _legacyCall = AppOfAppsNS.fromModules({
+  // @ts-expect-error excess property on target
+  target: { repoURL: "x", branch: "main", rootPath: "p" },
+  defaults: {},
+  modules: [provider] as const
+})
+
+void _legacyCall
+
 export type _Tests = readonly [_Ok, _Bad, _Single, _Missing, _OkR, _BadR]

@@ -4,7 +4,7 @@ import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { decodeEnvResult, type EnvResult } from "./envResult"
 
-const target = { repoURL: "https://example.com/r.git", branch: "main", rootPath: "apps" }
+const target = {}
 
 const app = {
   name: "web",

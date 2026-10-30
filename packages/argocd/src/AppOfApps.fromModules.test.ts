@@ -11,11 +11,7 @@ const src = (name: string) => ({
   path: `envs/test/${name}`
 })
 
-const target = {
-  repoURL: "https://example.com/repo",
-  branch: "main",
-  rootPath: "envs/test"
-}
+const target = {}
 
 const defaults = {
   destination: { server: "https://kubernetes.default.svc" }

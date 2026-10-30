@@ -52,7 +52,7 @@ const svc = Application.define({
 	build: () => [ConfigMap.make({ name: "svc-conf", namespace: "app", data: { K: "v" } })],
 });
 export default AppOfApps.fromModules({
-	target: { repoURL: "https://example.com/repo", branch: "main", rootPath: "envs/test" },
+	target: {},
 	defaults: { destination: { server: "https://kubernetes.default.svc" } },
 	modules: [svc] as const,
 });
@@ -465,7 +465,7 @@ const svc = Application.define({
 	build: () => [ConfigMap.make({ name: "c", namespace: "app", data: { K: "v" } })],
 });
 export default AppOfApps.fromModules({
-	target: { repoURL: "https://example.com/repo", branch: "main", rootPath: "envs/test" },
+	target: {},
 	defaults: { destination: { server: "https://kubernetes.default.svc" } },
 	modules: [svc] as const,
 });

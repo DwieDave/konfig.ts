@@ -186,7 +186,7 @@ describe("Application.module({ ... })", () => {
       build: (_ctx) => []
     })
 
-    const target = { repoURL: "ssh://git@example/repo.git", branch: "main", rootPath: "./apps" }
+    const target = {}
 
     const api = defineApi({ name: "api", source })
     const pulls = definePulls({ name: "pulls", source })

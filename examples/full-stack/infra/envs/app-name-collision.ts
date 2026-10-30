@@ -24,7 +24,7 @@ const apiV2 = Application.define({
 
 // @ts-expect-error — duplicate App "api": the later module would silently shadow the earlier.
 const collision = AppOfApps.fromModules({
-  target: { repoURL: cluster.repositoryUrl, branch: "main", rootPath: "./out" },
+  target: {},
   defaults: {},
   modules: [apiV1, apiV2] as const
 })

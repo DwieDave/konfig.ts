@@ -4,13 +4,12 @@ import { cluster } from "../cluster"
 import { defineApi } from "../modules/api"
 import { defineWorker } from "../modules/worker"
 
-const branch = "main"
-const rootPath = "./infra/k8s/manifests/broken"
+const basePath = "./infra/k8s/manifests/broken"
 
 const src = (name: string) => ({
   repoURL: cluster.repositoryUrl,
-  targetRevision: branch,
-  path: `${rootPath}/${name}`
+  targetRevision: "main",
+  path: `${basePath}/${name}`
 })
 
 const api = defineApi({
@@ -29,7 +28,7 @@ const worker = defineWorker({
 
 // @ts-expect-error - _konfig_unsatisfied hint: missing providers for Secret "ghcr-pull" and Image "api" / "worker".
 export default AppOfApps.fromModules({
-  target: { repoURL: cluster.repositoryUrl, branch, rootPath },
+  target: {},
   defaults: {},
   modules: [api, worker]
 })
