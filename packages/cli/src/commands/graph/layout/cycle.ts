@@ -35,7 +35,7 @@ const _visit = (input: { readonly state: CycleState; readonly node: string }): R
 }
 
 export const detectCycle = (input: CycleInput): ReadonlyArray<string> | null => {
-  const active = activeEdges({ edges: input.edges, withDev: input.withDev ?? true })
+  const active = activeEdges({ edges: input.edges, withDev: input.withDev })
 
   const scope = input.target === undefined
     ? { nodes: input.nodes, edges: active }

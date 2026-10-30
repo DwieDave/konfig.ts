@@ -2,16 +2,27 @@ import type { RenderContext, ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
-import { renderEnv, writeFilesToDir } from "../buildEnv"
+import { type RenderedEnv, renderEnv, writeFilesToDir } from "../buildEnv"
 import { renderContextFlags, withRenderContext } from "../renderContextFlags"
 import { runKubeconform, validateManifestFile, type ValidationIssue } from "../validator"
 
+const _issueLine = (issue: ValidationIssue): string =>
+  `${issue.file} (doc ${issue.doc}) ${issue.path.join(".")}: ${issue.message}`
+
 export class StructuralValidationFailed extends Data.TaggedError("StructuralValidationFailed")<{
   readonly env: string
-  readonly issueCount: number
-}> {}
+  readonly issues: ReadonlyArray<ValidationIssue>
+}> {
+  get message(): string {
+    return [
+      `env '${this.env}' failed structural validation (${this.issues.length} issue(s))`,
+      ...this.issues.map(_issueLine)
+    ]
+      .join("\n")
+  }
+}
 
-export interface RunValidateInput {
+interface RunValidateInput {
   readonly cfg: ResolvedKonfigConfig
   readonly envName: string
   readonly ctx: RenderContext
@@ -19,33 +30,19 @@ export interface RunValidateInput {
   readonly ignoreMissingSchemas: boolean
 }
 
-type Rendered = Effect.Success<ReturnType<typeof renderEnv>>
-
-const _structuralIssues = (rendered: Rendered) =>
+const _structuralIssues = (rendered: RenderedEnv) =>
   Effect.forEach(
     rendered.files,
     (f) => validateManifestFile({ file: f.path, content: f.content }),
     { concurrency: "unbounded" }
   ).pipe(Effect.map((all) => all.flat()))
 
-const _failOnIssues = (input: {
-  readonly envName: string
-  readonly issues: ReadonlyArray<ValidationIssue>
-}) =>
-  Effect.gen(function*() {
-    for (const issue of input.issues) {
-      yield* Console.error(`${issue.file} (doc ${issue.doc}) ${issue.path.join(".")}: ${issue.message}`)
-    }
-
-    return yield* new StructuralValidationFailed({ env: input.envName, issueCount: input.issues.length })
-  })
-
 const _kubeconformArgs = (input: Pick<RunValidateInput, "ctx" | "ignoreMissingSchemas">): string[] => [
   ...(input.ignoreMissingSchemas ? ["-ignore-missing-schemas"] : []),
   ...(input.ctx.k8sVersion !== undefined ? ["-kubernetes-version", input.ctx.k8sVersion] : [])
 ]
 
-const _runStrict = (input: RunValidateInput & { readonly rendered: Rendered }) =>
+const _runStrict = (input: RunValidateInput & { readonly rendered: RenderedEnv }) =>
   Effect.scoped(
     Effect.gen(function*() {
       const fs = yield* FileSystem
@@ -63,7 +60,7 @@ export const runValidate = (input: RunValidateInput) =>
     const rendered = yield* renderEnv({ cfg, envName, ctx })
     const issues = yield* _structuralIssues(rendered)
 
-    if (issues.length > 0) return yield* _failOnIssues({ envName, issues })
+    if (issues.length > 0) return yield* new StructuralValidationFailed({ env: envName, issues })
     yield* Console.log(`OK — env '${envName}': ${rendered.files.length} file(s) pass structural validation`)
 
     if (input.strict) yield* _runStrict({ ...input, rendered })

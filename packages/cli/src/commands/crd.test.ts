@@ -276,20 +276,23 @@ describe("crdVerifyEffect", () => {
 
 describe("tagged errors", () => {
   it("ReleaseNotFound carries the offending release id", () => {
-    const err = new ReleaseNotFound({ releaseId: "foo" })
+    const err = new ReleaseNotFound({ releaseId: "foo", chartsDir: "/c", available: ["a", "b"] })
     expect(err._tag).toBe("ReleaseNotFound")
     expect(err.releaseId).toBe("foo")
+    expect(err.message).toBe("Release 'foo' not found in /c. Available: a, b")
   })
 
   it("CrdDrift carries the drifted file list", () => {
     const err = new CrdDrift({ drifted: ["a.ts", "b.ts"] })
     expect(err._tag).toBe("CrdDrift")
     expect(err.drifted).toEqual(["a.ts", "b.ts"])
+    expect(err.message).toContain("a.ts, b.ts")
   })
 
   it("MissingCrdFlags is a bare tagged error", () => {
     const err = new MissingCrdFlags()
     expect(err._tag).toBe("MissingCrdFlags")
+    expect(err.message).toBe("Specify --release <id> or --all")
   })
 })
 

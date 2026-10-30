@@ -31,7 +31,7 @@ export const chart = {
   repo: "https://charts.bitnami.com/bitnami",
   chart: "postgresql",
   version: "16.0.0",
-  digest: "sha256:abc123"
+  digest: "sha256:abababababababababababababababababababababababababababababababab"
 };
 `
       )
@@ -43,7 +43,7 @@ export const chart = {
         repo: "https://charts.bitnami.com/bitnami",
         chart: "postgresql",
         version: "16.0.0",
-        digest: "sha256:abc123"
+        digest: "sha256:abababababababababababababababababababababababababababababababab"
       })
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -68,7 +68,7 @@ export const chart = {
       const entries = yield* loadChartRegistryEffect(root)
       expect(entries).toHaveLength(1)
       expect(entries[0]?.id).toBe("redis")
-      expect(entries[0]?.digest).toBe("")
+      expect(entries[0]?.digest).toBeUndefined()
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("ignores modules without the helm release sentinel", () =>

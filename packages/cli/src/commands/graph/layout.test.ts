@@ -13,7 +13,8 @@ describe("renderGraph — single node", () => {
       nodes: [node("@s/api", "packages/api")],
       edges: [],
       target: "@s/api",
-      withDev: false
+      withDev: false,
+      reduce: false
     })
 
     expect(out).toContain("@s/api")
@@ -25,7 +26,8 @@ describe("renderGraph — single node", () => {
       nodes: [node("@s/api", "packages/api", true)],
       edges: [],
       target: "@s/api",
-      withDev: false
+      withDev: false,
+      reduce: false
     })
 
     expect(out).toContain("build")
@@ -41,7 +43,8 @@ describe("renderGraph — parent → child tree", () => {
       ],
       edges: [{ from: "@s/api", to: "@s/core", kind: "runtime" }],
       target: "@s/api",
-      withDev: false
+      withDev: false,
+      reduce: false
     })
 
     const apiIdx = out.indexOf("@s/api")
@@ -61,7 +64,8 @@ describe("renderGraph — transitive reduction", () => {
         { from: "@s/a", to: "@s/c", kind: "runtime" as const }
       ],
       target: "@s/a",
-      withDev: false
+      withDev: false,
+      reduce: false
     }
 
     expect(renderGraph({ ...baseInput, reduce: false })).toContain("3 runtime edges")
@@ -78,7 +82,8 @@ describe("renderGraph — dev edges", () => {
       ],
       edges: [{ from: "@s/api", to: "@s/tsconfig", kind: "dev" }],
       target: "@s/api",
-      withDev: false
+      withDev: false,
+      reduce: false
     })
 
     expect(out).not.toContain("@s/tsconfig")
@@ -92,7 +97,8 @@ describe("renderGraph — dev edges", () => {
       ],
       edges: [{ from: "@s/api", to: "@s/tsconfig", kind: "dev" }],
       target: "@s/api",
-      withDev: true
+      withDev: true,
+      reduce: false
     })
 
     expect(out).toContain("@s/tsconfig")
@@ -112,7 +118,8 @@ describe("renderGraph — monorepo mode (no target)", () => {
         { from: "@s/web", to: "@s/utils", kind: "runtime" }
       ],
       target: undefined,
-      withDev: false
+      withDev: false,
+      reduce: false
     })
 
     expect(out).toContain("@s/api")
@@ -127,7 +134,8 @@ describe("detectCycle", () => {
   it("returns null for an acyclic graph", () => {
     const cycle = detectCycle({
       nodes: [node("a", "a"), node("b", "b")],
-      edges: [{ from: "a", to: "b", kind: "runtime" }]
+      edges: [{ from: "a", to: "b", kind: "runtime" }],
+      withDev: true
     })
 
     expect(cycle).toBeNull()
@@ -139,7 +147,8 @@ describe("detectCycle", () => {
       edges: [
         { from: "a", to: "b", kind: "runtime" },
         { from: "b", to: "a", kind: "runtime" }
-      ]
+      ],
+      withDev: true
     })
 
     expect(cycle).not.toBeNull()

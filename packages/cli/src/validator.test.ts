@@ -6,7 +6,7 @@ import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
 import {
-  _checkDnsName,
+  checkDnsName,
   KubeconformNotFound,
   KubeconformReportError,
   runKubeconform,
@@ -300,12 +300,12 @@ const _labelOf = (maxLength: number) =>
     _alnum
   ).map(([head, middle, tail]) => `${head}${middle.join("")}${tail}`)
 
-describe("_checkDnsName properties", () => {
+describe("checkDnsName properties", () => {
   it("property: every generated RFC 1123 label is accepted under both rules", () => {
     fc.assert(
       fc.property(_labelOf(63), (value) => {
-        expect(_checkDnsName({ value, rule: "label" })).toBeUndefined()
-        expect(_checkDnsName({ value, rule: "subdomain" })).toBeUndefined()
+        expect(checkDnsName({ value, rule: "label" })).toBeUndefined()
+        expect(checkDnsName({ value, rule: "subdomain" })).toBeUndefined()
       })
     )
   })
@@ -314,8 +314,8 @@ describe("_checkDnsName properties", () => {
     fc.assert(
       fc.property(fc.array(_labelOf(10), { minLength: 2, maxLength: 5 }), (labels) => {
         const value = labels.join(".")
-        expect(_checkDnsName({ value, rule: "subdomain" })).toBeUndefined()
-        expect(_checkDnsName({ value, rule: "label" })).toBeDefined()
+        expect(checkDnsName({ value, rule: "subdomain" })).toBeUndefined()
+        expect(checkDnsName({ value, rule: "label" })).toBeDefined()
       })
     )
   })
@@ -324,7 +324,7 @@ describe("_checkDnsName properties", () => {
     fc.assert(
       fc.property(_labelOf(63), (base) => {
         const value = `${base}${"a".repeat(64)}`
-        expect(_checkDnsName({ value, rule: "label" })).toBeDefined()
+        expect(checkDnsName({ value, rule: "label" })).toBeDefined()
       })
     )
   })
@@ -332,13 +332,13 @@ describe("_checkDnsName properties", () => {
   it("property: any uppercase letter or underscore makes a name invalid", () => {
     fc.assert(
       fc.property(_labelOf(20), fc.constantFrom("A", "Z", "_"), (base, bad) => {
-        expect(_checkDnsName({ value: `${base}${bad}${base}`, rule: "subdomain" })).toBeDefined()
+        expect(checkDnsName({ value: `${base}${bad}${base}`, rule: "subdomain" })).toBeDefined()
       })
     )
   })
 
   it("the empty string is always invalid", () => {
-    expect(_checkDnsName({ value: "", rule: "label" })).toBeDefined()
-    expect(_checkDnsName({ value: "", rule: "subdomain" })).toBeDefined()
+    expect(checkDnsName({ value: "", rule: "label" })).toBeDefined()
+    expect(checkDnsName({ value: "", rule: "subdomain" })).toBeDefined()
   })
 })

@@ -1,23 +1,16 @@
 import { Helm } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
 import { Command, Flag } from "effect/cli"
-import { type ChartRegistryEntry, loadChartRegistryEffect } from "../chartRegistry"
-import { digestOf, loadHelmPaths } from "../helmShared"
+import { loadChartRegistryEffect } from "../chartRegistry"
+import { forEachRegistryEntry, loadHelmPaths, toChartRef } from "../helmShared"
 
-export class MissingAllFlag extends Data.TaggedError("MissingAllFlag") {}
-
-interface FetchOneInput {
-  readonly repo: string
-  readonly chart: string
-  readonly version: string
-  readonly cacheDir: string
-  // Chart registry entries without a recorded digest fetch under the plain
-  // `<chart>-<version>.tgz` name, which `Helm.release`'s digest-suffixed
-  // cache (Helm.cacheFileName) can't reuse — see the warning below.
-  readonly digest?: string
+export class MissingAllFlag extends Data.TaggedError("MissingAllFlag") {
+  get message(): string {
+    return "Specify --all to fetch all charts"
+  }
 }
 
-export const _fetchOne = (input: FetchOneInput) =>
+export const fetchOne = (input: Helm.EnsureChartTarballInput) =>
   Effect.gen(function*() {
     yield* Helm.ensureChartTarball(input)
 
@@ -32,25 +25,18 @@ interface HelmFetchFlags {
   readonly all: boolean
 }
 
-const _fetchDef = (input: { readonly def: ChartRegistryEntry; readonly cacheDir: string }) =>
-  Effect.gen(function*() {
-    const { def, cacheDir } = input
-    yield* Console.log(`Fetching ${def.chart}@${def.version}...`)
-    yield* _fetchOne({ repo: def.repo, chart: def.chart, version: def.version, cacheDir, digest: digestOf(def) })
-  })
-
 export const helmFetchEffect = (flags: HelmFetchFlags) =>
   Effect.gen(function*() {
     const { cacheDir, chartsDir } = yield* loadHelmPaths
 
-    if (!flags.all) {
-      yield* Console.error("Specify --all to fetch all charts")
-
-      return yield* new MissingAllFlag()
-    }
+    if (!flags.all) return yield* new MissingAllFlag()
 
     const registry = yield* loadChartRegistryEffect(chartsDir)
-    yield* Effect.forEach(registry, (def) => _fetchDef({ def, cacheDir }), { concurrency: 4, discard: true })
+    yield* forEachRegistryEntry({
+      registry,
+      verb: "Fetching",
+      run: (entry) => fetchOne(toChartRef({ entry, cacheDir }))
+    })
     yield* Console.log(`Done. Cache at ${cacheDir}`)
   })
 

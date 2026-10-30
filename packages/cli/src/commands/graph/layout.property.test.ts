@@ -1,6 +1,7 @@
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { detectCycle, type EdgeKind, type GraphEdge, type GraphNode, renderGraph } from "./layout"
+import { transitiveReduce } from "./layout/adjacency"
 
 /**
  * Builds a DAG over node names "n0".."n{size-1}" with forward-only edges
@@ -48,11 +49,50 @@ const arbGraph = fc
     return { nodes, edges, withDev }
   })
 
+const _closure = (input: { readonly edges: ReadonlyArray<GraphEdge>; readonly size: number }): string[] => {
+  const reach = new Set(input.edges.map((e) => `${e.from}>${e.to}`))
+
+  for (let k = 0; k < input.size; k++) {
+    for (let i = 0; i < input.size; i++) {
+      for (let j = 0; j < input.size; j++) {
+        if (reach.has(`n${i}>n${k}`) && reach.has(`n${k}>n${j}`)) reach.add(`n${i}>n${j}`)
+      }
+    }
+  }
+
+  return [...reach].sort()
+}
+
+describe("transitiveReduce — per-kind reachability", () => {
+  it("preserves runtime-only reachability and all-edge reachability", () => {
+    fc.assert(
+      fc.property(arbGraph, ({ nodes, edges }) => {
+        const reduced = transitiveReduce(edges)
+        const runtime = (es: ReadonlyArray<GraphEdge>) => es.filter((e) => e.kind === "runtime")
+        const size = nodes.length
+        expect(_closure({ edges: runtime(reduced), size })).toEqual(_closure({ edges: runtime(edges), size }))
+        expect(_closure({ edges: reduced, size })).toEqual(_closure({ edges, size }))
+      }),
+      { numRuns: 200 }
+    )
+  })
+
+  it("keeps a runtime edge that is only implied through a dev path", () => {
+    const edges: GraphEdge[] = [
+      { from: "a", to: "c", kind: "runtime" },
+      { from: "a", to: "b", kind: "dev" },
+      { from: "b", to: "c", kind: "runtime" }
+    ]
+
+    expect(transitiveReduce(edges)).toContainEqual({ from: "a", to: "c", kind: "runtime" })
+  })
+})
+
 describe("renderGraph — layout property tests", () => {
   it("is deterministic — rendering the same input twice produces identical output", () => {
     fc.assert(
       fc.property(arbGraph, ({ nodes, edges, withDev }) => {
-        const input = { nodes, edges, target: undefined, withDev }
+        const input = { nodes, edges, target: undefined, withDev, reduce: false }
         const first = renderGraph(input)
         const second = renderGraph({ ...input })
         expect(second).toBe(first)
@@ -94,7 +134,7 @@ describe("renderGraph — layout property tests", () => {
   it("renders a header workspace count equal to the number of input nodes", () => {
     fc.assert(
       fc.property(arbGraph, ({ nodes, edges, withDev }) => {
-        const out = renderGraph({ nodes, edges, target: undefined, withDev })
+        const out = renderGraph({ nodes, edges, target: undefined, withDev, reduce: false })
         expect(out).toContain(`${nodes.length} workspaces`)
       }),
       { numRuns: 100 }

@@ -140,7 +140,8 @@ describe("runValidate", () => {
       }
 
       expect(failure.env).toBe("prod")
-      expect(failure.issueCount).toBe(1)
+      expect(failure.issues).toHaveLength(1)
+      expect(failure.message).toContain("failed structural validation")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect(

@@ -1,13 +1,8 @@
 import { Helm } from "@konfig.ts/core"
-import { Effect } from "effect"
+import { Console, Effect } from "effect"
 import type { ChartRegistryEntry } from "./chartRegistry"
 import { resolveCliPaths } from "./cliConfig"
 import { resolveConfig } from "./configResolver"
-
-// The chart registry decodes a missing digest as "" (see chartRegistry.ts);
-// treat that the same as "no digest recorded yet" everywhere.
-export const digestOf = (entry: { readonly digest: string }): string | undefined =>
-  entry.digest === "" ? undefined : entry.digest
 
 // Helm commands must keep working outside a konfig project (a bare directory
 // of chart definitions plus KONFIG_* env vars) — only a genuinely malformed
@@ -19,21 +14,33 @@ const resolveOptionalConfig = resolveConfig().pipe(
   Effect.catchTag("ConfigNotFound", () => Effect.succeed(undefined))
 )
 
-interface ExtractOptionsInput {
+export const toChartRef = (input: {
+  readonly entry: ChartRegistryEntry
+  readonly cacheDir: string
+}): Helm.EnsureChartTarballInput => ({
+  repo: input.entry.repo,
+  chart: input.entry.chart,
+  version: input.entry.version,
+  cacheDir: input.cacheDir,
+  digest: input.entry.digest
+})
+
+export const toExtractOptions = (input: {
   readonly entry: ChartRegistryEntry
   readonly outDir: string
   readonly cacheDir: string
-}
+}) => ({ ...toChartRef(input), id: input.entry.id, outDir: input.outDir })
 
-export const toExtractOptions = ({ entry, outDir, cacheDir }: ExtractOptionsInput) => ({
-  repo: entry.repo,
-  chart: entry.chart,
-  version: entry.version,
-  id: entry.id,
-  outDir,
-  cacheDir,
-  digest: digestOf(entry)
-})
+export const forEachRegistryEntry = <E, R>(input: {
+  readonly registry: ReadonlyArray<ChartRegistryEntry>
+  readonly verb: string
+  readonly run: (entry: ChartRegistryEntry) => Effect.Effect<void, E, R>
+}) =>
+  Effect.forEach(
+    input.registry,
+    (entry) => Console.log(`${input.verb} ${entry.chart}@${entry.version}...`).pipe(Effect.andThen(input.run(entry))),
+    { concurrency: 4, discard: true }
+  )
 
 export const loadHelmPaths = Effect.gen(function*() {
   const cfg = yield* resolveOptionalConfig

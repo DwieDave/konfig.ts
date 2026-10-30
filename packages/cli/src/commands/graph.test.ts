@@ -133,7 +133,28 @@ describe("runGraph", () => {
       expect(out).toContain("@fix/util")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("unknown target fails with GraphTargetNotFound and lists candidates on stderr", () =>
+  it.effect("resolves ./packages/util and . relative to the cwd", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-graph-" })
+      yield* _buildWorkspace(root)
+
+      const run = (cwd: string, target: string) => {
+        const { messages, testConsole } = _captured()
+
+        return runGraph({ cwd, target: Option.some(target), withDev: false, full: false }).pipe(
+          Effect.provideService(Console.Console, testConsole),
+          Effect.map(() => messages[0] ?? "")
+        )
+      }
+
+      expect(yield* run(root, "./packages/util")).toContain("closure: @fix/util")
+      expect(yield* run(path.join(root, "packages/app"), ".")).toContain("closure: @fix/app")
+      expect(yield* run(path.join(root, "packages/app"), "../util")).toContain("closure: @fix/util")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("unknown target fails with GraphTargetNotFound and carries a message listing candidates", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-graph-" })
@@ -150,11 +171,12 @@ describe("runGraph", () => {
       )
 
       expect(error._tag).toBe("GraphTargetNotFound")
-      expect(errors.some((e) => e.includes("workspace 'nope' not found"))).toBe(true)
-      expect(errors.some((e) => e.includes("@fix/app"))).toBe(true)
+      expect(error.message).toContain("workspace 'nope' not found")
+      expect(error.message).toContain("@fix/app")
+      expect(errors).toEqual([])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("a workspace dependency cycle fails with CircularWorkspaceDep on stderr", () =>
+  it.effect("a workspace dependency cycle fails with CircularWorkspaceDep", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-graph-cycle-" })
@@ -183,7 +205,8 @@ describe("runGraph", () => {
       )
 
       expect(error._tag).toBe("CircularWorkspaceDep")
-      expect(errors.some((e) => e.includes("workspace cycle detected"))).toBe(true)
+      expect(error.message).toContain("circular workspace dependency")
+      expect(errors).toEqual([])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("a target graph ignores cycles outside the target closure", () =>

@@ -10,13 +10,13 @@ import type { Command } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import * as crypto from "node:crypto"
 import { ChartRegistryEntryDecodeError } from "../chartRegistry"
-import { _fetchOne, helmFetchEffect, MissingAllFlag } from "./helmFetch"
+import { fetchOne, helmFetchEffect, MissingAllFlag } from "./helmFetch"
 
 const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
 /**
  * Records every command argv the fake spawner is asked to run, so tests
- * can assert on the exact `helm pull` invocation `_fetchOne`/`helmFetchEffect`
+ * can assert on the exact `helm pull` invocation `fetchOne`/`helmFetchEffect`
  * plan without ever running the real binary. The "helm version --short"
  * preflight is answered separately so tests only see the `helm pull` calls.
  */
@@ -55,7 +55,7 @@ const _pullDest = expect.stringMatching(/\.konfig-helm-pull-/)
 /**
  * A `pull` here writes `tarball`'s bytes to `<destination>/<chart>-<version>.tgz`
  * (matching real `helm pull` output), so the digest-verification path in
- * `_fetchOne` has a real file to hash and rename.
+ * `fetchOne` has a real file to hash and rename.
  */
 const _pullingSpawner = (tarball: Buffer): Layer.Layer<ChildProcessSpawner, never, FileSystem | Path> =>
   Layer.effect(
@@ -88,7 +88,7 @@ const _pullingSpawner = (tarball: Buffer): Layer.Layer<ChildProcessSpawner, neve
     })
   )
 
-describe("_fetchOne", () => {
+describe("fetchOne", () => {
   it.effect("skips the helm pull subprocess when the tarball is already cached", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
@@ -97,7 +97,7 @@ describe("_fetchOne", () => {
       yield* fs.writeFileString(path.join(cacheDir, "postgresql-16.0.0.tgz"), "cached-tarball")
 
       const calls: Array<ReadonlyArray<string>> = []
-      yield* _fetchOne({ repo: "https://charts.bitnami.com/bitnami", chart: "postgresql", version: "16.0.0", cacheDir })
+      yield* fetchOne({ repo: "https://charts.bitnami.com/bitnami", chart: "postgresql", version: "16.0.0", cacheDir })
         .pipe(Effect.provide(_recordingSpawner({ exitCode: 0 }, calls)))
 
       expect(calls).toEqual([])
@@ -109,7 +109,7 @@ describe("_fetchOne", () => {
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helmfetch-" })
 
       const calls: Array<ReadonlyArray<string>> = []
-      yield* _fetchOne({ repo: "https://charts.bitnami.com/bitnami", chart: "postgresql", version: "16.0.0", cacheDir })
+      yield* fetchOne({ repo: "https://charts.bitnami.com/bitnami", chart: "postgresql", version: "16.0.0", cacheDir })
         .pipe(Effect.provide(_recordingSpawner({ exitCode: 0 }, calls)))
 
       expect(calls).toEqual([
@@ -135,7 +135,7 @@ describe("_fetchOne", () => {
       const cacheDir = path.join(root, "nested", "cache")
 
       const calls: Array<ReadonlyArray<string>> = []
-      yield* _fetchOne({ repo: "https://example.com/charts", chart: "redis", version: "1.0.0", cacheDir })
+      yield* fetchOne({ repo: "https://example.com/charts", chart: "redis", version: "1.0.0", cacheDir })
         .pipe(Effect.provide(_recordingSpawner({ exitCode: 0 }, calls)))
 
       const exists = yield* fs.exists(cacheDir)
@@ -151,7 +151,7 @@ describe("_fetchOne", () => {
       const tarball = Buffer.from("fake-postgresql-tarball")
       const digest = `sha256:${_sha256Hex(tarball)}`
 
-      yield* _fetchOne({
+      yield* fetchOne({
         repo: "https://charts.bitnami.com/bitnami",
         chart: "postgresql",
         version: "16.0.0",
@@ -177,7 +177,7 @@ describe("_fetchOne", () => {
       )
 
       const calls: Array<ReadonlyArray<string>> = []
-      yield* _fetchOne({
+      yield* fetchOne({
         repo: "https://charts.bitnami.com/bitnami",
         chart: "postgresql",
         version: "16.0.0",
@@ -197,7 +197,7 @@ describe("_fetchOne", () => {
       const wrongDigest = `sha256:${_sha256Hex(Buffer.from("not-the-tarball"))}`
 
       const exit = yield* Effect.exit(
-        _fetchOne({
+        fetchOne({
           repo: "https://charts.bitnami.com/bitnami",
           chart: "postgresql",
           version: "16.0.0",
@@ -228,8 +228,7 @@ const _chartFixture = `export const postgres = {
   id: "postgres",
   repo: "https://charts.bitnami.com/bitnami",
   chart: "postgresql",
-  version: "16.0.0",
-  digest: ""
+  version: "16.0.0"
 }
 `
 

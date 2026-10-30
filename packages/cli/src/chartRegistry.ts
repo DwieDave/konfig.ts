@@ -1,7 +1,7 @@
 import { Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { ChartId, ChartName, ChartRepoUrl, ChartVersion } from "./chartSchemas"
+import { ChartDigest, ChartId, ChartName, ChartRepoUrl, ChartVersion } from "./chartSchemas"
 
 const HELM_RELEASE_MARKER = "_konfigHelmRelease" as const
 
@@ -10,7 +10,7 @@ const ChartRegistryEntrySchema = Schema.Struct({
   repo: ChartRepoUrl,
   chart: ChartName,
   version: ChartVersion,
-  digest: Schema.String
+  digest: Schema.optional(ChartDigest)
 })
 
 export type ChartRegistryEntry = typeof ChartRegistryEntrySchema.Type
@@ -44,15 +44,19 @@ const HelmReleaseExportSchema = Schema.Struct({
 
 const _decodeHelmReleaseExport = Schema.decodeUnknownOption(HelmReleaseExportSchema)
 
-const _decodeEntry = (val: typeof HelmReleaseExportSchema.Type, file: string, defaultId: string) =>
+const _decodeEntry = (input: {
+  readonly val: typeof HelmReleaseExportSchema.Type
+  readonly file: string
+  readonly defaultId: string
+}) =>
   Schema.decodeUnknownEffect(ChartRegistryEntrySchema)({
-    id: val.id ?? defaultId,
-    repo: val.repo,
-    chart: val.chart,
-    version: val.version,
-    digest: val.digest ?? ""
+    id: input.val.id ?? input.defaultId,
+    repo: input.val.repo,
+    chart: input.val.chart,
+    version: input.val.version,
+    digest: input.val.digest
   }).pipe(
-    Effect.mapError((cause) => new ChartRegistryEntryDecodeError({ file, cause }))
+    Effect.mapError((cause) => new ChartRegistryEntryDecodeError({ file: input.file, cause }))
   )
 
 interface _LoadOneInput {
@@ -74,7 +78,9 @@ const _loadOne = (
 
     const release = Object.values(mod).map((entry) => _decodeHelmReleaseExport(entry)).find(Option.isSome)
 
-    return release === undefined ? undefined : yield* _decodeEntry(release.value, file, file.replace(/\.ts$/, ""))
+    return release === undefined
+      ? undefined
+      : yield* _decodeEntry({ val: release.value, file, defaultId: file.replace(/\.ts$/, "") })
   })
 
 export const loadChartRegistryEffect = (
@@ -90,13 +96,10 @@ export const loadChartRegistryEffect = (
 
     const files = allFiles.filter((f) => f.endsWith(".ts") && !f.startsWith("_"))
 
-    const entries: ChartRegistryEntry[] = []
+    const loaded = yield* Effect.forEach(
+      files,
+      (file) => _loadOne({ absPath: path.resolve(chartsDir, file), file, chartsDir })
+    )
 
-    for (const file of files) {
-      const entry = yield* _loadOne({ absPath: path.resolve(chartsDir, file), file, chartsDir })
-
-      if (entry !== undefined) entries.push(entry)
-    }
-
-    return entries
+    return loaded.filter((entry) => entry !== undefined)
   })

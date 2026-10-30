@@ -10,12 +10,13 @@ import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildPr
 import fc from "fast-check"
 import * as crypto from "node:crypto"
 import {
-  _crdNameToIdentifier,
-  _dedupeCrdDocuments,
-  _parseCrdDocs,
   CrdInputDecodeError,
+  crdNameToIdentifier,
+  dedupeCrdDocuments,
+  driftOf,
   extractCrdsEffect,
   GENERATED_HEADER,
+  parseCrdDocs,
   verifyCrdsEffect
 } from "./extract"
 
@@ -48,6 +49,24 @@ spec:
                   type: string
               required:
                 - size
+`
+
+const _crdWithKind = (plural: string, group: string): string => `
+kind: CustomResourceDefinition
+metadata:
+  name: ${plural}.${group}
+spec:
+  group: ${group}
+  names:
+    kind: Widget
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            size:
+              type: string
 `
 
 const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
@@ -257,21 +276,34 @@ describe("extractCrdsEffect end-to-end", () => {
       expect(content).toContain("export {};")
     }).pipe(Effect.scoped, Effect.provide(_testLayer(""))))
 
-  it.effect("writes a stub file when helm template stdout is unparseable YAML", () =>
+  it.effect("fails with CrdExtractError when helm template stdout is unparseable YAML", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
-      const path = yield* Path
       const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-out-" })
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-cache-" })
 
-      yield* extractCrdsEffect({ ...validOpts, outDir, cacheDir })
-
-      const outPath = path.join(outDir, `${validOpts.id}.ts`)
-      const content = yield* fs.readFileString(outPath)
-      expect(content).toContain("No CRDs found in chart")
+      const error = yield* Effect.flip(extractCrdsEffect({ ...validOpts, outDir, cacheDir }))
+      expect(error._tag).toBe("CrdExtractError")
+      expect(yield* fs.exists(`${outDir}/${validOpts.id}.ts`)).toBe(false)
     }).pipe(
       Effect.scoped,
       Effect.provide(_testLayer("not: valid: yaml: [unterminated"))
+    ))
+
+  it.effect("disambiguates CRDs sharing a kind by group and emits both types", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-out-" })
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-cache-" })
+      yield* extractCrdsEffect({ ...validOpts, outDir, cacheDir })
+      const content = yield* fs.readFileString(`${outDir}/${validOpts.id}.ts`)
+      expect(content).toContain("export interface AlphaExampleComWidgetInput")
+      expect(content).toContain("export interface BetaExampleComWidgetInput")
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        _testLayer(`${_crdWithKind("a", "alpha.example.com")}---\n${_crdWithKind("b", "beta.example.com")}`)
+      )
     ))
 
   it.effect("wraps a subprocess failure as CrdExtractError carrying the chart name", () =>
@@ -301,8 +333,8 @@ describe("extractCrdsEffect end-to-end", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 
-describe("_parseCrdDocs", () => {
-  const parse = (text: string) => Effect.runSync(_parseCrdDocs(text))
+describe("parseCrdDocs", () => {
+  const parse = (text: string) => Effect.runSync(parseCrdDocs(text).pipe(Effect.orDie))
   it("parses a well-formed CustomResourceDefinition document", () => {
     const docs = parse(_validCrdYaml)
     expect(docs).toHaveLength(1)
@@ -380,8 +412,36 @@ spec:
     expect(docs[0]?.versions).toEqual(["v1", "v2"])
   })
 
-  it("returns no documents for unparseable YAML instead of throwing", () => {
-    expect(parse("not: valid: yaml: [unterminated")).toEqual([])
+  it("fails for unparseable YAML instead of hiding it", () => {
+    expect(Effect.runSync(Effect.exit(parseCrdDocs("not: valid: yaml: [unterminated")))._tag).toBe("Failure")
+  })
+
+  it("derives kind from spec.names.kind and falls back to the resource segment", () => {
+    expect(parse(_crdWithKind("a", "alpha.example.com"))[0]?.kind).toBe("Widget")
+    expect(parse(_validCrdYaml)[0]?.kind).toBe("Widgets")
+  })
+
+  it("takes the schema of the storage: true version", () => {
+    const docs = parse(`
+kind: CustomResourceDefinition
+metadata:
+  name: foo.example.com
+spec:
+  group: example.com
+  versions:
+    - name: v1
+      storage: false
+      schema:
+        openAPIV3Schema:
+          title: old
+    - name: v2
+      storage: true
+      schema:
+        openAPIV3Schema:
+          title: new
+`)
+
+    expect(docs[0]?.schema).toEqual({ title: "new" })
   })
 
   it("returns no documents for an empty string", () => {
@@ -389,23 +449,25 @@ spec:
   })
 })
 
-describe("_crdNameToIdentifier", () => {
+describe("crdNameToIdentifier", () => {
   it("takes the resource segment before the first dot and PascalCases it", () => {
-    expect(_crdNameToIdentifier("widgets.example.com")).toBe("Widgets")
+    expect(crdNameToIdentifier("widgets.example.com")).toBe("Widgets")
   })
 
   it("joins hyphen/underscore-separated words in PascalCase", () => {
-    expect(_crdNameToIdentifier("cron-tab-jobs.example.com")).toBe("CronTabJobs")
-    expect(_crdNameToIdentifier("cron_tab_jobs.example.com")).toBe("CronTabJobs")
+    expect(crdNameToIdentifier("cron-tab-jobs.example.com")).toBe("CronTabJobs")
+    expect(crdNameToIdentifier("cron_tab_jobs.example.com")).toBe("CronTabJobs")
   })
 
   it("falls back to the raw name when there is no dot", () => {
-    expect(_crdNameToIdentifier("widgets")).toBe("Widgets")
+    expect(crdNameToIdentifier("widgets")).toBe("Widgets")
   })
 })
 
-describe("_dedupeCrdDocuments", () => {
-  const dedupe = (allYaml: readonly string[]) => Effect.runSync(_dedupeCrdDocuments(allYaml))
+describe("dedupeCrdDocuments", () => {
+  const dedupe = (allYaml: readonly string[]) =>
+    Effect.runSync(dedupeCrdDocuments(allYaml.join("\n---\n")).pipe(Effect.orDie))
+
   it("keeps the first document seen for a duplicate CRD name across YAML sources", () => {
     const first = `
 kind: CustomResourceDefinition
@@ -509,6 +571,30 @@ describe("verifyCrdsEffect", () => {
       expect(drifted).toEqual([`${validOpts.id}.ts (missing generated header)`])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
+  it.effect("distinguishes a missing committed file from a header-less one", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const committedDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-committed-" })
+      const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-cache-" })
+
+      const drifted = yield* verifyCrdsEffect({
+        releases: [{ ...validOpts, outDir: committedDir, cacheDir }],
+        committedDir
+      }).pipe(Effect.provide(_helmSpawner(_validCrdYaml)))
+
+      expect(drifted).toEqual([`${validOpts.id}.ts (missing)`])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("reports committed .ts files that are not in the registry", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const committedDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-crd-committed-" })
+      yield* fs.writeFileString(path.join(committedDir, "gone.ts"), `${GENERATED_HEADER}\nexport {};\n`)
+      const drifted = yield* verifyCrdsEffect({ releases: [], committedDir })
+      expect(drifted).toEqual(["gone.ts (orphaned)"])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
   it.effect("returns an empty drift list for an empty release set", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
@@ -518,7 +604,7 @@ describe("verifyCrdsEffect", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 
-describe("_crdNameToIdentifier properties", () => {
+describe("crdNameToIdentifier properties", () => {
   const _word = fc.stringMatching(/^[a-z][a-z0-9]{0,6}$/)
 
   it("property: output is PascalCase of the resource segment with separators removed", () => {
@@ -529,7 +615,7 @@ describe("_crdNameToIdentifier properties", () => {
         fc.array(_word, { maxLength: 3 }),
         (words, sep, groupParts) => {
           const crdName = [words.join(sep), ...groupParts].join(".")
-          const id = _crdNameToIdentifier(crdName)
+          const id = crdNameToIdentifier(crdName)
           expect(id).toBe(words.map((w) => `${w.charAt(0).toUpperCase()}${w.slice(1)}`).join(""))
           expect(id).toMatch(/^[A-Z][A-Za-z0-9]*$/)
         }
@@ -540,7 +626,39 @@ describe("_crdNameToIdentifier properties", () => {
   it("property: only the first dot-separated segment influences the identifier", () => {
     fc.assert(
       fc.property(_word, fc.array(_word, { maxLength: 3 }), fc.array(_word, { maxLength: 3 }), (resource, a, b) => {
-        expect(_crdNameToIdentifier([resource, ...a].join("."))).toBe(_crdNameToIdentifier([resource, ...b].join(".")))
+        expect(crdNameToIdentifier([resource, ...a].join("."))).toBe(crdNameToIdentifier([resource, ...b].join(".")))
+      })
+    )
+  })
+})
+
+describe("driftOf properties", () => {
+  const _body = fc.string({ maxLength: 20 })
+
+  it("property: identical header-prefixed content never drifts", () => {
+    fc.assert(
+      fc.property(_body, (body) => {
+        const text = `${GENERATED_HEADER}${body}`
+        expect(driftOf({ file: "x.ts", tmp: text, committed: text })).toBeUndefined()
+      })
+    )
+  })
+
+  it("property: absent committed content is always reported as missing", () => {
+    fc.assert(
+      fc.property(_body, (tmp) => {
+        expect(driftOf({ file: "x.ts", tmp, committed: undefined })).toBe("x.ts (missing)")
+      })
+    )
+  })
+
+  it("property: differing header-prefixed content reports the bare file name", () => {
+    fc.assert(
+      fc.property(_body, _body, (a, b) => {
+        fc.pre(a !== b)
+        expect(driftOf({ file: "x.ts", tmp: `${GENERATED_HEADER}${a}`, committed: `${GENERATED_HEADER}${b}` })).toBe(
+          "x.ts"
+        )
       })
     )
   })

@@ -41,7 +41,7 @@ const _scopeOf = (input: RenderInput): Scope => {
     ? reachableFromTarget({ nodes: input.nodes, edges: filtered, target: input.target })
     : { nodes: input.nodes, edges: filtered }
 
-  return { nodes: scope.nodes, edges: input.reduce === true ? transitiveReduce(scope.edges) : scope.edges }
+  return { nodes: scope.nodes, edges: input.reduce ? transitiveReduce(scope.edges) : scope.edges }
 }
 
 const _emptyMessage = (target: string | undefined): string =>
@@ -57,7 +57,7 @@ export const renderGraph = (input: RenderInput): string => {
     edges,
     nodeCount: nodes.length,
     withDev: input.withDev,
-    reduce: input.reduce === true
+    reduce: input.reduce
   })
 
   const legend = _renderLegend({ withDev: input.withDev, showBuild: nodes.some((n) => n.hasBuildScript) })

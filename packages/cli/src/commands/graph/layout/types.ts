@@ -17,13 +17,13 @@ export interface RenderInput {
   readonly edges: ReadonlyArray<GraphEdge>
   readonly target: string | undefined
   readonly withDev: boolean
-  readonly reduce?: boolean
+  readonly reduce: boolean
 }
 
 export interface CycleInput {
   readonly nodes: ReadonlyArray<GraphNode>
   readonly edges: ReadonlyArray<GraphEdge>
-  readonly withDev?: boolean
+  readonly withDev: boolean
   readonly target?: string
 }
 

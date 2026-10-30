@@ -7,7 +7,11 @@ import { detectCycle, type EdgeKind, type GraphEdge, type GraphNode, renderGraph
 class GraphTargetNotFound extends Data.TaggedError("GraphTargetNotFound")<{
   readonly target: string
   readonly candidates: ReadonlyArray<string>
-}> {}
+}> {
+  get message(): string {
+    return `workspace '${this.target}' not found. Available workspaces: ${this.candidates.join(", ")}`
+  }
+}
 
 const _depEdges = (input: {
   readonly workspace: Workspace
@@ -32,11 +36,18 @@ const _buildEdges = (workspaces: ReadonlyArray<Workspace>): GraphEdge[] => {
 const _resolveTargetName = (input: {
   readonly workspaces: ReadonlyArray<Workspace>
   readonly rawTarget: string
-}): string | undefined =>
-  (input.workspaces.find((w) => w.name === input.rawTarget) ??
-    input.workspaces.find((w) => w.relDir === input.rawTarget))?.name
+  readonly cwd: string
+  readonly root: string
+}): Effect.Effect<string | undefined, never, Path> =>
+  Effect.gen(function*() {
+    const p = yield* Path
+    const wanted = p.resolve(input.cwd, input.rawTarget)
 
-export interface RunGraphArgs {
+    return (input.workspaces.find((w) => p.join(input.root, w.relDir) === wanted) ??
+      input.workspaces.find((w) => w.name === input.rawTarget))?.name
+  })
+
+interface RunGraphArgs {
   readonly cwd: string
   readonly target: Option.Option<string>
   readonly withDev: boolean
@@ -46,10 +57,12 @@ export interface RunGraphArgs {
 const _resolveTarget = (input: {
   readonly workspaces: ReadonlyArray<Workspace>
   readonly target: Option.Option<string>
+  readonly cwd: string
+  readonly root: string
 }) =>
   Effect.gen(function*() {
     if (Option.isNone(input.target)) return undefined
-    const resolved = _resolveTargetName({ workspaces: input.workspaces, rawTarget: input.target.value })
+    const resolved = yield* _resolveTargetName({ ...input, rawTarget: input.target.value })
 
     if (resolved) return resolved
 
@@ -59,54 +72,36 @@ const _resolveTarget = (input: {
     })
   })
 
-const _logTargetNotFound = (err: GraphTargetNotFound) =>
+const _toNodes = (workspaces: ReadonlyArray<Workspace>): GraphNode[] =>
+  workspaces.map((w) => ({ name: w.name, relDir: w.relDir, hasBuildScript: w.hasBuildScript }))
+
+const _graphOutput = (input: {
+  readonly workspaces: ReadonlyArray<Workspace>
+  readonly target: string | undefined
+  readonly withDev: boolean
+  readonly full: boolean
+}) =>
   Effect.gen(function*() {
-    yield* Console.error(`error: workspace '${err.target}' not found. Available workspaces:`)
-
-    for (const name of err.candidates) yield* Console.error(`  ${name}`)
-
-    return yield* err
-  })
-
-const _logCycle = (err: CircularWorkspaceDep) =>
-  Effect.gen(function*() {
-    yield* Console.error(`error: workspace cycle detected: ${err.cycle.join(" → ")}`)
-
-    return yield* err
-  })
-
-export const runGraph = (
-  args: RunGraphArgs
-) =>
-  Effect.gen(function*() {
-    const p = yield* Path
-    const root = yield* findRoot(p.resolve(args.cwd))
-    const workspaces = yield* allWorkspaces(root)
-
-    const nodes: GraphNode[] = workspaces.map((w) => ({
-      name: w.name,
-      relDir: w.relDir,
-      hasBuildScript: w.hasBuildScript
-    }))
-
-    const edges = _buildEdges(workspaces)
-    const target = yield* _resolveTarget({ workspaces, target: args.target })
-    const cycle = detectCycle({ nodes, edges, withDev: args.withDev, target })
+    const nodes = _toNodes(input.workspaces)
+    const edges = _buildEdges(input.workspaces)
+    const { target, withDev } = input
+    const cycle = detectCycle({ nodes, edges, withDev, target })
 
     if (cycle !== null) return yield* new CircularWorkspaceDep({ cycle: cycle.slice() })
 
-    const out = renderGraph({
-      nodes,
-      edges,
-      target,
-      withDev: args.withDev,
-      reduce: !args.full
-    })
+    return renderGraph({ nodes, edges, target, withDev, reduce: !input.full })
+  })
 
+export const runGraph = (args: RunGraphArgs) =>
+  Effect.gen(function*() {
+    const p = yield* Path
+    const cwd = p.resolve(args.cwd)
+    const root = yield* findRoot(cwd)
+    const workspaces = yield* allWorkspaces(root)
+    const target = yield* _resolveTarget({ workspaces, target: args.target, cwd, root })
+    const out = yield* _graphOutput({ workspaces, target, withDev: args.withDev, full: args.full })
     yield* Console.log(out)
-  }).pipe(
-    Effect.catchTags({ GraphTargetNotFound: _logTargetNotFound, CircularWorkspaceDep: _logCycle })
-  )
+  })
 
 export const graphCommand = Command.make(
   "graph",

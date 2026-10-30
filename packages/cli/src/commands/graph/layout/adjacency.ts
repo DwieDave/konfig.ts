@@ -55,12 +55,18 @@ export const reachableFromTarget = (input: {
   }
 }
 
+const _impliedByOthers = (input: {
+  readonly adj: ReadonlyMap<string, ReadonlyArray<string>>
+  readonly edge: GraphEdge
+}): boolean => {
+  const seeds = (input.adj.get(input.edge.from) ?? []).filter((k) => k !== input.edge.to)
+
+  return _bfsReach({ adj: input.adj, seeds }).has(input.edge.to)
+}
+
 export const transitiveReduce = (edges: ReadonlyArray<GraphEdge>): GraphEdge[] => {
-  const adj = adjacency(edges)
+  const all = adjacency(edges)
+  const runtime = adjacency(edges.filter((e) => e.kind === "runtime"))
 
-  return edges.filter((e) => {
-    const seeds = (adj.get(e.from) ?? []).filter((k) => k !== e.to)
-
-    return !_bfsReach({ adj, seeds }).has(e.to)
-  })
+  return edges.filter((edge) => !_impliedByOthers({ adj: edge.kind === "runtime" ? runtime : all, edge }))
 }

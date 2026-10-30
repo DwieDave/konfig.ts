@@ -18,18 +18,7 @@ const CrdExtractOptionsSchema = Schema.Struct({
   digest: Schema.optional(ChartDigest)
 })
 
-export interface CrdExtractOptions {
-  readonly repo: string
-  readonly chart: string
-  readonly version: string
-  readonly id: string
-  readonly outDir: string
-  readonly cacheDir: string
-  // The chart registry entry's recorded digest, when it has one. Reused as
-  // the Helm.cacheFileName suffix so a prior `konfig helm fetch` (or a prior
-  // `Helm.release` render) already warmed this exact cache slot.
-  readonly digest?: string
-}
+type CrdExtractOptions = typeof CrdExtractOptionsSchema.Type
 
 export class CrdInputDecodeError extends Data.TaggedError("CrdInputDecodeError")<{
   readonly cause: unknown
@@ -44,8 +33,9 @@ const _decodeOpts = (opts: CrdExtractOptions) =>
     Effect.mapError((cause) => new CrdInputDecodeError({ cause }))
   )
 
-export interface CrdDocument {
+interface CrdDocument {
   readonly crdName: string
+  readonly kind: string
   readonly group: string
   readonly schema: typeof OpenApiSchema.Type
   readonly versions: readonly string[]
@@ -57,6 +47,7 @@ const OpenApiSchema = Schema.Record(Schema.String, Schema.Unknown)
 
 const CrdVersionSchema = Schema.Struct({
   name: Schema.optional(Schema.String),
+  storage: Schema.optional(Schema.Boolean),
   schema: Schema.optional(
     Schema.Struct({
       openAPIV3Schema: Schema.optional(OpenApiSchema)
@@ -69,6 +60,7 @@ const CrdDocumentSchema = Schema.Struct({
   metadata: Schema.Struct({ name: Schema.String }),
   spec: Schema.Struct({
     group: Schema.optional(Schema.String),
+    names: Schema.optional(Schema.Struct({ kind: Schema.optional(Schema.String) })),
     versions: Schema.optional(Schema.Array(CrdVersionSchema))
   })
 })
@@ -77,18 +69,32 @@ const _decodeCrdDoc = Schema.decodeUnknownOption(CrdDocumentSchema)
 
 type DecodedCrd = typeof CrdDocumentSchema.Type
 
+type DecodedVersion = typeof CrdVersionSchema.Type
+
+const _capitalize = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+
+export const crdNameToIdentifier = (crdName: string): string =>
+  (crdName.split(".")[0] ?? crdName).split(/[-_]/).map(_capitalize).join("")
+
+const _groupPrefix = (group: string): string => group.split(/[.\-_]/).map(_capitalize).join("")
+
+const _PERMISSIVE_SCHEMA: CrdDocument["schema"] = { type: "object", additionalProperties: true }
+
+const _schemaOf = (versions: ReadonlyArray<DecodedVersion>): CrdDocument["schema"] =>
+  (versions.find((v) => v.storage === true) ?? versions[0])?.schema?.openAPIV3Schema
+    ?? versions.map((v) => v.schema?.openAPIV3Schema).find(Boolean)
+    ?? _PERMISSIVE_SCHEMA
+
 const _toCrdDocument = (doc: DecodedCrd): CrdDocument | undefined => {
   const versions = doc.spec.versions
 
   if (!doc.metadata.name || versions === undefined || versions.length === 0) return undefined
 
-  const schema: CrdDocument["schema"] = versions.map((v) => v.schema?.openAPIV3Schema).find(Boolean)
-    ?? { type: "object", additionalProperties: true }
-
   return {
     crdName: doc.metadata.name,
+    kind: doc.spec.names?.kind ?? crdNameToIdentifier(doc.metadata.name),
     group: doc.spec.group ?? "",
-    schema,
+    schema: _schemaOf(versions),
     versions: versions.flatMap((v) => (v.name !== undefined && v.name !== "" ? [v.name] : []))
   }
 }
@@ -101,24 +107,20 @@ const _buildCrds = (parsedDocs: ReadonlyArray<unknown>): CrdDocument[] =>
     return crd === undefined ? [] : [crd]
   })
 
-export const _parseCrdDocs = (yamlText: string): Effect.Effect<CrdDocument[], never> =>
-  parseYamlAll(yamlText).pipe(
-    Effect.orElseSucceed((): ReadonlyArray<unknown> => []),
-    Effect.map(_buildCrds)
-  )
+export const parseCrdDocs = (yamlText: string) => parseYamlAll(yamlText).pipe(Effect.map(_buildCrds))
 
-export const _crdNameToIdentifier = (crdName: string): string => {
-  const resource = crdName.split(".")[0] ?? crdName
+const _withIdentifiers = (crds: ReadonlyArray<CrdDocument>) => {
+  const counts = crds.reduce((acc, crd) => acc.set(crd.kind, (acc.get(crd.kind) ?? 0) + 1), new Map<string, number>())
 
-  return resource
-    .split(/[-_]/)
-    .map((s) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`)
-    .join("")
+  return crds.map((crd) => ({
+    crd,
+    identifier: (counts.get(crd.kind) ?? 0) > 1 ? `${_groupPrefix(crd.group)}${crd.kind}` : crd.kind
+  }))
 }
 
-const _generateCrdTs = (crd: CrdDocument) =>
+const _generateCrdTs = (input: { readonly crd: CrdDocument; readonly identifier: string }) =>
   Effect.gen(function*() {
-    const identifier = _crdNameToIdentifier(crd.crdName)
+    const { crd, identifier } = input
     const inputType = `${identifier}Input`
 
     const compiledTypes = yield* Effect.tryPromise(() =>
@@ -135,7 +137,7 @@ const _generateCrdTs = (crd: CrdDocument) =>
           strictIndexSignatures: false
         }
       )
-    ).pipe(Effect.orElseSucceed(() => `export type ${inputType} = Record<string, unknown>;\n`))
+    )
 
     return [
       compiledTypes,
@@ -159,20 +161,16 @@ const _templateChartYaml = (opts: CrdExtractOptions) =>
     return yield* runProcessString(templateCmd, { allowEmptyStdout: true, timeout: yield* Helm.timeout })
   })
 
-export const _dedupeCrdDocuments = (allYaml: ReadonlyArray<string>): Effect.Effect<Map<string, CrdDocument>, never> =>
-  Effect.gen(function*() {
-    const seen = new Map<string, CrdDocument>()
-
-    for (const yaml of allYaml) {
-      const crds = yield* _parseCrdDocs(yaml)
-
-      for (const crd of crds) {
-        if (!seen.has(crd.crdName)) seen.set(crd.crdName, crd)
-      }
-    }
-
-    return seen
-  })
+export const dedupeCrdDocuments = (yaml: string) =>
+  parseCrdDocs(yaml).pipe(
+    Effect.map((crds) =>
+      new Map(
+        crds
+          .filter((crd, i) => crds.findIndex((other) => other.crdName === crd.crdName) === i)
+          .map((crd) => [crd.crdName, crd])
+      )
+    )
+  )
 
 const _writeStub = (opts: CrdExtractOptions) =>
   Effect.gen(function*() {
@@ -186,78 +184,100 @@ const _writeStub = (opts: CrdExtractOptions) =>
     )
   })
 
-const _writeGeneratedTypes = (opts: CrdExtractOptions, crds: ReadonlyArray<CrdDocument>) =>
+const _writeGeneratedTypes = (input: { readonly opts: CrdExtractOptions; readonly crds: ReadonlyArray<CrdDocument> }) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
+    const parts = yield* Effect.forEach(_withIdentifiers(input.crds), _generateCrdTs)
+    yield* fs.makeDirectory(input.opts.outDir, { recursive: true })
 
-    const parts: string[] = [GENERATED_HEADER, ""]
-
-    for (const crd of crds) {
-      const ts = yield* _generateCrdTs(crd)
-      parts.push(ts, "")
-    }
-
-    yield* fs.makeDirectory(opts.outDir, { recursive: true })
-    const outPath = path.join(opts.outDir, `${opts.id}.ts`)
-    yield* fs.writeFileString(outPath, parts.join("\n"))
+    yield* fs.writeFileString(
+      path.join(input.opts.outDir, `${input.opts.id}.ts`),
+      [GENERATED_HEADER, "", ...parts.flatMap((ts) => [ts, ""])].join("\n")
+    )
   })
 
-export const extractCrdsEffect = (opts: CrdExtractOptions) =>
+const _extractDecoded = (opts: CrdExtractOptions) =>
   Effect.gen(function*() {
-    const decoded = yield* _decodeOpts(opts)
-    const templateYaml = yield* _templateChartYaml(decoded)
-    const crds = yield* _dedupeCrdDocuments([templateYaml])
+    const templateYaml = yield* _templateChartYaml(opts)
+    const crds = yield* dedupeCrdDocuments(templateYaml)
 
-    if (crds.size === 0) {
-      yield* _writeStub(decoded)
+    if (crds.size === 0) return yield* _writeStub(opts)
 
-      return
-    }
-
-    yield* _writeGeneratedTypes(decoded, [...crds.values()])
+    yield* _writeGeneratedTypes({ opts, crds: [...crds.values()] })
   }).pipe(
     Effect.scoped,
-    Effect.mapError((cause) => {
-      if (cause instanceof CrdInputDecodeError) return cause
-
-      return new CrdExtractError({ chart: opts.chart, cause })
-    })
+    Effect.mapError((cause) => new CrdExtractError({ chart: opts.chart, cause }))
   )
 
-export interface VerifyCrdsInput {
+export const extractCrdsEffect = (opts: CrdExtractOptions) => _decodeOpts(opts).pipe(Effect.flatMap(_extractDecoded))
+
+interface VerifyCrdsInput {
   readonly releases: readonly CrdExtractOptions[]
   readonly committedDir: string
 }
 
-export const verifyCrdsEffect = (input: VerifyCrdsInput) =>
+export const driftOf = (input: {
+  readonly file: string
+  readonly tmp: string
+  readonly committed: string | undefined
+}): string | undefined => {
+  if (input.committed === undefined) return `${input.file} (missing)`
+
+  if (!input.committed.startsWith(GENERATED_HEADER)) return `${input.file} (missing generated header)`
+
+  return input.tmp === input.committed ? undefined : input.file
+}
+
+const _readIfExists = (file: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+
+    return (yield* fs.exists(file)) ? yield* fs.readFileString(file) : undefined
+  })
+
+const _releaseDrift = (input: {
+  readonly release: CrdExtractOptions
+  readonly tmpDir: string
+  readonly committedDir: string
+}) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
+    const file = `${input.release.id}.ts`
+    yield* extractCrdsEffect({ ...input.release, outDir: input.tmpDir })
+    const tmp = yield* fs.readFileString(path.join(input.tmpDir, file))
+    const committed = yield* _readIfExists(path.join(input.committedDir, file))
 
+    return driftOf({ file, tmp, committed })
+  })
+
+const _orphans = (input: { readonly committedDir: string; readonly ids: ReadonlySet<string> }) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+
+    if (!(yield* fs.exists(input.committedDir))) return []
+    const files = yield* fs.readDirectory(input.committedDir)
+
+    return files
+      .filter((file) => file.endsWith(".ts") && !input.ids.has(file.slice(0, -".ts".length)))
+      .map((file) => `${file} (orphaned)`)
+  })
+
+export const verifyCrdsEffect = (input: VerifyCrdsInput) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
     const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-verify-" })
-    const drifted: string[] = []
 
-    for (const release of input.releases) {
-      yield* extractCrdsEffect({ ...release, outDir: tmpDir })
-      const tmpFile = path.join(tmpDir, `${release.id}.ts`)
-      const committedFile = path.join(input.committedDir, `${release.id}.ts`)
+    const drifts = yield* Effect.forEach(
+      input.releases,
+      (release) => _releaseDrift({ release, tmpDir, committedDir: input.committedDir })
+    )
 
-      const tmpContent = yield* fs.readFileString(tmpFile).pipe(Effect.orElseSucceed(() => ""))
+    const orphans = yield* _orphans({
+      committedDir: input.committedDir,
+      ids: new Set(input.releases.map((r) => r.id))
+    })
 
-      const committedContent = yield* fs
-        .readFileString(committedFile)
-        .pipe(Effect.orElseSucceed(() => ""))
-
-      if (!committedContent.startsWith(GENERATED_HEADER)) {
-        drifted.push(`${release.id}.ts (missing generated header)`)
-        continue
-      }
-
-      if (tmpContent !== committedContent) {
-        drifted.push(`${release.id}.ts`)
-      }
-    }
-
-    return drifted
+    return [...drifts.filter((d) => d !== undefined), ...orphans]
   }).pipe(Effect.scoped)

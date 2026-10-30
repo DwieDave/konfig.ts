@@ -17,14 +17,14 @@ konfig graph [target] [--with-dev] [--full]
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `target` | unset | Workspace directory (relative path such as `apps/api`) or package name (`@example/api`). Omit to render the whole monorepo. |
+| `target` | unset | Workspace directory (a path resolved against the current directory, such as `apps/api`, `./apps/api` or `.`) or package name (`@example/api`). Omit to render the whole monorepo. |
 
 ## Flags
 
 | Name | Default | Description |
 | --- | --- | --- |
 | `--with-dev` | `false` | Also draw `devDependencies` edges, annotated with `(dev)`. |
-| `--full` | `false` | Show every direct edge. By default transitively implied edges are hidden (A→C is dropped when A→B→C exists). |
+| `--full` | `false` | Show every direct edge. By default transitively implied edges are hidden (A→C is dropped when A→B→C exists). Runtime edges are reduced against runtime edges only and dev edges against all edges, so a runtime edge is never hidden by a path through a dev dependency. |
 
 ## Behaviour
 
@@ -32,7 +32,7 @@ The command finds the monorepo root by walking up from the current directory to 
 
 Each workspace becomes a node. An edge is drawn for every `dependencies` or `peerDependencies` entry (runtime edges) and every `devDependencies` entry (dev edges) whose version spec uses the `workspace:` or `link:` protocol and points at another workspace. Packages from the registry never appear.
 
-Before drawing, the command checks for cycles (only within the target's dependency closure when a target is given). A cycle fails the command with `CircularWorkspaceDep` and prints `error: workspace cycle detected: a → b → a`. Dev edges are only drawn, and only considered by the cycle check, when `--with-dev` is passed.
+Before drawing, the command checks for cycles (only within the target's dependency closure when a target is given). A cycle fails the command with `CircularWorkspaceDep` (`circular workspace dependency: a -> b -> a`). Dev edges are only drawn, and only considered by the cycle check, when `--with-dev` is passed.
 
 Nodes that define a `build` script are marked, so you can see which packages the `builder` stage of a generated Dockerfile will compile.
 
@@ -40,7 +40,7 @@ Nodes that define a `build` script are marked, so you can see which packages the
 
 | Error | When |
 | --- | --- |
-| `GraphTargetNotFound` | `target` matches neither a workspace name nor a relative directory; stderr lists the available workspace names. |
+| `GraphTargetNotFound` | `target` matches neither a workspace name nor a workspace directory; the message lists the available workspace names. |
 | `CircularWorkspaceDep { cycle }` | The workspace graph contains a dependency cycle. |
 | `MonorepoRootNotFound` | No workspace root was found above the current directory. |
 
