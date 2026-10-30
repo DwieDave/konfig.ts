@@ -7,7 +7,7 @@ export const closureByRef = (input: {
   readonly ref: string
   readonly includeDev?: boolean
 }): Effect.Effect<ReadonlyArray<Workspace>, WorkspaceNotFound | CircularWorkspaceDep> => {
-  const target = lookupWorkspace({ all: input.all, ref: input.ref })
+  const target = lookupWorkspace({ workspaces: input.all, root: "/", cwd: "/", target: input.ref })
 
   return target
     ? closureOf({ all: input.all, target, includeDev: input.includeDev ?? false })

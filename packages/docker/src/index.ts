@@ -6,4 +6,4 @@ export { emit } from "./render/emit"
 
 export { extractHeader, HEADER_MARKER } from "./render/header"
 
-export { allWorkspaces, findRoot, type Workspace } from "./services/WorkspaceGraph"
+export { allWorkspaces, findRoot, lookupWorkspace, type Workspace, workspaceDeps } from "./services/WorkspaceGraph"

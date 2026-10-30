@@ -5,7 +5,7 @@ export const bun: PackageManager = {
   kind: "Bun",
   lockfileNames: ["bun.lock", "bun.lockb"],
   auxFiles: ["bunfig.toml"],
-  installCommand: ["bun", "install", "--ignore-scripts"],
+  installCommand: ["bun", "install", "--frozen-lockfile", "--ignore-scripts"],
   prodInstall: ProdInstall.Targeted({
     command: (target) => ["bun", "install", "--ignore-scripts", "--frozen-lockfile", "--production", "--filter", target]
   }),

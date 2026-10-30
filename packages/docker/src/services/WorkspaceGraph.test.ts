@@ -5,7 +5,7 @@ import { describe, expect } from "vitest"
 import { CircularWorkspaceDep } from "../DockerError"
 import { closureByRef } from "../testing/closure"
 import { pkgJson, writeTree } from "../testing/tree"
-import { allWorkspaces, detectPm, findRoot, lookupWorkspace, type Workspace } from "./WorkspaceGraph"
+import { allWorkspaces, detectPm, findRoot, lookupWorkspace, type Workspace, workspaceDeps } from "./WorkspaceGraph"
 
 const FIXTURES = new URL("../../fixtures/", import.meta.url).pathname
 
@@ -189,16 +189,35 @@ describe("closureOf", () => {
 })
 
 describe("lookupWorkspace", () => {
-  const all: ReadonlyArray<Workspace> = [
-    { name: "@a", relDir: "packages/a", pkg: {}, hasBuildScript: false }
+  const workspaces: ReadonlyArray<Workspace> = [
+    { name: "@fix/app", relDir: "packages/app", pkg: {}, hasBuildScript: false }
   ]
 
-  it("resolves by name, relDir, or absolute path under root", () => {
-    expect(lookupWorkspace({ all, ref: "@a" })?.name).toBe("@a")
-    expect(lookupWorkspace({ all, ref: "packages/a" })?.name).toBe("@a")
-    expect(lookupWorkspace({ all, ref: "/r/packages/a", root: "/r" })?.name).toBe("@a")
-    expect(lookupWorkspace({ all, ref: "/r/packages/a" })).toBeUndefined()
-    expect(lookupWorkspace({ all, ref: "/r/packages/zz", root: "/r" })).toBeUndefined()
+  const find = (target: string, cwd = "/r") => lookupWorkspace({ workspaces, root: "/r", cwd, target })?.name
+
+  it("resolves by dir relative to cwd, absolute dir, or name", () => {
+    expect(find("packages/app")).toBe("@fix/app")
+    expect(find("app", "/r/packages")).toBe("@fix/app")
+    expect(find("/r/packages/app")).toBe("@fix/app")
+    expect(find("@fix/app")).toBe("@fix/app")
+    expect(find("/r/packages/zz")).toBeUndefined()
+  })
+})
+
+describe("workspaceDeps", () => {
+  it("dedupes and prefers runtime over dev", () => {
+    const ws: Workspace = {
+      name: "w",
+      relDir: "w",
+      hasBuildScript: false,
+      pkg: { dependencies: { X: "*" }, peerDependencies: { X: "*" }, devDependencies: { X: "*", Y: "*", Z: "*" } }
+    }
+
+    expect(workspaceDeps({ ws, names: ["X", "Y"], includeDev: true })).toEqual([
+      { to: "X", kind: "runtime" },
+      { to: "Y", kind: "dev" }
+    ])
+    expect(workspaceDeps({ ws, names: new Set(["X", "Y"]), includeDev: false })).toEqual([{ to: "X", kind: "runtime" }])
   })
 })
 

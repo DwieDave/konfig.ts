@@ -86,7 +86,7 @@ The generator never writes a floating `latest` tag. The base image version comes
 
 The closure is the set of workspace packages the target depends on, directly or transitively. It is computed in two steps.
 
-First, `findRoot` walks up from the target to the nearest directory that has a `pnpm-workspace.yaml` or a `package.json` with a `workspaces` field. If there is none, the error is `MonorepoRootNotFound`. Workspace globs support `*`, `**`, partial segments such as `web-*`, and `!` negations. A `package.json` that is not valid JSON fails with `PackageJsonInvalid`, naming the file.
+First, `findRoot` walks up from the target to the nearest directory that has a `pnpm-workspace.yaml` or a `package.json` with a `workspaces` field. If there is none, the error is `MonorepoRootNotFound`. Workspace globs support `*`, `**`, partial segments such as `web-*`, and `!` negations. A `package.json` that is not valid JSON fails with `PackageJsonInvalid`, naming the file. Unreadable files or directories (for example a permission error) fail with the underlying platform error instead of being skipped. The spec is validated on every `emit`, and an invalid one fails with `SpecInvalid`.
 
 Then `closureOf` follows every `dependencies` and `peerDependencies` entry whose name is a workspace package, whatever the version range (`workspace:*`, `^1.0.0`, `link:`). It rejects cycles with `CircularWorkspaceDep`. The runtime closure excludes `devDependencies`, so build-only tooling never lands in the runner. The `builder` and `dev` stages use a build closure that also follows workspace `devDependencies`, so shared tsconfigs and build tools are present when the build runs.
 

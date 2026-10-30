@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, Match, Schema, Struct } from "effect"
+import { Array as Arr, Effect, Match, type PlatformError, Schema, Struct } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { posix } from "node:path"
@@ -78,7 +78,7 @@ const _prepareContext = (
     const p = yield* Path
     const root = yield* findRoot(input.target)
     const all = yield* allWorkspaces(root)
-    const target = lookupWorkspace({ all, ref: input.target, root })
+    const target = lookupWorkspace({ workspaces: all, root, cwd: p.resolve("."), target: input.target })
 
     if (!target) return yield* new WorkspaceNotFound({ target: input.target })
     const detectedPm = yield* detectPm(root)
@@ -177,16 +177,20 @@ const _checkBuildScript = (input: ValidateSpecInput): Effect.Effect<void, BuildS
 
 const _checkSharedRootFiles = (
   input: ValidateSpecInput
-): Effect.Effect<void, SharedRootFileMissing, FileSystem | Path> =>
+): Effect.Effect<void, SharedRootFileMissing | PlatformError.PlatformError, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
-    yield* Effect.forEach(input.spec.sharedRootFiles ?? [], (path) =>
-      existsOrFalse({ fs, path: p.join(input.ctx.root, path) }).pipe(
-        Effect.flatMap((ok) =>
-          ok ? Effect.void : Effect.fail(new SharedRootFileMissing({ target: input.ctx.target.name, path }))
-        )
-      ), { discard: true })
+    yield* Effect.forEach(
+      input.spec.sharedRootFiles ?? [],
+      (path) =>
+        existsOrFalse({ fs, path: p.join(input.ctx.root, path) }).pipe(
+          Effect.flatMap((ok) =>
+            ok ? Effect.void : Effect.fail(new SharedRootFileMissing({ target: input.ctx.target.name, path }))
+          )
+        ),
+      { discard: true }
+    )
   })
 
 const _validateSpec = (
@@ -245,13 +249,19 @@ const _builderArtifactCopy = (input: {
 const _workspaceSourceCopy = (input: {
   readonly name: string
   readonly closure: ReadonlyArray<Workspace>
+  readonly from: string
 }): Instruction | undefined => {
   const ws = input.closure.find((w) => w.name === input.name)
 
   return ws
-    ? Instr.Copy({ from: "builder", src: [`/app/${ws.relDir}`], dst: `/app/${ws.relDir}` })
+    ? Instr.Copy({ from: input.from, src: [`/app/${ws.relDir}`], dst: `/app/${ws.relDir}` })
     : undefined
 }
+
+const _sourceNames = (copy: ReadonlyArray<CopyAtom>): ReadonlySet<string> =>
+  new Set(copy.flatMap((c) => (CopyAtom.guards.WorkspaceSource(c) ? [c.name] : [])))
+
+const _sourcesStageName = (runner: RunnerSpec): "sources" | "builder" => runner.production ? "sources" : "builder"
 
 const _copyPathCopy = (atom: Extract<CopyAtom, { _tag: "CopyPath" }>): Instruction =>
   Instr.Copy({ src: [atom.src], dst: atom.dst, ...Struct.pick(atom, ["from", "chown"]) })
@@ -259,12 +269,13 @@ const _copyPathCopy = (atom: Extract<CopyAtom, { _tag: "CopyPath" }>): Instructi
 const _copyAtomToInstruction = (input: {
   readonly atom: CopyAtom
   readonly ctx: LowerContext
+  readonly sourceFrom: string
 }): Instruction | undefined =>
   Match.value(input.atom).pipe(
     Match.tag("BuilderArtifact", (atom): Instruction | undefined =>
       _builderArtifactCopy({ atom, target: input.ctx.target })),
     Match.tag("WorkspaceSource", (atom): Instruction | undefined =>
-      _workspaceSourceCopy({ name: atom.name, closure: input.ctx.closure })),
+      _workspaceSourceCopy({ name: atom.name, closure: input.ctx.closure, from: input.sourceFrom })),
     Match.tag("CopyPath", (atom): Instruction | undefined =>
       _copyPathCopy(atom)),
     Match.tag("WorkspaceSourceAll", (): Instruction | undefined =>
@@ -332,7 +343,7 @@ interface PmContext {
 
 const _presentRootFiles = (
   input: { readonly root: string; readonly pm: PackageManager }
-): Effect.Effect<ReadonlyArray<string>, never, FileSystem | Path> =>
+): Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
@@ -469,7 +480,8 @@ const _prodDepsStage = (input: BuildIRInput): Stage =>
     instructions: [
       ..._rootCopyInstructions(input),
       ..._prodDepsInstallInstructions(input),
-      ..._removePathInstructions(input.spec.runner.removePaths)
+      ..._removePathInstructions(input.spec.runner.removePaths),
+      ..._ensureNodeModulesDirs(input)
     ]
   })
 
@@ -492,10 +504,18 @@ const _installInstructions = (input: CtxPm & { readonly installCmd: ReadonlyArra
   Instr.Run({ cmd: input.installCmd.join(" ") })
 ]
 
+const _ensureNodeModulesDirs = (input: CtxPm): Instruction[] =>
+  input.pm.pmImpl.nodeModulesLayout === "hoisted" || input.ctx.closure.length === 0
+    ? []
+    : [Instr.Run({ cmd: `mkdir -p ${input.ctx.closure.map((ws) => `${ws.relDir}/node_modules`).join(" ")}` })]
+
 const _depsStage = (input: CtxPm): Stage =>
   _stage({
     name: "deps",
-    instructions: _installInstructions({ ...input, installCmd: input.pm.pmImpl.installCommand })
+    instructions: [
+      ..._installInstructions({ ...input, installCmd: input.pm.pmImpl.installCommand }),
+      ..._ensureNodeModulesDirs(input)
+    ]
   })
 
 const _sharedRootCopies = (spec: DockerSpec): Instruction[] =>
@@ -570,14 +590,14 @@ interface RunnerNodeModulesInput {
   readonly runner: RunnerSpec
   readonly ctx: LowerContext
   readonly pm: PmContext
-  readonly usesWorkspaceSource: boolean
+  readonly sourceNames: ReadonlySet<string>
   readonly chown: ChownField
 }
 
 // Workspace source needs the root node_modules too, so workspace:*
 // symlinks resolve at runtime.
 const _runnerRootNodeModulesInstructions = (input: RunnerNodeModulesInput): ReadonlyArray<Instruction> =>
-  !input.usesWorkspaceSource || _usesCustomBase(input.runner) ? [] : [Instr.Copy({
+  input.sourceNames.size === 0 || _usesCustomBase(input.runner) ? [] : [Instr.Copy({
     from: _nodeModulesFrom(input.runner),
     src: ["/app/node_modules"],
     dst: "/app/node_modules",
@@ -587,10 +607,13 @@ const _runnerRootNodeModulesInstructions = (input: RunnerNodeModulesInput): Read
 // Under an isolated linker (e.g. bun), each workspace keeps its own
 // node_modules of symlinks into the shared store; these must come from
 // the same source stage as the root copy to stay consistent with it.
+const _needsWorkspaceNodeModules = (input: RunnerNodeModulesInput & { readonly ws: Workspace }): boolean =>
+  input.runner.production || !input.sourceNames.has(input.ws.name)
+
 const _runnerWorkspaceNodeModulesInstructions = (input: RunnerNodeModulesInput): ReadonlyArray<Instruction> =>
-  !input.usesWorkspaceSource || _usesCustomBase(input.runner) || input.pm.pmImpl.nodeModulesLayout === "hoisted"
+  input.sourceNames.size === 0 || _usesCustomBase(input.runner) || input.pm.pmImpl.nodeModulesLayout === "hoisted"
     ? []
-    : input.ctx.closure.map((ws): Instruction =>
+    : input.ctx.closure.filter((ws) => _needsWorkspaceNodeModules({ ...input, ws })).map((ws): Instruction =>
       Instr.Copy({
         from: _nodeModulesFrom(input.runner),
         src: [`/app/${ws.relDir}/node_modules`],
@@ -608,9 +631,10 @@ const _runnerCopyInstructions = (input: {
   readonly expandedCopy: ReadonlyArray<CopyAtom>
   readonly ctx: LowerContext
   readonly chown: string | undefined
+  readonly sourceFrom: string
 }): Instruction[] =>
   input.expandedCopy.flatMap((atom) =>
-    _optional(_copyAtomToInstruction({ atom, ctx: input.ctx })).map((instr) =>
+    _optional(_copyAtomToInstruction({ atom, ctx: input.ctx, sourceFrom: input.sourceFrom })).map((instr) =>
       _defaultChown({ instr, chown: input.chown })
     )
   )
@@ -660,7 +684,7 @@ const _runnerInstructions = (
     runner,
     ctx,
     pm,
-    usesWorkspaceSource: expandedCopy.some(CopyAtom.guards.WorkspaceSource),
+    sourceNames: _sourceNames(expandedCopy),
     chown: _chownField(user.chown)
   }
 
@@ -668,7 +692,12 @@ const _runnerInstructions = (
     ..._optional(user.setupRun),
     ..._runnerEnvAndExposeInstructions(runner),
     ..._runnerRootNodeModulesInstructions(nodeModules),
-    ..._runnerCopyInstructions({ expandedCopy, ctx, chown: user.chown }),
+    ..._runnerCopyInstructions({
+      expandedCopy,
+      ctx,
+      chown: user.chown,
+      sourceFrom: _sourcesStageName(runner)
+    }),
     ..._runnerWorkspaceNodeModulesInstructions(nodeModules),
     ..._optional(_runnerHealthcheckInstruction({
       hc: runner.healthcheck,
@@ -678,6 +707,18 @@ const _runnerInstructions = (
     ..._optional(user.user),
     Instr.Cmd({ argv: runner.cmd })
   ]
+}
+
+const _sourcesStage = (input: BuildIRInput): ReadonlyArray<Stage> => {
+  const names = _sourceNames(_expandWorkspaceSourceAll({ copy: input.spec.runner.copy, closure: input.ctx.closure }))
+  const paths = input.ctx.closure.filter((ws) => names.has(ws.name)).map((ws) => `/app/${ws.relDir}/node_modules`)
+
+  return !input.spec.runner.production || paths.length === 0 ? [] : [{
+    name: "sources",
+    from: FromOf.FromStage({ stage: "builder" }),
+    workdir: "/app",
+    instructions: [Instr.Run({ cmd: `rm -rf ${paths.join(" ")}` })]
+  }]
 }
 
 const _runnerStage = (input: BuildIRInput): Stage => {
@@ -724,6 +765,7 @@ const _buildIR = (input: BuildIRInput): DockerfileBundle => {
       _depsStage(input),
       _builderStage(input),
       ...(input.spec.runner.production ? [_prodDepsStage(input)] : []),
+      ..._sourcesStage(input),
       _runnerStage(input)
     ]
   }

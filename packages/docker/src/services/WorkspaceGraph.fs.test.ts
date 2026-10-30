@@ -1,7 +1,8 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Predicate } from "effect"
 import * as fc from "fast-check"
+import { chmod } from "node:fs/promises"
 import { describe, expect } from "vitest"
 import { closureByRef } from "../testing/closure"
 import { type Files, pkgJson as pkg, rootPkgJson as rootPkg, writeTree } from "../testing/tree"
@@ -62,7 +63,7 @@ describe("malformed package.json", () => {
       const root = yield* findRoot(dir)
       const err = yield* Effect.flip(allWorkspaces(root))
       expect(err._tag).toBe("PackageJsonInvalid")
-      expect(err.path.endsWith("packages/a/package.json")).toBe(true)
+      expect(Predicate.isTagged(err, "PackageJsonInvalid") && err.path.endsWith("packages/a/package.json")).toBe(true)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 
@@ -103,4 +104,44 @@ describe("closureOf protocol-agnostic", () => {
     expect(run(false)).toEqual(["app"])
     expect(run(true)).toEqual(["tsconfig", "app"])
   })
+})
+
+describe("filesystem errors", () => {
+  const unreadable = (rel: string) =>
+    Effect.gen(function*() {
+      const dir = yield* writeTree({
+        "package.json": rootPkg({ workspaces: ["packages/*"] }),
+        "packages/a/package.json": pkg({ name: "a" }),
+        "packages/x/package.json": pkg({ name: "x" })
+      })
+
+      yield* Effect.promise(() => chmod(`${dir}/${rel}`, 0o000))
+      yield* Effect.addFinalizer(() => Effect.promise(() => chmod(`${dir}/${rel}`, 0o755)))
+      const root = yield* findRoot(dir)
+
+      return yield* Effect.flip(allWorkspaces(root))
+    })
+
+  it.effect("fails with PlatformError when a workspace package.json is unreadable", () =>
+    Effect.gen(function*() {
+      const err = yield* unreadable("packages/x/package.json")
+      expect(err._tag).toBe("PlatformError")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("fails with PlatformError when a workspace dir is unreadable", () =>
+    Effect.gen(function*() {
+      const err = yield* unreadable("packages/x")
+      expect(err._tag).toBe("PlatformError")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("still succeeds without optional files like pnpm-workspace.yaml", () =>
+    Effect.gen(function*() {
+      const dir = yield* writeTree({
+        "package.json": rootPkg({ workspaces: ["packages/*"] }),
+        "packages/a/package.json": pkg({ name: "a" })
+      })
+
+      const root = yield* findRoot(dir)
+      expect((yield* allWorkspaces(root)).length).toBe(1)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

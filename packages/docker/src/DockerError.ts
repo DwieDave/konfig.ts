@@ -1,4 +1,4 @@
-import { Data } from "effect"
+import { Data, type PlatformError } from "effect"
 
 export class MonorepoRootNotFound extends Data.TaggedError("MonorepoRootNotFound")<{
   readonly from: string
@@ -63,7 +63,13 @@ export class SharedRootFileMissing extends Data.TaggedError("SharedRootFileMissi
   readonly path: string
 }> {}
 
+export class SpecInvalid extends Data.TaggedError("SpecInvalid")<{
+  readonly cause: unknown
+}> {}
+
 export type AnyDockerError =
+  | PlatformError.PlatformError
+  | SpecInvalid
   | MonorepoRootNotFound
   | WorkspaceNotFound
   | PackageJsonInvalid

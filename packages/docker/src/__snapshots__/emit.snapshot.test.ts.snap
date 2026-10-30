@@ -3,7 +3,7 @@
 exports[`emit snapshots — bun fixture > full-featured spec > bun-full-Dockerfile 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:42341cf38b10c39e5037c338862a6aca55cb2260270afa79b10b10932033bc2b
+# hash: sha256:5c434783c0709c3cdbdd163cf8ef752edc45e3e89ad6d05aaa3430cdf11f6842
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -13,7 +13,8 @@ COPY packages/app/package.json ./packages/app/
 COPY packages/other/package.json ./packages/other/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/util/package.json ./packages/util/
-RUN bun install --ignore-scripts
+RUN bun install --frozen-lockfile --ignore-scripts
+RUN mkdir -p packages/shared/node_modules packages/util/node_modules packages/app/node_modules
 
 FROM base AS builder
 WORKDIR /app
@@ -38,9 +39,6 @@ COPY --from=builder --chown=myapp:myapp /app/packages/app/dist /app/packages/app
 COPY --from=builder --chown=myapp:myapp /app/packages/shared /app/packages/shared
 COPY --from=builder --chown=myapp:myapp /app/packages/util /app/packages/util
 COPY --from=builder --chown=myapp:myapp /app/packages/app /app/packages/app
-COPY --from=builder --chown=myapp:myapp /app/packages/shared/node_modules /app/packages/shared/node_modules
-COPY --from=builder --chown=myapp:myapp /app/packages/util/node_modules /app/packages/util/node_modules
-COPY --from=builder --chown=myapp:myapp /app/packages/app/node_modules /app/packages/app/node_modules
 HEALTHCHECK --interval=30s CMD ["wget","--spider","-q","http://localhost:4000/healthz"]
 USER myapp
 CMD ["bun","run","dist/main.js"]
@@ -50,7 +48,7 @@ CMD ["bun","run","dist/main.js"]
 exports[`emit snapshots — bun fixture > full-featured spec > bun-full-Dockerfile.dev 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:30b372d80e589b87a77fa9c5d28858f737bbbb849b0c3671c7033b0d413bb6dc
+# hash: sha256:4a9d58809ee42043336f2a093be5f6ad22a2696fef32bae895b0eaf45b41d939
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS dev
@@ -60,7 +58,7 @@ COPY packages/app/package.json ./packages/app/
 COPY packages/other/package.json ./packages/other/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/util/package.json ./packages/util/
-RUN bun install
+RUN bun install --frozen-lockfile
 COPY packages/shared ./packages/shared
 COPY packages/util ./packages/util
 COPY packages/app ./packages/app
@@ -74,7 +72,7 @@ CMD ["bun","--watch","main.ts"]
 exports[`emit snapshots — bun fixture > minimal spec > bun-minimal-Dockerfile 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:6a0a706b7ae5729676d7ad9a55a16542c3c658ec3c41769af3ea646c8c18f479
+# hash: sha256:da60e3e483953eb77b1a0c515d922398ac77be463caafa234020abf306a63dc6
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -84,7 +82,8 @@ COPY packages/app/package.json ./packages/app/
 COPY packages/other/package.json ./packages/other/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/util/package.json ./packages/util/
-RUN bun install --ignore-scripts
+RUN bun install --frozen-lockfile --ignore-scripts
+RUN mkdir -p packages/shared/node_modules packages/util/node_modules packages/app/node_modules
 
 FROM base AS builder
 WORKDIR /app
@@ -111,7 +110,7 @@ CMD ["bun","run","dist/main.js"]
 exports[`emit snapshots — npm fixture > minimal spec > npm-minimal-Dockerfile 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:631dfebdbb0b9abe99ab3f6b8930f6c8fefe18acfd70f83a8d816476194080d6
+# hash: sha256:84ae4a8261cc6993f02f9dff259016da6c9560d54b49ba7e02863a73617f0532
 FROM node:22-alpine AS base
 
 FROM base AS deps
@@ -126,9 +125,6 @@ RUN npm ci --ignore-scripts
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules /app/node_modules
-COPY --from=deps /app/packages/shared/node_modules /app/packages/shared/node_modules
-COPY --from=deps /app/packages/util/node_modules /app/packages/util/node_modules
-COPY --from=deps /app/packages/app/node_modules /app/packages/app/node_modules
 COPY packages/shared ./packages/shared
 COPY packages/util ./packages/util
 COPY packages/app ./packages/app
@@ -183,7 +179,7 @@ CMD ["bun","run","dist/main.js"]
 exports[`emit snapshots — pnpm-isolated fixture > minimal spec > pnpm-isolated-minimal-Dockerfile 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:80a650cbcfb68e8b106d183ad218cc2362054fc89cd74966a6abe90764dac35a
+# hash: sha256:525ca02e7877361cd76e4ca453a1de0073e71409f7fbdbd719b47db2b83d0951
 FROM node:22-alpine AS base
 
 FROM base AS deps
@@ -195,6 +191,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY packages/util/package.json ./packages/util/
 RUN corepack enable pnpm && corepack prepare pnpm@9.7.0 --activate
 RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN mkdir -p packages/shared/node_modules packages/util/node_modules packages/app/node_modules
 
 FROM base AS builder
 WORKDIR /app
@@ -221,7 +218,7 @@ CMD ["bun","run","dist/main.js"]
 exports[`emit snapshots — production spec (prod-deps stage) > bun > bun-production-Dockerfile 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:dde90835185086b21eab2d8a09f9835b4734f1d7a4c4db6937ff9d1ed88b730f
+# hash: sha256:389f9b109c2d5e431c49be67a77bc6794829d094ce7858ecebc9f9a725be30b3
 FROM oven/bun:1.3.5-alpine AS base
 
 FROM base AS deps
@@ -231,7 +228,8 @@ COPY packages/app/package.json ./packages/app/
 COPY packages/other/package.json ./packages/other/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/util/package.json ./packages/util/
-RUN bun install --ignore-scripts
+RUN bun install --frozen-lockfile --ignore-scripts
+RUN mkdir -p packages/shared/node_modules packages/util/node_modules packages/app/node_modules
 
 FROM base AS builder
 WORKDIR /app
@@ -253,6 +251,7 @@ COPY packages/other/package.json ./packages/other/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/util/package.json ./packages/util/
 RUN bun install --ignore-scripts --frozen-lockfile --production --filter @fix/app
+RUN mkdir -p packages/shared/node_modules packages/util/node_modules packages/app/node_modules
 
 FROM base AS runner
 WORKDIR /app/packages/app
@@ -267,7 +266,7 @@ CMD ["bun","run","dist/main.js"]
 exports[`emit snapshots — production spec (prod-deps stage) > npm > npm-production-Dockerfile 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:75a2f985fb81673fa4b2cd500b89004c79e7ba124c4bbaf5dcf585a1959e344a
+# hash: sha256:ec070a858613efa8a5d187873b848318ec41b892faae9ffd730c795d0c6ea515
 FROM node:22-alpine AS base
 
 FROM base AS deps
@@ -282,9 +281,6 @@ RUN npm ci --ignore-scripts
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules /app/node_modules
-COPY --from=deps /app/packages/shared/node_modules /app/packages/shared/node_modules
-COPY --from=deps /app/packages/util/node_modules /app/packages/util/node_modules
-COPY --from=deps /app/packages/app/node_modules /app/packages/app/node_modules
 COPY packages/shared ./packages/shared
 COPY packages/util ./packages/util
 COPY packages/app ./packages/app
@@ -358,7 +354,7 @@ CMD ["bun","run","dist/main.js"]
 exports[`emit snapshots — production spec (prod-deps stage) > pnpm-isolated > pnpm-isolated-production-Dockerfile 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:66885a7b0d618da13707af0ae989b46b1ba08dfcedbf998e101a46bdf8d2d48b
+# hash: sha256:41dceec42d8913a2eca76f69012c2fe1e5ca2102c4098576cb0d1237ddad7974
 FROM node:22-alpine AS base
 
 FROM base AS deps
@@ -370,6 +366,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY packages/util/package.json ./packages/util/
 RUN corepack enable pnpm && corepack prepare pnpm@9.7.0 --activate
 RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN mkdir -p packages/shared/node_modules packages/util/node_modules packages/app/node_modules
 
 FROM base AS builder
 WORKDIR /app
@@ -392,6 +389,7 @@ COPY packages/util/package.json ./packages/util/
 COPY packages/app/package.json ./packages/app/
 RUN corepack enable pnpm && corepack prepare pnpm@9.7.0 --activate
 RUN pnpm install --ignore-scripts --prod
+RUN mkdir -p packages/shared/node_modules packages/util/node_modules packages/app/node_modules
 
 FROM base AS runner
 WORKDIR /app/packages/app

@@ -6,6 +6,6 @@ export const npm: PackageManager = {
   auxFiles: [".npmrc"],
   installCommand: ["npm", "ci", "--ignore-scripts"],
   prodInstall: ProdInstall.Rewrite({ command: ["npm", "install", "--ignore-scripts", "--omit=dev"] }),
-  nodeModulesLayout: "isolated",
+  nodeModulesLayout: "hoisted",
   prependDepsRuns: () => []
 }

@@ -15,24 +15,25 @@ describe("PackageManager bun", () => {
       layout: bunPm.nodeModulesLayout,
       prepend: bunPm.prependDepsRuns("1.3.5")
     }).toMatchInlineSnapshot(`
-			{
-			  "aux": [
-			    "bunfig.toml",
-			  ],
-			  "install": [
-			    "bun",
-			    "install",
-			    "--ignore-scripts",
-			  ],
-			  "layout": "isolated",
-			  "lockfiles": [
-			    "bun.lock",
-			    "bun.lockb",
-			  ],
-			  "prepend": [],
-			  "tag": "Bun",
-			}
-		`)
+      {
+        "aux": [
+          "bunfig.toml",
+        ],
+        "install": [
+          "bun",
+          "install",
+          "--frozen-lockfile",
+          "--ignore-scripts",
+        ],
+        "layout": "isolated",
+        "lockfiles": [
+          "bun.lock",
+          "bun.lockb",
+        ],
+        "prepend": [],
+        "tag": "Bun",
+      }
+    `)
   })
 })
 
@@ -45,22 +46,22 @@ describe("PackageManager npm", () => {
       install: npmPm.installCommand,
       layout: npmPm.nodeModulesLayout
     }).toMatchInlineSnapshot(`
-			{
-			  "aux": [
-			    ".npmrc",
-			  ],
-			  "install": [
-			    "npm",
-			    "ci",
-			    "--ignore-scripts",
-			  ],
-			  "layout": "isolated",
-			  "lockfiles": [
-			    "package-lock.json",
-			  ],
-			  "tag": "Npm",
-			}
-		`)
+      {
+        "aux": [
+          ".npmrc",
+        ],
+        "install": [
+          "npm",
+          "ci",
+          "--ignore-scripts",
+        ],
+        "layout": "hoisted",
+        "lockfiles": [
+          "package-lock.json",
+        ],
+        "tag": "Npm",
+      }
+    `)
   })
 })
 
