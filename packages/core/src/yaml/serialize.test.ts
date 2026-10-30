@@ -10,7 +10,7 @@ type _ParseOptions = YAML.ParseOptions & YAML.DocumentOptions & YAML.SchemaOptio
 const _parse = <T>(text: string, options?: _ParseOptions): T => {
   const parsed = YAML.parse(text, options ?? {})
 
-  return unsafeCoerce<T>(parsed, "tests assert the shape of YAML that serialize just emitted")
+  return unsafeCoerce<T>({ value: parsed, reason: "tests assert the shape of YAML that serialize just emitted" })
 }
 
 const _isString = Schema.is(Schema.String)

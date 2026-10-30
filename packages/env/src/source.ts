@@ -74,7 +74,10 @@ interface FromCommandInput<K extends string> {
 }
 
 const _runCommand = (input: { readonly spec: FromCommandSpec; readonly key: string }) =>
-  runProcessString(ChildProcess.make(input.spec.cmd, [...input.spec.args]), { allowEmptyStdout: true }).pipe(
+  runProcessString({
+    command: ChildProcess.make(input.spec.cmd, [...input.spec.args]),
+    options: { allowEmptyStdout: true }
+  }).pipe(
     Effect.mapError((cause) => new SecretSourceError({ source: "fromCommand", key: input.key, cause })),
     Effect.map((stdout) => stdout.trim()),
     Effect.filterOrFail(

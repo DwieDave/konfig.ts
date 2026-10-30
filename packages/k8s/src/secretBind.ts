@@ -3,6 +3,7 @@ import type { SecretEntry, SecretSource } from "@konfig.ts/env"
 import { type Context, Effect, type Layer, Layer as L } from "effect"
 import { resolveSource, type SecretBackend } from "./backend"
 import { EnvVar } from "./env"
+import type { StringMap } from "./meta"
 import { SecretRef as SecretRefValue } from "./refs"
 
 interface _DeclaredSecretBase<N extends string, K extends string, Ns extends string> {
@@ -36,8 +37,8 @@ interface BindSecretInput<
   readonly secret: SecretEntry<N, K, E>
   readonly backend?: SecretBackend<N, K>
   readonly source?: SecretSource<K, Manifest.RenderServices>
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+  readonly labels?: StringMap
+  readonly annotations?: StringMap
   readonly namespace?: Ns
 }
 

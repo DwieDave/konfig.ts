@@ -8,7 +8,7 @@ import { Selector } from "./selector"
 import { Deployment } from "./workload"
 
 const coerce = <T, V = unknown>(value: V): T =>
-  unsafeCoerce<T, V>(value, "the rendered manifest is the K8s resource its builder emits")
+  unsafeCoerce<T, V>({ value: value, reason: "the rendered manifest is the K8s resource its builder emits" })
 
 const ctx = { env: "prod" } as const
 

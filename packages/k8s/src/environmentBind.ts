@@ -15,6 +15,7 @@ import type {
 import { Layer, Match, Predicate } from "effect"
 import type { SecretBackend } from "./backend"
 import type { EnvVar } from "./env"
+import type { StringMap } from "./meta"
 import { bindSecret, type DeclaredSecret } from "./secretBind"
 
 interface DeclaredLiteral<EnvName extends string, T> {
@@ -66,8 +67,8 @@ export interface DeclaredEnvironment<
 }
 
 interface _SecretMemberOptionsBase {
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+  readonly labels?: StringMap
+  readonly annotations?: StringMap
 }
 
 interface _SecretMemberBackendRequiresSource<N extends string, K extends string> extends _SecretMemberOptionsBase {
@@ -89,11 +90,6 @@ type SecretMemberOptions<N extends string, K extends string> =
   | _SecretMemberBackendRequiresSource<N, K>
   | _SecretMemberBackendOptionalSource<N, K>
   | _SecretMemberSourceOnly<N, K>
-
-type SecretMemberOptionsFor<A> = A extends SecretEntry<infer N, infer K, infer _E>
-  ? [N, K] extends [string, string] ? SecretMemberOptions<N, K>
-  : never
-  : never
 
 /**
  * What a secret member accepts in `Environment.bind({ secrets })`: the
@@ -222,11 +218,11 @@ interface _Fragment {
 
 const _emptyFragment: _Fragment = { declared: {}, envVars: [], manifests: [], valuesLayers: [] }
 
-const _mergeFragments = (left: _Fragment, right: _Fragment): _Fragment => ({
-  declared: { ...left.declared, ...right.declared },
-  envVars: [...left.envVars, ...right.envVars],
-  manifests: [...left.manifests, ...right.manifests],
-  valuesLayers: [...left.valuesLayers, ...right.valuesLayers]
+const _mergeFragments = (input: { readonly left: _Fragment; readonly right: _Fragment }): _Fragment => ({
+  declared: { ...input.left.declared, ...input.right.declared },
+  envVars: [...input.left.envVars, ...input.right.envVars],
+  manifests: [...input.left.manifests, ...input.right.manifests],
+  valuesLayers: [...input.left.valuesLayers, ...input.right.valuesLayers]
 })
 
 interface _DispatchInput {
@@ -258,7 +254,9 @@ const _isLiteralOverride = (value: _NodeValue | undefined): value is _LiteralOve
 const _asNode = (value: _NodeValue | undefined): _Node | undefined =>
   Predicate.isObject(value) && !_isSecretMemberInput(value) ? value : undefined
 
-const _handleSecret = (entry: AnySecretEntry, input: _DispatchInput): _Fragment => {
+const _handleSecret = (
+  { entry, input }: { readonly entry: AnySecretEntry; readonly input: _DispatchInput }
+): _Fragment => {
   const raw = _lookup({ node: input.secretsOpts, key: input.memberKey })
   const memberOpts = _normalizeSecretMember(_isSecretMemberInput(raw) ? raw : undefined)
 
@@ -279,20 +277,26 @@ const _handleSecret = (entry: AnySecretEntry, input: _DispatchInput): _Fragment 
   }
 }
 
-const _handleLiteral = (entry: AnyLiteralEntry, input: _DispatchInput): _Fragment => {
+const _handleLiteral = (
+  { entry, input }: { readonly entry: AnyLiteralEntry; readonly input: _DispatchInput }
+): _Fragment => {
   const override = _lookup({ node: input.literalsOpts, key: input.memberKey })
   const d = _bindLiteral({ entry, override: _isLiteralOverride(override) ? override : undefined })
 
   return { ..._emptyFragment, declared: { [input.memberKey]: d }, envVars: [d.envVar] }
 }
 
-const _handleDownward = (entry: AnyDownwardEntry, input: _DispatchInput): _Fragment => {
+const _handleDownward = (
+  { entry, input }: { readonly entry: AnyDownwardEntry; readonly input: _DispatchInput }
+): _Fragment => {
   const d = _bindDownward({ entry })
 
   return { ..._emptyFragment, declared: { [input.memberKey]: d }, envVars: [d.envVar] }
 }
 
-const _handleEnvironment = (entry: AnyEnvironment, input: _DispatchInput): _Fragment => {
+const _handleEnvironment = (
+  { entry, input }: { readonly entry: AnyEnvironment; readonly input: _DispatchInput }
+): _Fragment => {
   const inner = _dispatchAllMembers({
     members: entry.members,
     secretsOpts: _asNode(_lookup({ node: input.secretsOpts, key: input.memberKey })),
@@ -306,10 +310,10 @@ const _handleEnvironment = (entry: AnyEnvironment, input: _DispatchInput): _Frag
 const _dispatch = (input: _DispatchInput): _Fragment =>
   Match.value(input.entry).pipe(
     Match.discriminatorsExhaustive("_kind")({
-      Secret: (entry: AnySecretEntry) => _handleSecret(entry, input),
-      Literal: (entry: AnyLiteralEntry) => _handleLiteral(entry, input),
-      Downward: (entry: AnyDownwardEntry) => _handleDownward(entry, input),
-      Environment: (entry: AnyEnvironment) => _handleEnvironment(entry, input)
+      Secret: (entry: AnySecretEntry) => _handleSecret({ entry, input }),
+      Literal: (entry: AnyLiteralEntry) => _handleLiteral({ entry, input }),
+      Downward: (entry: AnyDownwardEntry) => _handleDownward({ entry, input }),
+      Environment: (entry: AnyEnvironment) => _handleEnvironment({ entry, input })
     })
   )
 
@@ -331,7 +335,7 @@ const _dispatchAllMembers = (input: _DispatchAllInput): _Fragment =>
         namespace: input.namespace
       })
     )
-    .reduce(_mergeFragments, _emptyFragment)
+    .reduce((left, right) => _mergeFragments({ left, right }), _emptyFragment)
 
 const _mergeValuesLayers = (layers: ReadonlyArray<_CollectedLayer>): _CollectedLayer => {
   const [first, ...rest] = layers
@@ -355,13 +359,14 @@ export const bindEnvironment = <
   return {
     envVars: fragment.envVars,
     manifests: fragment.manifests,
-    members: unsafeCoerce<{ readonly [K in keyof M]: DeclaredMember<M[K], Ns> }>(
-      fragment.declared,
-      "declared is built by folding env.members; each key maps to its DeclaredMember<M[K], Ns>"
-    ),
-    valuesLayer: unsafeCoerce<DeclaredValuesLayer<M>>(
-      _mergeValuesLayers(fragment.valuesLayers),
-      "the merged layer provides exactly one SecretValues service per secret member that has a source; DeclaredValuesLayer names them from M"
-    )
+    members: unsafeCoerce<{ readonly [K in keyof M]: DeclaredMember<M[K], Ns> }>({
+      value: fragment.declared,
+      reason: "declared is built by folding env.members; each key maps to its DeclaredMember<M[K], Ns>"
+    }),
+    valuesLayer: unsafeCoerce<DeclaredValuesLayer<M>>({
+      value: _mergeValuesLayers(fragment.valuesLayers),
+      reason:
+        "the merged layer provides exactly one SecretValues service per secret member that has a source; DeclaredValuesLayer names them from M"
+    })
   }
 }

@@ -8,7 +8,7 @@ export interface HashSecretValuesInput {
 }
 
 // Netstring-frames each field (len:bytes,) so distinct records can't collide (unlike plain "key=value\n" concatenation).
-const _frame = (hasher: Hash, value: string): void => {
+const _frame = ({ hasher, value }: { readonly hasher: Hash; readonly value: string }): void => {
   const bytes = Buffer.from(value, "utf8")
   hasher.update(`${bytes.length}:`)
   hasher.update(bytes)
@@ -19,13 +19,13 @@ const _frame = (hasher: Hash, value: string): void => {
 // This digest is a change-detection fingerprint, not a safe-to-publish cryptographic commitment.
 export const hashSecretValues = (input: HashSecretValuesInput): string => {
   const hasher = createHash("sha256")
-  _frame(hasher, "konfig/secret-values-hash/v1")
-  _frame(hasher, input.salt)
+  _frame({ hasher, value: "konfig/secret-values-hash/v1" })
+  _frame({ hasher, value: input.salt })
   const keys = Object.keys(input.values).sort()
 
   for (const key of keys) {
-    _frame(hasher, key)
-    _frame(hasher, Redacted.value(input.values[key]!))
+    _frame({ hasher, value: key })
+    _frame({ hasher, value: Redacted.value(input.values[key]!) })
   }
 
   return hasher.digest("hex")

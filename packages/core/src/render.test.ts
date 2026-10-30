@@ -56,7 +56,7 @@ describe("render — _compose wiring", () => {
         seenTag = m.tag
       })
 
-    return _compose(program, { env: "staging", layers: extra }).pipe(
+    return _compose({ program, options: { env: "staging", layers: extra } }).pipe(
       Effect.map(() => {
         expect(seenEnv).toBe("staging")
         expect(seenTag).toBe("marker")
@@ -72,7 +72,7 @@ describe("render — _compose wiring", () => {
         seenEnv = ctx.env
       })
 
-    return _compose(program).pipe(
+    return _compose({ program }).pipe(
       Effect.map(() => {
         expect(seenEnv).toBe("prod")
       })

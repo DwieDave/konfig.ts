@@ -23,18 +23,20 @@ interface _Mismatch {
   readonly annotations: boolean
 }
 
-const _differs = (want: _Record | undefined, have: _Record | undefined): boolean =>
-  want !== undefined && Object.entries(want).some(([key, value]) => have?.[key] !== value)
+const _differs = (input: { readonly want: _Record | undefined; readonly have: _Record | undefined }): boolean =>
+  input.want !== undefined && Object.entries(input.want).some(([key, value]) => input.have?.[key] !== value)
 
 const _mismatches = ({ annotations, decoded, labels, name, namespace }: _RestampInput): _Mismatch => ({
   namespace: decoded.metadata.namespace !== namespace,
   name: decoded.metadata.name !== name
     || decoded.spec.secretTemplates.some((template) => template.name !== name),
-  labels: _differs(labels, decoded.metadata.labels),
-  annotations: _differs(annotations, decoded.metadata.annotations)
+  labels: _differs({ want: labels, have: decoded.metadata.labels }),
+  annotations: _differs({ want: annotations, have: decoded.metadata.annotations })
 })
 
-const _describeTargets = (input: _RestampInput, mismatch: _Mismatch): string =>
+const _describeTargets = (
+  { input, mismatch }: { readonly input: _RestampInput; readonly mismatch: _Mismatch }
+): string =>
   [
     mismatch.namespace ? `metadata.namespace to "${input.namespace}"` : undefined,
     mismatch.name ? `metadata.name/spec.secretTemplates[].name to "${input.name}"` : undefined,
@@ -74,7 +76,7 @@ export const _restampIdentity = (input: _RestampInput): Effect.Effect<SopsSecret
     return Effect.fail(
       new RenderError({
         message: `${input.label}: refusing to restamp ${
-          _describeTargets(input, mismatch)
+          _describeTargets({ input, mismatch })
         } — file is fully MAC'd (mac_only_encrypted is not true), so it is protected by the MAC`
       })
     )

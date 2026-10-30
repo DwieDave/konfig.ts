@@ -30,16 +30,16 @@ const _contextFor = (input: {
   readonly filename: string
   readonly messages: string[]
 }): Context =>
-  unsafeCoerce<Context>(
-    {
+  unsafeCoerce<Context>({
+    value: {
       id: "test/rule",
       filename: input.filename,
       options: input.options,
       sourceCode: { getAllComments: () => input.comments, ast: input.program },
       report: (diagnostic: { readonly message?: string }) => input.messages.push(diagnostic.message ?? "")
     },
-    "the harness provides exactly the context members the rules read"
-  )
+    reason: "the harness provides exactly the context members the rules read"
+  })
 
 /** Parses `source` with oxc-parser, runs `rule` over the real AST and returns the reported messages. */
 export const lint = (input: LintInput): ReadonlyArray<string> => {
@@ -52,11 +52,11 @@ export const lint = (input: LintInput): ReadonlyArray<string> => {
   _link({ node: program, parent: null })
 
   const context = _contextFor({
-    comments: unsafeCoerce(parsed.comments, "oxc-parser comments follow the ESTree comment shape"),
+    comments: unsafeCoerce({ value: parsed.comments, reason: "oxc-parser comments follow the ESTree comment shape" }),
     options: input.options ?? [],
     filename,
     messages,
-    program: unsafeCoerce(program, "the parsed program is an ESTree Program")
+    program: unsafeCoerce({ value: program, reason: "the parsed program is an ESTree Program" })
   })
 
   _visit({ listener: input.rule.create(context), node: program })

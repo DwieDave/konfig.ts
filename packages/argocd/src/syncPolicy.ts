@@ -10,7 +10,9 @@ export interface MergeSyncPolicyInput {
   readonly app: SyncPolicy | undefined
 }
 
-const _mergeAutomated = (def: Automated | undefined, app: Automated | undefined): Automated | undefined => {
+const _mergeAutomated = (
+  { def, app }: { readonly def: Automated | undefined; readonly app: Automated | undefined }
+): Automated | undefined => {
   if (def === undefined) return app
 
   if (app === undefined) return def
@@ -18,7 +20,9 @@ const _mergeAutomated = (def: Automated | undefined, app: Automated | undefined)
   return app.enabled === false ? omitUndefined(app) : { ...def, ...omitUndefined(app) }
 }
 
-const _mergeRetry = (def: Retry | undefined, app: Retry | undefined): Retry | undefined => {
+const _mergeRetry = (
+  { def, app }: { readonly def: Retry | undefined; readonly app: Retry | undefined }
+): Retry | undefined => {
   if (def === undefined) return app
 
   if (app === undefined) return def
@@ -40,8 +44,8 @@ export const mergeSyncPolicy = (input: MergeSyncPolicyInput): SyncPolicy | undef
   if (app === undefined) return def
 
   return {
-    automated: _mergeAutomated(def.automated, app.automated),
+    automated: _mergeAutomated({ def: def.automated, app: app.automated }),
     syncOptions: app.syncOptions ?? def.syncOptions,
-    retry: _mergeRetry(def.retry, app.retry)
+    retry: _mergeRetry({ def: def.retry, app: app.retry })
   }
 }

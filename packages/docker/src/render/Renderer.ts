@@ -5,10 +5,12 @@ const _json = (argv: ReadonlyArray<string>): string => JSON.stringify(argv)
 
 const _renderPlatformFlag = (p: PlatformIR | undefined): string => (p ? `--platform=${p.value} ` : "")
 
-const _renderFrom = (f: From, platform: PlatformIR | undefined, name: string): string =>
-  Match.value(f).pipe(
-    Match.tag("FromImage", (i) => `FROM ${_renderPlatformFlag(platform)}${i.image}:${i.tag} AS ${name}`),
-    Match.tag("FromStage", (s) => `FROM ${_renderPlatformFlag(platform)}${s.stage} AS ${name}`),
+const _renderFrom = (
+  input: { readonly from: From; readonly platform: PlatformIR | undefined; readonly name: string }
+): string =>
+  Match.value(input.from).pipe(
+    Match.tag("FromImage", (i) => `FROM ${_renderPlatformFlag(input.platform)}${i.image}:${i.tag} AS ${input.name}`),
+    Match.tag("FromStage", (s) => `FROM ${_renderPlatformFlag(input.platform)}${s.stage} AS ${input.name}`),
     Match.exhaustive
   )
 
@@ -62,7 +64,7 @@ const _renderInstruction = (i: Instruction): string =>
 
 const _renderStage = (s: Stage): string =>
   [
-    _renderFrom(s.from, s.platform, s.name),
+    _renderFrom({ from: s.from, platform: s.platform, name: s.name }),
     ...(s.workdir ? [`WORKDIR ${s.workdir}`] : []),
     ...s.instructions.map(_renderInstruction)
   ].join("\n")

@@ -413,10 +413,9 @@ export const detectPm = (
     return yield* _finalizePm({ env, choice })
   })
 
-const _depNames = (pkg: PackageJson, includeDev: boolean): ReadonlyArray<string> =>
-  [pkg.dependencies, pkg.peerDependencies, includeDev ? pkg.devDependencies : undefined].flatMap((rec) =>
-    Object.keys(rec ?? {})
-  )
+const _depNames = (input: { readonly pkg: PackageJson; readonly includeDev: boolean }): ReadonlyArray<string> =>
+  [input.pkg.dependencies, input.pkg.peerDependencies, input.includeDev ? input.pkg.devDependencies : undefined]
+    .flatMap((rec) => Object.keys(rec ?? {}))
 
 export interface ClosureInput {
   readonly all: ReadonlyArray<Workspace>
@@ -444,7 +443,7 @@ const _visit = (input: VisitInput): Effect.Effect<Visit, CircularWorkspaceDep> =
 
   if (stack.includes(ws.name)) return Effect.fail(new CircularWorkspaceDep({ cycle: [...stack, ws.name] }))
 
-  const deps = _depNames(ws.pkg, input.includeDev).flatMap((name) => {
+  const deps = _depNames({ pkg: ws.pkg, includeDev: input.includeDev }).flatMap((name) => {
     const dep = input.byName.get(name)
 
     return dep ? [dep] : []

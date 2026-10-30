@@ -662,7 +662,7 @@ metadata:
 })
 
 const _run = (command: string, args: readonly string[]) =>
-  runProcessString(ChildProcess.make(command, args)).pipe(Effect.scoped, Effect.option)
+  runProcessString({ command: ChildProcess.make(command, args) }).pipe(Effect.scoped, Effect.option)
 
 const _freshAgeRecipient = Effect.gen(function*() {
   const out = yield* _run("age-keygen", [])

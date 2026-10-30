@@ -57,7 +57,7 @@ describe("stdin", () => {
   it.effect("spawns with stdin ignored when the caller set none", () =>
     Effect.gen(function*() {
       const seen: Command[] = []
-      yield* runProcessExit(_cmd).pipe(Effect.provide(_spawnerFor({ exitCode: 0 }, seen)))
+      yield* runProcessExit({ command: _cmd }).pipe(Effect.provide(_spawnerFor({ exitCode: 0 }, seen)))
       const spawned = seen[0]
       expect(spawned !== undefined && ChildProcess.isStandardCommand(spawned)).toBe(true)
 
@@ -72,7 +72,7 @@ describe("stdin", () => {
       const seen: Command[] = []
       const stdin = Stream.succeed(new TextEncoder().encode("secret"))
       const cmd = ChildProcess.make("cat", [], { stdin })
-      const out = yield* runProcessString(cmd).pipe(Effect.provide(_spawnerFor({ stdout: "ok" }, seen)))
+      const out = yield* runProcessString({ command: cmd }).pipe(Effect.provide(_spawnerFor({ stdout: "ok" }, seen)))
       expect(out).toBe("ok")
       const spawned = seen[0]
 
@@ -87,7 +87,7 @@ describe("timeout", () => {
     Effect.gen(function*() {
       const fiber = yield* Effect.forkChild(
         Effect.exit(
-          runProcessExit(_cmd, { timeout: "5 seconds" }).pipe(
+          runProcessExit({ command: _cmd, options: { timeout: "5 seconds" } }).pipe(
             Effect.provide(_spawnerFor({ hangs: true, stderr: "Username: " }))
           )
         )
@@ -111,7 +111,7 @@ describe("timeout", () => {
 
   it.effect("does not fire when the process exits in time", () =>
     Effect.gen(function*() {
-      const out = yield* runProcessString(_cmd, { timeout: "5 seconds" }).pipe(
+      const out = yield* runProcessString({ command: _cmd, options: { timeout: "5 seconds" } }).pipe(
         Effect.provide(_spawnerFor({ stdout: "fast" }))
       )
 
@@ -122,7 +122,7 @@ describe("timeout", () => {
 describe("runProcessString", () => {
   it.effect("zero-exit with non-empty stdout returns stdout", () =>
     Effect.gen(function*() {
-      const out = yield* runProcessString(_cmd).pipe(
+      const out = yield* runProcessString({ command: _cmd }).pipe(
         Effect.provide(_spawnerFor({ stdout: "hello\n", exitCode: 0 }))
       )
 
@@ -132,7 +132,7 @@ describe("runProcessString", () => {
   it.effect("non-zero exit fails with ProcessError carrying the stderr tail", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(
-        runProcessString(_cmd).pipe(
+        runProcessString({ command: _cmd }).pipe(
           Effect.provide(
             _spawnerFor({ stdout: "", stderr: "boom: bad flag\n", exitCode: 2 })
           )
@@ -152,7 +152,7 @@ describe("runProcessString", () => {
   it.effect("zero-exit with empty stdout fails when allowEmptyStdout is not set", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(
-        runProcessString(_cmd).pipe(
+        runProcessString({ command: _cmd }).pipe(
           Effect.provide(_spawnerFor({ stdout: "   \n", exitCode: 0 }))
         )
       )
@@ -172,7 +172,7 @@ describe("runProcessString", () => {
 
   it.effect("zero-exit with empty stdout returns \"\" when allowEmptyStdout is true", () =>
     Effect.gen(function*() {
-      const out = yield* runProcessString(_cmd, { allowEmptyStdout: true }).pipe(
+      const out = yield* runProcessString({ command: _cmd, options: { allowEmptyStdout: true } }).pipe(
         Effect.provide(_spawnerFor({ stdout: "", exitCode: 0 }))
       )
 
@@ -182,7 +182,7 @@ describe("runProcessString", () => {
   it.effect("non-zero exit fails even when allowEmptyStdout is true", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(
-        runProcessString(_cmd, { allowEmptyStdout: true }).pipe(
+        runProcessString({ command: _cmd, options: { allowEmptyStdout: true } }).pipe(
           Effect.provide(_spawnerFor({ stdout: "partial", stderr: "nope", exitCode: 1 }))
         )
       )
@@ -192,12 +192,13 @@ describe("runProcessString", () => {
 })
 
 describe("runProcessExit", () => {
-  it.effect("zero exit succeeds", () => runProcessExit(_cmd).pipe(Effect.provide(_spawnerFor({ exitCode: 0 }))))
+  it.effect("zero exit succeeds", () =>
+    runProcessExit({ command: _cmd }).pipe(Effect.provide(_spawnerFor({ exitCode: 0 }))))
 
   it.effect("non-zero exit fails with ProcessError carrying the stderr tail", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(
-        runProcessExit(_cmd).pipe(
+        runProcessExit({ command: _cmd }).pipe(
           Effect.provide(_spawnerFor({ stderr: "pull failed", exitCode: 1 }))
         )
       )
@@ -225,7 +226,7 @@ describe("ProcessError", () => {
       const big = `${"x".repeat(5000)}TAILMARKER`
 
       const exit = yield* Effect.exit(
-        runProcessExit(_cmd).pipe(
+        runProcessExit({ command: _cmd }).pipe(
           Effect.provide(_spawnerFor({ stderr: big, exitCode: 1 }))
         )
       )

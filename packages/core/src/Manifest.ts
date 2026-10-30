@@ -33,10 +33,10 @@ export type MakeRun<A> = (
 ) => A | Effect.Effect<A, AnyRenderError, RenderServices>
 
 export const make = <A>(run: MakeRun<A>): Manifest<A> => ({
-  [ManifestTypeId]: unsafeCoerce<Variance<A>>(
-    variance,
-    "phantom variance witness — A only appears in covariant position"
-  ),
+  [ManifestTypeId]: unsafeCoerce<Variance<A>>({
+    value: variance,
+    reason: "phantom variance witness — A only appears in covariant position"
+  }),
   render: (ctx) => liftEffect<A, AnyRenderError, RenderServices>(run(ctx))
 })
 

@@ -125,10 +125,10 @@ const _generateCrdTs = (input: { readonly crd: CrdDocument; readonly identifier:
 
     const compiledTypes = yield* Effect.tryPromise(() =>
       compile(
-        unsafeCoerce<Parameters<typeof compile>[0]>(
-          crd.schema,
-          "json-schema-to-typescript's input type is structurally a JSON Schema object"
-        ),
+        unsafeCoerce<Parameters<typeof compile>[0]>({
+          value: crd.schema,
+          reason: "json-schema-to-typescript's input type is structurally a JSON Schema object"
+        }),
         inputType,
         {
           bannerComment: "",
@@ -158,7 +158,10 @@ const _templateChartYaml = (opts: CrdExtractOptions) =>
       "--no-hooks"
     ])
 
-    return yield* runProcessString(templateCmd, { allowEmptyStdout: true, timeout: yield* Helm.timeout })
+    return yield* runProcessString({
+      command: templateCmd,
+      options: { allowEmptyStdout: true, timeout: yield* Helm.timeout }
+    })
   })
 
 export const dedupeCrdDocuments = (yaml: string) =>

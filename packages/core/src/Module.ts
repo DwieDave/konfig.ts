@@ -20,10 +20,11 @@ export type LiteralName<T extends string> = string extends T ? T & {
 // conditional deferred and cannot verify it. (LiteralName<T> -> T needs no witness:
 // both branches are assignable to T.)
 const _asLiteralName = <T extends string>(value: T): LiteralName<T> =>
-  unsafeCoerce<LiteralName<T>>(
-    value,
-    "T extends string; for any literal instantiation LiteralName<T> = T, and non-literal T is rejected at the wrapper call site"
-  )
+  unsafeCoerce<LiteralName<T>>({
+    value: value,
+    reason:
+      "T extends string; for any literal instantiation LiteralName<T> = T, and non-literal T is rejected at the wrapper call site"
+  })
 
 export interface BuildContext<Ns extends string = string> {
   readonly name: string
@@ -108,10 +109,11 @@ const _defineWith = <
 ): ApplyHandle<Kind, Name, Ns, R, Extra> =>
   input.target.define<Name, Ns, R, Extra>(unsafeCoerce<
     DefineBaseArgs<Name, Ns, R, Extra> & ExtraConfig & ExtraCallArgs
-  >(
-    _withProvides({ args: { ...input.fields, build: liftEffect(input.buildResult) }, provides: input.provides }),
-    "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
-  ))
+  >({
+    value: _withProvides({ args: { ...input.fields, build: liftEffect(input.buildResult) }, provides: input.provides }),
+    reason:
+      "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
+  }))
 
 export interface FixedNsConfig<
   Kind extends HandleKind,
@@ -143,13 +145,14 @@ export const fixedNs = <
 
   const wrapper = dynamicNs<Kind, ExtraConfig, ExtraCallArgs, Opts, R, Extra>(unsafeCoerce<
     DynamicNsConfig<Kind, ExtraConfig, ExtraCallArgs, Opts, R, Extra> & ExtraConfig
-  >(
-    {
+  >({
+    value: {
       ...dynamicConfig,
       build: (ctx: BuildContext, opts: Opts) => build({ name: ctx.name, namespace }, opts)
     },
-    "the rest of a generic intersection cannot be re-related to ExtraConfig by TS; it is the caller's extra config minus namespace"
-  ))
+    reason:
+      "the rest of a generic intersection cannot be re-related to ExtraConfig by TS; it is the caller's extra config minus namespace"
+  }))
 
   return <const Name extends string>(
     args: { readonly name: LiteralName<Name> } & ExtraCallArgs & Opts

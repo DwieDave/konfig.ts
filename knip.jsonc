@@ -1,8 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  // "examples/**" is illustrative sample code, not a production surface —
-  // exclude both its files and its bun/npm workspaces from analysis.
-  "ignore": [".generated/**", "dist/**", "scratchpad/**", "examples/**", "website/**", "effect/**", "tools/oxlint/anti-slop/**"],
   "ignoreDependencies": [
     // Referenced only by name in tsconfig.base.json's `compilerOptions.plugins` —
     // an optional editor-only TS language-service plugin, not a runtime/build import.
@@ -18,6 +15,7 @@
   ],
   "workspaces": {
     ".": {
+      "includeEntryExports": true,
       // Root has no direct vitest dependency, so the vitest plugin doesn't
       // auto-enable here — declare the scripts/ test files explicitly.
       // (Every package's src/index.ts, packages/cli/src/main.ts, and the oxc
@@ -39,6 +37,7 @@
       "entry": ["test-types/**/*.ts"]
     },
     "packages/cli": {
+      "includeEntryExports": true,
       // vitest.config.mts aliases "@konfig.ts/k8s" straight to a source file path
       // for test-only fixtures, so knip can't see the import resolve back to this
       // package.json entry — false positive, the dependency is genuinely used.

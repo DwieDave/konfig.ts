@@ -43,7 +43,7 @@
     "app/no-bare-error": "error",
     "app/no-comments": "error",
     "app/no-effect-asvoid": "error",
-    "app/no-multiple-function-params": "error",
+    "app/no-multiple-function-params": ["error", { "scope": "all" }],
     "app/no-node-child-process": "error",
     "app/no-parse-coercion": "error",
     "app/no-record-string-undefined": "error",

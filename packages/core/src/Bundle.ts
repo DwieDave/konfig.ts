@@ -106,10 +106,10 @@ export const define = <
   const tag = Dep.App<Name, Bundle>(name)
   const layer = _defineLayer({ tag, namespace: opts.namespace, opts })
 
-  return unsafeCoerce<DefinedBundle<Name, Ns, R, Extra>>(
-    attachLayerToTag({ tag, layer }),
-    "narrow generic BundleHandle from the attachLayerToTag helper's loose Tag arg"
-  )
+  return unsafeCoerce<DefinedBundle<Name, Ns, R, Extra>>({
+    value: attachLayerToTag({ tag, layer }),
+    reason: "narrow generic BundleHandle from the attachLayerToTag helper's loose Tag arg"
+  })
 }
 
 // Module.Target adapter for Bundle.define; requires namespace (Bundle.define allows optional).
@@ -117,10 +117,11 @@ export const target: Module.Target<HandleKind, Record<never, never>, Record<neve
   define: <const Name extends string, const Ns extends string, R = never, Extra = never>(
     args: Module.DefineBaseArgs<Name, Ns, R, Extra>
   ) =>
-    unsafeCoerce<Module.ApplyHandle<HandleKind, Name, Ns, R, Extra>>(
-      define<Name, Ns, R, Extra>(args),
-      "target requires namespace so Ns is always a string literal; under that constraint Bundle.define's _NsProvides<Ns> reduces to Provide<\"Namespace\", Ns>, matching HandleKind"
-    )
+    unsafeCoerce<Module.ApplyHandle<HandleKind, Name, Ns, R, Extra>>({
+      value: define<Name, Ns, R, Extra>(args),
+      reason:
+        "target requires namespace so Ns is always a string literal; under that constraint Bundle.define's _NsProvides<Ns> reduces to Provide<\"Namespace\", Ns>, matching HandleKind"
+    })
 }
 
 export interface BundleSetResult {

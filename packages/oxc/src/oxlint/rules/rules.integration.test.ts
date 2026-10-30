@@ -152,9 +152,17 @@ _suite({
   name: "no-parse-coercion",
   rule: noParseCoercion,
   cases: [
-    { name: "reports unsafeCoerce(YAML.parse())", source: "unsafeCoerce(YAML.parse(s), 'r')", reports: 1 },
-    { name: "reports unsafeCoerce(JSON.parse())", source: "unsafeCoerce(JSON.parse(s), 'r')", reports: 1 },
-    { name: "allows other values", source: "unsafeCoerce(value, 'r')", reports: 0 }
+    {
+      name: "reports unsafeCoerce(YAML.parse())",
+      source: "unsafeCoerce({ value: YAML.parse(s), reason: 'r' })",
+      reports: 1
+    },
+    {
+      name: "reports unsafeCoerce(JSON.parse())",
+      source: "unsafeCoerce({ value: JSON.parse(s), reason: 'r' })",
+      reports: 1
+    },
+    { name: "allows other values", source: "unsafeCoerce({ value, reason: 'r' })", reports: 0 }
   ]
 })
 

@@ -28,9 +28,13 @@ export const _esoData = <K extends string>(input: {
 }): ReadonlyArray<ExternalSecretDataEntry> =>
   input.keys.map((key) => ({ secretKey: key, remoteRef: (input.remoteRef ?? _identityRemoteRef)(key) }))
 
+interface _EsoInput<N extends string, K extends string> {
+  readonly base: BackendEmitInput<N, K, false>
+  readonly opts: ExternalSecretsBackendOptions<K>
+}
+
 const _esoSpec = <N extends string, K extends string>(
-  base: BackendEmitInput<N, K, false>,
-  opts: ExternalSecretsBackendOptions<K>
+  { base, opts }: _EsoInput<N, K>
 ): ExternalSecretSpec => ({
   refreshInterval: opts.refreshInterval,
   secretStoreRef: {
@@ -42,22 +46,20 @@ const _esoSpec = <N extends string, K extends string>(
 })
 
 const _build = <N extends string, K extends string>(
-  base: BackendEmitInput<N, K, false>,
-  opts: ExternalSecretsBackendOptions<K>
+  { base, opts }: _EsoInput<N, K>
 ): ExternalSecret => ({
   apiVersion: "external-secrets.io/v1",
   kind: "ExternalSecret",
   metadata: secretMeta(base),
-  spec: _esoSpec(base, opts)
+  spec: _esoSpec({ base, opts })
 })
 
 const _emit = <N extends string, K extends string>(
-  base: BackendEmitInput<N, K, false>,
-  opts: ExternalSecretsBackendOptions<K>
+  { base, opts }: _EsoInput<N, K>
 ): Manifest.Manifest<ExternalSecret> =>
   Manifest.make<ExternalSecret>(() =>
     _isValidInterval(opts.refreshInterval)
-      ? Effect.succeed(_build(base, opts))
+      ? Effect.succeed(_build({ base, opts }))
       : Effect.fail(
         new RenderError({
           message: `${backendLabel({ tag: "ExternalSecrets", base })}: invalid refreshInterval`,
@@ -73,6 +75,6 @@ export const ExternalSecrets = {
     SecretBackend.make<N, K, false, ExternalSecret>({
       tag: "ExternalSecrets",
       requiresSource: false,
-      emit: (input) => _emit(input, opts)
+      emit: (input) => _emit({ base: input, opts })
     })
 }

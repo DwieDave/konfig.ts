@@ -140,10 +140,10 @@ export const define: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs>["defi
     provides: opts.provides
   })
 
-  return unsafeCoerce<DefinedHandle<Name, Ns, R, Extra>>(
-    attachLayerToTag({ tag, layer }),
-    "narrow generic ApplicationHandle from the attachLayerToTag helper's loose Tag arg"
-  )
+  return unsafeCoerce<DefinedHandle<Name, Ns, R, Extra>>({
+    value: attachLayerToTag({ tag, layer }),
+    reason: "narrow generic ApplicationHandle from the attachLayerToTag helper's loose Tag arg"
+  })
 }
 
 export const target: Module.Target<HandleKind, ExtraConfig, ExtraCallArgs> = { define }

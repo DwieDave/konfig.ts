@@ -190,12 +190,12 @@ const _failOnNonZero = (input: {
       })
     )
 
-// oxlint-disable-next-line app/no-multiple-function-params
-export const runProcessString = (
-  command: ChildProcess.Command,
-  options?: RunProcessStringOptions
-): Effect.Effect<string, ProcessFailure, ChildProcessSpawner> =>
+export const runProcessString = (input: {
+  readonly command: ChildProcess.Command
+  readonly options?: RunProcessStringOptions
+}): Effect.Effect<string, ProcessFailure, ChildProcessSpawner> =>
   Effect.gen(function*() {
+    const { command, options } = input
     const result = yield* _spawnCollect({ command, options })
     yield* _failOnNonZero({ command, result })
 
@@ -211,12 +211,12 @@ export const runProcessString = (
     return result.stdout
   })
 
-// oxlint-disable-next-line app/no-multiple-function-params
-export const runProcessExit = (
-  command: ChildProcess.Command,
-  options?: ProcessOptions
-): Effect.Effect<void, ProcessFailure, ChildProcessSpawner> =>
+export const runProcessExit = (input: {
+  readonly command: ChildProcess.Command
+  readonly options?: ProcessOptions
+}): Effect.Effect<void, ProcessFailure, ChildProcessSpawner> =>
   Effect.gen(function*() {
+    const { command, options } = input
     const result = yield* _spawnCollect({ command, options })
     yield* _failOnNonZero({ command, result })
   })
@@ -260,7 +260,10 @@ export const runProcessWithStdin = (input: {
   readonly label?: string
   readonly timeout?: Duration.Input
 }): Effect.Effect<string, ProcessInvocationError, ChildProcessSpawner> =>
-  runProcessString(_withStdin(input), { timeout: input.timeout ?? DEFAULT_STDIN_TIMEOUT }).pipe(
+  runProcessString({
+    command: _withStdin(input),
+    options: { timeout: input.timeout ?? DEFAULT_STDIN_TIMEOUT }
+  }).pipe(
     Effect.mapError((cause) =>
       new ProcessInvocationError({ label: input.label ?? _commandLabel(input.command), cause })
     )

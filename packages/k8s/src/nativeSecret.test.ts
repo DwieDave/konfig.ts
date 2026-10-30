@@ -10,7 +10,7 @@ import { NativeSecret } from "./nativeSecret"
 import { bindSecret } from "./secretBind"
 
 const coerce = <T, V = unknown>(value: V): T =>
-  unsafeCoerce<T, V>(value, "the rendered manifest is the K8s resource its builder emits")
+  unsafeCoerce<T, V>({ value: value, reason: "the rendered manifest is the K8s resource its builder emits" })
 
 const dbCreds = Secret.define({
   name: "db-creds",

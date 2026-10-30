@@ -37,7 +37,7 @@ const _failing = (stderr: string): Layer.Layer<ChildProcessSpawner> =>
   Layer.succeed(ChildProcessSpawner, makeSpawner((_command: Command) => Effect.succeed(_handle(stderr))))
 
 const _flipped = (input: { readonly command: Command; readonly stderr: string }): ProcessFailure =>
-  Effect.runSync(runProcessExit(input.command).pipe(Effect.provide(_failing(input.stderr)), Effect.flip))
+  Effect.runSync(runProcessExit({ command: input.command }).pipe(Effect.provide(_failing(input.stderr)), Effect.flip))
 
 it("never leaks Redacted args into the ProcessError command label", () => {
   const arbSecret = fc.stringMatching(/^[A-Z0-9]{12,24}$/)

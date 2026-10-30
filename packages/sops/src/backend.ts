@@ -21,14 +21,13 @@ export interface SopsBackendOptions {
 }
 
 const _plainCR = <N extends string, K extends string>(
-  input: EmitInput<N, K, SopsBackendOptions>,
-  stringData: Record<string, string>
+  input: EmitInput<N, K, SopsBackendOptions> & { readonly stringData: Record<string, string> }
 ) => ({
   apiVersion: "isindir.github.com/v1alpha3" as const,
   kind: "SopsSecret" as const,
   metadata: secretMeta(input.base),
   spec: {
-    secretTemplates: [{ name: input.base.name, type: input.opts.type ?? "Opaque", stringData }]
+    secretTemplates: [{ name: input.base.name, type: input.opts.type ?? "Opaque", stringData: input.stringData }]
   }
 })
 
@@ -41,7 +40,7 @@ const _emit = <N extends string, K extends string>(
     return encryptVia({
       base: input.base,
       label,
-      toPlain: (stringData) => _plainCR(input, stringData),
+      toPlain: (stringData) => _plainCR({ ...input, stringData }),
       encrypt: (plainYaml) =>
         sopsEncrypt({
           plainYaml,

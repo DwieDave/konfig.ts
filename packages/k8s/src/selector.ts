@@ -10,10 +10,10 @@ export interface Selector<L extends StringMap> {
 
 export const Selector = {
   make: <const L extends StringMap>(labels: L): Selector<L> =>
-    unsafeCoerce<Selector<L>>(
-      { labels },
-      "SelectorBrand is a unique-symbol phantom — no runtime value; runtime shape is { labels }"
-    )
+    unsafeCoerce<Selector<L>>({
+      value: { labels },
+      reason: "SelectorBrand is a unique-symbol phantom — no runtime value; runtime shape is { labels }"
+    })
 }
 
 export type SelectorLabels<S> = S extends Selector<infer L> ? L : never

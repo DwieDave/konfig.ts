@@ -5,7 +5,7 @@ import type { AnyRenderError } from "./RenderError"
 export const liftEffect = <A, E, R>(value: Effect.Effect<A, E, R> | A): Effect.Effect<A, E, R> =>
   Effect.isEffect(value)
     ? value
-    : Effect.succeed(unsafeCoerce<A>(value, "a non-Effect input is the success value itself"))
+    : Effect.succeed(unsafeCoerce<A>({ value: value, reason: "a non-Effect input is the success value itself" }))
 
 export const liftBuild = <R>(
   build: Effect.Effect<ReadonlyArray<unknown>, AnyRenderError, R> | (() => ReadonlyArray<unknown>)

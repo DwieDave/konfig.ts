@@ -13,6 +13,15 @@ const _isParseCall = (node: ESTree.Node): boolean =>
     ({ object, property }) => PARSE_NAMESPACES.has(object) && PARSE_METHODS.has(property)
   )
 
+const _isValueProperty = (p: ESTree.ObjectPropertyKind): p is ESTree.ObjectProperty =>
+  p.type === "Property" && p.key.type === "Identifier" && p.key.name === "value"
+
+const _valueArg = (node: ESTree.CallExpression): ESTree.Node | undefined => {
+  const first = node.arguments[0]
+
+  return first?.type === "ObjectExpression" ? first.properties.find(_isValueProperty)?.value : undefined
+}
+
 export const noParseCoercion = defineRule({
   meta: {
     type: "problem",
@@ -25,9 +34,9 @@ export const noParseCoercion = defineRule({
     return {
       CallExpression(node) {
         const isCoerce = node.callee.type === "Identifier" && node.callee.name === "unsafeCoerce"
-        const firstArg = node.arguments[0]
+        const value = _valueArg(node)
 
-        if (isCoerce && firstArg !== undefined && _isParseCall(firstArg)) {
+        if (isCoerce && value !== undefined && _isParseCall(value)) {
           context.report({
             node,
             message: "Parse results are untrusted — decode with Effect Schema (`boundary`) instead of coercing."

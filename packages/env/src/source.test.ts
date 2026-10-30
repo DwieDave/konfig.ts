@@ -20,7 +20,10 @@ interface FakeProc {
 }
 
 const _asHandle = (handle: ReturnType<typeof makeHandle>): ChildProcessHandle =>
-  unsafeCoerce<ChildProcessHandle>(handle, "the stub supplies every ChildProcessHandle member the spawner reads")
+  unsafeCoerce<ChildProcessHandle>({
+    value: handle,
+    reason: "the stub supplies every ChildProcessHandle member the spawner reads"
+  })
 
 const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
 

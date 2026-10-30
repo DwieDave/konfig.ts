@@ -74,8 +74,8 @@ const _spawnerFor = (input: { readonly tarball: Buffer; readonly templateStdout:
   Layer.succeed(
     ChildProcessSpawner,
     makeSpawner(
-      unsafeCoerce<Parameters<typeof makeSpawner>[0]>(
-        (command: Command) =>
+      unsafeCoerce<Parameters<typeof makeSpawner>[0]>({
+        value: (command: Command) =>
           Effect.gen(function*() {
             if (!isStandardCommand(command)) return _handle("")
             const args = _plainArgs(command)
@@ -98,8 +98,8 @@ const _spawnerFor = (input: { readonly tarball: Buffer; readonly templateStdout:
 
             return _handle("")
           }),
-        "fake spawner needs FileSystem and Path, supplied by NodeServices.layer at each call site"
-      )
+        reason: "fake spawner needs FileSystem and Path, supplied by NodeServices.layer at each call site"
+      })
     )
   )
 
@@ -268,8 +268,8 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
         const spawnerLayer = Layer.succeed(
           ChildProcessSpawner,
           makeSpawner(
-            unsafeCoerce<Parameters<typeof makeSpawner>[0]>(
-              (command: Command) =>
+            unsafeCoerce<Parameters<typeof makeSpawner>[0]>({
+              value: (command: Command) =>
                 Effect.gen(function*() {
                   if (!isStandardCommand(command)) return _handle("")
                   const args = _plainArgs(command)
@@ -296,8 +296,8 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
 
                   return _handle("")
                 }),
-              "fake spawner needs FileSystem and Path, supplied by NodeServices.layer at each call site"
-            )
+              reason: "fake spawner needs FileSystem and Path, supplied by NodeServices.layer at each call site"
+            })
           )
         )
 

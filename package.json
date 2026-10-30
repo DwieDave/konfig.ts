@@ -27,7 +27,7 @@
     "build": "bun scripts/cli.ts build",
     "check": "bun scripts/cli.ts check && bun run --cwd examples check && bun run --cwd examples/full-stack check && bun run --cwd apps/website check && tsc -p scripts/tsconfig.json --noEmit",
     "test": "bun scripts/cli.ts test",
-    "lint": "oxlint",
+    "lint": "oxlint --report-unused-disable-directives",
     "lint:apply": "oxlint --fix",
     "knip": "knip",
     "prepare": "effect-tsgo patch --no-typescript --oxlint",

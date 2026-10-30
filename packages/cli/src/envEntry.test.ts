@@ -5,9 +5,12 @@ import { Effect } from "effect"
 import { envEntryPath } from "./envEntry"
 
 const cfg = unsafeCoerce<Parameters<typeof envEntryPath>[0]["cfg"]>({
-  configDir: "/c",
-  config: { root: "r", envs: { prod: { entry: "x/prod.ts" } } }
-}, "minimal config fixture")
+  value: {
+    configDir: "/c",
+    config: { root: "r", envs: { prod: { entry: "x/prod.ts" } } }
+  },
+  reason: "minimal config fixture"
+})
 
 const _entry = (envName: string) => envEntryPath({ cfg, envName }).pipe(Effect.provide(NodeServices.layer))
 

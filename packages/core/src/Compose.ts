@@ -77,10 +77,10 @@ export const composeLayers = (
   return modules.reduce<AnyLayer>(
     (acc, mod) =>
       Layer.provideMerge(
-        unsafeCoerce<AnyLayer>(
-          mod.layer,
-          "handle.layer carries its narrow type at the call site; the fold collapses to AnyLayer here"
-        ),
+        unsafeCoerce<AnyLayer>({
+          value: mod.layer,
+          reason: "handle.layer carries its narrow type at the call site; the fold collapses to AnyLayer here"
+        }),
         acc
       ),
     provides ?? Layer.empty
@@ -103,10 +103,11 @@ export const makeResidualEntrypoint = <const Api extends string>(_api: Api) =>
 <A, E, R>(
   program: Effect.Effect<A, E, R> & ResidualCheck<R, Api>
 ): Effect.Effect<A, E, R & RenderServices> =>
-  unsafeCoerce<Effect.Effect<A, E, R & RenderServices>>(
-    program,
-    "ResidualHintCheck is a phantom intersection; once the call typechecks, the runtime value is the original Effect"
-  )
+  unsafeCoerce<Effect.Effect<A, E, R & RenderServices>>({
+    value: program,
+    reason:
+      "ResidualHintCheck is a phantom intersection; once the call typechecks, the runtime value is the original Effect"
+  })
 
 export interface SealModulesInput<V, R, A> {
   readonly modules: ReadonlyArray<ComposeHandle & Effect.Effect<V, never, R>>
@@ -122,10 +123,11 @@ export const sealModules = <V, R, A>(
   Effect.forEach(input.modules, (mod) => mod).pipe(
     Effect.map(input.build),
     Effect.provide(
-      unsafeCoerce<Layer.Layer<R, AnyRenderError, RenderServices>>(
-        composeLayers({ modules: input.modules, provides: input.provides }),
-        "ResidualCheck proved every module Need is provided by the composed layers, whose only remaining input is RenderServices"
-      )
+      unsafeCoerce<Layer.Layer<R, AnyRenderError, RenderServices>>({
+        value: composeLayers({ modules: input.modules, provides: input.provides }),
+        reason:
+          "ResidualCheck proved every module Need is provided by the composed layers, whose only remaining input is RenderServices"
+      })
     )
   )
 

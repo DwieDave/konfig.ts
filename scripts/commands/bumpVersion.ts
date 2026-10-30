@@ -10,8 +10,9 @@ const INSTALL_WARNING = "warning: 'bun install' failed; run it manually to sync 
 
 const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 
-const _setVersion = (file: string, version: string) =>
+const _setVersion = (input: { readonly file: string; readonly version: string }) =>
   Effect.gen(function*() {
+    const { file, version } = input
     const fs = yield* FileSystem
 
     const raw = yield* fs
@@ -78,7 +79,7 @@ export const _bumpPackage = (input: { readonly dir: string; readonly version: st
       return "skipped" as const
     }
 
-    const bumped = yield* _setVersion(pkgJson, input.version)
+    const bumped = yield* _setVersion({ file: pkgJson, version: input.version })
     yield* Console.log(bumped ? `  bumped ${rel} → ${input.version}` : `  already at target: ${rel}`)
 
     return bumped ? ("bumped" as const) : ("unchanged" as const)
@@ -92,7 +93,7 @@ const _bumpAll = (version: string) =>
     yield* Console.log(`bumped ${published} published packages + root (${alreadyAtTarget} already at target)`)
   })
 
-const _syncLockfile = runProcessExit(ChildProcess.make("bun", ["install"], { cwd: REPO_ROOT })).pipe(
+const _syncLockfile = runProcessExit({ command: ChildProcess.make("bun", ["install"], { cwd: REPO_ROOT }) }).pipe(
   Effect.catchTags({
     ProcessError: () => Console.warn(INSTALL_WARNING),
     ProcessTimeout: () => Console.warn(INSTALL_WARNING)
@@ -114,7 +115,7 @@ const _runBump = (target: string) =>
     const current = core.version ?? "0.0.0"
     const resolved = yield* resolveTarget({ arg: target, current })
     yield* Console.log(`bumping ${current} → ${resolved}`)
-    const rootBumped = yield* _setVersion(path.join(REPO_ROOT, "package.json"), resolved)
+    const rootBumped = yield* _setVersion({ file: path.join(REPO_ROOT, "package.json"), version: resolved })
 
     if (rootBumped) yield* Console.log("  bumped package.json (root)")
     yield* _bumpAll(resolved)

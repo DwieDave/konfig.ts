@@ -24,8 +24,8 @@ export const plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
 
 export const fakeHandle = (proc: FakeProc): ChildProcessHandle =>
   makeHandle(
-    unsafeCoerce<Parameters<typeof makeHandle>[0]>(
-      {
+    unsafeCoerce<Parameters<typeof makeHandle>[0]>({
+      value: {
         pid: ProcessId(1),
         exitCode: proc.hang === true ? Effect.never : Effect.succeed(ExitCode(proc.exitCode ?? 0)),
         isRunning: Effect.succeed(false),
@@ -38,8 +38,8 @@ export const fakeHandle = (proc: FakeProc): ChildProcessHandle =>
         getOutputFd: () => Stream.empty,
         unref: Effect.succeed(Effect.void)
       },
-      "the fake supplies every handle member the spawner contract reads; the parameter type only adds the brand"
-    )
+      reason: "the fake supplies every handle member the spawner contract reads; the parameter type only adds the brand"
+    })
   )
 
 export const stdinAsString = (command: StandardCommand): Effect.Effect<string> =>

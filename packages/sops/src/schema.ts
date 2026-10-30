@@ -11,7 +11,7 @@ const _GCP_KMS_PATH =
 const _AZURE_KV_URL = /^https:\/\/[A-Za-z0-9-]+\.vault\.azure\.net\/keys\/[A-Za-z0-9-]+\/[A-Za-z0-9]+$/
 const _PGP_FINGERPRINT = /^[0-9A-Fa-f]{8,40}$/
 
-const _recipientArray = (pattern: RegExp, label: string) =>
+const _recipientArray = ({ pattern, label }: { readonly pattern: RegExp; readonly label: string }) =>
   Schema.Array(
     Schema.String.check(
       Schema.isPattern(pattern, {
@@ -21,11 +21,11 @@ const _recipientArray = (pattern: RegExp, label: string) =>
   )
 
 export const SopsRecipientsSchema = Schema.Struct({
-  age: Schema.optionalKey(_recipientArray(_AGE_RECIPIENT, "age")),
-  kms: Schema.optionalKey(_recipientArray(_AWS_KMS_ARN, "AWS KMS ARN")),
-  gcpKms: Schema.optionalKey(_recipientArray(_GCP_KMS_PATH, "GCP KMS")),
-  azureKv: Schema.optionalKey(_recipientArray(_AZURE_KV_URL, "Azure Key Vault")),
-  pgp: Schema.optionalKey(_recipientArray(_PGP_FINGERPRINT, "PGP fingerprint"))
+  age: Schema.optionalKey(_recipientArray({ pattern: _AGE_RECIPIENT, label: "age" })),
+  kms: Schema.optionalKey(_recipientArray({ pattern: _AWS_KMS_ARN, label: "AWS KMS ARN" })),
+  gcpKms: Schema.optionalKey(_recipientArray({ pattern: _GCP_KMS_PATH, label: "GCP KMS" })),
+  azureKv: Schema.optionalKey(_recipientArray({ pattern: _AZURE_KV_URL, label: "Azure Key Vault" })),
+  pgp: Schema.optionalKey(_recipientArray({ pattern: _PGP_FINGERPRINT, label: "PGP fingerprint" }))
 })
 
 const SopsSecretTemplateSchema = Schema.Struct({

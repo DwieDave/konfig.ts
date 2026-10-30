@@ -212,7 +212,7 @@ const _helmVersionProbe: _HelmVersionProbe = Effect.gen(function*() {
   const cmd = ChildProcess.make("helm", ["version", "--short"])
 
   return yield* versionTimeout.pipe(
-    Effect.flatMap((t) => runProcessString(cmd, { allowEmptyStdout: false, timeout: t }))
+    Effect.flatMap((t) => runProcessString({ command: cmd, options: { allowEmptyStdout: false, timeout: t } }))
   )
 })
 
@@ -494,8 +494,9 @@ const _pullIntoTemp = (input: { readonly slot: _SlotInput; readonly pullDir: str
     const { pullDir, slot } = input
     const fs = yield* FileSystem
     const path = yield* Path
-    yield* runProcessExit(ChildProcess.make("helm", pullArgs({ ...slot, destination: pullDir })), {
-      timeout: yield* timeout
+    yield* runProcessExit({
+      command: ChildProcess.make("helm", pullArgs({ ...slot, destination: pullDir })),
+      options: { timeout: yield* timeout }
     })
     const files = yield* fs.readDirectory(pullDir)
     const pulled = yield* _singleTarball({ ...slot, pullDir, files })
@@ -613,7 +614,7 @@ const _runTemplate = (
     yield* Effect.logDebug(`helm: templating ${opts.chart}@${opts.version} as release ${releaseName}`)
 
     return yield* timeout.pipe(
-      Effect.flatMap((t) => runProcessString(template, { allowEmptyStdout: false, timeout: t })),
+      Effect.flatMap((t) => runProcessString({ command: template, options: { allowEmptyStdout: false, timeout: t } })),
       _inPhase({ opts, phase: "template" })
     )
   })

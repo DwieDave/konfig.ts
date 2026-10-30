@@ -20,31 +20,32 @@ export const _buildLayers = <RIn>(
   extra: Layer.Layer<RIn, never, never> | undefined
 ): Layer.Layer<NodeServices.NodeServices | RIn, never, never> =>
   extra === undefined
-    ? unsafeCoerce<Layer.Layer<NodeServices.NodeServices | RIn, never, never>>(
-      NodeServices.layer,
-      "no extra layers given means RIn is never at the call site; Layer is contravariant in its output so the generic form cannot be proven"
-    )
+    ? unsafeCoerce<Layer.Layer<NodeServices.NodeServices | RIn, never, never>>({
+      value: NodeServices.layer,
+      reason:
+        "no extra layers given means RIn is never at the call site; Layer is contravariant in its output so the generic form cannot be proven"
+    })
     : Layer.mergeAll(NodeServices.layer, extra)
 
 // Extracted so tests can exercise this with Effect.runPromise instead of runMain (which exits).
-// oxlint-disable-next-line app/no-multiple-function-params
-export const _compose = <E, RIn>(
-  program: (ctx: RenderContext) => Effect.Effect<void, E, NodeServices.NodeServices | RIn>,
-  options: RenderOptions<RIn> = {}
-): Effect.Effect<void, E> => {
+export const _compose = <E, RIn>(input: {
+  readonly program: (ctx: RenderContext) => Effect.Effect<void, E, NodeServices.NodeServices | RIn>
+  readonly options?: RenderOptions<RIn>
+}): Effect.Effect<void, E> => {
+  const { program, options = {} } = input
   const ctx = RenderContext.make(_resolveEnv(options.env))
   const layers = _buildLayers(options.layers)
 
   return program(ctx).pipe(Effect.scoped, Effect.provide(layers))
 }
 
-// oxlint-disable-next-line app/no-multiple-function-params
-export const render = <E, RIn>(
-  program: (ctx: RenderContext) => Effect.Effect<void, E, NodeServices.NodeServices | RIn>,
-  options: RenderOptions<RIn, E> = {}
-): void => {
+export const render = <E, RIn>(input: {
+  readonly program: (ctx: RenderContext) => Effect.Effect<void, E, NodeServices.NodeServices | RIn>
+  readonly options?: RenderOptions<RIn, E>
+}): void => {
+  const { program, options = {} } = input
   const runMain = options.runMain ?? NodeRuntime.runMain
-  runMain(_compose(program, options))
+  runMain(_compose({ program, options }))
 }
 
 interface RenderAllYamlEffectInput {

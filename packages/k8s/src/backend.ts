@@ -2,7 +2,7 @@ import { type Manifest, RenderError, Yaml } from "@konfig.ts/core"
 import type { ResolvedSecretValues, SecretSource } from "@konfig.ts/env"
 import { Effect, Redacted } from "effect"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
-import { toObjectMeta } from "./meta"
+import { type StringMap, toObjectMeta } from "./meta"
 
 export type BackendTag = string
 
@@ -41,8 +41,8 @@ export interface BackendEmitInput<
   readonly name: N
   readonly namespace: string
   readonly keys: ReadonlyArray<K>
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+  readonly labels?: StringMap
+  readonly annotations?: StringMap
   readonly source: RequiresSource extends true ? SecretSource<K, Manifest.RenderServices>
     : SecretSource<K, Manifest.RenderServices> | undefined
 }
