@@ -3,8 +3,11 @@ import * as Context from "effect/Context"
 import fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { attachLayerToTag, liftBuild, liftEffect } from "./lift"
-import { isParsedDoc, isRawYaml } from "./Manifest"
+import { isParsedDoc, isRawYaml, ParsedDoc, RawYaml } from "./Manifest"
 import { unwrapDocs } from "./unwrapDocs"
+
+const _tagged = (tag: string, fields: Readonly<Record<string, number>>) =>
+  Object.fromEntries([["_tag", tag], ...Object.entries(fields)])
 
 describe("liftEffect", () => {
   it("yields plain values unchanged", () => {
@@ -40,20 +43,20 @@ describe("attachLayerToTag", () => {
 describe("unwrapDocs", () => {
   it("unwraps ParsedDoc", () => {
     fc.assert(fc.property(fc.jsonValue(), (value) => {
-      expect(unwrapDocs({ _tag: "ParsedDoc", value })).toEqual([value])
+      expect(unwrapDocs(ParsedDoc.make({ value }))).toEqual([value])
     }))
   })
   it("parses RawYaml", () => {
-    expect(unwrapDocs({ _tag: "RawYaml", content: "a: 1" })).toEqual([{ a: 1 }])
+    expect(unwrapDocs(RawYaml.make({ content: "a: 1" }))).toEqual([{ a: 1 }])
   })
   it("passes null, primitives and unknown tags through", () => {
-    for (const v of [null, 1, "s", true, undefined, { _tag: "Other" }]) {
+    for (const v of [null, 1, "s", true, undefined, _tagged("Other", {})]) {
       expect(unwrapDocs(v)).toEqual([v])
     }
   })
   it("guards reject malformed input", () => {
-    expect(isRawYaml({ _tag: "RawYaml", content: "a: 1" })).toBe(true)
-    expect(isRawYaml({ _tag: "RawYaml", content: 5 })).toBe(false)
-    expect(isParsedDoc({ _tag: "ParsedDoc" })).toBe(false)
+    expect(isRawYaml(RawYaml.make({ content: "a: 1" }))).toBe(true)
+    expect(isRawYaml(_tagged("RawYaml", { content: 5 }))).toBe(false)
+    expect(isParsedDoc(_tagged("ParsedDoc", {}))).toBe(false)
   })
 })

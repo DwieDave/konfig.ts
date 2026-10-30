@@ -1,3 +1,5 @@
+import type { Types } from "effect"
+
 // `env` keys both the output dir and the KonfigConfig.envs entry; output dir is
 // `<outDir>/<env>/` or, when `cluster` is set, `<outDir>/<env>/<cluster>/`.
 export interface RenderContext {
@@ -9,10 +11,15 @@ export interface RenderContext {
 
 export const RenderContext = {
   make: (env: string): RenderContext => ({ env }),
-  makeFull: (input: RenderContext): RenderContext => ({
-    env: input.env,
-    ...(input.cluster !== undefined ? { cluster: input.cluster } : {}),
-    ...(input.k8sVersion !== undefined ? { k8sVersion: input.k8sVersion } : {}),
-    ...(input.flags !== undefined ? { flags: input.flags } : {})
-  })
+  makeFull: (input: RenderContext): RenderContext => {
+    const ctx: Types.Mutable<RenderContext> = { env: input.env }
+
+    if (input.cluster !== undefined) ctx.cluster = input.cluster
+
+    if (input.k8sVersion !== undefined) ctx.k8sVersion = input.k8sVersion
+
+    if (input.flags !== undefined) ctx.flags = input.flags
+
+    return ctx
+  }
 }

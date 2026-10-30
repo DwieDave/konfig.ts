@@ -54,7 +54,13 @@ describe("semver", () => {
       "1.0.0-rc.1",
       "1.0.0"
     ]
-    const parsed = ids.map((s) => parseSemver(s)).filter((v): v is Semver => v !== null)
+
+    const parsed = ids.flatMap((s) => {
+      const v = parseSemver(s)
+
+      return v === null ? [] : [v]
+    })
+
     const sorted = [...parsed].sort((a, b) => compareSemver({ a, b }))
     expect(sorted).toEqual(parsed)
   })

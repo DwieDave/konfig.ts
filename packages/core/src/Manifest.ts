@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Predicate, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { Path } from "effect/Path"
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
@@ -12,6 +12,7 @@ import { type AnyRenderError, EmbedYamlReadError } from "./RenderError"
 export type RenderServices = FileSystem | Path | ChildProcessSpawner | Scope.Scope
 
 export const ManifestTypeId: unique symbol = Symbol.for("@konfig.ts/core/Manifest")
+
 export type ManifestTypeId = typeof ManifestTypeId
 
 interface Variance<out A> {
@@ -47,6 +48,7 @@ export interface CombineInput<A1, A2> {
   readonly a: Manifest<A1>
   readonly b: Manifest<A2>
 }
+
 export const combine = <A1, A2>(input: CombineInput<A1, A2>): Manifest<readonly [A1, A2]> =>
   make((ctx) => Effect.all([input.a.render(ctx), input.b.render(ctx)], { concurrency: RENDER_CONCURRENCY }))
 
@@ -70,6 +72,7 @@ export interface WheneverInput<A> {
   readonly cond: boolean
   readonly thunk: () => Manifest<A>
 }
+
 export const whenever = <A>(input: WheneverInput<A>): Manifest<A | undefined> =>
   make((ctx) =>
     input.cond
@@ -79,35 +82,41 @@ export const whenever = <A>(input: WheneverInput<A>): Manifest<A | undefined> =>
 
 export type EmbedYamlSource = { readonly path: string } | { readonly literal: string }
 
-export interface RawYaml {
-  readonly _tag: "RawYaml"
-  readonly content: string
-  readonly origin?: string
-}
+export const RawYaml = Schema.TaggedStruct("RawYaml", {
+  content: Schema.String,
+  origin: Schema.optionalKey(Schema.String)
+})
+
+export type RawYaml = typeof RawYaml.Type
 
 // One already-parsed YAML document. `Helm.release` emits these instead of
 // RawYaml so the build path serializes each doc exactly once instead of
 // stringify → re-parse → re-serialize.
-export interface ParsedDoc {
-  readonly _tag: "ParsedDoc"
-  readonly value: unknown
-  readonly origin?: string
-}
+export const ParsedDoc = Schema.TaggedStruct("ParsedDoc", {
+  value: Schema.Unknown,
+  origin: Schema.optionalKey(Schema.String)
+})
+
+export type ParsedDoc = typeof ParsedDoc.Type
 
 export const isRawYaml = (u: unknown): u is RawYaml =>
-  isRecord(u) && u._tag === "RawYaml" && typeof u.content === "string"
+  Predicate.isTagged(u, "RawYaml") && Predicate.hasProperty(u, "content") && Predicate.isString(u.content)
 
-export const isParsedDoc = (u: unknown): u is ParsedDoc => isRecord(u) && u._tag === "ParsedDoc" && "value" in u
+export const isParsedDoc = (u: unknown): u is ParsedDoc =>
+  Predicate.isTagged(u, "ParsedDoc") && Predicate.hasProperty(u, "value")
 
 export const embedYaml = (source: EmbedYamlSource): Manifest<RawYaml> =>
   make<RawYaml>((_ctx) => {
     if ("literal" in source) {
-      return Effect.succeed<RawYaml>({ _tag: "RawYaml", content: source.literal })
+      return Effect.succeed<RawYaml>(RawYaml.make({ content: source.literal }))
     }
+
     const path = source.path
+
     return Effect.gen(function*() {
       const fs = yield* FileSystem
       const content = yield* fs.readFileString(path)
-      return { _tag: "RawYaml" as const, content, origin: path }
+
+      return RawYaml.make({ content, origin: path })
     }).pipe(Effect.mapError((cause) => new EmbedYamlReadError({ path, cause })))
   })

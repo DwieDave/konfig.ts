@@ -1,9 +1,15 @@
 export { brand, unsafeCoerce } from "./_cast"
+
 export { boundary } from "./boundary"
+
 export type { BundleHandle, BundleSetResult } from "./Bundle"
+
 export * as Bundle from "./Bundle"
+
 export * as Compose from "./Compose"
-export { makeStrictDecoder } from "./decode"
+
+export { strictDecoderOf } from "./decode"
+
 export type {
   BuiltImageRefApp,
   ConfigMapRef,
@@ -19,8 +25,11 @@ export type {
   SecretRefNamespace,
   ServiceAccountRef
 } from "./deps"
+
 export * as Dep from "./deps"
+
 export { BuiltImageRef } from "./deps"
+
 export {
   deepEqual,
   diffFiles,
@@ -35,8 +44,11 @@ export {
   redact,
   type RedactOptions
 } from "./diff"
+
 export { isRecord } from "./guards"
+
 export * as Helm from "./Helm"
+
 export {
   decodeImagesEffect,
   decodeImagesSync,
@@ -50,6 +62,7 @@ export {
   requireImage,
   requireImageEffect
 } from "./images"
+
 export {
   ClusterSpec,
   CrdConfig,
@@ -63,6 +76,7 @@ export {
   type ResolvedKonfigConfig,
   ServicesConfig
 } from "./konfigConfig"
+
 export {
   DEFAULT_CHARTS_DIR,
   DEFAULT_CRD_OUT_DIR,
@@ -76,11 +90,17 @@ export {
   KONFIG_HELM_MIN_VERSION_ENV,
   KONFIG_HELM_TIMEOUT_ENV
 } from "./konfigDefaults"
+
 export { attachLayerToTag, liftBuild, liftEffect } from "./lift"
+
 export type { EmbedYamlSource, ParsedDoc, RawYaml } from "./Manifest"
+
 export * as Manifest from "./Manifest"
+
 export { isParsedDoc, isRawYaml } from "./Manifest"
+
 export * as Module from "./Module"
+
 export {
   render,
   renderAllYaml,
@@ -89,7 +109,9 @@ export {
   type RenderAllYamlInput,
   type RenderOptions
 } from "./render"
+
 export { RenderContext } from "./RenderContext"
+
 export {
   type AnyRenderError,
   BoundaryDecodeError,
@@ -101,7 +123,9 @@ export {
   HelmVersionTooLow,
   RenderError
 } from "./RenderError"
+
 export { renderManifest } from "./renderManifest"
+
 export {
   processDetail,
   ProcessError,
@@ -112,5 +136,7 @@ export {
   runProcessString,
   type RunProcessStringOptions
 } from "./subprocess"
+
 export { unwrapDocs } from "./unwrapDocs"
+
 export * as Yaml from "./yaml"

@@ -1,4 +1,4 @@
-import { Data } from "effect"
+import { Data, Predicate } from "effect"
 import { processDetail } from "./subprocess"
 
 export class RenderError extends Data.TaggedError("RenderError")<{
@@ -44,9 +44,13 @@ export type HelmRenderPhase = "version-check" | "pull" | "template" | "parse"
 // its message so the one-liner never ends in a bare "failed during pull".
 const _causeDetail = (cause: unknown): string => {
   const process = processDetail(cause)
+
   if (process.length > 0) return process
-  if (typeof cause === "string") return `: ${cause}`
+
+  if (Predicate.isString(cause)) return `: ${cause}`
+
   if (cause instanceof Error && cause.message.length > 0) return `: ${cause.message}`
+
   return ""
 }
 

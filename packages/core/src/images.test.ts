@@ -43,6 +43,7 @@ describe("decodeImagesSync / decodeImagesEffect", () => {
   it("decodeImagesEffect succeeds for a valid config", () => {
     const exit = Effect.runSyncExit(decodeImagesEffect(RAW))
     expect(Exit.isSuccess(exit)).toBe(true)
+
     if (Exit.isSuccess(exit)) {
       expect(exit.value.envs.prod?.api).toBe("ghcr.io/acme/api:1.0.0")
     }
@@ -84,12 +85,13 @@ describe("imagesFor (throwing variant)", () => {
 
   it("throws ImagesEnvMissing for an unknown env", () => {
     expect(() => imagesFor({ cfg, env: "nope" })).toThrow(ImagesEnvMissing)
+
     try {
       imagesFor({ cfg, env: "nope" })
       throw new Error("expected imagesFor to throw")
     } catch (e) {
       expect(e).toBeInstanceOf(ImagesEnvMissing)
-      expect((e as ImagesEnvMissing).env).toBe("nope")
+      expect(e).toMatchObject({ env: "nope" })
     }
   })
 })
@@ -110,8 +112,7 @@ describe("requireImage / requireImageEffect", () => {
       throw new Error("expected requireImage to throw")
     } catch (e) {
       expect(e).toBeInstanceOf(ImagesAppMissing)
-      expect((e as ImagesAppMissing).app).toBe("worker")
-      expect((e as ImagesAppMissing).env).toBe("prod")
+      expect(e).toMatchObject({ app: "worker", env: "prod" })
     }
   })
 
@@ -124,6 +125,7 @@ describe("requireImage / requireImageEffect", () => {
     const flipped = Effect.runSync(
       requireImageEffect({ e: prodImages, app: "worker", envName: "prod" }).pipe(Effect.flip)
     )
+
     expect(flipped).toBeInstanceOf(ImagesAppMissing)
     expect(flipped.app).toBe("worker")
     expect(flipped.env).toBe("prod")

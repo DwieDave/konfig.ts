@@ -38,7 +38,7 @@ const _handle = (proc: FakeProc): ChildProcessHandle =>
       getInputFd: () => Sink.drain,
       getOutputFd: () => Stream.empty,
       unref: Effect.succeed(Effect.void)
-    } as Parameters<typeof makeHandle>[0]
+    }
   )
 
 const _spawnerFor = (proc: FakeProc, seen?: Command[]): Layer.Layer<ChildProcessSpawner> =>
@@ -46,6 +46,7 @@ const _spawnerFor = (proc: FakeProc, seen?: Command[]): Layer.Layer<ChildProcess
     ChildProcessSpawner,
     makeSpawner((command: Command) => {
       seen?.push(command)
+
       return Effect.succeed(_handle(proc))
     })
   )
@@ -59,6 +60,7 @@ describe("stdin", () => {
       yield* runProcessExit(_cmd).pipe(Effect.provide(_spawnerFor({ exitCode: 0 }, seen)))
       const spawned = seen[0]
       expect(spawned !== undefined && ChildProcess.isStandardCommand(spawned)).toBe(true)
+
       if (spawned !== undefined && ChildProcess.isStandardCommand(spawned)) {
         expect(spawned.options.stdin).toBe("ignore")
         expect(spawned.args).toEqual(["hi"])
@@ -73,6 +75,7 @@ describe("stdin", () => {
       const out = yield* runProcessString(cmd).pipe(Effect.provide(_spawnerFor({ stdout: "ok" }, seen)))
       expect(out).toBe("ok")
       const spawned = seen[0]
+
       if (spawned !== undefined && ChildProcess.isStandardCommand(spawned)) {
         expect(spawned.options.stdin).toBe(stdin)
       }
@@ -89,12 +92,15 @@ describe("timeout", () => {
           )
         )
       )
+
       yield* TestClock.adjust("6 seconds")
       const exit = yield* Fiber.join(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
         expect(err).toBeInstanceOf(ProcessTimeout)
+
         if (err instanceof ProcessTimeout) {
           expect(err.command).toBe("echo hi")
           expect(err.message).toContain("timed out after 5s")
@@ -108,6 +114,7 @@ describe("timeout", () => {
       const out = yield* runProcessString(_cmd, { timeout: "5 seconds" }).pipe(
         Effect.provide(_spawnerFor({ stdout: "fast" }))
       )
+
       expect(out).toBe("fast")
     }))
 })
@@ -118,6 +125,7 @@ describe("runProcessString", () => {
       const out = yield* runProcessString(_cmd).pipe(
         Effect.provide(_spawnerFor({ stdout: "hello\n", exitCode: 0 }))
       )
+
       expect(out).toBe("hello\n")
     }))
 
@@ -130,7 +138,9 @@ describe("runProcessString", () => {
           )
         )
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = exit.cause
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(err)
@@ -146,10 +156,13 @@ describe("runProcessString", () => {
           Effect.provide(_spawnerFor({ stdout: "   \n", exitCode: 0 }))
         )
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
         expect(err).toBeInstanceOf(ProcessError)
+
         if (err instanceof ProcessError) {
           expect(err.message).toContain("produced no output")
           expect(err.message).not.toContain("failed (exit 0)")
@@ -162,6 +175,7 @@ describe("runProcessString", () => {
       const out = yield* runProcessString(_cmd, { allowEmptyStdout: true }).pipe(
         Effect.provide(_spawnerFor({ stdout: "", exitCode: 0 }))
       )
+
       expect(out).toBe("")
     }))
 
@@ -172,6 +186,7 @@ describe("runProcessString", () => {
           Effect.provide(_spawnerFor({ stdout: "partial", stderr: "nope", exitCode: 1 }))
         )
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
     }))
 })
@@ -186,7 +201,9 @@ describe("runProcessExit", () => {
           Effect.provide(_spawnerFor({ stderr: "pull failed", exitCode: 1 }))
         )
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("pull failed")
@@ -206,15 +223,19 @@ describe("ProcessError", () => {
   it.effect("bounds the stderr tail to roughly 2KB (last bytes retained)", () =>
     Effect.gen(function*() {
       const big = `${"x".repeat(5000)}TAILMARKER`
+
       const exit = yield* Effect.exit(
         runProcessExit(_cmd).pipe(
           Effect.provide(_spawnerFor({ stderr: big, exitCode: 1 }))
         )
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
         expect(err).toBeInstanceOf(ProcessError)
+
         if (err instanceof ProcessError) {
           expect(err.stderrTail.length).toBeLessThanOrEqual(2048)
           expect(err.stderrTail).toContain("TAILMARKER")

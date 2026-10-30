@@ -13,11 +13,11 @@ export interface Bundle {
   readonly manifests: ReadonlyArray<unknown>
 }
 
-const _make = (opts: Bundle): Bundle => ({
-  name: opts.name,
-  manifests: opts.manifests,
-  ...(opts.namespace !== undefined ? { namespace: opts.namespace } : {})
-})
+const _make = (opts: Bundle): Bundle => {
+  const bundle = { name: opts.name, manifests: opts.manifests }
+
+  return opts.namespace === undefined ? bundle : { ...bundle, namespace: opts.namespace }
+}
 
 export interface BundleHandle<Name extends string, Out, In> extends Context.Service<Dep.Need<"App", Name>, Bundle> {
   readonly layer: Layer.Layer<Out, AnyRenderError, In>
@@ -77,22 +77,20 @@ interface DefineLayerInput<Name extends string, R, Extra> {
 const _bundleOf = (input: { readonly name: string; readonly namespace: string | undefined }) =>
 (
   manifests: ReadonlyArray<unknown>
-): Bundle =>
-  _make({
-    name: input.name,
-    ...(input.namespace !== undefined ? { namespace: input.namespace } : {}),
-    manifests
-  })
+): Bundle => _make({ name: input.name, namespace: input.namespace, manifests })
 
 const _defineLayer = <Name extends string, R, Extra>(input: DefineLayerInput<Name, R, Extra>) => {
   const { namespace, opts, tag } = input
   const nsLayer = _nsLayer(namespace)
   const bundleBuild = liftBuild(opts.build).pipe(Effect.map(_bundleOf({ name: opts.name, namespace })))
+
   if (opts.provides === undefined) {
     return Layer.mergeAll(Layer.effect(tag, bundleBuild).pipe(Layer.provide(nsLayer)), nsLayer)
   }
+
   const internal = Layer.mergeAll(nsLayer, opts.provides)
   const bundleLayer = Layer.effect(tag, bundleBuild).pipe(Layer.provide(internal))
+
   return Layer.mergeAll(bundleLayer, nsLayer, opts.provides)
 }
 
@@ -111,6 +109,7 @@ export const define = <
   const name: Name = opts.name
   const tag = Dep.App<Name, Bundle>(name)
   const layer = _defineLayer({ tag, namespace: opts.namespace, opts })
+
   return unsafeCoerce<
     BundleHandle<
       Name,
@@ -174,10 +173,12 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = n
 ): Effect.Effect<BundleSetResult, AnyRenderError, CoreManifest.RenderServices> => {
   const program = Effect.gen(function*() {
     const bundles: Bundle[] = []
+
     for (const mod of opts.modules) {
       const b = yield* mod
       bundles.push(b)
     }
+
     return _makeSet({ name: opts.name, bundles })
   })
 

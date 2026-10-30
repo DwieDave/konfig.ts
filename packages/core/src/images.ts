@@ -1,15 +1,17 @@
 import { Data, Effect, Schema } from "effect"
-import { makeStrictDecoder } from "./decode"
+import { strictDecoderOf } from "./decode"
 
 export const EnvImages = Schema.Record(Schema.String, Schema.String)
+
 export type EnvImages = typeof EnvImages.Type
 
 export const ImagesConfig = Schema.Struct({
   envs: Schema.Record(Schema.String, EnvImages)
 })
+
 export type ImagesConfig = typeof ImagesConfig.Type
 
-const _imagesDecoder = makeStrictDecoder(ImagesConfig)
+const _imagesDecoder = strictDecoderOf(ImagesConfig)
 
 export const decodeImagesSync = _imagesDecoder.sync
 export const decodeImagesEffect = _imagesDecoder.effect
@@ -25,6 +27,7 @@ export interface LookupEnvInput {
   readonly cfg: ImagesConfig
   readonly env: string
 }
+
 export const lookupEnv = (input: LookupEnvInput): EnvImages | undefined => _own(input.cfg.envs, input.env)
 
 export const lookupEnvEffect = (
@@ -47,6 +50,7 @@ export interface RequireImageInput {
   readonly app: string
   readonly envName: string
 }
+
 export const requireImageEffect = (
   input: RequireImageInput
 ): Effect.Effect<string, ImagesAppMissing> =>

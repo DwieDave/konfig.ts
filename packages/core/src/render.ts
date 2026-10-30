@@ -1,5 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Effect, Layer } from "effect"
+import { Array as Arr, Effect, Layer, Predicate } from "effect"
 import { unsafeCoerce } from "./_cast"
 import type * as Manifest from "./Manifest"
 import { RenderContext } from "./RenderContext"
@@ -34,6 +34,7 @@ export const _compose = <E, RIn>(
 ): Effect.Effect<void, E> => {
   const ctx = RenderContext.make(_resolveEnv(options.env))
   const layers = _buildLayers(options.layers)
+
   return program(ctx).pipe(Effect.scoped, Effect.provide(layers))
 }
 
@@ -45,10 +46,6 @@ export const render = <E, RIn>(
   const runMain = options.runMain ?? NodeRuntime.runMain
   runMain(_compose(program, options))
 }
-
-const _isPresent = (doc: unknown): boolean => doc !== null && doc !== undefined
-
-const _flatten = (rendered: unknown): ReadonlyArray<unknown> => Array.isArray(rendered) ? rendered : [rendered]
 
 export interface RenderAllYamlEffectInput {
   // Defaults to RenderContext.make("prod").
@@ -64,12 +61,15 @@ export const renderAllYamlEffect = (
   Effect.gen(function*() {
     const ctx = input.ctx ?? RenderContext.make(_resolveEnv(undefined))
     const docs: Array<string> = []
+
     for (const m of input.manifests) {
       const rendered = yield* m.render(ctx)
-      for (const doc of _flatten(rendered).flatMap(unwrapDocs).filter(_isPresent)) {
+
+      for (const doc of Arr.ensure(rendered).flatMap(unwrapDocs).filter(Predicate.isNotNullish)) {
         docs.push(Yaml.serialize({ value: doc }))
       }
     }
+
     return docs.join("---\n")
   })
 

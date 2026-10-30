@@ -86,6 +86,10 @@ export interface Target<
   ) => ApplyHandle<Kind, Name, Ns, R, Extra>
 }
 
+const _withProvides = (
+  input: { readonly args: object; readonly provides: Layer.Layer<never, never, never> | undefined }
+) => input.provides === undefined ? input.args : { ...input.args, provides: input.provides }
+
 const _defineWith = <
   Kind extends HandleKind,
   ExtraConfig extends object,
@@ -105,11 +109,7 @@ const _defineWith = <
   input.target.define<Name, Ns, R, Extra>(unsafeCoerce<
     DefineBaseArgs<Name, Ns, R, Extra> & ExtraConfig & ExtraCallArgs
   >(
-    {
-      ...input.fields,
-      build: liftEffect(input.buildResult),
-      ...(input.provides !== undefined ? { provides: input.provides } : {})
-    },
+    _withProvides({ args: { ...input.fields, build: liftEffect(input.buildResult) }, provides: input.provides }),
     "spreads of generic rest/args cannot be re-related to the intersection by TS; unsound only if Opts redeclares a DefineBaseArgs key with a different type"
   ))
 

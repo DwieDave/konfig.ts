@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { makeStrictDecoder } from "./decode"
+import { strictDecoderOf } from "./decode"
 import {
   DEFAULT_CHARTS_DIR,
   DEFAULT_CRD_OUT_DIR,
@@ -19,22 +19,26 @@ const _stringArrayWithKeyDefault = (def: ReadonlyArray<string>) =>
 export const EnvEntry = Schema.Struct({
   entry: Schema.String
 })
+
 export type EnvEntry = typeof EnvEntry.Type
 
 export const OutDir = Schema.Struct({
   manifests: Schema.String
 })
+
 export type OutDir = typeof OutDir.Type
 
 export const CrdConfig = Schema.Struct({
   outDir: _stringWithKeyDefault(DEFAULT_CRD_OUT_DIR)
 })
+
 export type CrdConfig = typeof CrdConfig.Type
 
 export const HelmConfig = Schema.Struct({
   cacheDir: _stringWithKeyDefault(DEFAULT_HELM_CACHE_DIR),
   minVersion: _stringWithKeyDefault(DEFAULT_HELM_MIN_VERSION)
 })
+
 export type HelmConfig = typeof HelmConfig.Type
 
 export const ClusterSpec = Schema.Struct({
@@ -43,17 +47,20 @@ export const ClusterSpec = Schema.Struct({
   storageClass: Schema.optionalKey(Schema.String),
   repositoryUrl: Schema.optionalKey(Schema.String)
 })
+
 export type ClusterSpec = typeof ClusterSpec.Type
 
 export const DiffConfig = Schema.Struct({
   baseline: Schema.String
 })
+
 export type DiffConfig = typeof DiffConfig.Type
 
 export const ServicesConfig = Schema.Struct({
   outFile: Schema.optionalKey(Schema.String),
   globalPaths: _stringArrayWithKeyDefault([])
 })
+
 export type ServicesConfig = typeof ServicesConfig.Type
 
 export const KonfigConfig = Schema.Struct({
@@ -74,6 +81,7 @@ export const KonfigConfig = Schema.Struct({
   services: Schema.optionalKey(ServicesConfig),
   clusters: Schema.optionalKey(Schema.Record(Schema.String, ClusterSpec))
 })
+
 export type KonfigConfig = typeof KonfigConfig.Type
 
 export interface ResolvedKonfigConfig {
@@ -81,7 +89,7 @@ export interface ResolvedKonfigConfig {
   readonly config: KonfigConfig
 }
 
-const _konfigConfigDecoder = makeStrictDecoder(KonfigConfig)
+const _konfigConfigDecoder = strictDecoderOf(KonfigConfig)
 
 export const decodeKonfigConfigSync = _konfigConfigDecoder.sync
 export const decodeKonfigConfigEffect = _konfigConfigDecoder.effect

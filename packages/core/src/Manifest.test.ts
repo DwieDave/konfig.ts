@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import * as Manifest from "./Manifest"
+import { RawYaml } from "./Manifest"
 import { RenderContext } from "./RenderContext"
 import { EmbedYamlReadError } from "./RenderError"
 
@@ -44,14 +45,17 @@ layer(NodeServices.layer)("Manifest combinators", (it) => {
   it.effect("whenever runs the thunk and its manifest when cond is true", () =>
     Effect.gen(function*() {
       let called = false
+
       const m = Manifest.whenever({
         cond: true,
         thunk: () =>
           Manifest.make<string>(() => {
             called = true
+
             return "made"
           })
       })
+
       const result = yield* m.render(ctx)
       expect(called).toBe(true)
       expect(result).toBe("made")
@@ -60,14 +64,17 @@ layer(NodeServices.layer)("Manifest combinators", (it) => {
   it.effect("whenever skips the thunk and yields undefined when cond is false", () =>
     Effect.gen(function*() {
       let called = false
+
       const m = Manifest.whenever<string>({
         cond: false,
         thunk: () =>
           Manifest.make<string>(() => {
             called = true
+
             return "made"
           })
       })
+
       const result = yield* m.render(ctx)
       expect(called).toBe(false)
       expect(result).toBeUndefined()
@@ -77,7 +84,7 @@ layer(NodeServices.layer)("Manifest combinators", (it) => {
     Effect.gen(function*() {
       const m = Manifest.embedYaml({ literal: "kind: ConfigMap\n" })
       const result = yield* m.render(ctx)
-      expect(result).toEqual({ _tag: "RawYaml", content: "kind: ConfigMap\n" })
+      expect(result).toEqual(RawYaml.make({ content: "kind: ConfigMap\n" }))
       expect(result.origin).toBeUndefined()
     }))
 
@@ -101,6 +108,7 @@ layer(NodeServices.layer)("Manifest combinators", (it) => {
       const m = Manifest.embedYaml({ path: missing })
       const failure = yield* m.render(ctx).pipe(Effect.flip)
       expect(failure).toBeInstanceOf(EmbedYamlReadError)
+
       if (failure instanceof EmbedYamlReadError) {
         expect(failure.path).toBe(missing)
       }
@@ -113,6 +121,7 @@ layer(NodeServices.layer)("Manifest concurrency bound", (it) => {
   it.effect("concat never runs more than RENDER_CONCURRENCY manifests at once", () =>
     Effect.gen(function*() {
       const state = { active: 0, peak: 0 }
+
       const tracked = Manifest.make<number>(() =>
         Effect.gen(function*() {
           state.active += 1
@@ -120,9 +129,11 @@ layer(NodeServices.layer)("Manifest concurrency bound", (it) => {
           yield* Effect.yieldNow
           yield* Effect.yieldNow
           state.active -= 1
+
           return 1
         })
       )
+
       yield* Manifest.concat<number>(...Array.from({ length: 12 }, () => tracked)).render(ctx)
       expect(state.peak).toBeGreaterThan(0)
       expect(state.peak).toBeLessThanOrEqual(Manifest.RENDER_CONCURRENCY)

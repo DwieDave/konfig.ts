@@ -21,6 +21,7 @@ describe("Module.fixedNs({ target: Bundle.target, ... })", () => {
     const cm = defineCertManager({ name: "cert-manager" })
 
     type NameOf<T> = T extends Bundle.BundleHandle<infer N, infer _Out, infer _In> ? N : never
+
     expectTypeOf<NameOf<typeof cm>>().toEqualTypeOf<"cert-manager">()
   })
 
@@ -37,7 +38,7 @@ describe("Module.fixedNs({ target: Bundle.target, ... })", () => {
   })
 
   it("rejects bare `string` for name at the call site", () => {
-    const dynamicName = "x" as string
+    const dynamicName: string = "x"
     // @ts-expect-error — `name` must be a literal
     defineCertManager({ name: dynamicName })
   })
@@ -63,7 +64,7 @@ describe("Module.dynamicNs({ target: Bundle.target, ... })", () => {
   })
 
   it("rejects bare `string` for namespace at the call site", () => {
-    const dynamicNs = "x" as string
+    const dynamicNs: string = "x"
     defineCache({
       name: "cache",
       // @ts-expect-error — `namespace` must be a literal

@@ -30,7 +30,7 @@ const _handle = (stderr: string): ChildProcessHandle =>
       getInputFd: () => Sink.drain,
       getOutputFd: () => Stream.empty,
       unref: Effect.succeed(Effect.void)
-    } as Parameters<typeof makeHandle>[0]
+    }
   )
 
 const _failing = (stderr: string): Layer.Layer<ChildProcessSpawner> =>
