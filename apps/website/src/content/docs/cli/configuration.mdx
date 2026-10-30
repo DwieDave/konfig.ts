@@ -86,4 +86,4 @@ interface ImagesConfig {
 }
 ```
 
-Your modules read this file through two helpers from `@konfig.ts/core`: `imagesFor({ cfg, env })` selects the map for one env, and `requireImage({ e, app, envName })` picks one app's image out of it and fails when the app is missing. Both throw on a missing key; the Effect variants (`lookupEnvEffect` and `requireImageEffect`) instead report the typed errors `ImagesEnvMissing` and `ImagesAppMissing`. The full-stack example does not ship an `images.json`; it derives image references from its build modules instead. See [konfig set](/konfig.ts/docs/cli/set/) for the write path.
+Your modules read this file through two helpers from `@konfig.ts/core`: `imagesFor({ cfg, env })` selects the map for one env, and `requireImage({ e, app, envName })` picks one app's image out of it and fails when the app is missing. `imagesFor` throws `ImagesEnvMissing` and `requireImage` throws `ImagesAppMissing`; `decodeImagesEffect` decodes the file as an Effect. The full-stack example does not ship an `images.json`; it derives image references from its build modules instead. See [konfig set](/konfig.ts/docs/cli/set/) for the write path.

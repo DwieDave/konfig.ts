@@ -61,7 +61,7 @@ Workload.web({
         name: "api",
         image: "ghcr.io/example/api:1.0.0",
         ports: [Port.make({ name: "http", containerPort: 8080 })],
-        env: [EnvVar.fromSecretForPod({ name: "DATABASE_URL", ref: apiCreds.ref, key: "url", podNamespace: "prod" })]
+        env: [EnvVar.fromSecret({ name: "DATABASE_URL", ref: apiCreds.ref, key: "url" })]
       })
     ]
   },
@@ -109,17 +109,17 @@ console.log(`api listening on :${config.port}`)
 
 ## Packages
 
-| Package                                                      | Description                                                                                                                      |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| [`@konfig.ts/core`](./packages/core)                         | `Manifest<A>`, `Helm.release` (digest-verified), `Module.fixedNs`/`dynamicNs`, structural diff, stable YAML, `Dep.*`             |
-| [`@konfig.ts/k8s`](./packages/k8s)                           | Kubernetes builders with branded refs; `Container.define`; `Workload.web`/`Workload.cron`; `SecretBackend<N, K, RequiresSource>` |
-| [`@konfig.ts/env`](./packages/env)                           | `Secret.define`/`Literal.define`/`Downward.define`/`Environment.define`; `Environment.runtime` decoder                           |
-| [`@konfig.ts/sops`](./packages/sops)                         | `Sops.source` + `Sops.backend` + `Sops.passthrough`; SopsSecret schema; fail-closed on unencrypted values                        |
-| [`@konfig.ts/sealed-secrets`](./packages/sealed-secrets)     | `SealedSecret` CR backend; shells out to `kubeseal` with schema-validated stdout                                                 |
-| [`@konfig.ts/external-secrets`](./packages/external-secrets) | `ExternalSecret` CR backend (no source required)                                                                                 |
-| [`@konfig.ts/argocd`](./packages/argocd)                     | `Application.define`/`.target`; `AppOfApps.fromModules` (compile-time dep check); `Sync.wave`/`hook`/`options`                   |
-| [`@konfig.ts/docker`](./packages/docker)                     | Workspace-graph-aware Dockerfile generator; Bun/Npm/Pnpm                                                                         |
-| [`@konfig.ts/cli`](./packages/cli)                           | `konfig build`, `validate`, `diff`, `set`, `crd`, `helm`, `docker`, `graph`                                                      |
+| Package                                                      | Description                                                                                                          |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| [`@konfig.ts/core`](./packages/core)                         | `Manifest<A>`, `Helm.release` (digest-verified), `Module.fixedNs`/`dynamicNs`, structural diff, stable YAML, `Dep.*` |
+| [`@konfig.ts/k8s`](./packages/k8s)                           | Kubernetes builders with branded refs; `Container.define`; `Workload.web`; `SecretBackend<N, K, RequiresSource>`     |
+| [`@konfig.ts/env`](./packages/env)                           | `Secret.define`/`Literal.define`/`Downward.define`/`Environment.define`; `Environment.runtime` decoder               |
+| [`@konfig.ts/sops`](./packages/sops)                         | `Sops.backend` + `Sops.passthrough`; SopsSecret schema; fail-closed on unencrypted values                            |
+| [`@konfig.ts/sealed-secrets`](./packages/sealed-secrets)     | `SealedSecret` CR backend; shells out to `kubeseal` with schema-validated stdout                                     |
+| [`@konfig.ts/external-secrets`](./packages/external-secrets) | `ExternalSecret` CR backend (no source required)                                                                     |
+| [`@konfig.ts/argocd`](./packages/argocd)                     | `Application.define`/`.target`; `AppOfApps.fromModules` (compile-time dep check); `Sync.wave`/`hook`/`options`       |
+| [`@konfig.ts/docker`](./packages/docker)                     | Workspace-graph-aware Dockerfile generator; Bun/Npm/Pnpm                                                             |
+| [`@konfig.ts/cli`](./packages/cli)                           | `konfig build`, `validate`, `diff`, `set`, `crd`, `helm`, `docker`, `graph`                                          |
 
 ## What this is not
 

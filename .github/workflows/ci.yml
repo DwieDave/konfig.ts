@@ -50,6 +50,10 @@ jobs:
         run: |
           jq '.catalog.effect = "4.0.0" | .catalog["@effect/vitest"] = "4.0.0" | .catalog["@effect/platform-node"] = "~4.0.0"' package.json > package.floor.json
           mv package.floor.json package.json
+          for f in packages/core/package.json packages/cli/package.json; do
+            jq '.dependencies["@effect/platform-node"] = "~4.0.0"' "$f" > "$f.floor"
+            mv "$f.floor" "$f"
+          done
 
       - uses: ./.github/actions/setup
         with:
@@ -59,10 +63,11 @@ jobs:
         run: |
           bun pm ls --all | grep -E ' effect@4\.0\.0$'
           bun pm ls --all | grep -E ' @effect/platform-node@4\.0\.'
+          ! bun pm ls --all | grep -E ' @effect/platform-node@4\.[1-9]'
 
-      - name: Typecheck and test core and env at the floor
+      - name: Typecheck and test every effect-peer package at the floor
         run: |
-          for pkg in core env; do
+          for pkg in $(jq -r 'select(.peerDependencies.effect) | .name | ltrimstr("@konfig.ts/")' packages/*/package.json); do
             bun run --cwd "packages/$pkg" check
             bun run --cwd "packages/$pkg" test
           done

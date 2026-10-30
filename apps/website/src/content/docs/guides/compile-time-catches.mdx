@@ -32,7 +32,7 @@ An environment contract can declare secret members; the api contract declares th
 
 Why it fails: the bind input makes `secrets` mandatory as soon as the environment has any secret member, and each entry must be a backend, a source, or both. Whether a source is required is part of the backend's type. `Sops.backend` returns a backend whose type says it requires a source, so leaving the source out is a type error. `Sops.passthrough` returns a backend that does not require one.
 
-Fix: bind every secret member, and pair `Sops.backend` with `Sops.source({ file, keys })`. See [Secrets with sops](/konfig.ts/docs/guides/secrets-with-sops/).
+Fix: bind every secret member, and pair `Sops.backend` with a `SecretSource` such as `SecretSource.fromConfig`. See [Secrets with sops](/konfig.ts/docs/guides/secrets-with-sops/).
 
 ## port-mismatch.ts: a probe or Service names a port that does not exist
 

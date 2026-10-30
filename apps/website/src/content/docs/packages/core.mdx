@@ -1,6 +1,6 @@
 ---
 title: "@konfig.ts/core"
-description: Kubernetes-agnostic primitives every konfig.ts package builds on, including Manifest, Dep, Module, Helm, stable YAML, diff, and render.
+description: Kubernetes-agnostic primitives every konfig.ts package builds on, including Manifest, Dep, Module, Helm, stable YAML, diff, and rendering helpers.
 sidebar:
   order: 0
   label: core
@@ -15,7 +15,7 @@ import { Aside, Snippet } from "@/components/docs"
 - the module factories that give a build a namespace and a target (`Module`),
 - Helm chart rendering with digest verification (`Helm.release`),
 - deterministic YAML serialization and a structural diff,
-- and the `render` entrypoint the CLI calls.
+- and the `renderAllYaml` helpers.
 
 Most projects work with the higher-level packages (`@konfig.ts/k8s`, `@konfig.ts/env`, `@konfig.ts/argocd`) and reach into core directly only for `Module.*`, `Dep.*`, and `Helm.release`.
 
@@ -38,18 +38,18 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 | Export | Purpose |
 | --- | --- |
 | `Manifest` | `make`, `concat`, `embedYaml`: the `Manifest<A>` carrier and its combinators |
-| `render`, `renderManifest`, `RenderContext` | Run a program against a `RenderContext` (env, cluster, k8s version, `flags`) and write files |
+| `renderAllYaml`, `renderAllYamlEffect`, `renderManifest`, `RenderContext` | Render manifests against a `RenderContext` (env, cluster, k8s version, `flags`) into multi-document YAML |
 | `Dep` | Needs (`Secret`, `SecretValues`, `Namespace`, `Image`, `Application`, `App`) and `provide*` layers |
 | `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef`, `BuiltImageRef` | Branded reference types (k8s constructs the non-secret ones; `BuiltImageRef` is also a value with `of`); `*RefName`, `*RefKeys` helpers extract the brand parameters |
 | `Module` | `fixedNs`, `dynamicNs` factories; `Target`, `BuildContext`, `LiteralName` types |
 | `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`) and the type-level tracking of unmet needs behind every `fromModules` (`Compose.ResidualCheck`, `Compose.NoDuplicateProvides`) |
 | `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template`; `cacheFileName`, `ensureChartTarball`, `assertMinVersion`, `timeout` for the CLI's shared cache |
 | `Yaml` | `serialize` (stable key order) and `filenameFor` |
-| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYaml`, `parseYamlAll` | Structural YAML diff |
+| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYamlAll` | Structural YAML diff |
 | `KonfigConfig`, `decodeKonfigConfigEffect` | Schemas and decoders for `konfig.json`; `ResolvedKonfigConfig` pairs the decoded config with its directory |
 | `ImagesConfig`, `decodeImagesSync`, `decodeImagesEffect`, `imagesFor`, `requireImage` | Schema and lookups for `images.json` |
 | `boundary`, `brand`, `unsafeCoerce` | Schema decode at boundaries; annotated escape hatches |
-| `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin`, `processDetail` | Subprocess helpers used by Helm and the secret backends |
+| `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin` | Subprocess helpers used by Helm and the secret backends |
 
 ## Errors
 
@@ -70,7 +70,7 @@ Core exports tagged error classes from `src/index.ts`. The render-time ones are 
 ## Requirements
 
 - `effect@^4.0.0` as a peer dependency (Effect 4).
-- `@effect/platform-node` and `yaml` are regular dependencies: `render()` needs the Node filesystem and subprocess services, so they install with the package.
+- `@effect/platform-node` and `yaml` are regular dependencies: `renderAllYaml()` needs the Node filesystem and subprocess services, so they install with the package.
 - Runtime: Bun recommended; Node >= 23.6 works; Node 22.6 to 23.5 with `--experimental-strip-types`; `tsx` works.
 
 Source and README: [packages/core](https://github.com/DwieDave/konfig.ts/tree/main/packages/core).
