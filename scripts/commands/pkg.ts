@@ -1,9 +1,8 @@
+import { existsOrFalse } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { Argument, Command } from "effect/cli"
-import { FileSystem } from "effect/FileSystem"
-import { ChildProcess } from "effect/process"
-import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { mapRepoError, REPO_ROOT, RepoScriptError } from "../lib/repo"
+import { spawnInherit } from "../lib/spawn"
 
 export const PKG_SCRIPTS = ["build", "check", "test", "lint", "test:coverage", "prepack", "postpack"] as const
 
@@ -48,33 +47,17 @@ export const pkgSteps = (input: { readonly script: PkgScript; readonly layout: P
 }
 
 const _layout = Effect.gen(function*() {
-  const fs = yield* FileSystem
-  const exists = (file: string) => fs.exists(file).pipe(Effect.orElseSucceed(() => false))
-  const hasIndex = yield* exists("src/index.ts")
+  const hasIndex = yield* existsOrFalse("src/index.ts")
 
   return {
     entry: hasIndex ? "./src/index.ts" : "./src/main.ts",
-    hasBuildTsconfig: yield* exists("tsconfig.build.json")
+    hasBuildTsconfig: yield* existsOrFalse("tsconfig.build.json")
   } satisfies PkgLayout
 })
 
-const _spawn = (argv: Argv) =>
-  Effect.scoped(
-    Effect.gen(function*() {
-      const spawner = yield* ChildProcessSpawner
-      const [cmd = "", ...args] = argv
-
-      const handle = yield* spawner.spawn(
-        ChildProcess.make(cmd, args, { stdin: "inherit", stdout: "inherit", stderr: "inherit", extendEnv: true })
-      )
-
-      return Number(yield* handle.exitCode)
-    })
-  ).pipe(mapRepoError(`cannot spawn ${argv.join(" ")}`))
-
 const _runStep = (argv: Argv) =>
   Effect.flatMap(
-    _spawn(argv),
+    spawnInherit({ argv }),
     (code) =>
       code === 0 ? Effect.void : Effect.fail(new RepoScriptError({ message: `${argv.join(" ")} exited with ${code}` }))
   )
@@ -84,6 +67,7 @@ export const pkgCommand = Command.make(
   { script: Argument.Literals("script", PKG_SCRIPTS) },
   ({ script }) =>
     _layout.pipe(
+      mapRepoError("cannot inspect package layout"),
       Effect.flatMap((layout) => Effect.forEach(pkgSteps({ script, layout }), _runStep, { discard: true }))
     )
 ).pipe(Command.withDescription("Run the shared per-package script (build, check, test, ...) in the cwd package"))

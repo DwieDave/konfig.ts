@@ -1,3 +1,4 @@
+import { existsOrFalse } from "@konfig.ts/core"
 import { Console, Effect, Match, Schema } from "effect"
 import { Argument, Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
@@ -95,7 +96,7 @@ const _restore = Effect.gen(function*() {
   const pkgJsonPath = path.resolve("package.json")
   const backup = `${pkgJsonPath}.prepack-backup`
 
-  const exists = yield* fs.exists(backup).pipe(Effect.orElseSucceed(() => false))
+  const exists = yield* existsOrFalse(backup).pipe(mapRepoError(`cannot stat ${backup}`))
 
   if (!exists) {
     yield* Console.error(`prepack-exports: no backup at ${backup}; nothing to restore`)

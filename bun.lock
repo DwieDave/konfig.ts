@@ -7,6 +7,7 @@
       "devDependencies": {
         "@effect/platform-node": "catalog:",
         "@effect/tsgo": "0.53.4",
+        "@konfig.ts/core": "workspace:*",
         "@oxlint/plugins": "1.88.0",
         "effect": "catalog:",
         "fast-check": "catalog:",

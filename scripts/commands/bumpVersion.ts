@@ -1,9 +1,9 @@
+import { runProcessExit } from "@konfig.ts/core"
 import { Console, Effect, Match } from "effect"
 import { Argument, Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { ChildProcess } from "effect/process"
-import { runProcessExit } from "../../packages/core/src/subprocess"
 import { mapRepoError, packageDirs, readJson, REPO_ROOT, RepoScriptError } from "../lib/repo"
 
 const INSTALL_WARNING = "warning: 'bun install' failed; run it manually to sync bun.lock"

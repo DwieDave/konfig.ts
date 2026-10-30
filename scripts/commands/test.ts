@@ -1,10 +1,9 @@
-import { Config, Console, Effect, Option, Stream } from "effect"
+import { readOrEmpty, runProcessCollect } from "@konfig.ts/core"
+import { Config, Console, Effect, Option } from "effect"
 import { Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/process"
-import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { availableParallelism } from "node:os"
 import { mapRepoError, REPO_ROOT, RepoScriptError, testPackageNames } from "../lib/repo"
 
@@ -23,8 +22,6 @@ const _spawnArgsFor = (pkg: string) =>
     ? { cmd: "bunx", args: ["vitest", "run"], cwd: `${REPO_ROOT}/scripts` }
     : { cmd: "bun", args: ["run", "--cwd", `packages/${pkg}`, "test"], cwd: REPO_ROOT }
 
-const _collect = (stream: Stream.Stream<Uint8Array, PlatformError>) => Stream.mkString(Stream.decodeText(stream))
-
 const _commandFor = (input: { readonly pkg: string; readonly summaryFile: string | undefined }) => {
   const { args, cmd, cwd } = _spawnArgsFor(input.pkg)
 
@@ -37,19 +34,8 @@ const _commandFor = (input: { readonly pkg: string; readonly summaryFile: string
 }
 
 const _run = (input: { readonly pkg: string; readonly summaryFile: string | undefined }) =>
-  Effect.scoped(
-    Effect.gen(function*() {
-      const spawner = yield* ChildProcessSpawner
-      const handle = yield* spawner.spawn(_commandFor(input))
-
-      const [code, out, err] = yield* Effect.all(
-        [handle.exitCode, _collect(handle.stdout), _collect(handle.stderr)],
-        { concurrency: "unbounded" }
-      )
-
-      return { pkg: input.pkg, output: out + err, code: Number(code) } satisfies _RunResult
-    })
-  ).pipe(
+  runProcessCollect({ command: _commandFor(input) }).pipe(
+    Effect.map(({ exitCode, stderr, stdout }) => ({ pkg: input.pkg, output: stdout + stderr, code: exitCode })),
     mapRepoError(`cannot spawn tests for ${input.pkg}`)
   )
 
@@ -57,28 +43,23 @@ const _labelFor = (pkg: string) => pkg === _SCRIPTS_PSEUDO_PACKAGE ? pkg : `@kon
 
 const _summaryEnv = Config.option(Config.String("GITHUB_STEP_SUMMARY"))
 
-const _readOrEmpty = (file: string) =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem
-
-    return yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""))
-  })
-
 const _block = (r: _RunResult & { readonly summaryFile: string | undefined }) =>
   Effect.map(
-    r.summaryFile === undefined ? Effect.succeed("") : _readOrEmpty(r.summaryFile),
+    r.summaryFile === undefined
+      ? Effect.succeed("")
+      : readOrEmpty(r.summaryFile).pipe(mapRepoError(`cannot read ${r.summaryFile}`)),
     (block) => `\n## 📦 ${_labelFor(r.pkg)}\n${block}`
   )
 
 // Each child gets its own GITHUB_STEP_SUMMARY file; stitched under its package heading afterwards.
-const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFile: string | undefined }>) =>
+export const _stitchSummary = (results: ReadonlyArray<_RunResult & { readonly summaryFile: string | undefined }>) =>
   Effect.gen(function*() {
     const summaryFile = yield* _summaryEnv
 
     if (Option.isNone(summaryFile)) return
     const fs = yield* FileSystem
     const blocks = yield* Effect.forEach(results, _block)
-    const existing = yield* _readOrEmpty(summaryFile.value)
+    const existing = yield* readOrEmpty(summaryFile.value).pipe(mapRepoError(`cannot read ${summaryFile.value}`))
     yield* fs
       .writeFileString(summaryFile.value, existing + blocks.join(""))
       .pipe(mapRepoError(`cannot append to ${summaryFile.value}`))

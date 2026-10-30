@@ -1,3 +1,4 @@
+import { existsOrFalse } from "@konfig.ts/core"
 import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -68,7 +69,7 @@ export const packageDirs = Effect.gen(function*() {
 
   return yield* Effect.filter(
     dirs,
-    (dir) => fs.exists(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => false))
+    (dir) => existsOrFalse(path.join(dir, "package.json")).pipe(mapRepoError(`cannot stat ${dir}`))
   )
 })
 
