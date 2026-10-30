@@ -82,6 +82,8 @@ Every manifest's `render` fails with `AnyRenderError`, a tagged union you can `E
 | `HelmDigestMismatch` | Chart tarball hash differs from `digest`; carries `chart`, `version`, `expected`, `actual`. Reaches you as the `cause` of a `HelmRenderError`. |
 | `CrdExtractError` | `konfig crd extract` / `verify` failures for one chart; carries `chart` and `cause`. |
 
+`EmbedYamlReadError` and `HelmRenderError` are members of the union and are matched by tag; core does not export their classes.
+
 ## Logging flags
 
 `konfig build` accepts `--log text|json` (default `text`) to switch the final report line between prose and a JSON object with `env`, `files`, `outDir`, `renderMs`, `writeMs`, `totalMs`, and `cached`. In `text` mode a `Rendering env '<env>'...` line precedes the render. `--verbose` wraps the render in an Effect span named `konfig.render.<env>` so tracing output includes it.

@@ -81,8 +81,8 @@ describe("render — _compose wiring", () => {
 })
 
 describe("renderAllYaml — skipped manifests", () => {
-  it("skips Manifest.whenever with a false condition instead of crashing", async () => {
-    const skipped = Manifest.whenever({ cond: false, thunk: () => Manifest.make(() => ({ kind: "A" })) })
+  it("skips a manifest rendering undefined instead of crashing", async () => {
+    const skipped = Manifest.make(() => undefined)
     const kept = Manifest.make(() => ({ kind: "B" }))
     const out = await renderAllYaml({ manifests: [skipped, kept] })
     expect(out).toBe("kind: B\n")

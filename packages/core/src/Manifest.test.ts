@@ -11,15 +11,6 @@ import { EmbedYamlReadError } from "./RenderError"
 layer(NodeServices.layer)("Manifest combinators", (it) => {
   const ctx = RenderContext.make("test")
 
-  it.effect("combine pairs two manifests' rendered values into a tuple", () =>
-    Effect.gen(function*() {
-      const a = Manifest.make<number>(() => 1)
-      const b = Manifest.make<string>(() => "x")
-      const combined = Manifest.combine({ a, b })
-      const result = yield* combined.render(ctx)
-      expect(result).toEqual([1, "x"])
-    }))
-
   it.effect("concat flattens array-returning and scalar-returning manifests together", () =>
     Effect.gen(function*() {
       const arrayManifest = Manifest.make<number[]>(() => [1, 2])
@@ -41,44 +32,6 @@ layer(NodeServices.layer)("Manifest combinators", (it) => {
     // indistinguishable via Array.isArray; concat's type rejects this call.
     Manifest.concat(nested)
   })
-
-  it.effect("whenever runs the thunk and its manifest when cond is true", () =>
-    Effect.gen(function*() {
-      let called = false
-
-      const m = Manifest.whenever({
-        cond: true,
-        thunk: () =>
-          Manifest.make<string>(() => {
-            called = true
-
-            return "made"
-          })
-      })
-
-      const result = yield* m.render(ctx)
-      expect(called).toBe(true)
-      expect(result).toBe("made")
-    }))
-
-  it.effect("whenever skips the thunk and yields undefined when cond is false", () =>
-    Effect.gen(function*() {
-      let called = false
-
-      const m = Manifest.whenever<string>({
-        cond: false,
-        thunk: () =>
-          Manifest.make<string>(() => {
-            called = true
-
-            return "made"
-          })
-      })
-
-      const result = yield* m.render(ctx)
-      expect(called).toBe(false)
-      expect(result).toBeUndefined()
-    }))
 
   it.effect("embedYaml with a literal source returns its content with no origin", () =>
     Effect.gen(function*() {

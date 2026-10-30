@@ -61,24 +61,23 @@ resolved cache directory. Outside the CLI (a bare Effect program calling
 
 ## Surface
 
-| Area        | Exports                                                                                                                                                                       |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Manifest    | `Manifest` (`.make` / `.combine` / `.concat` / `.whenever` / `.embedYaml`), `render`, `renderManifest`, `RenderContext`                                                       |
-| Deps        | `Dep.*` kinds + `Dep.provide*` helpers; branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `ServiceAccountRef` / `BuiltImageRef`                                               |
-| Modules     | `Module.fixedNs`, `Module.dynamicNs`                                                                                                                                          |
-| Helm        | `Helm.release` — chart pull + SHA-256 digest verification; `Helm.cacheFileName`, `Helm.verifyChartDigest`, the shared cache-naming/verification building blocks it's built on |
-| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYaml`, `parseYamlAll`, `redact`                                                                                       |
-| Config      | `KonfigConfig`, `ImagesConfig`, and their decoders; `konfigDefaults.ts`'s `DEFAULT_*`/`KONFIG_*_ENV` constants                                                                |
-| Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `brand` / `unsafeCoerce` escape hatches                                                                                   |
-| Errors      | the tagged union `AnyRenderError` (`HelmDigestMismatch`, `BoundaryDecodeError`, …)                                                                                            |
+| Area        | Exports                                                                                                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Manifest    | `Manifest` (`.make` / `.concat` / `.embedYaml`), `render`, `renderManifest`, `RenderContext`                                                                                   |
+| Deps        | `Dep.*` kinds + `Dep.provide*` helpers; plain branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `ServiceAccountRef` / `BuiltImageRef`                                          |
+| Modules     | `Module.fixedNs`, `Module.dynamicNs`                                                                                                                                           |
+| Helm        | `Helm.release` — chart pull + SHA-256 digest verification; `Helm.cacheFileName`, `Helm.ensureChartTarball`, the shared cache-naming/verification building blocks it's built on |
+| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYaml`, `parseYamlAll`                                                                                  |
+| Config      | `KonfigConfig`, `ImagesConfig`, and their decoders; `konfigDefaults.ts`'s `DEFAULT_*`/`KONFIG_*_ENV` constants                                                                 |
+| Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `brand` / `unsafeCoerce` escape hatches                                                                                    |
+| Errors      | the tagged union `AnyRenderError` (`RenderError`, `BoundaryDecodeError`, `CrdExtractError`)                                                                                    |
 
 ## Internals
 
 `Manifest<A>` is only a recipe from a `RenderContext` to an Effect that produces
 an `A` — it does not track deps in its own type. Per-kind dependency tracking
 lives one level up, in the Effect `Layer`s that `Module` and
-`Application.define` compose. See
-[`.docs/architecture.md`](../../.docs/architecture.md).
+`Application.define` compose.
 
 ## Requirements
 
@@ -86,6 +85,6 @@ konfig.ts is built on [Effect](https://effect.website/) 4. Any 4.x build from 4.
 is supported:
 
 - **`effect@^4.0.0`** — peer dependency of every package.
-- **`@effect/platform-node@^4.1.0`** — a regular dependency of
+- **`@effect/platform-node@^4.0.0`** — a regular dependency of
   `@konfig.ts/core`, since `render()` needs its Node filesystem/subprocess
   implementations. It is installed automatically with core.

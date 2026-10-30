@@ -91,25 +91,12 @@ export const SecretValues = <N extends string, K extends string = string>(
 ): Context.Service<Need<"SecretValues", N>, SecretValuesRecord<K>> =>
   _service<"SecretValues", N, SecretValuesRecord<K>>({ kind: "SecretValues", name })
 
-export const ConfigMap = <N extends string, K extends string = string>(
-  name: N
-): Context.Service<Need<"ConfigMap", N>, ConfigMapRef<N, K>> =>
-  _service<"ConfigMap", N, ConfigMapRef<N, K>>({ kind: "ConfigMap", name })
-
 export const Namespace = <N extends string>(name: N): Context.Service<Need<"Namespace", N>, N> =>
   _service<"Namespace", N, N>({ kind: "Namespace", name })
-
-export const ServiceAccount = <N extends string>(
-  name: N
-): Context.Service<Need<"ServiceAccount", N>, ServiceAccountRef<N>> =>
-  _service<"ServiceAccount", N, ServiceAccountRef<N>>({ kind: "ServiceAccount", name })
 
 export const Application = <N extends string>(
   name: N
 ): Context.Service<Need<"Application", N>, N> => _service<"Application", N, N>({ kind: "Application", name })
-
-export const Pvc = <N extends string>(name: N): Context.Service<Need<"Pvc", N>, PvcRef<N>> =>
-  _service<"Pvc", N, PvcRef<N>>({ kind: "Pvc", name })
 
 export const App = <N extends string, S = unknown>(name: N): Context.Service<Need<"App", N>, S> =>
   _service<"App", N, S>({ kind: "App", name })
@@ -146,27 +133,10 @@ export const provideSecret = <
 ): Layer.Layer<Provide<"Secret", N>> =>
   _provide<"Secret", N, SecretRef<N, K, Ns>>({ kind: "Secret", name, value: brand<SecretRef<N, K, Ns>>(name) })
 
-export const provideConfigMap = <const N extends string, const K extends string = string>(
-  name: N
-): Layer.Layer<Provide<"ConfigMap", N>> =>
-  _provide<"ConfigMap", N, ConfigMapRef<N, K>>({ kind: "ConfigMap", name, value: brand<ConfigMapRef<N, K>>(name) })
-
 export const provideNamespace = <const N extends string>(
   name: N
 ): Layer.Layer<Provide<"Namespace", N>> => _provide<"Namespace", N, N>({ kind: "Namespace", name, value: name })
 
-export const provideServiceAccount = <const N extends string>(
-  name: N
-): Layer.Layer<Provide<"ServiceAccount", N>> =>
-  _provide<"ServiceAccount", N, ServiceAccountRef<N>>({
-    kind: "ServiceAccount",
-    name,
-    value: brand<ServiceAccountRef<N>>(name)
-  })
-
 export const provideApplication = <const N extends string>(
   name: N
 ): Layer.Layer<Provide<"Application", N>> => _provide<"Application", N, N>({ kind: "Application", name, value: name })
-
-export const providePvc = <const N extends string>(name: N): Layer.Layer<Provide<"Pvc", N>> =>
-  _provide<"Pvc", N, PvcRef<N>>({ kind: "Pvc", name, value: brand<PvcRef<N>>(name) })

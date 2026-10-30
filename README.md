@@ -141,7 +141,7 @@ konfig.ts is built on [Effect](https://effect.website/) 4. Every `@konfig.ts/*` 
 accepts any 4.x build from 4.0.0 on:
 
 - `effect@^4.0.0`, a peer dependency of every package.
-- `@effect/platform-node@^4.1.0`, a regular dependency of
+- `@effect/platform-node@^4.0.0`, a regular dependency of
   `@konfig.ts/core` and the CLI (`render()` needs the Node filesystem and
   subprocess services), so it is installed automatically.
 
@@ -159,6 +159,3 @@ walkthrough: a monorepo with env contracts, secret backends, and ArgoCD
 wiring. The worked-failure files under
 [`examples/full-stack/infra/envs/`](./examples/full-stack/infra/envs)
 show each compile error the type system catches.
-
-For architecture and per-package internals see
-[`.docs/architecture.md`](./.docs/architecture.md).

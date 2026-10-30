@@ -2,16 +2,12 @@ import { it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { describe, expect, expectTypeOf } from "vitest"
 import { brand } from "./_cast"
-import type { ConfigMapRef, Need, SecretRef, ServiceAccountRef } from "./deps"
-import { Application, ConfigMap, Namespace, Secret, ServiceAccount } from "./deps"
+import type { Need, SecretRef } from "./deps"
+import { Application, Namespace, Secret } from "./deps"
 
 type SecretReq<N extends string> = Need<"Secret", N>
 
-type ConfigMapReq<N extends string> = Need<"ConfigMap", N>
-
 type NamespaceReq<N extends string> = Need<"Namespace", N>
-
-type ServiceAccountReq<N extends string> = Need<"ServiceAccount", N>
 
 type ApplicationReq<N extends string> = Need<"Application", N>
 
@@ -63,23 +59,19 @@ describe("deps — yieldable Key constructors", () => {
     )
   })
 
-  it.effect("ConfigMap, Namespace, ServiceAccount, Application all behave the same", () => {
+  it.effect("Namespace and Application behave like Secret", () => {
     const prog = Effect.gen(function*() {
-      const cm = yield* ConfigMap("settings")
       const ns = yield* Namespace("prod")
-      const sa = yield* ServiceAccount("worker")
       const app = yield* Application("api")
 
-      return { cm, ns, sa, app }
+      return { ns, app }
     })
 
     expectTypeOf(prog).toMatchTypeOf<
       Effect.Effect<
         unknown,
         never,
-        | ConfigMapReq<"settings">
         | NamespaceReq<"prod">
-        | ServiceAccountReq<"worker">
         | ApplicationReq<"api">
       >
     >()
@@ -87,17 +79,13 @@ describe("deps — yieldable Key constructors", () => {
     return prog.pipe(
       Effect.provide(
         Layer.mergeAll(
-          Layer.succeed(ConfigMap("settings"))(brand<ConfigMapRef<"settings">>("settings")),
           Layer.succeed(Namespace("prod"))("prod"),
-          Layer.succeed(ServiceAccount("worker"))(brand<ServiceAccountRef<"worker">>("worker")),
           Layer.succeed(Application("api"))("api")
         )
       ),
       Effect.map((result) => {
         expect(result).toEqual({
-          cm: "settings",
           ns: "prod",
-          sa: "worker",
           app: "api"
         })
       })

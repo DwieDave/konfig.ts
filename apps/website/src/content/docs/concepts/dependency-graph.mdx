@@ -17,10 +17,7 @@ A need is identified by a kind (Secret, Image, Namespace, and so on) and a liter
 | --- | --- | --- | --- |
 | Secret | `Dep.Secret(name)` | `Dep.provideSecret(name)` | a branded secret reference |
 | SecretValues | `Dep.SecretValues(name)` | the values layer from `Secret.bind` / `Environment.bind` | the decrypted values, one `Redacted<string>` per key |
-| ConfigMap | `Dep.ConfigMap(name)` | `Dep.provideConfigMap(name)` | a branded ConfigMap reference |
 | Namespace | `Dep.Namespace(name)` | `Dep.provideNamespace(name)` | the name |
-| ServiceAccount | `Dep.ServiceAccount(name)` | `Dep.provideServiceAccount(name)` | a branded ServiceAccount reference |
-| Pvc | `Dep.Pvc(name)` | `Dep.providePvc(name)` | a branded PVC reference |
 | Image | `Dep.Image(name)` | `Dep.provideImage({ app, registry, tag })` | the full `registry/app:tag` image string |
 | Application | `Dep.Application(name)` | `Dep.provideApplication(name)` | the name |
 | App | `Dep.App(name)` | emitted by every `Application.define` | the built Argo CD Application |
@@ -82,7 +79,6 @@ The names behind the checks above, for when you read the types or a compiler mes
 | `Dep.Need<K, N>` / `Dep.Provide<K, N>` | The type-only marker for a need or provide of kind `K` and literal name `N`. Both are the same type. |
 | `Compose.ResidualIn<Ms>` | The type-level walk that filters each module's input against every earlier module's output. |
 | `Compose.NoDuplicateProvides` | The second fold that collects names provided twice. |
-| `Compose.composeLayers` | The runtime fold: reduces the handles with `Layer.provideMerge` into one layer. |
 | `Layer.provideMerge` | The Effect combinator both folds are built on. |
 
 Next: [Branded refs](/konfig.ts/docs/concepts/branded-refs/).
