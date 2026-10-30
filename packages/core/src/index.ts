@@ -95,6 +95,7 @@ export {
   CrdExtractError,
   EmbedYamlReadError,
   HelmDigestMismatch,
+  HelmMinVersionInvalid,
   HelmRenderError,
   HelmVersionTooLow,
   RenderError

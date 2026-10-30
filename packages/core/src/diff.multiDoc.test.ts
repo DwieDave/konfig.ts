@@ -141,3 +141,28 @@ describe("redact numeric normalization", () => {
     expect((out as { spec: { replicas: unknown } }).spec.replicas).toBe(3)
   })
 })
+
+describe("diffFiles — duplicate document identities", () => {
+  const doc = (v: string) => `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\ndata:\n  k: ${v}\n`
+  const file = (a: string, b: string) => `${doc(a)}---\n${doc(b)}`
+
+  it("reports a change in the first of two same-key docs", () => {
+    const result = diffFiles({ left: { "f.yaml": file("1", "2") }, right: { "f.yaml": file("9", "2") } })
+    expect(hasDifferences(result)).toBe(true)
+  })
+
+  it("reports a change in the last of two same-key docs", () => {
+    const result = diffFiles({ left: { "f.yaml": file("1", "2") }, right: { "f.yaml": file("1", "9") } })
+    expect(hasDifferences(result)).toBe(true)
+  })
+
+  it("reports a removed duplicate", () => {
+    const result = diffFiles({ left: { "f.yaml": file("1", "2") }, right: { "f.yaml": `${doc("1")}---\n${doc("1")}` } })
+    expect(hasDifferences(result)).toBe(true)
+  })
+
+  it("keeps identical duplicate files Same", () => {
+    const result = diffFiles({ left: { "f.yaml": file("1", "2") }, right: { "f.yaml": file("1", "2") } })
+    expect(hasDifferences(result)).toBe(false)
+  })
+})

@@ -242,6 +242,19 @@ const _docKey = (value: unknown, fallbackIdx: number): string => {
   return `:doc:${fallbackIdx}`
 }
 
+// Two docs in one file may share an identity; a Map would keep only the last and
+// hide a change in the earlier one. Repeats get an occurrence suffix so each
+// is compared against the same-numbered doc on the other side.
+const _keyedDocs = (docs: ReadonlyArray<unknown>): ReadonlyArray<readonly [string, unknown]> => {
+  const seen = new Map<string, number>()
+  return docs.map((v, i) => {
+    const base = _docKey(v, i)
+    const n = (seen.get(base) ?? 0) + 1
+    seen.set(base, n)
+    return [n === 1 ? base : `${base}#${n}`, v] as const
+  })
+}
+
 export type DocDiff =
   | { readonly _tag: "Same"; readonly key: string }
   | { readonly _tag: "MissingLeft"; readonly key: string; readonly right: unknown }
@@ -283,8 +296,8 @@ const _diffOne = (
 ): FileDiff => {
   // Docs are compared raw under redaction semantics; `redact` only runs once the file is
   // known to differ, so a Same file never clones its documents.
-  const lDocs = parseYamlAll(leftText).map((v, i) => [_docKey(v, i), v] as const)
-  const rDocs = parseYamlAll(rightText).map((v, i) => [_docKey(v, i), v] as const)
+  const lDocs = _keyedDocs(parseYamlAll(leftText))
+  const rDocs = _keyedDocs(parseYamlAll(rightText))
   const equal = (a: unknown, b: unknown): boolean => _redactedEqual(a, b, null, options)
   const clean = (value: unknown): unknown => redact({ value, options })
 

@@ -25,6 +25,14 @@ export class HelmVersionTooLow extends Data.TaggedError("HelmVersionTooLow")<{
   }
 }
 
+export class HelmMinVersionInvalid extends Data.TaggedError("HelmMinVersionInvalid")<{
+  readonly minVersion: string
+}> {
+  get message(): string {
+    return `Invalid helm minVersion '${this.minVersion}': expected major.minor or major.minor.patch`
+  }
+}
+
 // Which helm step failed. Process failures carry their own exit code and
 // stderr tail; the phase tells the reader whether it was the local `helm
 // version` preflight, the network-bound pull, the template run, or parsing
@@ -78,6 +86,7 @@ export type AnyRenderError =
   | EmbedYamlReadError
   | BoundaryDecodeError
   | HelmVersionTooLow
+  | HelmMinVersionInvalid
   | HelmRenderError
   | HelmDigestMismatch
   | CrdExtractError

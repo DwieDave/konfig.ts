@@ -13,7 +13,7 @@ import {
 } from "effect/process/ChildProcessSpawner"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
-import { HelmRenderError } from "./RenderError"
+import { HelmMinVersionInvalid, HelmRenderError, HelmVersionTooLow } from "./RenderError"
 import { ProcessError } from "./subprocess"
 
 interface FakeProc {
@@ -124,4 +124,45 @@ describe("Helm.release helm-version preflight", () => {
         expect(files).toEqual([])
       }).pipe(Effect.provide(NodeServices.layer))
   )
+})
+
+const _errorOf = (exit: Exit.Exit<unknown, unknown>): unknown =>
+  Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined
+
+describe("Helm.release minVersion semantics", () => {
+  it.effect("accepts major.minor as major.minor.0", () =>
+    Effect.gen(function*() {
+      const exit = yield* _run("3.16", { stdout: "v3.10.0\n" })
+      expect(_errorOf(exit)).toBeInstanceOf(HelmVersionTooLow)
+    }))
+
+  it.effect("fails with a typed error for an unparseable minVersion", () =>
+    Effect.gen(function*() {
+      const exit = yield* _run("latest", { stdout: "v3.99.0\n" })
+      expect(_errorOf(exit)).toBeInstanceOf(HelmMinVersionInvalid)
+    }))
+
+  it.effect("a prerelease does not satisfy the matching release floor", () =>
+    Effect.gen(function*() {
+      const exit = yield* _run("3.16.0", { stdout: "v3.16.0-rc.1+gabc\n" })
+      expect(_errorOf(exit)).toBeInstanceOf(HelmVersionTooLow)
+    }))
+
+  it.effect("retries the version probe after a failed probe instead of caching the failure", () =>
+    Effect.gen(function*() {
+      let calls = 0
+      const spawner = Layer.succeed(
+        ChildProcessSpawner,
+        makeSpawner((_command: Command) => {
+          calls += 1
+          return Effect.succeed(_handle(calls === 1 ? { stderr: "boom", exitCode: 1 } : { stdout: "v3.10.0\n" }))
+        })
+      )
+      const run = _release("3.16.0")
+        .render(RenderContext.make("test"))
+        .pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, spawner)), Effect.scoped, Effect.exit)
+      expect(_errorOf(yield* run)).toBeInstanceOf(HelmRenderError)
+      expect(_errorOf(yield* run)).toBeInstanceOf(HelmVersionTooLow)
+      expect(calls).toBe(2)
+    }))
 })

@@ -22,10 +22,11 @@ Options:
 | `version` | Exact chart version. Required; there is no "latest". |
 | `digest` | `sha256:<hex>` (the prefix is optional) of the chart tarball. Required. |
 | `releaseName?` | Name given to `helm template`; defaults to `chart`. |
-| `namespace?` | Passed as `--namespace`, and stamped onto every document that arrived without a `metadata.namespace` (missing or empty). Kinds on the built-in cluster-scoped list (`Namespace`, `ClusterRole`, `ClusterRoleBinding`, `CustomResourceDefinition`, `PersistentVolume`, `StorageClass`, `IngressClass`, webhook configurations, and others) are left alone. |
+| `namespace?` | Passed as `--namespace`, and stamped onto every document that arrived without a `metadata.namespace` (missing or empty). Kinds on the built-in cluster-scoped list (`Namespace`, `ClusterRole`, `ClusterRoleBinding`, `CustomResourceDefinition`, `PersistentVolume`, `StorageClass`, `IngressClass`, webhook configurations, and others) are left alone, as is any custom kind whose `CustomResourceDefinition` with `spec.scope: Cluster` appears in the same chart output. |
+| `clusterScopedKinds?` | Extra kinds to treat as cluster-scoped, for CRDs the chart does not ship. |
 | `values` | Plain object written to a temporary `values.yaml`. |
 | `extraOpts?` | Extra `helm template` arguments, for example `["--include-crds"]`. |
-| `minVersion?` | When set, runs `helm version --short` first and fails with `HelmVersionTooLow { required, found }` if the binary is older or cannot be run (`found: "not found"`). |
+| `minVersion?` | When set, runs `helm version --short` first and fails with `HelmVersionTooLow { required, found }` if the binary is older or cannot be run (`found: "not found"`). Accepts `major.minor` (read as `major.minor.0`) or `major.minor.patch`; anything else fails with `HelmMinVersionInvalid { minVersion }`. Prerelease builds follow semver, so `v3.16.0-rc.1` does not satisfy `3.16.0`. |
 
 The result is a manifest producing one raw YAML document per document in the template output; each records its origin as `helm:<chart>@<version>`. The output is split with a real YAML multi-document parser, so a `---` inside a block scalar does not split a document in two; each document is re-stringified with a leading `---`. When the CLI writes files, each document is parsed again, serialised through the stable YAML writer, and named `<Kind>-<name>.yaml` like every other manifest. Documents without a string `kind` and `metadata.name` are dropped.
 
@@ -37,7 +38,7 @@ On a cache miss, `helm pull --repo <repo> <chart> --version <version>` runs into
 
 On a cache hit the file is hashed **again** before use, so a tampered cache directory cannot slip a different chart into your manifests. A mismatch in either path removes the cached file and fails with `HelmDigestMismatch { chart, version, expected, actual }`, whose message reads `Helm chart <chart>@<version> digest mismatch: expected sha256:..., got sha256:...`.
 
-Every `Helm.release` failure except `HelmVersionTooLow` is reported as `HelmRenderError { chart, version, cause }`. A digest mismatch, a failed pull, or a failed template therefore arrives as the `cause` of a `HelmRenderError`. Both tags are members of the `AnyRenderError` union.
+Every `Helm.release` failure except `HelmVersionTooLow` and `HelmMinVersionInvalid` is reported as `HelmRenderError { chart, version, cause }`. A digest mismatch, a failed pull, or a failed template therefore arrives as the `cause` of a `HelmRenderError`. Both tags are members of the `AnyRenderError` union.
 
 <Aside type="tip" title="Finding the digest">
 Run `helm pull --repo <repo> <chart> --version <version>` once and `shasum -a 256` the tarball, or set `digest` to a placeholder, run `konfig build`, and copy the `actual` value from the `HelmDigestMismatch` error into your module.

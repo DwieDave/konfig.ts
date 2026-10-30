@@ -16,19 +16,32 @@ import {
   KONFIG_HELM_TIMEOUT_ENV
 } from "./konfigDefaults"
 import { make, type Manifest, type ParsedDoc } from "./Manifest"
-import { HelmDigestMismatch, HelmRenderError, type HelmRenderPhase, HelmVersionTooLow } from "./RenderError"
+import {
+  HelmDigestMismatch,
+  HelmMinVersionInvalid,
+  HelmRenderError,
+  type HelmRenderPhase,
+  HelmVersionTooLow
+} from "./RenderError"
+import { compareSemver, parseSemver } from "./semver"
 import { type ProcessFailure, runProcessExit, runProcessString } from "./subprocess"
 
 const CLUSTER_SCOPED_KINDS: ReadonlySet<string> = new Set([
   "APIService",
+  "CertificateSigningRequest",
   "ClusterRole",
   "ClusterRoleBinding",
+  "ClusterTrustBundle",
   "ComponentStatus",
   "CSIDriver",
   "CSINode",
   "CustomResourceDefinition",
+  "DeviceClass",
   "FlowSchema",
   "IngressClass",
+  "IPAddress",
+  "MutatingAdmissionPolicy",
+  "MutatingAdmissionPolicyBinding",
   "MutatingWebhookConfiguration",
   "Namespace",
   "Node",
@@ -36,12 +49,22 @@ const CLUSTER_SCOPED_KINDS: ReadonlySet<string> = new Set([
   "PodSecurityPolicy",
   "PriorityClass",
   "PriorityLevelConfiguration",
+  "ResourceSlice",
   "RuntimeClass",
+  "SelfSubjectAccessReview",
+  "SelfSubjectReview",
+  "SelfSubjectRulesReview",
+  "ServiceCIDR",
   "StorageClass",
+  "StorageVersion",
+  "StorageVersionMigration",
+  "SubjectAccessReview",
+  "TokenReview",
   "ValidatingAdmissionPolicy",
   "ValidatingAdmissionPolicyBinding",
   "ValidatingWebhookConfiguration",
-  "VolumeAttachment"
+  "VolumeAttachment",
+  "VolumeAttributesClass"
 ])
 
 export interface HelmReleaseOptions {
@@ -55,6 +78,8 @@ export interface HelmReleaseOptions {
   readonly extraOpts?: readonly string[]
   // When set, runs a `helm version --short` preflight and fails HelmVersionTooLow if older.
   readonly minVersion?: string
+  // Custom-resource kinds to treat as cluster-scoped when their CRD is not part of the chart output.
+  readonly clusterScopedKinds?: ReadonlyArray<string>
 }
 
 interface _ParseHelmOutputInput {
@@ -62,7 +87,36 @@ interface _ParseHelmOutputInput {
   readonly chart: string
   readonly version: string
   readonly namespace: string | undefined
+  readonly clusterScopedKinds?: ReadonlyArray<string>
 }
+
+const _crdClusterKind = (doc: unknown): ReadonlyArray<string> => {
+  if (!isRecord(doc) || doc["kind"] !== "CustomResourceDefinition" || !isRecord(doc["spec"])) return []
+  const kind = isRecord(doc["spec"]["names"]) ? doc["spec"]["names"]["kind"] : undefined
+  return doc["spec"]["scope"] === "Cluster" && typeof kind === "string" ? [kind] : []
+}
+
+interface _ScopedKindsInput {
+  readonly docs: ReadonlyArray<unknown>
+  readonly extra: ReadonlyArray<string>
+}
+const _scopedKinds = ({ docs, extra }: _ScopedKindsInput): ReadonlySet<string> =>
+  new Set([...CLUSTER_SCOPED_KINDS, ...extra, ...docs.flatMap(_crdClusterKind)])
+
+interface _StampInput {
+  readonly doc: unknown
+  readonly namespace: string
+  readonly clusterKinds: ReadonlySet<string>
+}
+const _stampNamespace = ({ doc, namespace, clusterKinds }: _StampInput): unknown => {
+  if (!isRecord(doc)) return doc
+  const kind = doc["kind"]
+  const metadata = isRecord(doc["metadata"]) ? doc["metadata"] : undefined
+  const ns = metadata?.["namespace"]
+  const needsNamespace = typeof kind === "string" && !clusterKinds.has(kind) && (ns === undefined || ns === "")
+  return needsNamespace ? { ...doc, metadata: { ...metadata, namespace } } : doc
+}
+
 // Uses parseYamlAll (not a naive /^---$/m split) so a `---` inside a block scalar can't
 // spuriously split one manifest into two. Docs stay parsed (ParsedDoc, not
 // RawYaml): re-stringifying here only for the CLI to parse and serialize again
@@ -71,46 +125,14 @@ const _parseHelmOutput = (input: _ParseHelmOutputInput): Effect.Effect<ParsedDoc
   Effect.sync(() => {
     const { output, chart, version, namespace } = input
     const origin = `helm:${chart}@${version}`
-    const results: ParsedDoc[] = []
-    for (const parsed of parseYamlAll(output)) {
-      let value: unknown = parsed
-      if (namespace !== undefined && isRecord(parsed)) {
-        const kind = parsed["kind"]
-        const metadata = isRecord(parsed["metadata"]) ? parsed["metadata"] : undefined
-        const ns = metadata?.["namespace"]
-        if (
-          typeof kind === "string" &&
-          !CLUSTER_SCOPED_KINDS.has(kind) &&
-          (ns === undefined || ns === "")
-        ) {
-          value = { ...parsed, metadata: { ...metadata, namespace } }
-        }
-      }
-      results.push({ _tag: "ParsedDoc", value, origin })
-    }
-    return results
+    const docs = parseYamlAll(output)
+    const clusterKinds = _scopedKinds({ docs, extra: input.clusterScopedKinds ?? [] })
+    return docs.map((doc): ParsedDoc => ({
+      _tag: "ParsedDoc",
+      value: namespace === undefined ? doc : _stampNamespace({ doc, namespace, clusterKinds }),
+      origin
+    }))
   })
-
-const _HELM_VERSION_RE = /v?(\d+)\.(\d+)\.(\d+)/
-
-const _parseVersionTriple = (text: string): readonly [number, number, number] | null => {
-  const m = _HELM_VERSION_RE.exec(text.trim())
-  if (m === null) return null
-  return [Number(m[1]), Number(m[2]), Number(m[3])]
-}
-
-const _isBelow = (
-  found: readonly [number, number, number],
-  min: readonly [number, number, number]
-): boolean => {
-  for (let i = 0; i < 3; i++) {
-    const f = found[i] ?? 0
-    const m = min[i] ?? 0
-    if (f < m) return true
-    if (f > m) return false
-  }
-  return false
-}
 
 // How long a network-bound helm call (`pull`, `template`) may run before konfig
 // gives up with ProcessTimeout. Without a bound, a `helm pull` that prompts for
@@ -140,33 +162,47 @@ const _helmVersionProbe: _HelmVersionProbe = Effect.gen(function*() {
 // `helm version --short` is spawned once per process, not once per release:
 // the binary doesn't change under a running render. Keyed by the spawner
 // service (not truly module-global) so a test that swaps in a different mock
-// spawner per case isn't served the previous case's answer. `Effect.cached` is
-// a pure `sync` constructor, so building it under `runSync` inside the map
-// check is race-free; concurrent first callers share the one in-flight probe.
-const _helmVersionBySpawner = new WeakMap<ChildProcessSpawner["Service"], _HelmVersionProbe>()
+// spawner per case isn't served the previous case's answer. Only a successful
+// probe is remembered; a failure (timeout, transient spawn error) is retried by
+// the next caller instead of being replayed for the whole process.
+interface _VersionSlot {
+  value: string | undefined
+}
+const _helmVersionBySpawner = new WeakMap<ChildProcessSpawner["Service"], _VersionSlot>()
+
+const _slotFor = (spawner: ChildProcessSpawner["Service"]): _VersionSlot => {
+  const existing = _helmVersionBySpawner.get(spawner)
+  if (existing !== undefined) return existing
+  const slot: _VersionSlot = { value: undefined }
+  _helmVersionBySpawner.set(spawner, slot)
+  return slot
+}
 
 const _memoizedHelmVersion: _HelmVersionProbe = Effect.gen(function*() {
-  const spawner = yield* ChildProcessSpawner
-  let probe = _helmVersionBySpawner.get(spawner)
-  if (probe === undefined) {
-    // oxlint-disable-next-line effecttsgo/run-effect-inside-effect -- must not yield between the map check and set
-    probe = Effect.runSync(Effect.cached(_helmVersionProbe))
-    _helmVersionBySpawner.set(spawner, probe)
-  }
-  return yield* probe
+  const slot = _slotFor(yield* ChildProcessSpawner)
+  if (slot.value !== undefined) return slot.value
+  const stdout = yield* _helmVersionProbe
+  slot.value = stdout
+  return stdout
 })
 
 // A failed `helm version` (not on PATH, permission denied, timeout) surfaces as
 // its ProcessError/ProcessTimeout; HelmVersionTooLow is reserved for a version
-// that was actually read and is too old (or unparseable).
+// that was actually read and is too old (or unparseable). A minVersion that is
+// not major.minor[.patch] fails before helm is ever spawned.
 const _assertHelmMinVersion = (
   minVersion: string
-): Effect.Effect<void, HelmVersionTooLow | ProcessFailure | Config.ConfigError, ChildProcessSpawner> =>
+): Effect.Effect<
+  void,
+  HelmVersionTooLow | HelmMinVersionInvalid | ProcessFailure | Config.ConfigError,
+  ChildProcessSpawner
+> =>
   Effect.gen(function*() {
+    const min = parseSemver(minVersion)
+    if (min === null) return yield* new HelmMinVersionInvalid({ minVersion })
     const stdout = yield* _memoizedHelmVersion
-    const found = _parseVersionTriple(stdout)
-    const min = _parseVersionTriple(minVersion)
-    if (found === null || (min !== null && _isBelow(found, min))) {
+    const found = parseSemver(stdout)
+    if (found === null || compareSemver({ a: found, b: min }) < 0) {
       return yield* new HelmVersionTooLow({ required: minVersion, found: stdout.trim() })
     }
   })
@@ -187,11 +223,14 @@ export interface CacheFileNameInput {
 // cache filenames readable.
 export const cacheFileName = (input: CacheFileNameInput): string => {
   if (input.digest === undefined) return `${input.chart}-${input.version}.tgz`
-  const digestSuffix = input.digest.replace(/^sha256:/, "").slice(0, 12)
+  const digestSuffix = _normalizeDigest(input.digest).slice("sha256:".length, "sha256:".length + 12)
   return `${input.chart}-${input.version}-${digestSuffix}.tgz`
 }
 
-const _normalizeDigest = (digest: string): string => digest.startsWith("sha256:") ? digest : `sha256:${digest}`
+export const _normalizeDigest = (digest: string): string => {
+  const lower = digest.trim().toLowerCase()
+  return lower.startsWith("sha256:") ? lower : `sha256:${lower}`
+}
 
 // Streamed through node:crypto rather than readFile + crypto.subtle so a
 // large chart tarball never has to sit in memory whole.
@@ -350,7 +389,7 @@ const _pullAndVerify = (input: _EnsureCachedTarballInput): _PullOnce =>
     yield* verifyChartDigest({ chart: opts.chart, version: opts.version, digest: opts.digest, cachedTgz })
   })
 
-type _ReleaseError = HelmRenderError | HelmVersionTooLow | HelmDigestMismatch
+type _ReleaseError = HelmRenderError | HelmVersionTooLow | HelmMinVersionInvalid | HelmDigestMismatch
 
 // HelmVersionTooLow and HelmDigestMismatch already name the chart and carry a
 // precise message, so they pass through; everything else is wrapped with the
@@ -361,7 +400,8 @@ const _inPhase =
     Effect.mapError(
       self,
       (cause): _ReleaseError =>
-        cause instanceof HelmVersionTooLow || cause instanceof HelmDigestMismatch || cause instanceof HelmRenderError
+        cause instanceof HelmVersionTooLow || cause instanceof HelmMinVersionInvalid ||
+          cause instanceof HelmDigestMismatch || cause instanceof HelmRenderError
           ? cause
           : new HelmRenderError({ chart: opts.chart, version: opts.version, phase, cause })
     )
@@ -427,7 +467,8 @@ export const release = (opts: HelmReleaseOptions): Manifest<ParsedDoc[]> => {
         output: stdout,
         chart: opts.chart,
         version: opts.version,
-        namespace: opts.namespace
+        namespace: opts.namespace,
+        clusterScopedKinds: opts.clusterScopedKinds
       }).pipe(_inPhase(opts, "parse"))
     }).pipe(Effect.scoped)
   )

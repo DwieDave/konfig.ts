@@ -43,12 +43,14 @@ export const make = <A>(run: MakeRun<A>): Manifest<A> => ({
   }
 })
 
+export const RENDER_CONCURRENCY = 4
+
 export interface CombineInput<A1, A2> {
   readonly a: Manifest<A1>
   readonly b: Manifest<A2>
 }
 export const combine = <A1, A2>(input: CombineInput<A1, A2>): Manifest<readonly [A1, A2]> =>
-  make((ctx) => Effect.all([input.a.render(ctx), input.b.render(ctx)], { concurrency: "unbounded" }))
+  make((ctx) => Effect.all([input.a.render(ctx), input.b.render(ctx)], { concurrency: RENDER_CONCURRENCY }))
 
 // `concat` tells apart a Manifest<A> from a Manifest<A[]> at render time with
 // `Array.isArray`, so A must not itself be an array type — Manifest<string[]>
@@ -61,7 +63,7 @@ export const concat = <A>(
   ...manifests: (IsArray<A> extends true ? never : Manifest<A | A[]>)[]
 ): Manifest<A[]> =>
   make((ctx) =>
-    Effect.forEach(manifests, (m) => m.render(ctx), { concurrency: "unbounded" }).pipe(
+    Effect.forEach(manifests, (m) => m.render(ctx), { concurrency: RENDER_CONCURRENCY }).pipe(
       Effect.map((results) => results.flatMap((r) => (Array.isArray(r) ? r : [r])))
     )
   )

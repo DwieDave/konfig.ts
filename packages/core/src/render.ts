@@ -43,6 +43,8 @@ export const render = <E, RIn>(
   runMain(_compose(program, options))
 }
 
+const _isPresent = (doc: unknown): boolean => doc !== null && doc !== undefined
+
 const _flatten = (rendered: unknown): ReadonlyArray<unknown> => Array.isArray(rendered) ? rendered : [rendered]
 
 // Helm.release yields ParsedDoc wrappers and Manifest.embedYaml a RawYaml one;
@@ -70,7 +72,7 @@ export const renderAllYamlEffect = (
     const docs: Array<string> = []
     for (const m of input.manifests) {
       const rendered = yield* m.render(ctx)
-      for (const doc of _flatten(rendered).flatMap(_unwrapDocs)) {
+      for (const doc of _flatten(rendered).flatMap(_unwrapDocs).filter(_isPresent)) {
         docs.push(Yaml.serialize({ value: doc }))
       }
     }

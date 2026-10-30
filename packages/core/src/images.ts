@@ -18,22 +18,25 @@ export class ImagesEnvMissing extends Data.TaggedError("ImagesEnvMissing")<{
   readonly env: string
 }> {}
 
+const _own = <V>(record: Readonly<Record<string, V>>, key: string): V | undefined =>
+  Object.hasOwn(record, key) ? record[key] : undefined
+
 export interface LookupEnvInput {
   readonly cfg: ImagesConfig
   readonly env: string
 }
-export const lookupEnv = (input: LookupEnvInput): EnvImages | undefined => input.cfg.envs[input.env]
+export const lookupEnv = (input: LookupEnvInput): EnvImages | undefined => _own(input.cfg.envs, input.env)
 
 export const lookupEnvEffect = (
   input: LookupEnvInput
 ): Effect.Effect<EnvImages, ImagesEnvMissing> => {
-  const e = input.cfg.envs[input.env]
+  const e = _own(input.cfg.envs, input.env)
   return e === undefined ? Effect.fail(new ImagesEnvMissing({ env: input.env })) : Effect.succeed(e)
 }
 
 /** @throws {ImagesEnvMissing} Use `lookupEnvEffect` for a typed error channel instead. */
 export const imagesFor = (input: LookupEnvInput): EnvImages => {
-  const e = input.cfg.envs[input.env]
+  const e = _own(input.cfg.envs, input.env)
   if (e === undefined) {
     throw new ImagesEnvMissing({ env: input.env })
   }
@@ -52,7 +55,7 @@ export interface RequireImageInput {
 }
 /** @throws {ImagesAppMissing} Use `requireImageEffect` for a typed error channel instead. */
 export const requireImage = (input: RequireImageInput): string => {
-  const v = input.e[input.app]
+  const v = _own(input.e, input.app)
   if (v === undefined) {
     throw new ImagesAppMissing({ env: input.envName, app: input.app })
   }
@@ -62,7 +65,7 @@ export const requireImage = (input: RequireImageInput): string => {
 export const requireImageEffect = (
   input: RequireImageInput
 ): Effect.Effect<string, ImagesAppMissing> => {
-  const v = input.e[input.app]
+  const v = _own(input.e, input.app)
   return v === undefined
     ? Effect.fail(new ImagesAppMissing({ env: input.envName, app: input.app }))
     : Effect.succeed(v)

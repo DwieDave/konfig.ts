@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest"
 import { Cause, ConfigProvider, Effect, Exit } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import * as fc from "fast-check"
 import * as crypto from "node:crypto"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
@@ -98,4 +99,31 @@ describe("Helm.release digest verification", () => {
     expect(err.message).toContain("expected sha256:aaa")
     expect(err.message).toContain("got sha256:bbb")
   })
+})
+
+describe("digest case normalization", () => {
+  it("normalizes to lowercase sha256: form and is idempotent", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[0-9a-fA-F]{0,64}$/), fc.boolean(), (hex, prefixed) => {
+        const raw = prefixed ? `SHA256:${hex}` : hex
+        const once = Helm._normalizeDigest(raw)
+        expect(once).toBe(`sha256:${hex.toLowerCase()}`)
+        expect(Helm._normalizeDigest(once)).toBe(once)
+      })
+    )
+  })
+
+  it.effect("an uppercase digest verifies and keeps the cached tarball", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const fixture = yield* _setupFixture
+      const upper = fixture.digest.toUpperCase().replace("SHA256:", "sha256:")
+      yield* Helm.verifyChartDigest({
+        chart: fixture.chart,
+        version: fixture.version,
+        digest: upper,
+        cachedTgz: fixture.cachedTgz
+      })
+      expect(yield* fs.exists(fixture.cachedTgz)).toBe(true)
+    }).pipe(Effect.provide(NodeServices.layer)))
 })

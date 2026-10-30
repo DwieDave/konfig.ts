@@ -1,11 +1,12 @@
 import { Effect, Exit } from "effect"
+import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import {
   decodeImagesEffect,
   decodeImagesSync,
-  imagesFor,
   ImagesAppMissing,
   ImagesEnvMissing,
+  imagesFor,
   lookupEnv,
   lookupEnvEffect,
   requireImage,
@@ -126,5 +127,37 @@ describe("requireImage / requireImageEffect", () => {
     expect(flipped).toBeInstanceOf(ImagesAppMissing)
     expect(flipped.app).toBe("worker")
     expect(flipped.env).toBe("prod")
+  })
+})
+
+describe("images — own keys only", () => {
+  const protoNames = Object.getOwnPropertyNames(Object.prototype)
+  const anyKey = fc.oneof(fc.constantFrom(...protoNames), fc.string())
+  const cfg = { envs: {} }
+
+  it("lookupEnv and imagesFor never resolve inherited keys", () => {
+    fc.assert(
+      fc.property(anyKey, (env) => {
+        expect(lookupEnv({ cfg, env })).toBeUndefined()
+        expect(() => imagesFor({ cfg, env })).toThrow()
+      })
+    )
+  })
+
+  it("requireImage never resolves inherited keys", () => {
+    fc.assert(
+      fc.property(anyKey, (app) => {
+        expect(() => requireImage({ e: {}, app, envName: "x" })).toThrow()
+      })
+    )
+  })
+
+  it("still resolves own keys", () => {
+    fc.assert(
+      fc.property(anyKey, fc.string(), (app, image) => {
+        const e = Object.fromEntries([[app, image]])
+        expect(requireImage({ e, app, envName: "x" })).toBe(image)
+      })
+    )
   })
 })

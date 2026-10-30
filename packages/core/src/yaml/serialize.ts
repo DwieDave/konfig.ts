@@ -44,7 +44,18 @@ const _normalize = (input: _NormalizeInput): unknown => {
   if (isRecord(value)) {
     return _reorderObject({ obj: value, depth, parentKey })
   }
-  return value
+  return typeof value === "string" ? _safeString(value) : value
+}
+
+// The yaml block-scalar writer drops a whitespace-only line, so such strings
+// are emitted double-quoted where every character survives.
+const _BLANK_LINE = /(^|\n)[ \t]+(\n|$)/
+const _safeString = (value: string): string | YAML.Scalar => _BLANK_LINE.test(value) ? _quoted(value) : value
+
+const _quoted = (value: string): YAML.Scalar => {
+  const node = new YAML.Scalar(value)
+  node.type = "QUOTE_DOUBLE"
+  return node
 }
 
 export interface SerializeInput {
@@ -65,8 +76,19 @@ export const serialize = (input: SerializeInput): string => {
     // like "no"/"yes"/"on"/"off" to be quoted so they aren't coerced to bools.
     version: "1.1"
   })
-  const lf = raw.replace(/\r\n/g, "\n").replace(/\s+$/g, "")
-  return (input.trailingNewline ?? true) ? `${lf}\n` : lf
+  return _finish({ text: raw.replace(/\r\n/g, "\n"), trailingNewline: input.trailingNewline ?? true })
+}
+
+interface _FinishInput {
+  readonly text: string
+  readonly trailingNewline: boolean
+}
+// A keep-chomped block scalar (|+) ends in content newlines, so only the single
+// document terminator may ever be removed; stripping more corrupts the value.
+const _finish = ({ text, trailingNewline }: _FinishInput): string => {
+  const terminated = text.endsWith("\n") ? text : `${text}\n`
+  if (trailingNewline) return terminated
+  return terminated.endsWith("\n\n") ? terminated : terminated.slice(0, -1)
 }
 
 // Caller invariant: kind and metadata.name must be non-empty strings (validate/decode first).

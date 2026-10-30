@@ -106,3 +106,26 @@ layer(NodeServices.layer)("Manifest combinators", (it) => {
       }
     }))
 })
+
+layer(NodeServices.layer)("Manifest concurrency bound", (it) => {
+  const ctx = RenderContext.make("test")
+
+  it.effect("concat never runs more than RENDER_CONCURRENCY manifests at once", () =>
+    Effect.gen(function*() {
+      const state = { active: 0, peak: 0 }
+      const tracked = Manifest.make<number>(() =>
+        Effect.gen(function*() {
+          state.active += 1
+          state.peak = Math.max(state.peak, state.active)
+          yield* Effect.yieldNow
+          yield* Effect.yieldNow
+          state.active -= 1
+          return 1
+        })
+      )
+      yield* Manifest.concat<number>(...Array.from({ length: 12 }, () => tracked)).render(ctx)
+      expect(state.peak).toBeGreaterThan(0)
+      expect(state.peak).toBeLessThanOrEqual(Manifest.RENDER_CONCURRENCY)
+      expect(Manifest.RENDER_CONCURRENCY).toBe(4)
+    }))
+})

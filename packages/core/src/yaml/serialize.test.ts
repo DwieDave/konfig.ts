@@ -265,3 +265,31 @@ describe("filenameFor (FR-2.5)", () => {
     expect(() => filenameFor({ kind: "Pod", metadata: {} })).toThrow()
   })
 })
+
+const _wsString = fc.string({ unit: fc.constantFrom("a", "b", " ", "\n", "\t", ":", "-"), maxLength: 12 })
+const _jsonLike: fc.Arbitrary<unknown> = fc.letrec((tie) => ({
+  leaf: fc.oneof(_wsString, fc.integer(), fc.boolean()),
+  node: fc.oneof(
+    { depthSize: "small" },
+    tie("leaf"),
+    fc.array(tie("node"), { maxLength: 3 }),
+    fc.dictionary(fc.constantFrom("k1", "k2", "k3"), tie("node"), { maxKeys: 3 })
+  )
+})).node
+
+describe("serialize — round trip", () => {
+  it("parse(serialize(x)) deep-equals x, including trailing newlines and spaces", () => {
+    fc.assert(
+      fc.property(_jsonLike, (value) => {
+        const out = serialize({ value: { root: value } })
+        expect(YAML.parse(out, { version: "1.1" })).toEqual({ root: value })
+      }),
+      { numRuns: 500 }
+    )
+  })
+
+  it("keeps a value ending in two newlines intact", () => {
+    const out = serialize({ value: { data: "x\n\n" } })
+    expect(YAML.parse(out)).toEqual({ data: "x\n\n" })
+  })
+})

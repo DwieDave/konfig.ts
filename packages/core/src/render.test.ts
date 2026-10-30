@@ -2,7 +2,8 @@ import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Context, Effect, Layer } from "effect"
 import { describe, expect } from "vitest"
-import { _buildLayers, _compose, _resolveEnv } from "./render"
+import * as Manifest from "./Manifest"
+import { _buildLayers, _compose, _resolveEnv, renderAllYaml } from "./render"
 import { RenderContext } from "./RenderContext"
 
 describe("render — env resolution", () => {
@@ -73,5 +74,14 @@ describe("render — _compose wiring", () => {
         expect(seenEnv).toBe("prod")
       })
     )
+  })
+})
+
+describe("renderAllYaml — skipped manifests", () => {
+  it("skips Manifest.whenever with a false condition instead of crashing", async () => {
+    const skipped = Manifest.whenever({ cond: false, thunk: () => Manifest.make(() => ({ kind: "A" })) })
+    const kept = Manifest.make(() => ({ kind: "B" }))
+    const out = await renderAllYaml({ manifests: [skipped, kept] })
+    expect(out).toBe("kind: B\n")
   })
 })
