@@ -28,6 +28,7 @@
     ".specs",
     "website",
     "effect",
+    "tools/oxlint/anti-slop",
     "apps/website/.astro",
     "apps/website/dist"
   ],

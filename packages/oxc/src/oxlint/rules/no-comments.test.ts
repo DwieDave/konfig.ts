@@ -36,12 +36,15 @@ describe("no-comments", () => {
     expect(harness.reports).toHaveLength(0)
   })
 
-  it("exempts directive comments and konfig:WHY comments", () => {
+  it("exempts directive, konfig:WHY and SAFETY comments", () => {
     const comments: Comment[] = [
       { type: "Line", value: " eslint-disable-next-line" },
       { type: "Line", value: " konfig: WHY " + "x".repeat(200) },
+      { type: "Line", value: " SAFETY: " + "x".repeat(200) },
+      { type: "Block", value: " SAFETY: block justification " },
       { type: "Block", value: " @ts-expect-error some non-jsdoc reason" }
     ]
+
     const harness = createHarness({ comments })
     runVisitor({ rule: noComments, event: "Program", node: program, harness: harness })
     expect(harness.reports).toHaveLength(0)
