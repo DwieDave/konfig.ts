@@ -121,6 +121,24 @@ describe("Sops.backend (case B: konfig source → SopsSecret CR)", () => {
       return sink.calls[0]?.args ?? []
     }).pipe(Effect.provide(NodeServices.layer))
 
+  it.effect("an invalid encryptedRegex fails before sops is spawned", () =>
+    Effect.gen(function*() {
+      const sink: CallSink = { calls: [] }
+
+      const bound = Secret.bind({
+        secret: dbCreds,
+        backend: Sops.backend({ recipients: { age: ["age1stub"] }, encryptedRegex: "(" }),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+
+      const exit = yield* Effect.exit(
+        bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink, () => SOPS_ENCRYPT_OUTPUT)))
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(sink.calls).toHaveLength(0)
+    }).pipe(Effect.provide(NodeServices.layer)))
+
   it.effect("passes the default --encrypted-regex limiting encryption to secret data", () =>
     Effect.gen(function*() {
       const args = yield* _encryptArgs()

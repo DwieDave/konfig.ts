@@ -1,18 +1,21 @@
 import { NodeServices } from "@effect/platform-node"
 import { Manifest, RenderError } from "@konfig.ts/core"
+import { stubSpawner } from "@konfig.ts/core/testing"
 import { SecretSource, SecretSourceError } from "@konfig.ts/env"
 import { Effect, Redacted } from "effect"
 import * as fc from "fast-check"
 import { expect, it } from "vitest"
 import {
   type BackendEmitInput,
-  backendLabel,
+  decodeYamlOutput,
   encryptVia,
+  encryptWithCli,
   plainSecret,
   resolvePlaintext,
   SecretBackend,
   secretMeta
 } from "./backend"
+import * as K8s from "./index"
 
 const word = fc.stringMatching(/^[a-z]{1,6}$/)
 
@@ -64,10 +67,60 @@ it("SecretBackend.make carries tag, requiresSource and emit", () => {
   }))
 })
 
-it("backendLabel and plainSecret derive from the emit base", () => {
+it("SecretBackend.make computes the label from tag and base for emit", () => {
+  fc.assert(fc.property(word, word, word, (tag, name, namespace) => {
+    const seen: string[] = []
+    const base = { ...baseOf(["k"], Effect.succeed({})), name, namespace }
+
+    SecretBackend.make({
+      tag,
+      requiresSource: true,
+      emit: (input) => {
+        seen.push(input.label)
+
+        return Manifest.make(() => Effect.succeed({}))
+      }
+    }).emit(base)
+    expect(seen).toEqual([`${tag}(${namespace}/${name})`])
+  }))
+})
+
+it("resolvePlaintext stays internal to the k8s package", () => {
+  expect("resolvePlaintext" in K8s).toBe(false)
+})
+
+it("encryptWithCli fails RenderError with label and bin on non-zero exit", async () => {
+  const err = await Effect.runPromise(
+    Effect.flip(encryptWithCli({ bin: "tool", args: ["-x"], stdin: "in", label: "L(ns/n)" })).pipe(
+      Effect.provide(stubSpawner({ respond: () => ({ exitCode: 2, stderr: "boom" }) }))
+    )
+  )
+
+  expect(err).toBeInstanceOf(RenderError)
+  expect(err.message).toBe("L(ns/n): tool failed")
+  expect(err.cause).toBeDefined()
+})
+
+it("decodeYamlOutput reports invalid YAML with label", async () => {
+  const err = await Effect.runPromise(
+    Effect.flip(
+      decodeYamlOutput<string, never, never>({
+        text: "a: [",
+        label: "LBL",
+        what: "tool",
+        decode: () => Effect.succeed("x")
+      })
+    )
+  )
+
+  expect(err).toBeInstanceOf(RenderError)
+  expect(err.message).toContain("LBL")
+  expect(err.message).toContain("not valid YAML")
+})
+
+it("plainSecret derives from the emit base", () => {
   fc.assert(fc.property(word, word, word, (tag, name, namespace) => {
     const base: BackendEmitInput<string, string, true> = { ...baseOf(["k"], Effect.succeed({})), name, namespace }
-    expect(backendLabel({ tag, base })).toBe(`${tag}(${namespace}/${name})`)
     expect(secretMeta(base)).toMatchObject({ name, namespace })
     expect(plainSecret({ base, stringData: { k: "v" } })).toMatchObject({
       kind: "Secret",

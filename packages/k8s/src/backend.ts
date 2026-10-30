@@ -1,13 +1,14 @@
-import { type Manifest, RenderError, Yaml } from "@konfig.ts/core"
+import { type Manifest, parseYamlWith, RenderError, runProcessWithStdin, Yaml } from "@konfig.ts/core"
 import type { ResolvedSecretValues, SecretSource } from "@konfig.ts/env"
-import { Effect, Redacted } from "effect"
+import { type Duration, Effect, Redacted, Schema } from "effect"
+import { ChildProcess } from "effect/process"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
 import { type StringMap, toObjectMeta } from "./meta"
 
-export type BackendTag = string
+type BackendTag = string
 
-export interface EmitInput<N extends string, K extends string, Opts> {
-  readonly base: BackendEmitInput<N, K, true>
+export interface EmitInput<N extends string, K extends string, Opts, RS extends boolean = true> {
+  readonly base: BackendEmitInput<N, K, RS>
   readonly opts: Opts
 }
 
@@ -61,8 +62,14 @@ export interface SecretBackend<
 interface _MakeBackendInput<N extends string, K extends string, RequiresSource extends boolean, Out> {
   readonly tag: BackendTag
   readonly requiresSource: RequiresSource
-  readonly emit: SecretBackend<N, K, RequiresSource, Out>["emit"]
+  readonly emit: (input: {
+    readonly base: BackendEmitInput<N, K, RequiresSource>
+    readonly label: string
+  }) => Manifest.Manifest<Out>
 }
+
+const _label = (input: { readonly tag: BackendTag; readonly base: BackendEmitInput<string, string> }): string =>
+  `${input.tag}(${input.base.namespace}/${input.base.name})`
 
 export const SecretBackend = {
   make: <N extends string, K extends string, RequiresSource extends boolean, Out = unknown>(
@@ -70,7 +77,7 @@ export const SecretBackend = {
   ): SecretBackend<N, K, RequiresSource, Out> => ({
     _tag: input.tag,
     requiresSource: input.requiresSource,
-    emit: input.emit
+    emit: (base) => input.emit({ base, label: _label({ tag: input.tag, base }) })
   })
 }
 
@@ -81,10 +88,6 @@ export const secretMeta = <N extends string, K extends string>(base: BackendEmit
     labels: base.labels,
     annotations: base.annotations
   })
-
-export const backendLabel = <N extends string, K extends string>(
-  input: { readonly tag: BackendTag; readonly base: BackendEmitInput<N, K> }
-): string => `${input.tag}(${input.base.namespace}/${input.base.name})`
 
 export const plainSecret = <N extends string, K extends string>(input: {
   readonly base: BackendEmitInput<N, K>
@@ -112,3 +115,38 @@ export const encryptVia = <N extends string, K extends string, P extends object,
     Effect.flatMap(input.encrypt),
     Effect.flatMap(input.verify)
   )
+
+export const encryptWithCli = (input: {
+  readonly bin: string
+  readonly args: ReadonlyArray<string>
+  readonly stdin: string
+  readonly label: string
+  readonly timeout?: Duration.Input | undefined
+}) =>
+  runProcessWithStdin({
+    command: ChildProcess.make(input.bin, input.args),
+    stdin: input.stdin,
+    label: `${input.label}: ${input.bin}`,
+    timeout: input.timeout
+  }).pipe(
+    Effect.catchTag("ProcessInvocationError", (cause) =>
+      Effect.fail(new RenderError({ message: `${input.label}: ${input.bin} failed`, cause })))
+  )
+
+type YamlDocument = Schema.Schema.Type<typeof Schema.Unknown>
+
+export const decodeYamlOutput = <A, E, R>(input: {
+  readonly text: string
+  readonly label: string
+  readonly what?: string
+  readonly decode: (parsed: YamlDocument) => Effect.Effect<A, E, R>
+}): Effect.Effect<A, RenderError | E, R> =>
+  parseYamlWith({
+    text: input.text,
+    schema: Schema.Unknown,
+    onError: (cause) =>
+      new RenderError({
+        message: `${input.label}: ${input.what === undefined ? "" : `${input.what} — `}output was not valid YAML`,
+        cause
+      })
+  }).pipe(Effect.flatMap(input.decode))

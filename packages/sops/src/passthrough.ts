@@ -1,5 +1,5 @@
 import { Manifest, RenderError } from "@konfig.ts/core"
-import { type BackendEmitInput, backendLabel } from "@konfig.ts/k8s"
+import type { BackendEmitInput } from "@konfig.ts/k8s"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { SopsSecret } from "./crd"
@@ -132,11 +132,11 @@ const _readFile = (input: { readonly file: string; readonly label: string }) =>
 export const passthroughManifest = <N extends string, K extends string>(input: {
   readonly base: BackendEmitInput<N, K, false>
   readonly file: string
+  readonly label: string
 }): Manifest.Manifest<SopsSecret> =>
   Manifest.make<SopsSecret>((_ctx) =>
     Effect.gen(function*() {
-      const { base } = input
-      const label = backendLabel({ tag: "Sops.passthrough", base })
+      const { base, label } = input
 
       const decoded = yield* _readFile({ file: input.file, label }).pipe(
         Effect.flatMap((yamlText) => parseVerified({ yamlText, label }))

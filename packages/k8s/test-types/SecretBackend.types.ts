@@ -1,16 +1,9 @@
 import type { Manifest } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
 import type { BackendEmitInput, SecretBackend } from "@konfig.ts/k8s"
-import {
-  backendLabel,
-  Environment,
-  plainSecret,
-  Secret,
-  SecretBackend as BackendFactory,
-  secretMeta
-} from "@konfig.ts/k8s"
+import { Environment, plainSecret, Secret, SecretBackend as BackendFactory, secretMeta } from "@konfig.ts/k8s"
 
-type _BarrelHelpers = [typeof backendLabel, typeof plainSecret, typeof secretMeta, typeof BackendFactory.make]
+type _BarrelHelpers = [typeof plainSecret, typeof secretMeta, typeof BackendFactory.make]
 
 type Expect<T extends true> = T
 

@@ -1,6 +1,6 @@
-import { boundary, RenderError, runProcessWithStdin } from "@konfig.ts/core"
+import { boundary } from "@konfig.ts/core"
+import { encryptWithCli } from "@konfig.ts/k8s"
 import { type Duration, Effect } from "effect"
-import { ChildProcess } from "effect/process"
 import type { SopsRecipients } from "./crd"
 import { SopsRecipientsSchema } from "./schema"
 
@@ -52,13 +52,12 @@ export const sopsEncrypt = (input: {
 }) =>
   _decodeRecipients(input.recipients).pipe(
     Effect.flatMap((recipients) =>
-      runProcessWithStdin({
-        command: ChildProcess.make("sops", _sopsArgs({ recipients, encryptedRegex: input.encryptedRegex })),
+      encryptWithCli({
+        bin: "sops",
+        args: _sopsArgs({ recipients, encryptedRegex: input.encryptedRegex }),
         stdin: input.plainYaml,
-        label: `${input.label}: sops --encrypt`,
+        label: input.label,
         timeout: input.timeout
       })
-    ),
-    Effect.catchTag("ProcessInvocationError", (cause) =>
-      Effect.fail(new RenderError({ message: `${input.label}: sops --encrypt failed`, cause })))
+    )
   )

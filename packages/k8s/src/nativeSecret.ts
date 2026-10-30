@@ -1,14 +1,7 @@
 import { Manifest } from "@konfig.ts/core"
 import { Effect } from "effect"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
-import {
-  type BackendEmitInput,
-  backendLabel,
-  type EmitInput,
-  plainSecret,
-  resolvePlaintext,
-  SecretBackend
-} from "./backend"
+import { type EmitInput, plainSecret, resolvePlaintext, SecretBackend } from "./backend"
 
 export interface NativeSecretOptions {
   readonly type?: string
@@ -28,7 +21,7 @@ const _warn = <N extends string, K extends string>(
     )
 
 const _emit = <N extends string, K extends string>(
-  input: EmitInput<N, K, NativeSecretOptions>
+  input: EmitInput<N, K, NativeSecretOptions> & { readonly label: string }
 ): Manifest.Manifest<K8sSecret> =>
   Manifest.make<K8sSecret>((_ctx) =>
     Effect.gen(function*() {
@@ -36,7 +29,7 @@ const _emit = <N extends string, K extends string>(
 
       const stringData = yield* resolvePlaintext({
         base: input.base,
-        label: backendLabel({ tag: _TAG, base: input.base })
+        label: input.label
       })
 
       return plainSecret({ base: input.base, type: input.opts.type, stringData, immutable: input.opts.immutable })
@@ -52,7 +45,7 @@ export const NativeSecret = {
     return SecretBackend.make<N, K, true, K8sSecret>({
       tag: _TAG,
       requiresSource: true,
-      emit: (input: BackendEmitInput<N, K, true>) => _emit({ base: input, opts: resolvedOpts })
+      emit: ({ base, label }) => _emit({ base, label, opts: resolvedOpts })
     })
   }
 }

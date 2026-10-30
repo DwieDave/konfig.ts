@@ -1,12 +1,5 @@
 import { Manifest } from "@konfig.ts/core"
-import {
-  type BackendEmitInput,
-  backendLabel,
-  type EmitInput,
-  encryptVia,
-  plainSecret,
-  SecretBackend
-} from "@konfig.ts/k8s"
+import { type EmitInput, encryptVia, plainSecret, SecretBackend } from "@konfig.ts/k8s"
 import { type Duration, Effect } from "effect"
 import type { SealedSecret, SealedSecretScope } from "./crd"
 import { parseSealed, resolveCertPath, runKubeseal } from "./kubeseal"
@@ -19,10 +12,10 @@ export interface SealedSecretsBackendOptions {
 }
 
 const _emit = <N extends string, K extends string>(
-  input: EmitInput<N, K, SealedSecretsBackendOptions>
+  input: EmitInput<N, K, SealedSecretsBackendOptions> & { readonly label: string }
 ): Manifest.Manifest<SealedSecret> =>
   Manifest.make<SealedSecret>((_ctx) => {
-    const label = backendLabel({ tag: "SealedSecrets", base: input.base })
+    const { label } = input
 
     return resolveCertPath({ certPath: input.opts.certPath, label }).pipe(
       Effect.flatMap((certPath) =>
@@ -51,6 +44,6 @@ export const SealedSecrets = {
     SecretBackend.make({
       tag: "SealedSecrets",
       requiresSource: true,
-      emit: (base: BackendEmitInput<N, K, true>) => _emit({ base, opts })
+      emit: ({ base, label }) => _emit({ base, label, opts })
     })
 }

@@ -1,14 +1,8 @@
 import { Manifest } from "@konfig.ts/core"
-import {
-  type BackendEmitInput,
-  backendLabel,
-  type EmitInput,
-  encryptVia,
-  SecretBackend,
-  secretMeta
-} from "@konfig.ts/k8s"
-import type { Duration } from "effect"
+import { type EmitInput, encryptVia, SecretBackend, secretMeta } from "@konfig.ts/k8s"
+import { type Duration, Effect } from "effect"
 import type { SopsRecipients, SopsSecret } from "./crd"
+import { compileRegex } from "./encryption-policy"
 import { passthroughManifest } from "./passthrough"
 import { sopsEncrypt } from "./sops"
 import { parseVerified } from "./verify"
@@ -31,26 +25,31 @@ const _plainCR = <N extends string, K extends string>(
   }
 })
 
+const _checkRegex = (input: { readonly raw: string | undefined; readonly label: string }) =>
+  compileRegex({ field: "encrypted_regex", raw: input.raw ?? "", label: input.label })
+
 const _emit = <N extends string, K extends string>(
-  input: EmitInput<N, K, SopsBackendOptions>
+  input: EmitInput<N, K, SopsBackendOptions> & { readonly label: string }
 ): Manifest.Manifest<SopsSecret> =>
   Manifest.make<SopsSecret>((_ctx) => {
-    const label = backendLabel({ tag: "Sops", base: input.base })
+    const { label } = input
 
-    return encryptVia({
-      base: input.base,
-      label,
-      toPlain: (stringData) => _plainCR({ ...input, stringData }),
-      encrypt: (plainYaml) =>
-        sopsEncrypt({
-          plainYaml,
-          recipients: input.opts.recipients,
-          encryptedRegex: input.opts.encryptedRegex,
-          timeout: input.opts.timeout,
-          label
-        }),
-      verify: (yamlText) => parseVerified({ yamlText, label })
-    })
+    return _checkRegex({ raw: input.opts.encryptedRegex, label }).pipe(Effect.flatMap(() =>
+      encryptVia({
+        base: input.base,
+        label,
+        toPlain: (stringData) => _plainCR({ ...input, stringData }),
+        encrypt: (plainYaml) =>
+          sopsEncrypt({
+            plainYaml,
+            recipients: input.opts.recipients,
+            encryptedRegex: input.opts.encryptedRegex,
+            timeout: input.opts.timeout,
+            label
+          }),
+        verify: (yamlText) => parseVerified({ yamlText, label })
+      })
+    ))
   })
 
 export const Sops = {
@@ -60,7 +59,7 @@ export const Sops = {
     SecretBackend.make({
       tag: "Sops",
       requiresSource: true,
-      emit: (base: BackendEmitInput<N, K, true>) => _emit({ base, opts })
+      emit: ({ base, label }) => _emit({ base, label, opts })
     }),
   passthrough: <N extends string, K extends string>(opts: {
     readonly file: string
@@ -68,6 +67,6 @@ export const Sops = {
     SecretBackend.make({
       tag: "Sops.passthrough",
       requiresSource: false,
-      emit: (base: BackendEmitInput<N, K, false>) => passthroughManifest({ base, file: opts.file })
+      emit: ({ base, label }) => passthroughManifest({ base, label, file: opts.file })
     })
 }

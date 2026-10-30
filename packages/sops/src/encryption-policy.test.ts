@@ -58,4 +58,27 @@ describe("encryption policy", () => {
       const exit = yield* Effect.exit(_policy({ unencrypted_regex: "(" }))
       expect(exit._tag).toBe("Failure")
     }))
+
+  it.effect("compiles RE2 leading flags", () =>
+    Effect.gen(function*() {
+      const policy = yield* _policy({ encrypted_regex: "(?i)^(data|stringdata)$" })
+      expect(mustEncrypt({ policy, path: ["StringData"] })).toBe(true)
+      expect(mustEncrypt({ policy, path: ["other"] })).toBe(false)
+    }))
+
+  it.effect("translates \\A and \\z anchors", () =>
+    Effect.gen(function*() {
+      const policy = yield* _policy({ encrypted_regex: "\\Adata\\z" })
+      expect(mustEncrypt({ policy, path: ["data"] })).toBe(true)
+      expect(mustEncrypt({ policy, path: ["xdata"] })).toBe(false)
+    }))
+
+  it.effect("rejects untranslated RE2-only constructs with a RenderError", () =>
+    Effect.gen(function*() {
+      for (const raw of ["(?P<n>x)", "\\pL", "(?U)x"]) {
+        const error = yield* Effect.flip(_policy({ encrypted_regex: raw }))
+        expect(error._tag).toBe("RenderError")
+        expect(error.message).toContain("not a valid regex")
+      }
+    }))
 })

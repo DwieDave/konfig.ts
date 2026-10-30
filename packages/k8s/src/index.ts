@@ -5,11 +5,11 @@ import { bindSecret } from "./secretBind"
 
 export {
   type BackendEmitInput,
-  backendLabel,
+  decodeYamlOutput,
   type EmitInput,
   encryptVia,
+  encryptWithCli,
   plainSecret,
-  resolvePlaintext,
   SecretBackend,
   secretMeta
 } from "./backend"

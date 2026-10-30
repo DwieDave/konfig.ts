@@ -1,5 +1,6 @@
-import { boundary, type BoundaryDecodeError, parseYamlWith, RenderError } from "@konfig.ts/core"
-import { Array as Arr, Data, Effect, Option, Schema } from "effect"
+import { boundary, type BoundaryDecodeError, RenderError } from "@konfig.ts/core"
+import { decodeYamlOutput } from "@konfig.ts/k8s"
+import { Array as Arr, Data, Effect, Option } from "effect"
 import type { SopsSecret } from "./crd"
 import { compilePolicy, mustEncrypt } from "./encryption-policy"
 import { SopsEncryptedSecretSchema } from "./schema"
@@ -60,11 +61,7 @@ export const parseVerified = (input: {
   readonly yamlText: string
   readonly label: string
 }): Effect.Effect<SopsSecret, RenderError | BoundaryDecodeError> =>
-  parseYamlWith({
-    text: input.yamlText,
-    schema: Schema.Unknown,
-    onError: (cause) => new RenderError({ message: `${input.label}: output was not valid YAML`, cause })
-  }).pipe(
-    Effect.flatMap(_decodeSopsSecret),
-    Effect.tap((decoded) => _assertEncrypted({ secret: decoded, label: input.label }))
-  )
+  decodeYamlOutput({ text: input.yamlText, label: input.label, decode: _decodeSopsSecret })
+    .pipe(
+      Effect.tap((decoded) => _assertEncrypted({ secret: decoded, label: input.label }))
+    )
