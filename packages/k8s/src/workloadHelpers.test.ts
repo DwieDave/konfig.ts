@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
+import { unsafeCoerce } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
 import type {
@@ -11,7 +12,8 @@ import type {
 } from "./.generated/k8s-types"
 import { cron, web } from "./workloadHelpers"
 
-const coerce = <T>(value: unknown): T => value as T
+const coerce = <T, V = unknown>(value: V): T =>
+  unsafeCoerce<T, V>(value, "the rendered manifest is the K8s resource its builder emits")
 
 const ctx = { env: "prod" } as const
 
@@ -27,6 +29,7 @@ describe("Workload.web pod labels", () => {
         },
         service: { ports: [{ port: 80, targetPort: 80 }] }
       })
+
       const [deployment] = yield* manifest.render(ctx)
       const dep = coerce<K8sDeployment>(deployment)
       expect(dep.spec?.selector.matchLabels).toEqual({ app: "api" })
@@ -79,6 +82,7 @@ describe("Workload.web reloader annotations", () => {
         ...baseInput,
         reloader: { secrets: ["s1", "s2"], configMaps: ["cm1"] }
       })
+
       const [deployment] = yield* manifest.render(ctx)
       const dep = coerce<K8sDeployment>(deployment)
       expect(dep.metadata?.annotations).toEqual({
@@ -118,6 +122,7 @@ describe("Workload.web without ingress", () => {
         },
         service: { ports: [{ port: 80, targetPort: 8080 }], type: "ClusterIP" }
       })
+
       const rendered = yield* manifest.render(ctx)
       expect(rendered).toHaveLength(2)
       const [deployment, service] = rendered
@@ -140,6 +145,7 @@ describe("Workload.web without ingress", () => {
         deployment: { containers: [{ name: "app", image: "nginx" }] },
         service: { ports: [{ port: 80, targetPort: 80 }] }
       })
+
       const [, service] = yield* manifest.render(ctx)
       const svc = coerce<K8sService>(service)
       expect(svc.spec?.type).toBe("ClusterIP")
@@ -161,6 +167,7 @@ describe("Workload.web with ingress", () => {
           rules: [{ host: "api.example.com" }]
         }
       })
+
       const rendered = yield* manifest.render(ctx)
       expect(rendered).toHaveLength(3)
       const ingress = coerce<K8sIngress>(rendered[2])
@@ -186,6 +193,7 @@ describe("cron", () => {
         annotations: { owner: "data-team" },
         containers: [{ name: "job", image: "worker:latest" }]
       })
+
       const [sa, cronJob] = yield* manifest.render(ctx)
       const account = coerce<K8sServiceAccount>(sa)
       const job = coerce<K8sCronJob>(cronJob)
@@ -210,6 +218,7 @@ describe("cron", () => {
         restartPolicy: "Never",
         containers: [{ name: "job", image: "worker:latest" }]
       })
+
       const [, cronJob] = yield* manifest.render(ctx)
       const job = coerce<K8sCronJob>(cronJob)
       expect(job.spec?.concurrencyPolicy).toBe("Forbid")

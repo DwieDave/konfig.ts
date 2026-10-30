@@ -20,6 +20,16 @@ export interface SecretSource<K extends string, R = never> {
   readonly resolve: Effect.Effect<ResolvedSecretValues<K>, SecretSourceError, R>
 }
 
+class _Source<K extends string, R> extends Data.TaggedClass("SecretSource")<{
+  readonly keys: ReadonlyArray<K>
+  readonly resolve: Effect.Effect<ResolvedSecretValues<K>, SecretSourceError, R>
+}> {}
+
+const _source = <K extends string, R>(input: {
+  readonly keys: ReadonlyArray<K>
+  readonly resolve: Effect.Effect<ResolvedSecretValues<K>, SecretSourceError, R>
+}): SecretSource<K, R> => new _Source(input)
+
 export interface FromConfigInput<K extends string> {
   readonly keys: ReadonlyArray<K>
   readonly envName?: (key: K) => string
@@ -27,6 +37,7 @@ export interface FromConfigInput<K extends string> {
 
 const _fromConfig = <const K extends string>(input: FromConfigInput<K>): SecretSource<K> => {
   const envName = input.envName ?? ((k: K) => k)
+
   const resolve = resolveByKey({
     keys: input.keys,
     resolve: (key) =>
@@ -34,7 +45,8 @@ const _fromConfig = <const K extends string>(input: FromConfigInput<K>): SecretS
         Effect.mapError((cause) => new SecretSourceError({ source: "fromConfig", key, cause }))
       )
   })
-  return { _tag: "SecretSource", keys: input.keys, resolve }
+
+  return _source({ keys: input.keys, resolve })
 }
 
 export interface LiteralInput<D extends Readonly<Record<string, string>>> {
@@ -46,7 +58,8 @@ const _literal = <const D extends Readonly<Record<string, string>>>(
 ): SecretSource<keyof D & string> => {
   const keys = typedKeys(input.data)
   const resolve = Effect.sync(() => collectByKey({ keys, build: (key) => Redacted.make(input.data[key]) }))
-  return { _tag: "SecretSource", keys, resolve }
+
+  return _source({ keys, resolve })
 }
 
 export interface FromCommandSpec {
@@ -74,7 +87,8 @@ const _fromCommand = <const K extends string>(
   input: FromCommandInput<K>
 ): SecretSource<K, ChildProcessSpawner> => {
   const resolve = resolveByKey({ keys: input.keys, resolve: (key) => _runCommand(input.run(key), key) })
-  return { _tag: "SecretSource", keys: input.keys, resolve }
+
+  return _source({ keys: input.keys, resolve })
 }
 
 export const SecretSource = {

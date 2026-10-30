@@ -16,7 +16,7 @@ export interface EnvVarSource {
   readonly resourceFieldRef?: { readonly containerName?: string; readonly resource: string }
 }
 
-export interface EnvVarShape<N extends string = string> {
+export interface EnvVarEntry<N extends string = string> {
   readonly name: N
   readonly value?: string
   readonly valueFrom?: EnvVarSource
@@ -132,4 +132,4 @@ export const EnvVar = {
   })
 }
 
-export type EnvVar<N extends string = string> = EnvVarShape<N>
+export type EnvVar<N extends string = string> = EnvVarEntry<N>

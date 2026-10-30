@@ -8,23 +8,22 @@ export type ReloaderOption =
     readonly configMaps?: ReadonlyArray<string>
   }
 
-export const _reloaderAnnotations = (
-  opt: ReloaderOption | undefined
-): Readonly<Record<string, string>> => {
+const _STAKATER_AUTO = { "reloader.stakater.com/auto": "true" }
+
+const _STAKATER_STRICT = { ..._STAKATER_AUTO, "reloader.stakater.com/match": "true" }
+
+const _listAnnotation = (entry: readonly [string, ReadonlyArray<string> | undefined]) =>
+  entry[1] !== undefined && entry[1].length > 0 ? [[entry[0], entry[1].join(",")]] : []
+
+export const _reloaderAnnotations = (opt: ReloaderOption | undefined) => {
   if (opt === undefined || opt === "off") return {}
-  if (opt === "stakater") return { "reloader.stakater.com/auto": "true" }
-  if (opt === "stakater-strict") {
-    return {
-      "reloader.stakater.com/auto": "true",
-      "reloader.stakater.com/match": "true"
-    }
-  }
-  const out: Record<string, string> = {}
-  if (opt.secrets && opt.secrets.length > 0) {
-    out["secret.reloader.stakater.com/reload"] = opt.secrets.join(",")
-  }
-  if (opt.configMaps && opt.configMaps.length > 0) {
-    out["configmap.reloader.stakater.com/reload"] = opt.configMaps.join(",")
-  }
-  return out
+
+  if (opt === "stakater") return _STAKATER_AUTO
+
+  if (opt === "stakater-strict") return _STAKATER_STRICT
+
+  return Object.fromEntries([
+    ..._listAnnotation(["secret.reloader.stakater.com/reload", opt.secrets]),
+    ..._listAnnotation(["configmap.reloader.stakater.com/reload", opt.configMaps])
+  ])
 }

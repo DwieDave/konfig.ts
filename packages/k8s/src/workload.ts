@@ -14,14 +14,14 @@ import type { PodSpecInput } from "./container"
 import { type NamespacedMetaInput, type PodTemplateMetaInput, toLabelsMeta, toObjectMeta } from "./meta"
 import type { Selector } from "./selector"
 
-interface PodTemplateShape {
+interface PodTemplateInput {
   readonly metadata?: PodTemplateMetaInput
   readonly spec: PodSpecInput
 }
 
 interface SelectorAndTemplate {
   readonly selector: { readonly matchLabels: Readonly<Record<string, string>> }
-  readonly template: PodTemplateShape
+  readonly template: PodTemplateInput
 }
 
 export interface DeploymentInput extends NamespacedMetaInput, SelectorAndTemplate {
@@ -54,6 +54,7 @@ export const Deployment = {
         minReadySeconds: input.minReadySeconds
       }
     }
+
     return Manifest.make<K8sDeployment>(() => Effect.succeed(resource))
   },
   fromPodSet: <L extends Readonly<Record<string, string>>>(
@@ -107,6 +108,7 @@ export const StatefulSet = {
         updateStrategy: structuredClone(input.updateStrategy)
       }
     }
+
     return Manifest.make<K8sStatefulSet>(() => Effect.succeed(resource))
   }
 }
@@ -118,7 +120,7 @@ export interface JobInput extends NamespacedMetaInput {
   readonly activeDeadlineSeconds?: number
   readonly ttlSecondsAfterFinished?: number
   readonly suspend?: boolean
-  readonly template: PodTemplateShape
+  readonly template: PodTemplateInput
 }
 
 export const Job = {
@@ -137,6 +139,7 @@ export const Job = {
         template: _lowerPodTemplate(input.template)
       }
     }
+
     return Manifest.make<K8sJob>(() => Effect.succeed(resource))
   }
 }
@@ -151,7 +154,7 @@ export interface CronJobInput extends NamespacedMetaInput {
   readonly jobTemplate: {
     readonly metadata?: PodTemplateMetaInput
     readonly spec: {
-      readonly template: PodTemplateShape
+      readonly template: PodTemplateInput
       readonly backoffLimit?: number
       readonly activeDeadlineSeconds?: number
       readonly ttlSecondsAfterFinished?: number
@@ -183,6 +186,7 @@ export const CronJob = {
         }
       }
     }
+
     return Manifest.make<K8sCronJob>(() => Effect.succeed(resource))
   }
 }

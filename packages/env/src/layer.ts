@@ -1,14 +1,14 @@
 import type { Config, Context } from "effect"
 import { Layer } from "effect"
-import type { Environment, EnvironmentShape, EnvMember } from "./environment"
+import type { Environment, EnvironmentValues, EnvMember } from "./environment"
 import { runtime } from "./runtime"
 
-export type { EnvironmentShape } from "./environment"
+export type { EnvironmentValues } from "./environment"
 
 // Bundle is resolved once at Layer construction; downstream services read
 // from that resolved record rather than each doing per-service Config reads.
 export interface EnvironmentLayerInput<Self, M extends Readonly<Record<string, EnvMember>>> {
-  readonly tag: Context.Service<Self, EnvironmentShape<M>>
+  readonly tag: Context.Service<Self, EnvironmentValues<M>>
   readonly env: Environment<M>
 }
 

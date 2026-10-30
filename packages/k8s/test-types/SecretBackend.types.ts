@@ -4,6 +4,7 @@ import type { BackendEmitInput, BackendTag, SecretBackend } from "@konfig.ts/k8s
 import { Environment, Secret } from "@konfig.ts/k8s"
 
 type Expect<T extends true> = T
+
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
 declare const reqTrue: SecretBackend<"x", "k", true>
@@ -43,7 +44,8 @@ type _BackendEmitInputOptional = Expect<
   >
 >
 
-const noSecrets = () => null as unknown as ReturnType<typeof Secret.define>
+declare const noSecrets: () => ReturnType<typeof Secret.define>
+
 void noSecrets
 
 declare const dbCreds: ReturnType<
@@ -51,9 +53,11 @@ declare const dbCreds: ReturnType<
 >
 
 declare const lit: { readonly _kind: "Literal" }
+
 void lit
 
 void dbCreds
+
 void Environment
 
 type _Defaulted = Expect<

@@ -1,7 +1,7 @@
 import type {
   Downward as _Downward,
   Environment as _Environment,
-  EnvironmentShape,
+  EnvironmentValues,
   Literal as _Literal,
   MemberValue,
   Secret as _Secret
@@ -9,9 +9,11 @@ import type {
 import type { Config, Redacted } from "effect"
 
 type Expect<T extends true> = T
+
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
 declare const port: ReturnType<typeof _Literal.define<"PORT", number>>
+
 type _Port_Value = Expect<Equal<MemberValue<typeof port>, number>>
 
 declare const dbCreds: ReturnType<
@@ -20,6 +22,7 @@ declare const dbCreds: ReturnType<
     { readonly url: "DATABASE_URL"; readonly password: "DATABASE_PASSWORD" }
   >
 >
+
 type _DbCreds_Value = Expect<
   Equal<
     MemberValue<typeof dbCreds>,
@@ -37,9 +40,9 @@ declare const bundle: ReturnType<
   }>
 >
 
-type _Bundle_Shape = Expect<
+type _Bundle_Values = Expect<
   Equal<
-    EnvironmentShape<{
+    EnvironmentValues<{
       readonly db: typeof dbCreds
       readonly port: typeof port
     }>,
@@ -54,11 +57,12 @@ type _Bundle_Shape = Expect<
 >
 
 declare const cfg: Config.Config<
-  EnvironmentShape<{
+  EnvironmentValues<{
     readonly db: typeof dbCreds
     readonly port: typeof port
   }>
 >
+
 type _Bundle_IsConfig = Expect<
   Equal<typeof bundle extends Config.Config<infer T> ? T : never, typeof cfg extends Config.Config<infer U> ? U : never>
 >
@@ -66,6 +70,6 @@ type _Bundle_IsConfig = Expect<
 export type _Tests = readonly [
   _Port_Value,
   _DbCreds_Value,
-  _Bundle_Shape,
+  _Bundle_Values,
   _Bundle_IsConfig
 ]

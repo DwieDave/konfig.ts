@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
+import { unsafeCoerce } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
 import type {
@@ -11,7 +12,8 @@ import type {
 import { Selector } from "./selector"
 import { CronJob, Deployment, Job, StatefulSet } from "./workload"
 
-const coerce = <T>(value: unknown): T => value as T
+const coerce = <T, V = unknown>(value: V): T =>
+  unsafeCoerce<T, V>(value, "the rendered manifest is the K8s resource its builder emits")
 
 const ctx = { env: "prod" } as const
 
@@ -19,12 +21,14 @@ describe("Deployment.fromPodSet", () => {
   it.effect("selector labels and pod template labels are coherent by construction", () =>
     Effect.gen(function*() {
       const pods = Selector.make({ app: "api" })
+
       const dep = Deployment.fromPodSet({
         name: "api",
         namespace: "prod",
         podSet: pods,
         template: { spec: { containers: [{ name: "app", image: "nginx" }] } }
       })
+
       const res = coerce<K8sDeployment>(yield* dep.render(ctx))
       expect(res.spec?.selector.matchLabels).toEqual({ app: "api" })
       expect(res.spec?.template.metadata?.labels).toEqual({ app: "api" })
@@ -33,6 +37,7 @@ describe("Deployment.fromPodSet", () => {
   it.effect("a colliding template label cannot shadow the selector label", () =>
     Effect.gen(function*() {
       const pods = Selector.make({ app: "api" })
+
       const dep = Deployment.fromPodSet({
         name: "api",
         namespace: "prod",
@@ -42,6 +47,7 @@ describe("Deployment.fromPodSet", () => {
           spec: { containers: [{ name: "app", image: "nginx" }] }
         }
       })
+
       const res = coerce<K8sDeployment>(yield* dep.render(ctx))
       expect(res.spec?.template.metadata?.labels).toEqual({ app: "api", tier: "web" })
       expect(res.spec?.selector.matchLabels).toEqual({ app: "api" })
@@ -72,6 +78,7 @@ describe("StatefulSet.make", () => {
         ],
         updateStrategy: { type: "RollingUpdate", rollingUpdate: { partition: 1 } }
       })
+
       const res = coerce<K8sStatefulSet>(yield* sts.render(ctx))
       expect(res.spec?.serviceName).toBe("db-headless")
       expect(res.spec?.volumeClaimTemplates).toEqual([
@@ -96,6 +103,7 @@ describe("Job.make", () => {
         backoffLimit: 3,
         template: { spec: { containers: [{ name: "migrate", image: "migrator" }] } }
       })
+
       const res = coerce<K8sJob>(yield* job.render(ctx))
       expect(res.spec?.parallelism).toBe(2)
       expect(res.spec?.completions).toBe(4)
@@ -118,6 +126,7 @@ describe("CronJob.make", () => {
           }
         }
       })
+
       const res = coerce<K8sCronJob>(yield* cron.render(ctx))
       expect(res.spec?.schedule).toBe("0 0 * * *")
       expect(res.spec?.jobTemplate.spec?.backoffLimit).toBe(1)

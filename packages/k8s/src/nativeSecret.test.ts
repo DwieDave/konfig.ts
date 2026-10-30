@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Yaml } from "@konfig.ts/core"
+import { unsafeCoerce, Yaml } from "@konfig.ts/core"
 import { SecretSource } from "@konfig.ts/env"
 import { Cause, Effect, Exit, Logger } from "effect"
 import { describe, expect, it as vitestIt } from "vitest"
@@ -9,7 +9,8 @@ import { Secret } from "./index"
 import { NativeSecret } from "./nativeSecret"
 import { bindSecret } from "./secretBind"
 
-const coerce = <T>(value: unknown): T => value as T
+const coerce = <T, V = unknown>(value: V): T =>
+  unsafeCoerce<T, V>(value, "the rendered manifest is the K8s resource its builder emits")
 
 const dbCreds = Secret.define({
   name: "db-creds",
@@ -38,6 +39,7 @@ describe("NativeSecret.backend", () => {
           data: { url: "postgres://localhost/api", password: "hunter2" }
         })
       })
+
       const rendered = yield* bound.manifest!.render(ctx)
       const res = coerce<K8sSecret>(rendered)
       expect(res.apiVersion).toBe("v1")
@@ -57,6 +59,7 @@ describe("NativeSecret.backend", () => {
         backend: NativeSecret.backend({ silenceWarning: true }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       const rendered = yield* bound.manifest!.render(ctx)
       const yaml = Yaml.serialize({ value: rendered })
       expect(yaml).toContain("kind: Secret")
@@ -70,8 +73,10 @@ describe("NativeSecret.backend", () => {
         secret: dbCreds,
         backend: NativeSecret.backend({ silenceWarning: true })
       })
+
       const exit = yield* Effect.exit(bound.manifest!.render(ctx))
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         expect(Cause.pretty(exit.cause)).toContain("requires a source")
       }
@@ -80,11 +85,13 @@ describe("NativeSecret.backend", () => {
   it.effect("emits a render-time warning by default", () =>
     Effect.gen(function*() {
       const messages: string[] = []
+
       const bound = bindSecret({
         secret: dbCreds,
         backend: NativeSecret.backend(),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       yield* bound.manifest!.render(ctx).pipe(Effect.withLogger(_captureLogger(messages)))
       expect(messages.some((m) => m.includes("plaintext Secret"))).toBe(true)
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -92,11 +99,13 @@ describe("NativeSecret.backend", () => {
   it.effect("silenceWarning: true suppresses the warning", () =>
     Effect.gen(function*() {
       const messages: string[] = []
+
       const bound = bindSecret({
         secret: dbCreds,
         backend: NativeSecret.backend({ silenceWarning: true }),
         source: SecretSource.literal({ data: { url: "u", password: "p" } })
       })
+
       yield* bound.manifest!.render(ctx).pipe(Effect.withLogger(_captureLogger(messages)))
       expect(messages.some((m) => m.includes("plaintext"))).toBe(false)
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -112,8 +121,10 @@ describe("NativeSecret.backend", () => {
         backend: NativeSecret.backend({ silenceWarning: true }),
         source: SecretSource.fromConfig({ keys: ["x"] as const })
       })
+
       const exit = yield* Effect.exit(bound.manifest!.render(ctx))
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         expect(Cause.pretty(exit.cause)).toContain("RenderError")
       }
@@ -124,11 +135,13 @@ describe("Secret.bind refLayer", () => {
   vitestIt("always exposes a refLayer regardless of backend", () => {
     const a = bindSecret({ secret: dbCreds })
     expect(a.refLayer).toBeDefined()
+
     const b = bindSecret({
       secret: dbCreds,
       backend: NativeSecret.backend({ silenceWarning: true }),
       source: SecretSource.literal({ data: { url: "u", password: "p" } })
     })
+
     expect(b.refLayer).toBeDefined()
   })
 })

@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { type AnyRenderError, brand, type Manifest, type PvcRef, RenderContext } from "@konfig.ts/core"
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 import * as fc from "fast-check"
 import type { PodSpecInput } from "./container"
 import { NetworkPolicy } from "./policy"
@@ -13,9 +13,8 @@ const ctx = RenderContext.make("test")
 const word = fc.string({ minLength: 1, maxLength: 6 })
 const labels = fc.dictionary(word, word, { maxKeys: 3 })
 
-const scribble = (value: unknown): void => {
-  if (typeof value !== "object" || value === null) return
-  Object.values(value).forEach(scribble)
+const scribble = <V extends object>(value: V): void => {
+  Object.values(value).filter(Predicate.isObjectOrArray).forEach(scribble)
   Object.keys(value).forEach((k) => Reflect.set(value, k, "MUTATED"))
 }
 
@@ -56,6 +55,7 @@ const podSpec = (l: Record<string, string>, w: string): PodSpecInput => ({
 })
 
 const meta = (l: Record<string, string>) => ({ name: "n", namespace: "ns", labels: l, annotations: l })
+
 const template = (l: Record<string, string>, w: string) => ({
   metadata: { labels: l, annotations: l },
   spec: podSpec(l, w)
@@ -64,16 +64,16 @@ const template = (l: Record<string, string>, w: string) => ({
 type Labels = Record<string, string>
 
 interface Case {
-  readonly input: unknown
-  readonly run: Effect.Effect<unknown, AnyRenderError, Manifest.RenderServices>
+  readonly input: object
+  readonly run: Effect.Effect<object, AnyRenderError, Manifest.RenderServices>
 }
 
-const rendered = (input: unknown, manifest: Manifest.Manifest<unknown>): Case => ({
+const rendered = <I extends object>(input: I, manifest: Manifest.Manifest<object>): Case => ({
   input,
   run: manifest.render(ctx)
 })
 
-const cases: Record<string, (l: Labels, w: string) => Case> = {
+const cases = {
   Deployment: (l, w) => {
     const input = {
       ...meta(l),
@@ -81,6 +81,7 @@ const cases: Record<string, (l: Labels, w: string) => Case> = {
       strategy: { type: w },
       template: template(l, w)
     }
+
     return rendered(input, Deployment.make(input))
   },
   StatefulSet: (l, w) => {
@@ -91,10 +92,12 @@ const cases: Record<string, (l: Labels, w: string) => Case> = {
       template: template(l, w),
       volumeClaimTemplates: [{ metadata: { name: w, labels: l } }]
     }
+
     return rendered(input, StatefulSet.make(input))
   },
   Job: (l, w) => {
     const input = { ...meta(l), template: template(l, w) }
+
     return rendered(input, Job.make(input))
   },
   CronJob: (l, w) => {
@@ -103,6 +106,7 @@ const cases: Record<string, (l: Labels, w: string) => Case> = {
       schedule: "* * * * *",
       jobTemplate: { metadata: { labels: l }, spec: { template: template(l, w) } }
     }
+
     return rendered(input, CronJob.make(input))
   },
   NetworkPolicy: (l, w) => {
@@ -110,15 +114,17 @@ const cases: Record<string, (l: Labels, w: string) => Case> = {
       ...meta(l),
       spec: { podSelector: { matchLabels: l }, ingress: [{ ports: [{ port: 80, protocol: w }] }] }
     }
+
     return rendered(input, NetworkPolicy.make(input))
   }
-}
+} satisfies Record<string, (l: Labels, w: string) => Case>
 
 const noAlias = (build: (l: Labels, w: string) => Case) =>
   fc.asyncProperty(labels, word, async (l, w) => {
     const { input, run } = build(l, w)
     const before = JSON.stringify(input)
     scribble(await Effect.runPromise(run.pipe(Effect.scoped, Effect.provide(NodeServices.layer))))
+
     return JSON.stringify(input) === before
   })
 

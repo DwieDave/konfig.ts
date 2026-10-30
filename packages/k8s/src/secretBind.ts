@@ -49,15 +49,14 @@ interface _ValuesLayerInput<N extends string, K extends string> {
 
 const _buildValuesLayer = <N extends string, K extends string>(
   input: _ValuesLayerInput<N, K>
-): {
-  readonly values: Context.Service<Dep.Need<"SecretValues", N>, Dep.SecretValuesRecord<K>>
-  readonly layer: Layer.Layer<Dep.Provide<"SecretValues", N>, RenderError, Manifest.RenderServices>
-} => {
+) => {
   const values = Dep.SecretValues<N, K>(input.name)
+
   const layer = L.effect(
     values,
     resolveSource({ source: input.source, label: `SecretValues(${input.namespace}/${input.name})` })
   )
+
   return { values, layer }
 }
 
@@ -94,10 +93,13 @@ const _backendManifest = <N extends string, K extends string, E extends Readonly
   { input, source, namespace }: _BackendManifestInput<N, K, E>
 ): Manifest.Manifest<unknown> | undefined => {
   const { backend, secret } = input
+
   if (backend === undefined) return undefined
+
   if (backend.requiresSource && source === undefined) {
     return _missingSourceManifest(backend, secret.name, namespace)
   }
+
   return backend.emit({
     name: secret.name,
     namespace,
@@ -111,7 +113,7 @@ const _backendManifest = <N extends string, K extends string, E extends Readonly
 // Overloaded so the namespace type parameter `Ns` only narrows when an explicit
 // `namespace` override is passed; without one, the fallback is the secret's own
 // namespace, which is only known to be `string`.
-export const bindSecret: {
+export interface BindSecret {
   <
     N extends string,
     K extends string,
@@ -123,7 +125,9 @@ export const bindSecret: {
   <N extends string, K extends string, E extends Readonly<Record<K, string>>>(
     input: BindSecretInput<N, K, E, string>
   ): DeclaredSecret<N, K, string>
-} = <
+}
+
+export const bindSecret: BindSecret = <
   N extends string,
   K extends string,
   E extends Readonly<Record<K, string>>

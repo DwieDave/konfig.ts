@@ -32,11 +32,13 @@ export const toLabelsMeta = (
     ? undefined
     : { labels: _copyMap(input.labels), annotations: _copyMap(input.annotations) }
 
+const _named = (input: ClusterMetaInput & { readonly namespace?: string }) =>
+  input.namespace === undefined ? { name: input.name } : { name: input.name, namespace: input.namespace }
+
 export const toObjectMeta = (
   input: ClusterMetaInput & { readonly namespace?: string }
 ): ObjectMetaOutput => ({
-  name: input.name,
-  ...(input.namespace === undefined ? {} : { namespace: input.namespace }),
+  ..._named(input),
   labels: _copyMap(input.labels),
   annotations: _copyMap(input.annotations)
 })

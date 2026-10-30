@@ -1,4 +1,3 @@
-import { unsafeCoerce } from "@konfig.ts/core"
 import { Config } from "effect"
 import { _envClaim, _makeEntry, type EntryMarker, type HasEnvClaims } from "./entry"
 
@@ -8,10 +7,7 @@ export interface LiteralEntry<EnvName extends string, T>
   readonly envName: EnvName
   readonly value: T
   readonly serialized: string
-  // Typed (unknown) => string, not (T) => string, so LiteralEntry<..., T>
-  // stays assignable to LiteralEntry<string, unknown> in the EnvMember union
-  // (contravariance would otherwise block the narrowing).
-  readonly serialize: (value: unknown) => string
+  serialize(value: T): string
 }
 
 type _Primitive = string | number | boolean | bigint
@@ -27,19 +23,12 @@ export type DefineLiteralInput<EnvName extends string, T> =
   & (T extends _Primitive ? { readonly serialize?: (value: T) => string }
     : { readonly serialize: (value: T) => string })
 
-const _erasedSerialize = <T>(userSerialize: (value: T) => string) => (value: unknown): string =>
-  userSerialize(
-    unsafeCoerce<T>(
-      value,
-      "stored serialize erases its param to unknown for variance; the user-facing Literal signature guarantees the value is a T"
-    )
-  )
-
 const _define = <const EnvName extends string, T = string>(
   input: DefineLiteralInput<EnvName, T>
 ): LiteralEntry<EnvName, T> => {
   const userSerialize = input.serialize ?? ((v: T) => String(v))
   const parser: Config.Config<T> = input.schema !== undefined ? input.schema : Config.succeed(input.value)
+
   return _makeEntry({
     config: parser,
     metadata: {
@@ -47,7 +36,7 @@ const _define = <const EnvName extends string, T = string>(
       envName: input.envName,
       value: input.value,
       serialized: userSerialize(input.value),
-      serialize: _erasedSerialize(userSerialize),
+      serialize: userSerialize,
       envClaims: [_envClaim({ envName: input.envName, label: `Literal(${input.envName})` })]
     }
   })

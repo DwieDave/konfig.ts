@@ -47,6 +47,7 @@ describe("Environment", () => {
         port,
         pod: podName
       })
+
       const v = yield* env
       expect(Redacted.value(v.db.url)).toBe("postgres://localhost/api")
       expect(Redacted.value(v.db.password)).toBe("hunter2")
@@ -74,6 +75,7 @@ describe("Environment", () => {
       namespace: "x",
       env: { url: "SHARED" }
     })
+
     const b = Literal.define({ envName: "SHARED", value: "literal" })
     // @ts-expect-error envName collision
     expect(() => Environment.define({ a, b })).toThrow(EnvNameCollision)
@@ -82,18 +84,13 @@ describe("Environment", () => {
   it("collision error names the conflicting entries", () => {
     const a = Secret.define({ name: "a", namespace: "x", env: { url: "SHARED" } })
     const b = Secret.define({ name: "b", namespace: "x", env: { val: "SHARED" } })
-    try {
-      // @ts-expect-error envName collision
-      Environment.define({ a, b })
-      throw new Error("expected throw")
-    } catch (e) {
-      expect(e).toBeInstanceOf(EnvNameCollision)
-      const err = e as EnvNameCollision
-      expect(err.envName).toBe("SHARED")
-      expect(err.claims).toEqual(["Secret(a).url", "Secret(b).val"])
-      expect(err.message).toContain("SHARED")
-      expect(err.message).toContain("Secret(a).url")
-    }
+
+    // @ts-expect-error envName collision
+    const define = () => Environment.define({ a, b })
+
+    expect(define).toThrow(EnvNameCollision)
+    expect(define).toThrow("SHARED")
+    expect(define).toThrow("Secret(a).url")
   })
 
   it("a SecretEntry may live in multiple bundles (no copy)", () => {

@@ -4,6 +4,9 @@ import { EnvNameCollision } from "./entry"
 import { Environment } from "./environment"
 import { Literal } from "./literal"
 
+const _membersOf = (names: ReadonlyArray<string>) =>
+  Object.fromEntries(names.map((envName, i) => [`m${i}`, Literal.define({ envName, value: "v" })]))
+
 describe("env-name collision (property)", () => {
   const envName = fc
     .string({ minLength: 1, maxLength: 16 })
@@ -15,10 +18,8 @@ describe("env-name collision (property)", () => {
       fc.property(
         fc.uniqueArray(envName, { minLength: 1, maxLength: 8 }),
         (names) => {
-          const members: Record<string, ReturnType<typeof Literal.define>> = {}
-          for (let i = 0; i < names.length; i++) {
-            members[`m${i}`] = Literal.define({ envName: names[i] as string, value: "v" })
-          }
+          const members = _membersOf(names)
+
           expect(() => Environment.define(members)).not.toThrow()
         }
       )
@@ -32,10 +33,8 @@ describe("env-name collision (property)", () => {
         fc.uniqueArray(envName, { minLength: 1, maxLength: 4 }),
         (dup, rest) => {
           const all = [dup, dup, ...rest.filter((n) => n !== dup)]
-          const members: Record<string, ReturnType<typeof Literal.define>> = {}
-          for (let i = 0; i < all.length; i++) {
-            members[`m${i}`] = Literal.define({ envName: all[i] as string, value: "v" })
-          }
+          const members = _membersOf(all)
+
           expect(() => Environment.define(members)).toThrow(EnvNameCollision)
         }
       )

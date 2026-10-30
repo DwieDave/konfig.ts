@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node"
 import { it as effectIt } from "@effect/vitest"
 import { Manifest, RenderContext } from "@konfig.ts/core"
 import { Downward, Literal, SecretSource } from "@konfig.ts/env"
-import { Effect } from "effect"
+import { Data, Effect } from "effect"
 import { describe, expect, it } from "vitest"
 import { Environment, NativeSecret, Secret, type SecretBackend } from "./index"
 
@@ -24,6 +24,7 @@ const podName = Downward.define({ envName: "POD_NAME", fieldPath: "metadata.name
 const dbCredsOpts = {
   source: SecretSource.literal({ data: { url: "u", password: "p" } })
 } as const
+
 const sessionKeyOpts = {
   source: SecretSource.literal({ data: { value: "s" } })
 } as const
@@ -55,6 +56,7 @@ describe("Environment.bind", () => {
     port,
     pod: podName
   })
+
   const apiSecrets = { db: dbCredsOpts, session: sessionKeyOpts } as const
 
   it("walks every member and concatenates envVars", () => {
@@ -97,6 +99,7 @@ describe("Environment.bind", () => {
       secrets: apiSecrets,
       namespace: "staging"
     })
+
     expect(bound.members.db.namespace).toBe("staging")
     expect(bound.members.session.namespace).toBe("staging")
     expect(bound.envVars.map((e) => e.name).sort()).toEqual([
@@ -135,6 +138,7 @@ describe("Environment.bind nested groups", () => {
     }),
     api: apiPort
   })
+
   const apiSecrets = { db: { creds: dbCredsOpts } } as const
 
   it("recurses into nested Environment members and flattens envVars", () => {
@@ -165,6 +169,7 @@ describe("Environment.bind nested groups", () => {
         db: { host: "db.prod.svc", port: 5432 }
       }
     })
+
     const byName = new Map(bound.envVars.map((e) => [e.name, e]))
     expect(byName.get("DB_HOST")?.value).toBe("db.prod.svc")
     expect(byName.get("DB_PORT")?.value).toBe("5432")
@@ -176,6 +181,7 @@ describe("Environment.bind nested groups", () => {
       secrets: apiSecrets,
       namespace: "staging"
     })
+
     expect(bound.members.db.creds.namespace).toBe("staging")
   })
 })
@@ -199,6 +205,7 @@ describe("Environment.bind literal value overrides", () => {
       secrets: envSecrets,
       literals: { clientUrl: "https://api.example.com", replicas: 3 }
     })
+
     const byName = new Map(bound.envVars.map((e) => [e.name, e]))
     expect(byName.get("CLIENT_URL")?.value).toBe("https://api.example.com")
     expect(byName.get("REPLICAS")?.value).toBe("3")
@@ -210,6 +217,7 @@ describe("Environment.bind literal value overrides", () => {
       secrets: envSecrets,
       literals: { replicas: 3 }
     })
+
     expect(bound.members.replicas.value).toBe(3)
     expect(bound.members.clientUrl.value).toBe("")
   })
@@ -220,6 +228,7 @@ describe("Environment.bind literal value overrides", () => {
       secrets: envSecrets,
       literals: { clientUrl: "https://x" }
     })
+
     const byName = new Map(bound.envVars.map((e) => [e.name, e]))
     expect(byName.get("CLIENT_URL")?.value).toBe("https://x")
     expect(byName.get("REPLICAS")?.value).toBe("0")
@@ -234,11 +243,14 @@ describe("Environment.bind literal value overrides", () => {
   })
 
   it("custom serialize fn is reused for overrides", () => {
+    const initial: ReadonlyArray<string> = ["a"]
+
     const lit = Literal.define({
       envName: "LIST",
-      value: ["a"] as ReadonlyArray<string>,
+      value: initial,
       serialize: (xs: ReadonlyArray<string>) => xs.join(",")
     })
+
     const e = Environment.define({ lit })
     const bound = Environment.bind({ env: e, literals: { lit: ["a", "b", "c"] } })
     const entry = bound.envVars.find((v) => v.name === "LIST")
@@ -246,14 +258,19 @@ describe("Environment.bind literal value overrides", () => {
   })
 })
 
+class TestBackend<N extends string, K extends string> extends Data.TaggedClass("TestBackend")<{
+  readonly requiresSource: false
+  readonly emit: SecretBackend<N, K, false>["emit"]
+}> {}
+
 describe("Environment.bind secret shorthand", () => {
   const apiEnv = Environment.define({ db: dbCreds, session: sessionKey, port })
 
-  const stubBackend = <N extends string, K extends string>(): SecretBackend<N, K, false> => ({
-    _tag: "Sops.passthrough",
-    requiresSource: false,
-    emit: (input) => Manifest.make((_ctx) => Effect.succeed({ kind: "Stub", name: input.name }))
-  })
+  const stubBackend = <N extends string, K extends string>(): SecretBackend<N, K, false> =>
+    new TestBackend<N, K>({
+      requiresSource: false,
+      emit: (input) => Manifest.make((_ctx) => Effect.succeed({ kind: "Stub", name: input.name }))
+    })
 
   it("a bare source is treated as { source }", () => {
     const bound = Environment.bind({
@@ -263,6 +280,7 @@ describe("Environment.bind secret shorthand", () => {
         session: SecretSource.literal({ data: { value: "s" } })
       }
     })
+
     expect(bound.members.db.ref).toBe("db-creds")
     expect(bound.members.db.manifest).toBeUndefined()
     expect(bound.members.db.layer).toBeDefined()
@@ -278,6 +296,7 @@ describe("Environment.bind secret shorthand", () => {
       env: apiEnv,
       secrets: { db: stubBackend(), session: sessionKeyOpts }
     })
+
     expect(bound.members.db.manifest).toBeDefined()
     expect(bound.members.db.layer).toBeUndefined()
     expect(bound.manifests).toHaveLength(1)
@@ -285,6 +304,7 @@ describe("Environment.bind secret shorthand", () => {
 
   it("shorthand and object forms mix, including inside nested groups", () => {
     const nested = Environment.define({ inner: Environment.define({ db: dbCreds }), session: sessionKey })
+
     const bound = Environment.bind({
       env: nested,
       secrets: {
@@ -292,6 +312,7 @@ describe("Environment.bind secret shorthand", () => {
         session: { backend: NativeSecret.backend({ silenceWarning: true }), source: sessionKeyOpts.source }
       }
     })
+
     expect(bound.members.inner.db.ref).toBe("db-creds")
     expect(bound.manifests).toHaveLength(2)
   })
@@ -302,15 +323,17 @@ describe("Secret.bind source resolution", () => {
     Effect.gen(function*() {
       let calls = 0
       const base = SecretSource.literal({ data: { value: "s" } })
+
       const source = {
         ...base,
         resolve: Effect.sync(() => ++calls).pipe(Effect.flatMap(() => base.resolve))
       }
-      const backend: SecretBackend<"session-key", "value", false> = {
-        _tag: "NativeSecret",
+
+      const backend: SecretBackend<"session-key", "value", false> = new TestBackend<"session-key", "value">({
         requiresSource: false,
         emit: (i) => Manifest.make(() => (i.source?.resolve ?? Effect.succeed({})).pipe(Effect.as({})))
-      }
+      })
+
       const bound = Secret.bind({ secret: sessionKey, backend, source })
       yield* bound.manifest!.render(RenderContext.make("test"))
       yield* Effect.service(bound.values!).pipe(Effect.provide(bound.layer!))
@@ -323,15 +346,17 @@ describe("Secret.bind source resolution", () => {
       Effect.gen(function*() {
         let calls = 0
         const base = SecretSource.literal({ data: { value: "s" } })
+
         const source = {
           ...base,
           resolve: Effect.sync(() => ++calls).pipe(Effect.flatMap(() => base.resolve))
         }
-        const backend: SecretBackend<"session-key", "value", false> = {
-          _tag: "NativeSecret",
+
+        const backend: SecretBackend<"session-key", "value", false> = new TestBackend<"session-key", "value">({
           requiresSource: false,
           emit: (i) => Manifest.make(() => (i.source?.resolve ?? Effect.succeed({})).pipe(Effect.as({})))
-        }
+        })
+
         const bound = Secret.bind({ secret: sessionKey, backend, source })
         const ctx = RenderContext.make("test")
         yield* bound.manifest!.render(ctx)

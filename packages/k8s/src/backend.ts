@@ -13,10 +13,12 @@ export const objectMetaSchema = Schema.Struct({
   annotations: Schema.optionalKey(stringRecordSchema)
 })
 
+type YamlDocument = ReturnType<typeof parseYaml>
+
 export const parseYamlWith = <E>(input: {
   readonly text: string
   readonly onError: (cause: unknown) => E
-}): Effect.Effect<unknown, E> => Effect.try({ try: (): unknown => parseYaml(input.text), catch: input.onError })
+}): Effect.Effect<YamlDocument, E> => Effect.try({ try: () => parseYaml(input.text), catch: input.onError })
 
 export interface EmitInput<N extends string, K extends string, Opts> {
   readonly base: BackendEmitInput<N, K, true>

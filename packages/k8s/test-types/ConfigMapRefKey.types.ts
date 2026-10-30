@@ -1,14 +1,19 @@
+import { brand } from "@konfig.ts/core"
 import type { ConfigMapRef, ConfigMapRefKeys, ConfigMapRefName } from "@konfig.ts/core"
 import { ConfigMap, EnvVar } from "@konfig.ts/k8s"
 
 type Expect<T extends true> = T
+
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
 type RefDefault = ConfigMapRef<"app-config">
+
 type _DefaultK = Expect<Equal<ConfigMapRefKeys<RefDefault>, string>>
+
 type _DefaultN = Expect<Equal<ConfigMapRefName<RefDefault>, "app-config">>
 
 type RefTyped = ConfigMapRef<"app-config", "HOST" | "PORT" | "LOG_LEVEL">
+
 type _TypedK = Expect<Equal<ConfigMapRefKeys<RefTyped>, "HOST" | "PORT" | "LOG_LEVEL">>
 
 const cfg = ConfigMap.make({
@@ -16,8 +21,11 @@ const cfg = ConfigMap.make({
   namespace: "prod",
   data: { HOST: "db.prod", PORT: "5432", LOG_LEVEL: "info" }
 })
+
 type CfgRef = typeof cfg.ref
+
 type _CfgK = Expect<Equal<ConfigMapRefKeys<CfgRef>, "HOST" | "PORT" | "LOG_LEVEL">>
+
 type _CfgN = Expect<Equal<ConfigMapRefName<CfgRef>, "app-config">>
 
 const _ok = EnvVar.fromConfigMap({ name: "DB_HOST", ref: cfg.ref, key: "HOST" })
@@ -34,6 +42,7 @@ const flags = ConfigMap.make({
   namespace: "prod",
   data: { NEW_UI: "true", BETA: "false" }
 })
+
 const _cross = EnvVar.fromConfigMap({
   name: "MISWIRED",
   ref: flags.ref,
@@ -41,12 +50,15 @@ const _cross = EnvVar.fromConfigMap({
   key: "HOST"
 })
 
-const opaque: ConfigMapRef<"opaque"> = "opaque" as ConfigMapRef<"opaque">
+const opaque: ConfigMapRef<"opaque"> = brand<ConfigMapRef<"opaque">>("opaque")
 const _anyKey = EnvVar.fromConfigMap({ name: "OPAQUE", ref: opaque, key: "anything" })
 
 void _ok
+
 void _typo
+
 void _cross
+
 void _anyKey
 
 export type _Tests = readonly [_DefaultK, _DefaultN, _TypedK, _CfgK, _CfgN]

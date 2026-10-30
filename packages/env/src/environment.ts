@@ -15,18 +15,17 @@ export type EnvMember =
 
 export type MemberValue<A> = [A] extends [Config.Config<infer T>] ? T : never
 
-export type EnvironmentShape<M extends Readonly<Record<string, EnvMember>>> = {
+export type EnvironmentValues<M extends Readonly<Record<string, EnvMember>>> = {
   readonly [K in keyof M]: MemberValue<M[K]>
 }
 
 export interface Environment<M extends Readonly<Record<string, EnvMember>>>
-  extends Config.Config<EnvironmentShape<M>>, EntryMarker<"Environment">, HasEnvClaims
+  extends Config.Config<EnvironmentValues<M>>, EntryMarker<"Environment">, HasEnvClaims
 {
   readonly members: M
 }
 
-// oxlint-disable-next-line app/no-explicit-any
-export type AnyEnvironment = Environment<Readonly<Record<string, any>>>
+export type AnyEnvironment = Environment<Readonly<Record<string, EnvMember>>>
 
 // Throws EnvNameCollision synchronously (not Effect): Environment.define
 // is a synchronous builder and collisions are an authoring mistake caught
@@ -36,22 +35,27 @@ const _collectClaims = (
 ): ReadonlyArray<EnvClaim> => {
   const byEnvName = new Map<string, string[]>()
   const out: EnvClaim[] = []
+
   for (const [, entry] of Object.entries(members)) {
     for (const claim of entry.envClaims) {
       const prior = byEnvName.get(claim.envName)
+
       if (prior === undefined) {
         byEnvName.set(claim.envName, [claim.label])
       } else {
         prior.push(claim.label)
       }
+
       out.push(claim)
     }
   }
+
   for (const [envName, labels] of byEnvName) {
     if (labels.length > 1) {
       throw new EnvNameCollision({ envName, claims: labels })
     }
   }
+
   return out
 }
 
@@ -97,7 +101,7 @@ const _define = <const M extends Readonly<Record<string, EnvMember>>>(
 ): Environment<M> => {
   const envClaims = _collectClaims(members)
 
-  const root: Config.Config<EnvironmentShape<M>> = allConfigs(members)
+  const root: Config.Config<EnvironmentValues<M>> = allConfigs(members)
 
   return _makeEntry({
     config: root,

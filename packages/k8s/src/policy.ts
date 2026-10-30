@@ -1,15 +1,15 @@
 import { Manifest } from "@konfig.ts/core"
 import { Effect } from "effect"
 import type {
-  NetworkPolicyEgressRule as K8sNetworkPolicyEgressRule,
-  NetworkPolicyIngressRule as K8sNetworkPolicyIngressRule,
-  NetworkPolicyPeer as K8sNetworkPolicyPeer,
-  PersistentVolumeSpec as K8sPersistentVolumeSpec,
   ClusterRole as K8sClusterRole,
   ClusterRoleBinding as K8sClusterRoleBinding,
   NetworkPolicy as K8sNetworkPolicy,
+  NetworkPolicyEgressRule as K8sNetworkPolicyEgressRule,
+  NetworkPolicyIngressRule as K8sNetworkPolicyIngressRule,
+  NetworkPolicyPeer as K8sNetworkPolicyPeer,
   PersistentVolume as K8sPersistentVolume,
   PersistentVolumeClaim as K8sPersistentVolumeClaim,
+  PersistentVolumeSpec as K8sPersistentVolumeSpec,
   Role as K8sRole,
   RoleBinding as K8sRoleBinding
 } from "./.generated/k8s-types"
@@ -130,27 +130,30 @@ export interface NetworkPolicyFromPodSetInput<L extends Readonly<Record<string, 
   readonly egress?: ReadonlyArray<NetworkPolicyEgressRule>
 }
 
+const _podPart = (peer: NetworkPolicyPeer): K8sNetworkPolicyPeer =>
+  peer.podSet === undefined ? {} : { podSelector: { matchLabels: { ...peer.podSet.labels } } }
+
+const _namespacePart = (peer: NetworkPolicyPeer): K8sNetworkPolicyPeer =>
+  peer.namespaceSelector === undefined ? {} : {
+    namespaceSelector: {
+      matchLabels: peer.namespaceSelector.matchLabels === undefined
+        ? undefined
+        : { ...peer.namespaceSelector.matchLabels }
+    }
+  }
+
+const _ipBlockPart = (peer: NetworkPolicyPeer): K8sNetworkPolicyPeer =>
+  peer.ipBlock === undefined ? {} : {
+    ipBlock: {
+      cidr: peer.ipBlock.cidr,
+      except: peer.ipBlock.except === undefined ? undefined : [...peer.ipBlock.except]
+    }
+  }
+
 const _lowerPeer = (peer: NetworkPolicyPeer): K8sNetworkPolicyPeer => ({
-  ...(peer.podSet !== undefined
-    ? { podSelector: { matchLabels: { ...peer.podSet.labels } } }
-    : {}),
-  ...(peer.namespaceSelector !== undefined
-    ? {
-      namespaceSelector: {
-        matchLabels: peer.namespaceSelector.matchLabels === undefined
-          ? undefined
-          : { ...peer.namespaceSelector.matchLabels }
-      }
-    }
-    : {}),
-  ...(peer.ipBlock !== undefined
-    ? {
-      ipBlock: {
-        cidr: peer.ipBlock.cidr,
-        except: peer.ipBlock.except === undefined ? undefined : [...peer.ipBlock.except]
-      }
-    }
-    : {})
+  ..._podPart(peer),
+  ..._namespacePart(peer),
+  ..._ipBlockPart(peer)
 })
 
 export const NetworkPolicy = {
@@ -170,10 +173,12 @@ export const NetworkPolicy = {
       from: rule.from?.map(_lowerPeer),
       ports: rule.ports === undefined ? undefined : [...rule.ports]
     }))
+
     const egress = input.egress?.map((rule): K8sNetworkPolicyEgressRule => ({
       to: rule.to?.map(_lowerPeer),
       ports: rule.ports === undefined ? undefined : [...rule.ports]
     }))
+
     return NetworkPolicy.make({
       name: input.name,
       namespace: input.namespace,

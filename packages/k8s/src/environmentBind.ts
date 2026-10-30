@@ -11,7 +11,7 @@ import type {
   SecretEntry,
   SecretSource
 } from "@konfig.ts/env"
-import { Layer, Match, Predicate } from "effect"
+import { Layer, Match } from "effect"
 import type { SecretBackend } from "./backend"
 import type { EnvVar } from "./env"
 import { bindSecret, type DeclaredSecret } from "./secretBind"
@@ -144,14 +144,17 @@ export type BindEnvironmentInput<
 
 interface _BindLiteralInput {
   readonly entry: LiteralEntry<string, unknown>
-  readonly override?: unknown
+  readonly override?: _LiteralOverride
 }
+
 const _bindLiteral = (input: _BindLiteralInput): DeclaredLiteral<string, unknown> => {
   const hasOverride = input.override !== undefined
   const value = hasOverride ? input.override : input.entry.value
+
   const serialized = hasOverride
     ? input.entry.serialize(input.override)
     : input.entry.serialized
+
   return {
     envName: input.entry.envName,
     value,
@@ -162,6 +165,7 @@ const _bindLiteral = (input: _BindLiteralInput): DeclaredLiteral<string, unknown
 interface _BindDownwardInput {
   readonly entry: DownwardEntry<string>
 }
+
 const _bindDownward = (input: _BindDownwardInput): DeclaredDownward<string> => ({
   envName: input.entry.envName,
   fieldPath: input.entry.fieldPath,
@@ -178,8 +182,28 @@ type _AnyValuesLayer = Layer.Layer<unknown, RenderError, Manifest.RenderServices
 // without a cast; the fold in `_mergeValuesLayers` widens the result once.
 type _CollectedLayer = Layer.Layer<never, RenderError, Manifest.RenderServices>
 
+type _LiteralOverride = AnyLiteralEntry["value"]
+
+type _Declared =
+  | DeclaredSecret<string, string, string>
+  | DeclaredLiteral<string, _LiteralOverride>
+  | DeclaredDownward<string>
+  | _DeclaredNode
+
+interface _DeclaredNode {
+  readonly [key: string]: _Declared
+}
+
+interface _SecretsNode {
+  readonly [key: string]: SecretMemberInput<string, string> | _SecretsNode
+}
+
+interface _LiteralsNode {
+  readonly [key: string]: _LiteralOverride
+}
+
 interface _BindAcc {
-  readonly declared: Record<string, unknown>
+  readonly declared: Record<string, _Declared>
   readonly envVars: EnvVar[]
   readonly manifests: Manifest.Manifest<unknown>[]
   readonly valuesLayers: _CollectedLayer[]
@@ -188,8 +212,8 @@ interface _BindAcc {
 interface _DispatchInput {
   readonly memberKey: string
   readonly entry: EnvMember
-  readonly secretsOpts: Record<string, unknown> | undefined
-  readonly literalsOpts: Record<string, unknown> | undefined
+  readonly secretsOpts: _SecretsNode | undefined
+  readonly literalsOpts: _LiteralsNode | undefined
   readonly namespace: string | undefined
   readonly acc: _BindAcc
 }
@@ -200,13 +224,28 @@ const _normalizeSecretMember = (
   raw: SecretMemberInput<string, string> | undefined
 ): SecretMemberOptions<string, string> | undefined => {
   if (raw === undefined || !("_tag" in raw)) return raw
+
   return "emit" in raw ? { backend: raw } : { source: raw }
 }
 
 // The typed options records (SecretMembersOpts / LiteralMembersOpts and their
-// nested sub-records) are walked with runtime string keys; this helper is the
-// single boundary where the typed view becomes Record<string, unknown>.
-const _asRecord = (value: unknown): Record<string, unknown> | undefined => Predicate.isObject(value) ? value : undefined
+// nested sub-records) are walked with runtime string keys; these helpers are
+// the boundary where the typed view becomes an untyped-key node.
+const _secretsRoot = <M extends Readonly<Record<string, EnvMember>>>(
+  opts: SecretMembersOpts<M> | undefined
+): _SecretsNode | undefined =>
+  unsafeCoerce<_SecretsNode | undefined>(opts, "SecretMembersOpts<M> is a record of member inputs and nested records")
+
+const _literalsRoot = <M extends Readonly<Record<string, EnvMember>>>(
+  opts: LiteralMembersOpts<M> | undefined
+): _LiteralsNode | undefined =>
+  unsafeCoerce<_LiteralsNode | undefined>(opts, "LiteralMembersOpts<M> is a record of overrides and nested records")
+
+const _nestedSecrets = (node: _SecretsNode | undefined, key: string): _SecretsNode | undefined =>
+  unsafeCoerce<_SecretsNode | undefined>(node?.[key], "an Environment member's secrets entry is a nested record")
+
+const _nestedLiterals = (node: _LiteralsNode | undefined, key: string): _LiteralsNode | undefined =>
+  unsafeCoerce<_LiteralsNode | undefined>(node?.[key], "an Environment member's literals entry is a nested record")
 
 const _handleSecret = (entry: AnySecretEntry, input: _DispatchInput): void => {
   const memberOpts = _normalizeSecretMember(
@@ -215,6 +254,7 @@ const _handleSecret = (entry: AnySecretEntry, input: _DispatchInput): void => {
       "SecretMembersOpts<M> puts a SecretMemberInput under every secret member's key; the runtime key lookup erases that"
     )
   )
+
   const d = bindSecret({
     secret: entry,
     backend: memberOpts?.backend,
@@ -223,14 +263,23 @@ const _handleSecret = (entry: AnySecretEntry, input: _DispatchInput): void => {
     annotations: memberOpts?.annotations,
     namespace: input.namespace
   })
+
   input.acc.declared[input.memberKey] = d
   input.acc.envVars.push(...d.envVars)
+
   if (d.manifest !== undefined) input.acc.manifests.push(d.manifest)
+
   if (d.layer !== undefined) input.acc.valuesLayers.push(d.layer)
 }
 
+const _literalOverride = (input: _DispatchInput): _LiteralOverride =>
+  unsafeCoerce<_LiteralOverride>(
+    input.literalsOpts?.[input.memberKey],
+    "a literal member's entry is its override value"
+  )
+
 const _handleLiteral = (entry: AnyLiteralEntry, input: _DispatchInput): void => {
-  const d = _bindLiteral({ entry, override: input.literalsOpts?.[input.memberKey] })
+  const d = _bindLiteral({ entry, override: _literalOverride(input) })
   input.acc.declared[input.memberKey] = d
   input.acc.envVars.push(d.envVar)
 }
@@ -245,8 +294,8 @@ const _handleEnvironment = (entry: AnyEnvironment, input: _DispatchInput): void 
   const acc: _BindAcc = { declared: {}, envVars: [], manifests: [], valuesLayers: [] }
   _dispatchAllMembers({
     members: entry.members,
-    secretsOpts: _asRecord(input.secretsOpts?.[input.memberKey]),
-    literalsOpts: _asRecord(input.literalsOpts?.[input.memberKey]),
+    secretsOpts: _nestedSecrets(input.secretsOpts, input.memberKey),
+    literalsOpts: _nestedLiterals(input.literalsOpts, input.memberKey),
     namespace: input.namespace,
     acc
   })
@@ -268,8 +317,8 @@ const _dispatch = (input: _DispatchInput): void =>
 
 interface _DispatchAllInput {
   readonly members: Readonly<Record<string, EnvMember>>
-  readonly secretsOpts: Record<string, unknown> | undefined
-  readonly literalsOpts: Record<string, unknown> | undefined
+  readonly secretsOpts: _SecretsNode | undefined
+  readonly literalsOpts: _LiteralsNode | undefined
   readonly namespace: string | undefined
   readonly acc: _BindAcc
 }
@@ -305,10 +354,11 @@ export const bindEnvironment = <
     manifests: [],
     valuesLayers: []
   }
+
   _dispatchAllMembers({
     members: input.env.members,
-    secretsOpts: _asRecord(input.secrets),
-    literalsOpts: _asRecord(input.literals),
+    secretsOpts: _secretsRoot(input.secrets),
+    literalsOpts: _literalsRoot(input.literals),
     namespace: input.namespace,
     acc
   })

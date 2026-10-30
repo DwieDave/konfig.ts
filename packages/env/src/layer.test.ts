@@ -2,7 +2,7 @@ import { it } from "@effect/vitest"
 import { Config, ConfigProvider, Context, Effect, Layer, Redacted } from "effect"
 import { describe, expect } from "vitest"
 import { Environment } from "./environment"
-import { environmentLayer, type EnvironmentShape } from "./layer"
+import { environmentLayer, type EnvironmentValues } from "./layer"
 import { Literal } from "./literal"
 import { Secret } from "./secret"
 
@@ -15,9 +15,10 @@ const dbCreds = Secret.define({
 const port = Literal.define({ envName: "PORT", value: 8080 })
 
 const apiEnv = Environment.define({ db: dbCreds, port })
-type ApiEnvShape = EnvironmentShape<typeof apiEnv.members>
 
-class ApiEnv extends Context.Service<ApiEnv, ApiEnvShape>()("ApiEnv") {}
+type ApiEnvValues = EnvironmentValues<typeof apiEnv.members>
+
+class ApiEnv extends Context.Service<ApiEnv, ApiEnvValues>()("ApiEnv") {}
 
 const fakeEnv = ConfigProvider.layer(
   ConfigProvider.fromEnv({
@@ -37,6 +38,7 @@ describe("environmentLayer", () => {
           ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }))
         )
       ).pipe(Effect.scoped, Effect.flip)
+
       expect(exit).toBeInstanceOf(Config.ConfigError)
     }))
 
@@ -61,10 +63,13 @@ describe("environmentLayer", () => {
     }).pipe(Effect.provide(Layer.provide(environmentLayer({ tag: ApiEnv, env: apiEnv }), fakeEnv))))
 })
 
-type _Shape = {
+type _ExpectedValues = {
   db: { url: Redacted.Redacted<string>; password: Redacted.Redacted<string> }
   port: number
 }
-type _SameShape = ApiEnvShape extends _Shape ? (_Shape extends ApiEnvShape ? true : false) : false
-const _assertShapeMatches: _SameShape = true
-void _assertShapeMatches
+
+type _SameValues = ApiEnvValues extends _ExpectedValues ? (_ExpectedValues extends ApiEnvValues ? true : false) : false
+
+const _assertValuesMatch: _SameValues = true
+
+void _assertValuesMatch

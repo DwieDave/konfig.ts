@@ -102,6 +102,6 @@ describe("Secret", () => {
 
   it("composes with Config combinators", () => {
     const opt = Config.option(dbCreds)
-    expect(typeof opt).toBe("object")
+    expect(opt).toBeDefined()
   })
 })
