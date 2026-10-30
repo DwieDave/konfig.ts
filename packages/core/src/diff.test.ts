@@ -13,6 +13,7 @@ describe("redact (FR-3.2)", () => {
         }
       }
     })
+
     expect(r).toEqual({
       apiVersion: "v1",
       kind: "Pod",
@@ -23,14 +24,15 @@ describe("redact (FR-3.2)", () => {
   it("strips app.kubernetes.io/managed-by=Helm but keeps non-Helm values", () => {
     const r = redact({
       value: { metadata: { labels: { "app.kubernetes.io/managed-by": "Helm", other: "v" } } }
-    }) as { metadata: { labels: Record<string, string> } }
-    expect(r.metadata.labels["app.kubernetes.io/managed-by"]).toBeUndefined()
-    expect(r.metadata.labels.other).toBe("v")
+    })
+
+    expect(r).toEqual({ metadata: { labels: { other: "v" } } })
 
     const r2 = redact({
       value: { metadata: { labels: { "app.kubernetes.io/managed-by": "argocd" } } }
-    }) as { metadata: { labels: Record<string, string> } }
-    expect(r2.metadata.labels["app.kubernetes.io/managed-by"]).toBe("argocd")
+    })
+
+    expect(r2).toEqual({ metadata: { labels: { "app.kubernetes.io/managed-by": "argocd" } } })
   })
 
   it("strips meta.helm.sh/* annotations", () => {
@@ -44,15 +46,17 @@ describe("redact (FR-3.2)", () => {
           }
         }
       }
-    }) as { metadata: { annotations: Record<string, string> } }
-    expect(r.metadata.annotations).toEqual({ keep: "v" })
+    })
+
+    expect(r).toEqual({ metadata: { annotations: { keep: "v" } } })
   })
 
   it("does NOT strip helm.sh/chart on nested (non-metadata) labels", () => {
     const r = redact({
       value: { spec: { selector: { matchLabels: { "helm.sh/chart": "x" } } } }
-    }) as { spec: { selector: { matchLabels: Record<string, string> } } }
-    expect(r.spec.selector.matchLabels["helm.sh/chart"]).toBe("x")
+    })
+
+    expect(r).toEqual({ spec: { selector: { matchLabels: { "helm.sh/chart": "x" } } } })
   })
 })
 
@@ -75,11 +79,13 @@ describe("diffFiles (FR-3.3)", () => {
       "Pod-shared.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: shared\n",
       "Pod-b.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: b\n"
     }
+
     const right = {
       "Pod-shared.yaml": "kind: Pod\napiVersion: v1\nmetadata:\n  name: shared\n",
       "Pod-b.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: bee\n",
       "Pod-c.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: c\n"
     }
+
     const result = diffFiles({ left, right })
     const byFile = Object.fromEntries(result.entries.map((e) => [e.file, e._tag]))
     expect(byFile["Pod-a.yaml"]).toBe("MissingRight")
@@ -94,9 +100,11 @@ describe("diffFiles (FR-3.3)", () => {
       "Pod-a.yaml":
         "apiVersion: v1\nkind: Pod\nmetadata:\n  name: a\n  labels:\n    helm.sh/chart: foo-1.0\n    app: x\n"
     }
+
     const right = {
       "Pod-a.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: a\n  labels:\n    app: x\n"
     }
+
     const r = diffFiles({ left, right })
     expect(hasDifferences(r)).toBe(false)
   })
@@ -137,10 +145,12 @@ describe("formatDiff (FR-3.4)", () => {
       "multi.yaml":
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\ndata:\n  k: v\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: svc\n"
     }
+
     const right = {
       "multi.yaml":
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\ndata:\n  k: v2\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: svc\n"
     }
+
     const out = formatDiff({ result: diffFiles({ left, right }), format: "detail" })
     expect(out).toContain("[doc ConfigMap||cm] Changed")
     expect(out).not.toContain("[doc Service||svc]")

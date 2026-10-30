@@ -1,6 +1,7 @@
+import { Predicate } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { deepEqual, diffFiles, hasDifferences, redact, redactedEqual } from "./diff"
+import { deepEqual, diffFiles, hasDifferences, type Json, redact, redactedEqual } from "./diff"
 
 /** A small alphabet of Kubernetes-shaped documents, YAML-stringified. */
 const arbDoc = fc.record({
@@ -28,6 +29,7 @@ const arbLeaf = fc.oneof(
   fc.constantFrom("1", "1.0", "-2", "true", "Helm", "x", "<redacted>"),
   fc.double({ noNaN: true, noDefaultInfinity: true, min: -2, max: 2 })
 )
+
 const arbKey = fc.constantFrom(
   "a",
   "b",
@@ -42,8 +44,10 @@ const arbKey = fc.constantFrom(
   "meta.helm.sh/release-name",
   "meta.helm.sh/release-namespace"
 )
+
 const arbKind = fc.constantFrom("Secret", "ConfigMap", null, undefined)
-const arbValue: fc.Arbitrary<unknown> = fc.letrec((tie) => ({
+
+const arbValue: fc.Arbitrary<Json> = fc.letrec<{ value: Json }>((tie) => ({
   value: fc.oneof(
     { depthSize: "small", maxDepth: 4 },
     arbLeaf,
@@ -65,6 +69,7 @@ describe("redactedEqual mirrors deepEqual over redact", () => {
       { numRuns: 2000 }
     )
   }
+
   it("without numeric normalization", () => check({}))
   it("with numeric normalization", () => check({ normalizeNumerics: true }))
 })
@@ -112,11 +117,13 @@ describe("diff.ts — property tests", () => {
 
         const rEntry = removedFromRight.entries[0]
         const lEntry = removedFromLeft.entries[0]
-        if (rEntry?._tag === "Changed") {
-          expect(rEntry.docs?.some((d) => d._tag === "MissingRight")).toBe(true)
+
+        if (Predicate.isTagged(rEntry, "Changed")) {
+          expect(rEntry.docs?.some((d) => Predicate.isTagged(d, "MissingRight"))).toBe(true)
         }
-        if (lEntry?._tag === "Changed") {
-          expect(lEntry.docs?.some((d) => d._tag === "MissingLeft")).toBe(true)
+
+        if (Predicate.isTagged(lEntry, "Changed")) {
+          expect(lEntry.docs?.some((d) => Predicate.isTagged(d, "MissingLeft"))).toBe(true)
         }
       })
     )

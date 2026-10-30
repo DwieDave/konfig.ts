@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { describe, expect, it } from "vitest"
 import { diffFiles, hasDifferences, parseYamlAll, redact } from "./diff"
 
@@ -53,8 +54,8 @@ describe("parseYamlAll", () => {
   it("returns a tuple of parsed docs in source order", () => {
     const docs = parseYamlAll(MULTI_DOC_LEFT)
     expect(docs).toHaveLength(2)
-    expect((docs[0] as { kind: string }).kind).toBe("ConfigMap")
-    expect((docs[1] as { kind: string }).kind).toBe("Service")
+    expect(docs[0]).toMatchObject({ kind: "ConfigMap" })
+    expect(docs[1]).toMatchObject({ kind: "Service" })
   })
 
   it("drops empty / whitespace-only fragments", () => {
@@ -78,9 +79,10 @@ describe("diffFiles multi-doc handling", () => {
     expect(hasDifferences(result)).toBe(true)
     const entry = result.entries[0]
     expect(entry?._tag).toBe("Changed")
-    if (entry?._tag === "Changed") {
+
+    if (Predicate.isTagged(entry, "Changed")) {
       expect(entry.docs).toBeDefined()
-      const changedDocs = entry.docs?.filter((d) => d._tag !== "Same") ?? []
+      const changedDocs = entry.docs?.filter((d) => !Predicate.isTagged(d, "Same")) ?? []
       expect(changedDocs).toHaveLength(1)
       expect(changedDocs[0]?.key).toContain("ConfigMap")
     }
@@ -88,14 +90,17 @@ describe("diffFiles multi-doc handling", () => {
 
   it("flags an added document on one side as MissingLeft", () => {
     const left = { "out.yaml": MULTI_DOC_LEFT }
+
     const right = {
       "out.yaml": `${MULTI_DOC_LEFT}---\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: extra\n`
     }
+
     const result = diffFiles({ left, right })
     const entry = result.entries[0]
     expect(entry?._tag).toBe("Changed")
-    if (entry?._tag === "Changed") {
-      const missingLeft = entry.docs?.find((d) => d._tag === "MissingLeft")
+
+    if (Predicate.isTagged(entry, "Changed")) {
+      const missingLeft = entry.docs?.find((d) => Predicate.isTagged(d, "MissingLeft"))
       expect(missingLeft).toBeDefined()
       expect(missingLeft?.key).toContain("Namespace")
     }
@@ -105,16 +110,19 @@ describe("diffFiles multi-doc handling", () => {
     const left = {
       "out.yaml": `${MULTI_DOC_LEFT}---\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: extra\n`
     }
+
     const right = { "out.yaml": MULTI_DOC_LEFT }
     const result = diffFiles({ left, right })
     const entry = result.entries[0]
     expect(entry?._tag).toBe("Changed")
-    if (entry?._tag === "Changed") {
-      const missingRight = entry.docs?.find((d) => d._tag === "MissingRight")
+
+    if (Predicate.isTagged(entry, "Changed")) {
+      const missingRight = entry.docs?.find((d) => Predicate.isTagged(d, "MissingRight"))
       expect(missingRight).toBeDefined()
       expect(missingRight?.key).toContain("Namespace")
-      if (missingRight?._tag === "MissingRight") {
-        expect((missingRight.left as { kind: string }).kind).toBe("Namespace")
+
+      if (Predicate.isTagged(missingRight, "MissingRight")) {
+        expect(missingRight.left).toMatchObject({ kind: "Namespace" })
       }
     }
   })
@@ -130,7 +138,7 @@ describe("redact numeric normalization", () => {
 
   it("default behavior keeps the YAML library's coercion (1.0 → 1 number unifies anyway)", () => {
     const out = redact({ value: { x: "1.0" } })
-    expect((out as { x: unknown }).x).toBe("1.0")
+    expect(out).toEqual({ x: "1.0" })
   })
 
   it("normalizes a numeric string deep inside a map", () => {
@@ -138,7 +146,8 @@ describe("redact numeric normalization", () => {
       value: { spec: { replicas: "3" } },
       options: { normalizeNumerics: true }
     })
-    expect((out as { spec: { replicas: unknown } }).spec.replicas).toBe(3)
+
+    expect(out).toEqual({ spec: { replicas: 3 } })
   })
 })
 
