@@ -12,9 +12,11 @@ export interface ValidationIssue {
 // Most Kubernetes objects (Deployments, ConfigMaps, CRDs, CustomResources,
 // ...) are named per RFC 1123 *subdomain* rules — lowercase alphanumerics,
 // '-', and '.', up to 253 chars — which is why e.g. a CustomResourceDefinition
-// named `sopssecrets.isindir.github.com` is legal. A handful of kinds are
-// stricter and require an RFC 1123 *label* (no dots, max 63 chars):
-// Namespace and Service names, and every object's metadata.namespace.
+// named `sopssecrets.isindir.github.com` is legal. Exceptions: Namespace uses
+// the RFC 1123 *label* rule (no dots, max 63 chars), Service uses the DNS-1035
+// label rule (must start with a letter), and RBAC kinds (Role, ClusterRole,
+// RoleBinding, ClusterRoleBinding) only need a valid path segment. Every
+// object's metadata.namespace is an RFC 1123 label.
 const _DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
 const _DNS_SUBDOMAIN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/
 const _MAX_LABEL_LENGTH = 63

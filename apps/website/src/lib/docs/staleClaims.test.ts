@@ -29,7 +29,9 @@ const STALE_CLAIMS: ReadonlyArray<RegExp> = [
   /_tag: "Sops" \|/,
   /number followed by `s`, `m`, or `h`/,
   /`target` is passed through unchanged/,
-  /implement the `SecretBackend<N, K, RequiresSource>` contract/
+  /implement the `SecretBackend<N, K, RequiresSource>` contract/,
+  /issueCount/,
+  /`Namespace` and `Service`[^\n]*RFC 1123 \*?label/
 ]
 
 describe("stale doc claims", () => {

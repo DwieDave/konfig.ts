@@ -14,8 +14,8 @@ import { Aside } from "@/components/docs"
 1. The CLI finds `konfig.json` by walking up from the working directory and decodes it strictly. It then resolves the entry file for the env: `<root>/<envs.<env>.entry>`, or `<root>/env/<env>.ts` when the env is not listed. From the env name and the `--cluster`, `--k8s-version`, and `--flag k=v` flags it builds the render context. Errors at this step: `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`.
 2. It imports the entry module. The default export must be an Effect: an `AppOfApps.fromModules({ ... })` or `Bundle.fromModules({ ... })` program. A missing default export, a non-Effect, or an import failure fails with `EnvLoadError { entry, cause }`.
 3. It runs that Effect. The result is a list of Applications (or Bundles), each carrying its `manifests` array.
-4. It renders every manifest. Each manifest's `render` is called with the context; concurrency is unbounded within an app, four apps at a time. Results are flattened: typed objects, arrays, and raw YAML blobs are all accepted, and raw YAML is split into documents. `null` and empty documents are skipped; any other value lacking a string `kind` and `metadata.name` fails with `InvalidOutputObject`.
-5. It assigns file names. Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>.yaml`, where `outDir` is `<root>/<outDir.manifests>` from `konfig.json`. The Argo CD Application CR for each app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml`; `apps-name` is the `name` given to `AppOfApps.fromModules`, default `apps`. Bundles emit no CR.
+4. It renders every manifest. Each manifest's `render` is called with the context; total in-flight renders across all apps are bounded by `RENDER_CONCURRENCY` (4). Results are flattened: typed objects, arrays, and raw YAML blobs are all accepted, and raw YAML is split into documents. `null` and empty documents are skipped; any other value lacking a string `kind` and `metadata.name` fails with `InvalidOutputObject`.
+5. It assigns file names. Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>[@<namespace>].yaml`, where `outDir` is `<root>/<outDir.manifests>` from `konfig.json`. The Argo CD Application CR for each app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml`; `apps-name` is the `name` given to `AppOfApps.fromModules`, default `apps`. Bundles emit no CR.
 6. It writes atomically. Files are staged under `<outDir>/<env>[/<cluster>].tmp` with mode `0600`. The previous live directory is then removed and the staged tree renamed into its place, so a build that dies while rendering never touches the previous output.
 
 `validate` and `diff` run steps 1 to 4 in memory and skip the write.
@@ -32,9 +32,9 @@ All output goes through `Yaml.serialize`, so two renders of the same input are b
 - YAML 1.1 semantics, so strings such as `"yes"`, `"no"`, `"on"`, `"off"` are quoted and are not read back as booleans by go-yaml based tools.
 - CRLF is normalised and the file ends with a single newline.
 
-`Yaml.filenameFor({ kind, metadata: { name } })` produces `<Kind>-<name>.yaml` with `.` and `/` in either part replaced by `-`. It throws if `kind` or `metadata.name` is missing; validate or decode first. `konfig build` checks this before calling it: an object with an empty `kind` or `metadata.name` fails with `InvalidOutputObject`.
+`Yaml.filenameFor({ kind, metadata: { name, namespace } })` produces `<Kind>-<name>.yaml`, or `<Kind>-<name>@<namespace>.yaml` when a namespace is set, with `.`, `/`, and `@` inside any part replaced by `-`. Files stay flat because Argo CD does not recurse into directories by default. It throws if `kind` or `metadata.name` is missing; validate or decode first. `konfig build` checks this before calling it: an object with an empty `kind` or `metadata.name` fails with `InvalidOutputObject`.
 
-The file name carries no namespace, and `.` maps to `-`. If two different objects in one app resolve to the same file (the same kind and name in two namespaces, or `a.b` next to `a-b`) with differing content, the render fails with `OutputFileCollision` listing the colliding objects instead of letting one overwrite the other.
+The namespace is part of the file name, and `.`, `/`, and `@` map to `-`. If two different objects in one app still resolve to the same file (`a.b` next to `a-b`, or the same kind and name with no namespace) with differing content, the render fails with `OutputFileCollision` listing the colliding objects instead of letting one overwrite the other.
 
 ## Structural diff
 
@@ -60,11 +60,13 @@ The cache entry lives at `<configDir>/.konfig/cache/<env>-<ctx digest>.json` and
 
 | Field | Rule |
 | --- | --- |
-| `metadata.name` (most kinds) | RFC 1123 subdomain: lowercase alphanumerics, dashes, and dots; max 253 chars |
-| `metadata.name` of `Namespace` and `Service` | RFC 1123 label: no dots, max 63 chars |
+| `metadata.name` of `Namespace` | RFC 1123 label: no dots, max 63 chars |
+| `metadata.name` of `Service` | DNS-1035 label: like an RFC 1123 label, but must start with a letter |
+| `metadata.name` of `Role`, `ClusterRole`, `RoleBinding`, `ClusterRoleBinding` | Path segment: non-empty, no `/` or `%`, not `.` or `..` |
+| `metadata.name` (all other kinds) | RFC 1123 subdomain: lowercase alphanumerics, dashes, and dots; max 253 chars |
 | `metadata.namespace` (when present) | RFC 1123 label, regardless of kind |
 
-Any issue fails with `StructuralValidationFailed { env, issueCount }`.
+Any issue fails with `StructuralValidationFailed { env, issues }`.
 
 Deeper, schema-level validation is left to `--strict`. It stages the same in-memory render into a scratch directory, runs `kubeconform -summary -strict` over it, and decides pass or fail from the exit code (`KubeconformReportError` on non-zero); it no longer depends on a prior `konfig build`. `kubeconform` must be on `PATH` (`KubeconformNotFound` otherwise). `--ignore-missing-schemas` is forwarded as `-ignore-missing-schemas` for CRDs without published schemas, and `--k8s-version` is forwarded as `-kubernetes-version <major.minor.patch>` (`1.31` becomes `1.31.0`); values that are not `major.minor[.patch]` fail with `InvalidK8sVersion`.
 

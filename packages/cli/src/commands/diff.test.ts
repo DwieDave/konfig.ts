@@ -131,9 +131,9 @@ describe("diffCommand", () => {
 
       const baselineDir = path.join(root, "infra", "baseline", "test")
       yield* fs.makeDirectory(path.join(baselineDir, "api"), { recursive: true })
-      yield* fs.writeFileString(path.join(baselineDir, "api", "ConfigMap-api-conf.yaml"), _apiConfYaml)
+      yield* fs.writeFileString(path.join(baselineDir, "api", "ConfigMap-api-conf@app.yaml"), _apiConfYaml)
       yield* fs.writeFileString(
-        path.join(baselineDir, "api", "ConfigMap-web-conf.yaml"),
+        path.join(baselineDir, "api", "ConfigMap-web-conf@app.yaml"),
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: web-conf\n  namespace: app\ndata:\n  K: render-value\n"
       )
 
@@ -156,10 +156,10 @@ describe("diffCommand", () => {
         const baselineDir = path.join(root, "infra", "baseline", "test")
         yield* fs.makeDirectory(path.join(baselineDir, "api"), { recursive: true })
         // api-conf matches the render exactly (Same, no output line).
-        yield* fs.writeFileString(path.join(baselineDir, "api", "ConfigMap-api-conf.yaml"), _apiConfYaml)
+        yield* fs.writeFileString(path.join(baselineDir, "api", "ConfigMap-api-conf@app.yaml"), _apiConfYaml)
         // web-conf differs from the render (Changed -> "~").
         yield* fs.writeFileString(
-          path.join(baselineDir, "api", "ConfigMap-web-conf.yaml"),
+          path.join(baselineDir, "api", "ConfigMap-web-conf@app.yaml"),
           "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: web-conf\n  namespace: app\ndata:\n  K: baseline-value\n"
         )
         // Baseline-only file the render no longer produces (MissingRight -> "-").
@@ -179,7 +179,7 @@ describe("diffCommand", () => {
         expect(lines).toHaveLength(1)
         const printed = (lines[0] ?? "").split("\n")
         expect(printed).toContain("- api/ConfigMap-retired.yaml")
-        expect(printed).toContain("~ api/ConfigMap-web-conf.yaml")
+        expect(printed).toContain("~ api/ConfigMap-web-conf@app.yaml")
         expect(printed.some((l) => l.includes("ConfigMap-api-conf"))).toBe(false)
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
@@ -195,9 +195,9 @@ describe("diffCommand", () => {
 
       const baselineDir = path.join(root, "infra", "baseline", "test")
       yield* fs.makeDirectory(path.join(baselineDir, "api"), { recursive: true })
-      yield* fs.writeFileString(path.join(baselineDir, "api", "ConfigMap-api-conf.yaml"), _apiConfYaml)
+      yield* fs.writeFileString(path.join(baselineDir, "api", "ConfigMap-api-conf@app.yaml"), _apiConfYaml)
       yield* fs.writeFileString(
-        path.join(baselineDir, "api", "ConfigMap-web-conf.yaml"),
+        path.join(baselineDir, "api", "ConfigMap-web-conf@app.yaml"),
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: web-conf\n  namespace: app\ndata:\n  K: baseline-value\n"
       )
 
@@ -210,9 +210,9 @@ describe("diffCommand", () => {
       })
 
       const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(DiffResultJson))(lines[0] ?? "")
-      const changed = parsed.entries.find((e) => e.file === "api/ConfigMap-web-conf.yaml")
+      const changed = parsed.entries.find((e) => e.file === "api/ConfigMap-web-conf@app.yaml")
       expect(changed?._tag).toBe("Changed")
-      const same = parsed.entries.find((e) => e.file === "api/ConfigMap-api-conf.yaml")
+      const same = parsed.entries.find((e) => e.file === "api/ConfigMap-api-conf@app.yaml")
       expect(same?._tag).toBe("Same")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

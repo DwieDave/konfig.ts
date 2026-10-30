@@ -1,6 +1,5 @@
 import { applicationCRFilename, type AppOfAppsResult, serializeApplicationCR } from "@konfig.ts/argocd"
 import {
-  type AnyRenderError,
   existsOrFalse,
   flattenDocs,
   KONFIG_HELM_CACHE_ENV,
@@ -10,12 +9,14 @@ import {
   type ResolvedKonfigConfig,
   Yaml
 } from "@konfig.ts/core"
-import { Array as Arr, ConfigProvider, Data, Effect, Option, Predicate, Schema } from "effect"
+import { Array as Arr, ConfigProvider, Data, Effect, Inspectable, Option, Predicate, Schema, Semaphore } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { resolveCliPaths } from "./cliConfig"
 import { envEntryPath } from "./envEntry"
 import { decodeEnvResult, type EnvResult } from "./envResult"
+import { writeFileEnsuringDir } from "./fsUtil"
+import { SUBPROCESS_CONCURRENCY } from "./helmShared"
 import { moduleDefault } from "./moduleDefault"
 
 export interface EnvTarget {
@@ -86,6 +87,18 @@ class EnvLoadError extends Data.TaggedError("EnvLoadError")<{
   readonly cause: unknown
 }> {}
 
+class EnvProgramFailed extends Data.TaggedError("EnvProgramFailed")<{
+  readonly entry: string
+  readonly cause: unknown
+}> {
+  get message(): string {
+    return `env entry ${this.entry} failed: ${_describeCause(this.cause)}`
+  }
+}
+
+const _describeCause = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : Inspectable.toStringUnknown(cause, 0)
+
 interface _ResolveEnvEntryInput {
   readonly cfg: ResolvedKonfigConfig
   readonly envName: string
@@ -120,7 +133,7 @@ const _importDefault = (entry: string): Effect.Effect<unknown, EnvLoadError> =>
 const _NOT_AN_EFFECT =
   "default export is not an Effect — env entries must default-export an AppOfApps or Bundle program Effect"
 
-const _isEnvProgram = (program: unknown): program is Effect.Effect<unknown, AnyRenderError> => Effect.isEffect(program)
+const _isEnvProgram = (program: unknown): program is Effect.Effect<unknown, unknown, never> => Effect.isEffect(program)
 
 const _asEnvProgram = (input: { readonly entry: string; readonly program: unknown }) =>
   _isEnvProgram(input.program)
@@ -130,7 +143,7 @@ const _asEnvProgram = (input: { readonly entry: string; readonly program: unknow
 const _loadEnv = (entry: string) =>
   Effect.gen(function*() {
     const program = yield* _asEnvProgram({ entry, program: yield* _importDefault(entry) })
-    const result = yield* program
+    const result = yield* program.pipe(Effect.mapError((cause) => new EnvProgramFailed({ entry, cause })))
 
     return yield* decodeEnvResult(result).pipe(
       Effect.mapError((cause) => new EnvResultInvalid({ entry, cause }))
@@ -199,7 +212,10 @@ const _toOutputFile = (input: _ToOutputFileInput): Effect.Effect<OutputFile, Inv
     }
 
     return {
-      path: path.join(dir, Yaml.filenameFor({ kind: routing.kind, metadata: { name: routing.name } })),
+      path: path.join(
+        dir,
+        Yaml.filenameFor({ kind: routing.kind, metadata: { name: routing.name, namespace: routing.namespace } })
+      ),
       content: Yaml.serialize({ value: doc }),
       object: _describeObject(routing)
     }
@@ -290,20 +306,21 @@ const _childrenOf = (result: EnvResult): EnvChild[] =>
     }))
 
 interface RenderChildInput {
+  readonly gate: Semaphore.Semaphore
   readonly child: EnvChild
   readonly outDirAbs: string
   readonly appsDirAbs: string
   readonly ctx: RenderContext
 }
 
-const _renderManifests = (input: Pick<RenderChildInput, "child" | "ctx">) =>
+const _renderManifests = (input: Pick<RenderChildInput, "child" | "ctx" | "gate">) =>
   Effect.forEach(
     input.child.manifests,
     (m) =>
       Effect.gen(function*() {
         if (!M.isManifest(m)) return yield* new NonManifestChild({ child: input.child.name })
 
-        return yield* renderManifest({ manifest: m, ctx: input.ctx })
+        return yield* input.gate.withPermit(renderManifest({ manifest: m, ctx: input.ctx }))
       }),
     { concurrency: "unbounded" }
   )
@@ -321,10 +338,10 @@ const _applicationFile = (input: { readonly argo: EnvChildArgo; readonly appsDir
 
 const _renderChild = (input: RenderChildInput) =>
   Effect.gen(function*() {
-    const { appsDirAbs, child, ctx, outDirAbs } = input
+    const { appsDirAbs, child, ctx, gate, outDirAbs } = input
     const path = yield* Path
     const appDir = path.join(outDirAbs, child.name)
-    const rendered = yield* _renderManifests({ child, ctx })
+    const rendered = yield* _renderManifests({ child, ctx, gate })
     const collected = yield* Effect.forEach(rendered, (value) => _collectOutputs({ value, appDir }))
     const application = child.argo === undefined ? [] : [yield* _applicationFile({ argo: child.argo, appsDirAbs })]
 
@@ -341,11 +358,12 @@ const _renderEnvBody = (input: EnvTarget) =>
     const outDirAbs = yield* envOutDir(input)
     const appsDirAbs = path.join(outDirAbs, result.name)
 
-    // Bounded at 4: keeps the helm/sops subprocess count manageable.
+    const gate = yield* Semaphore.make(SUBPROCESS_CONCURRENCY)
+
     const perAppFiles = yield* Effect.forEach(
       _childrenOf(result),
-      (child) => _renderChild({ appsDirAbs, child, ctx, outDirAbs }),
-      { concurrency: 4 }
+      (child) => _renderChild({ appsDirAbs, child, ctx, gate, outDirAbs }),
+      { concurrency: "unbounded" }
     )
 
     const all = perAppFiles.flat()
@@ -387,6 +405,8 @@ export class WriteEnvError extends Data.TaggedError("WriteEnvError")<{
   readonly cause: unknown
 }> {}
 
+const _writeEnvError = (path: string) => (cause: unknown) => new WriteEnvError({ path, cause })
+
 interface WriteFilesToDirInput {
   readonly rendered: RenderedEnv
   readonly targetDir: string
@@ -413,12 +433,11 @@ const _targetPathOf = (input: WriteFilesToDirInput & { readonly file: OutputFile
 
 const _writeOne = (input: { readonly targetPath: string; readonly content: string }) =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
-    const path = yield* Path
     const { content, targetPath } = input
-    const toError = (cause: unknown) => new WriteEnvError({ path: targetPath, cause })
-    yield* fs.makeDirectory(path.dirname(targetPath), { recursive: true }).pipe(Effect.mapError(toError))
-    yield* fs.writeFileString(targetPath, content, { mode: 0o600 }).pipe(Effect.mapError(toError))
+
+    yield* writeFileEnsuringDir({ path: targetPath, content, mode: 0o600 }).pipe(
+      Effect.mapError(_writeEnvError(targetPath))
+    )
 
     return targetPath
   })
@@ -438,26 +457,19 @@ export const writeFilesToDir = (
     return yield* Effect.forEach(targets, _writeOne)
   })
 
-const _removeIfExists = (target: string) =>
+const _removeTree = (target: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
 
-    const present = yield* existsOrFalse(target).pipe(
-      Effect.mapError((cause) => new WriteEnvError({ path: target, cause }))
-    )
-
-    if (!present) return
-    yield* fs
-      .remove(target, { recursive: true })
-      .pipe(Effect.mapError((cause) => new WriteEnvError({ path: target, cause })))
+    yield* fs.remove(target, { recursive: true, force: true }).pipe(Effect.mapError(_writeEnvError(target)))
   })
 
 const _promoteStaging = (input: { readonly stagingDir: string; readonly outDirAbs: string }) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
-    const toError = (cause: unknown) => new WriteEnvError({ path: input.outDirAbs, cause })
-    yield* _removeIfExists(input.outDirAbs)
+    const toError = _writeEnvError(input.outDirAbs)
+    yield* _removeTree(input.outDirAbs)
     yield* fs.makeDirectory(path.dirname(input.outDirAbs), { recursive: true }).pipe(Effect.mapError(toError))
     yield* fs.rename(input.stagingDir, input.outDirAbs).pipe(Effect.mapError(toError))
   })
@@ -487,10 +499,10 @@ export const writeFiles = (
     const { cfg, rendered } = input
     yield* _assertInsideManifests({ cfg, outDirAbs: rendered.outDirAbs })
     const stagingDir = `${rendered.outDirAbs}.tmp`
-    yield* _removeIfExists(stagingDir)
+    yield* _removeTree(stagingDir)
     const fs = yield* FileSystem
     yield* fs.makeDirectory(stagingDir, { recursive: true }).pipe(
-      Effect.mapError((cause) => new WriteEnvError({ path: stagingDir, cause }))
+      Effect.mapError(_writeEnvError(stagingDir))
     )
     yield* writeFilesToDir({ rendered, targetDir: stagingDir })
     yield* _promoteStaging({ stagingDir, outDirAbs: rendered.outDirAbs })

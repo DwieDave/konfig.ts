@@ -67,7 +67,7 @@ describe("runBuild", () => {
       })
 
       const outDir = path.join(root, "rendered", "prod")
-      const configMapPath = path.join(outDir, "api", "ConfigMap-api-conf.yaml")
+      const configMapPath = path.join(outDir, "api", "ConfigMap-api-conf@app.yaml")
       const exists = yield* fs.exists(configMapPath)
       expect(exists).toBe(true)
       const content = yield* fs.readFileString(configMapPath)
@@ -111,7 +111,7 @@ describe("runBuild", () => {
       yield* runBuild({ cfg, envName: "prod", ctx, logFmt: "text", noCache: true })
 
       const outDir = path.join(root, "rendered", "prod")
-      const exists = yield* fs.exists(path.join(outDir, "api", "ConfigMap-api-conf.yaml"))
+      const exists = yield* fs.exists(path.join(outDir, "api", "ConfigMap-api-conf@app.yaml"))
       expect(exists).toBe(true)
 
       const entry = yield* readCacheEntry({ cfg, envName: "prod", ctx })
@@ -202,8 +202,8 @@ describe("runBuild", () => {
       })
 
       const base = path.join(root, "rendered")
-      expect(yield* fs.exists(path.join(base, "prod@eu1", "api", "ConfigMap-api-conf.yaml"))).toBe(true)
-      expect(yield* fs.exists(path.join(base, "prod", "api", "ConfigMap-api-conf.yaml"))).toBe(true)
+      expect(yield* fs.exists(path.join(base, "prod@eu1", "api", "ConfigMap-api-conf@app.yaml"))).toBe(true)
+      expect(yield* fs.exists(path.join(base, "prod", "api", "ConfigMap-api-conf@app.yaml"))).toBe(true)
       expect(yield* fs.exists(path.join(base, "prod", "eu1"))).toBe(false)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

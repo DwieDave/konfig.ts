@@ -2,10 +2,11 @@ import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Manifest, renderAllYaml, RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Cause, Effect, Exit, Option, Predicate, Schema } from "effect"
-import { FileSystem } from "effect/FileSystem"
+import { FileSystem, makeNoop } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import { badArgument } from "effect/PlatformError"
 import fc from "fast-check"
-import { vi } from "vitest"
+import { expectTypeOf, vi } from "vitest"
 import { _collectOutputs, _findOutputCollisions, envOutDir, renderEnv, writeFiles } from "./buildEnv"
 import { _clusterName, _envName, withRenderContext } from "./renderContextFlags"
 
@@ -210,19 +211,6 @@ const _renderFlipped = (body: string) =>
   })
 
 describe("renderEnv: output file safety", () => {
-  it.effect("same kind+name in two namespaces fails with OutputFileCollision listing both objects", () =>
-    Effect.gen(function*() {
-      const err = yield* _renderFlipped(
-        _bundleEnv(
-          `[ConfigMap.make({ name: "c", namespace: "a", data: { K: "1" } }), ConfigMap.make({ name: "c", namespace: "b", data: { K: "1" } })]`
-        )
-      )
-
-      expect(err._tag).toBe("OutputFileCollision")
-      expect(String(err.message)).toContain("ConfigMap a/c")
-      expect(String(err.message)).toContain("ConfigMap b/c")
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
-
   it.effect("an empty metadata.name fails with InvalidOutputObject instead of throwing", () =>
     Effect.gen(function*() {
       const err = yield* _renderFlipped(
@@ -678,5 +666,132 @@ describe("_collectOutputs: parity with renderAllYaml", () => {
     const expected = rendered === "" ? [] : rendered.split("---\n")
 
     expect(files.map((f) => f.content.trim())).toEqual(expected.map((c) => c.trim()))
+  })
+})
+
+describe("renderEnv: render concurrency bound", () => {
+  const _slowBundle = (name: string) => `
+const ${name} = Bundle.define({ name: "${name}", namespace: "app", build: () =>
+  [0, 1, 2, 3, 4].map((i) => Manifest.make(() => Effect.gen(function*() {
+    const s = globalThis.__konfigRenders;
+    s.now += 1;
+    s.peak = Math.max(s.peak, s.now);
+    yield* Effect.sleep("5 millis");
+    s.now -= 1;
+    return { apiVersion: "v1", kind: "ConfigMap", metadata: { name: "${name}-" + i } };
+  }))) });
+`
+
+  it.live("peak in-flight renders across all children stays within RENDER_CONCURRENCY", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-conc-" })
+      const state = { now: 0, peak: 0 }
+      Reflect.set(globalThis, "__konfigRenders", state)
+
+      const body = `import { Bundle, Manifest } from "@konfig.ts/core";
+import { Effect } from "effect";
+${_slowBundle("a")}${_slowBundle("b")}${_slowBundle("c")}
+export default Bundle.fromModules({ modules: [a, b, c] as const });
+`
+
+      yield* _writeEnvFile(root, "infra/env/test.ts", body)
+      yield* renderEnv({ cfg: _cfgFor(root), envName: "test", ctx: RenderContext.make("test") })
+
+      expect(state.peak).toBeGreaterThan(0)
+      expect(state.peak).toBeLessThanOrEqual(Manifest.RENDER_CONCURRENCY)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("renderEnv: env program failures", () => {
+  it.effect("a failing env program surfaces as EnvProgramFailed with entry and cause", () =>
+    Effect.gen(function*() {
+      const err = yield* _renderFlipped(
+        `import { Effect } from "effect";\nexport default Effect.fail(new Error("boom"));\n`
+      )
+
+      expect(err._tag).toBe("EnvProgramFailed")
+      expect(String(err.message)).toContain("test.ts")
+      expect(String(err.message)).toContain("boom")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it.effect("a non-Error failure value is wrapped too", () =>
+    Effect.gen(function*() {
+      const err = yield* _renderFlipped(
+        `import { Effect } from "effect";\nexport default Effect.fail({ _tag: "Custom" });\n`
+      )
+
+      expect(err._tag).toBe("EnvProgramFailed")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
+  it("renderEnv's error union includes EnvProgramFailed", () => {
+    type _Err = Effect.Error<ReturnType<typeof renderEnv>>
+
+    expectTypeOf<Extract<_Err, { readonly _tag: "EnvProgramFailed" }>>().not.toBeNever()
+    expectTypeOf<Extract<_Err, { readonly _tag: "EnvProgramFailed"; readonly cause: unknown }>["entry"]>().toBeString()
+    expectTypeOf<Exclude<_Err, { readonly _tag: "EnvProgramFailed" }>>().not.toEqualTypeOf<_Err>()
+  })
+})
+
+describe("writeFiles: filesystem edge cases", () => {
+  it.effect("promotes staging even when exists would be denied for an absent target", () =>
+    Effect.gen(function*() {
+      const denied = badArgument({ module: "FileSystem", method: "exists", description: "permission denied" })
+
+      const stub = makeNoop({
+        exists: () => Effect.fail(denied),
+        remove: () => Effect.void,
+        makeDirectory: () => Effect.void,
+        writeFileString: () => Effect.void,
+        rename: () => Effect.void
+      })
+
+      const outDirAbs = "/cfg/infra/rendered/test"
+
+      const written = yield* writeFiles({
+        rendered: { appsDirAbs: outDirAbs, outDirAbs, files: [{ path: `${outDirAbs}/a.yaml`, content: "a: 1\n" }] },
+        cfg: _cfgFor("/cfg")
+      }).pipe(Effect.provideService(FileSystem, stub))
+
+      expect(written).toEqual([`${outDirAbs}/a.yaml`])
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("creates deeply nested target directories", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-nest-" })
+      const outDirAbs = path.join(root, "infra", "rendered", "test")
+
+      yield* writeFiles({
+        rendered: {
+          appsDirAbs: outDirAbs,
+          outDirAbs,
+          files: [{ path: `${outDirAbs}/x/y/z/a.yaml`, content: "a: 1\n" }]
+        },
+        cfg: _cfgFor(root)
+      })
+
+      expect(yield* fs.readFileString(path.join(outDirAbs, "x", "y", "z", "a.yaml"))).toBe("a: 1\n")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("_collectOutputs: namespaced filenames", () => {
+  const _roleBinding = (namespace: string) => ({
+    apiVersion: "rbac.authorization.k8s.io/v1",
+    kind: "RoleBinding",
+    metadata: { name: "leader-election", namespace }
+  })
+
+  it("same kind+name in two namespaces yields two files and no collision", async () => {
+    const files = await _collectOutputs({ value: [_roleBinding("team-a"), _roleBinding("team-b")], appDir: "/out/app" })
+      .pipe(Effect.provide(NodeServices.layer), Effect.runPromise)
+
+    expect(files.map((f) => f.path)).toEqual([
+      "/out/app/RoleBinding-leader-election@team-a.yaml",
+      "/out/app/RoleBinding-leader-election@team-b.yaml"
+    ])
+
+    expect(_findOutputCollisions(files)).toEqual([])
   })
 })

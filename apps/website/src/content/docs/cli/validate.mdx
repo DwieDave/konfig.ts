@@ -37,7 +37,7 @@ Structural validation catches the mistakes that make a manifest unusable before 
 | `apiVersion` | Required string. |
 | `kind` | Required string. |
 | `metadata.labels`, `metadata.annotations` | Optional maps of string to string. |
-| `metadata.name` | RFC 1123 *subdomain* (lowercase alphanumerics, `-`, `.`; must start and end alphanumeric; max 253 chars) for every kind except `Namespace` and `Service`, which use the stricter RFC 1123 *label* rule (no dots, max 63 chars). |
+| `metadata.name` | `Namespace`: RFC 1123 *label* (no dots, max 63 chars). `Service`: DNS-1035 *label* (like a label, but must start with a letter). `Role`, `ClusterRole`, `RoleBinding`, `ClusterRoleBinding`: path segment (no `/` or `%`, not `.` or `..`). Every other kind: RFC 1123 *subdomain* (lowercase alphanumerics, `-`, `.`; must start and end alphanumeric; max 253 chars). |
 | `metadata.namespace` | When present, always the RFC 1123 *label* rule regardless of kind. |
 
 So a `CustomResourceDefinition` named `sopssecrets.isindir.github.com` passes under the subdomain rule, while a `Service` or `Namespace` whose name contains a dot does not. Deeper fields are left to kubeconform.

@@ -153,10 +153,11 @@ const _isNonEmpty = Schema.is(Schema.NonEmptyString)
 // Throws synchronously as a defect — deliberately not routed through AnyRenderError.
 export const filenameFor = (resource: {
   readonly kind?: unknown
-  readonly metadata?: { readonly name?: unknown }
+  readonly metadata?: { readonly name?: unknown; readonly namespace?: unknown }
 }): string => {
   const kind = resource.kind
   const name = resource.metadata?.name
+  const namespace = resource.metadata?.namespace
 
   if (!_isNonEmpty(kind)) {
     throw new Error(`filenameFor: resource has no string kind`)
@@ -166,7 +167,9 @@ export const filenameFor = (resource: {
     throw new Error(`filenameFor: resource '${kind}' has no metadata.name`)
   }
 
-  return `${_sanitizeNameForFilename(kind)}-${_sanitizeNameForFilename(name)}.yaml`
+  const suffix = _isNonEmpty(namespace) ? `@${_sanitizeNameForFilename(namespace)}` : ""
+
+  return `${_sanitizeNameForFilename(kind)}-${_sanitizeNameForFilename(name)}${suffix}.yaml`
 }
 
-const _sanitizeNameForFilename = (name: string): string => name.replace(/[./]/g, "-")
+const _sanitizeNameForFilename = (name: string): string => name.replace(/[./@]/g, "-")

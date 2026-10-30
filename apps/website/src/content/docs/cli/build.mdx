@@ -36,7 +36,7 @@ konfig build <env> [--log text|json] [--no-cache]
 
 Files land under `<configDir>/<root>/<outDir.manifests>/<env>`, or `<env>@<cluster>` when `--cluster` is set. That directory contains two kinds of subdirectories:
 
-- One directory per app, named after the app. It holds one file per rendered resource, named `<Kind>-<name>.yaml`. Dots and slashes in resource names are replaced with `-` in the filename. Output that arrives as raw YAML text (Helm releases, sops passthrough) is split on real YAML document boundaries, so it ends up in the same per-resource files as everything else.
+- One directory per app, named after the app. It holds one file per rendered resource, named `<Kind>-<name>.yaml`, or `<Kind>-<name>@<namespace>.yaml` when `metadata.namespace` is set, so the same kind and name in two namespaces get separate files. Dots, slashes, and `@` inside a kind, name, or namespace are replaced with `-` in the filename. Output that arrives as raw YAML text (Helm releases, sops passthrough) is split on real YAML document boundaries, so it ends up in the same per-resource files as everything else.
 - One directory for the app-of-apps program itself, named `apps` unless you gave the program a name. It holds one `Application-<app>.yaml` for every child app.
 
 ```text

@@ -1,4 +1,4 @@
-import { Helm } from "@konfig.ts/core"
+import { Helm, Manifest } from "@konfig.ts/core"
 import { Console, Effect } from "effect"
 import type { ChartRegistryEntry } from "./chartRegistry"
 import { resolveCliPaths } from "./cliConfig"
@@ -13,6 +13,8 @@ const resolveOptionalConfig = resolveConfig().pipe(
   // oxlint-disable-next-line effecttsgo/effect-succeed-with-void
   Effect.catchTag("ConfigNotFound", () => Effect.succeed(undefined))
 )
+
+export const SUBPROCESS_CONCURRENCY = Manifest.RENDER_CONCURRENCY
 
 export const toChartRef = (input: {
   readonly entry: ChartRegistryEntry
@@ -39,7 +41,7 @@ export const forEachRegistryEntry = <E, R>(input: {
   Effect.forEach(
     input.registry,
     (entry) => Console.log(`${input.verb} ${entry.chart}@${entry.version}...`).pipe(Effect.andThen(input.run(entry))),
-    { concurrency: 4, discard: true }
+    { concurrency: SUBPROCESS_CONCURRENCY, discard: true }
   )
 
 export const loadHelmPaths = Effect.gen(function*() {

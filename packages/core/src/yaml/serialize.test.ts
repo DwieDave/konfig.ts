@@ -283,6 +283,34 @@ describe("filenameFor (FR-2.5)", () => {
     )
   })
 
+  it("appends @namespace when set", () => {
+    expect(filenameFor({ kind: "Role", metadata: { name: "r", namespace: "a" } })).toBe("Role-r@a.yaml")
+  })
+
+  const _label = fc.stringMatching(/^[a-z][a-z0-9-]{0,8}[a-z0-9]$/)
+  const _ns = fc.option(_label, { nil: undefined })
+  const _name = fc.string({ unit: fc.constantFrom("a", "b", "@", ".", "/", "-"), minLength: 1, maxLength: 8 })
+
+  it("property: differing namespaces never share a filename", () => {
+    fc.assert(
+      fc.property(_label, _name, _ns, _ns, (kind, name, n1, n2) => {
+        fc.pre(n1 !== n2)
+        const f = (namespace: string | undefined) => filenameFor({ kind, metadata: { name, namespace } })
+        expect(f(n1)).not.toBe(f(n2))
+      })
+    )
+  })
+
+  it("property: a namespaced object never collides with an unnamespaced one", () => {
+    fc.assert(
+      fc.property(_label, _name, _name, _label, (kind, n1, n2, ns) => {
+        expect(filenameFor({ kind, metadata: { name: n1, namespace: ns } })).not.toBe(
+          filenameFor({ kind, metadata: { name: n2 } })
+        )
+      })
+    )
+  })
+
   it("throws when kind is missing", () => {
     expect(() => filenameFor({ metadata: { name: "x" } })).toThrow()
   })
