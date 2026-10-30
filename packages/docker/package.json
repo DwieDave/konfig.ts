@@ -61,8 +61,7 @@
     "test:coverage": "bun ../../scripts/cli.ts pkg test:coverage"
   },
   "dependencies": {
-    "@konfig.ts/core": "workspace:*",
-    "yaml": "catalog:"
+    "@konfig.ts/core": "workspace:*"
   },
   "peerDependencies": {
     "effect": "^4.0.0"

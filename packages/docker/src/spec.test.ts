@@ -249,3 +249,47 @@ describe("EngineVersion", () => {
     }
   })
 })
+
+describe("DockerSpec numeric and name strictness", () => {
+  const withRunner = (patch: Partial<DockerSpec["runner"]>): DockerSpec => ({
+    ...minimalValid,
+    runner: { ...minimalValid.runner, ...patch }
+  })
+
+  const user = (u: { uid?: number; gid?: number; name?: string }) =>
+    withRunner({ user: UserAtom.cases.UserNonRoot.make(u, { disableChecks: true }) })
+
+  const hc = (retries: number) =>
+    withRunner({
+      healthcheck: HealthcheckAtom.cases.HealthcheckCommand.make({ argv: ["x"], retries }, { disableChecks: true })
+    })
+
+  const decodes = (spec: DockerSpec): boolean => Exit.isSuccess(Effect.runSyncExit(decodeDockerSpec(spec)))
+
+  it("rejects fractional or out-of-range values and unsafe names", () => {
+    const bad = [
+      withRunner({ expose: 80.5 }),
+      hc(2.5),
+      hc(-1),
+      user({ uid: -1.5 }),
+      user({ gid: 1.5 }),
+      user({ uid: 0 }),
+      user({ name: "a b" }),
+      user({ name: "a; rm -rf /" })
+    ]
+
+    expect(bad.map(decodes)).toEqual(bad.map(() => false))
+  })
+
+  it("accepts edge values", () => {
+    const good = [
+      withRunner({ expose: [1, 65535] }),
+      user({ uid: 1, gid: 2147483647 }),
+      hc(0),
+      user({ name: "app" }),
+      user({ name: "_svc-1" })
+    ]
+
+    expect(good.map(decodes)).toEqual(good.map(() => true))
+  })
+})

@@ -31,7 +31,18 @@ const EnvValue = Schema.String.check(notASecret)
 
 const EnvRecord = Schema.Record(Schema.String, EnvValue)
 
-const PortNumber = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65535))
+const MAX_ID = 2147483647
+
+const _intBetween = (range: { readonly min: number; readonly max: number }) =>
+  Schema.Int.check(Schema.isGreaterThanOrEqualTo(range.min), Schema.isLessThanOrEqualTo(range.max))
+
+const PortNumber = _intBetween({ min: 1, max: 65535 })
+
+const Retries = _intBetween({ min: 0, max: MAX_ID })
+
+const UnixId = _intBetween({ min: 1, max: MAX_ID })
+
+const PosixUserName = Schema.String.check(Schema.isPattern(/^[a-z_][a-z0-9_-]{0,31}$/))
 
 const ExposeField = Schema.Union([PortNumber, Schema.Array(PortNumber)])
 
@@ -83,14 +94,14 @@ export const HealthcheckAtom = Schema.TaggedUnion({
     port: PortNumber,
     interval: Schema.optionalKey(Schema.String),
     timeout: Schema.optionalKey(Schema.String),
-    retries: Schema.optionalKey(Schema.Finite),
+    retries: Schema.optionalKey(Retries),
     startPeriod: Schema.optionalKey(Schema.String)
   },
   HealthcheckCommand: {
     argv: Schema.Array(Schema.String),
     interval: Schema.optionalKey(Schema.String),
     timeout: Schema.optionalKey(Schema.String),
-    retries: Schema.optionalKey(Schema.Finite),
+    retries: Schema.optionalKey(Retries),
     startPeriod: Schema.optionalKey(Schema.String)
   }
 })
@@ -99,9 +110,9 @@ export type HealthcheckAtom = typeof HealthcheckAtom.Type
 
 export const UserAtom = Schema.TaggedUnion({
   UserNonRoot: {
-    uid: Schema.optionalKey(Schema.Finite),
-    gid: Schema.optionalKey(Schema.Finite),
-    name: Schema.optionalKey(Schema.String)
+    uid: Schema.optionalKey(UnixId),
+    gid: Schema.optionalKey(UnixId),
+    name: Schema.optionalKey(PosixUserName)
   },
   UserRoot: {}
 })

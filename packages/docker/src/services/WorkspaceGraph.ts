@@ -1,9 +1,16 @@
-import { brand, existsOrFalse, findUp, orElseIfNotFound, readOrEmpty } from "@konfig.ts/core"
+import {
+  brand,
+  existsOrFalse,
+  findUp,
+  orElseIfNotFound,
+  parseYamlWith,
+  readOrEmpty,
+  stringRecordSchema
+} from "@konfig.ts/core"
 import { Effect, Match, Option, type PlatformError, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { posix, relative, resolve } from "node:path"
-import { parse as parseYaml } from "yaml"
 import {
   CircularWorkspaceDep,
   MonorepoRootNotFound,
@@ -21,8 +28,6 @@ export type RootDir = string & { readonly [ROOT_BRAND]: true }
 
 const _brandRoot = (s: string): RootDir => brand<RootDir>(s)
 
-const DepRecord = Schema.Record(Schema.String, Schema.String)
-
 const PackageJsonSchema = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   version: Schema.optionalKey(Schema.String),
@@ -30,12 +35,12 @@ const PackageJsonSchema = Schema.Struct({
     Schema.Array(Schema.String),
     Schema.Struct({ packages: Schema.optionalKey(Schema.Array(Schema.String)) })
   ])),
-  dependencies: Schema.optionalKey(DepRecord),
-  devDependencies: Schema.optionalKey(DepRecord),
-  peerDependencies: Schema.optionalKey(DepRecord),
-  scripts: Schema.optionalKey(DepRecord),
+  dependencies: Schema.optionalKey(stringRecordSchema),
+  devDependencies: Schema.optionalKey(stringRecordSchema),
+  peerDependencies: Schema.optionalKey(stringRecordSchema),
+  scripts: Schema.optionalKey(stringRecordSchema),
   packageManager: Schema.optionalKey(Schema.String),
-  engines: Schema.optionalKey(DepRecord)
+  engines: Schema.optionalKey(stringRecordSchema)
 })
 
 export type PackageJson = typeof PackageJsonSchema.Type
@@ -224,17 +229,27 @@ const PnpmWorkspaceYamlSchema = Schema.Struct({
 
 const _isStringArray = Schema.is(Schema.Array(Schema.String))
 
+export const _decodeConfigYaml = <S extends Schema.Codec<unknown, unknown>>(input: {
+  readonly path: string
+  readonly text: string
+  readonly schema: S
+}): Effect.Effect<S["Type"], WorkspaceConfigInvalid> => {
+  const onError = (cause: unknown) => new WorkspaceConfigInvalid({ path: input.path, cause })
+
+  return parseYamlWith({ text: input.text, schema: Schema.NullOr(input.schema), onError }).pipe(
+    Effect.flatMap((doc) =>
+      doc === null ? Schema.decodeUnknownEffect(input.schema)({}).pipe(Effect.mapError(onError)) : Effect.succeed(doc)
+    )
+  )
+}
+
 const _parsePnpmPatterns = (input: {
   readonly path: string
   readonly text: string
 }): Effect.Effect<ReadonlyArray<string>, WorkspaceConfigInvalid> =>
-  input.text === ""
-    ? Effect.succeed<ReadonlyArray<string>>([])
-    : Effect.try(() => parseYaml(input.text)).pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(PnpmWorkspaceYamlSchema)),
-      Effect.map((parsed): ReadonlyArray<string> => parsed.packages ?? []),
-      Effect.mapError((cause) => new WorkspaceConfigInvalid({ path: input.path, cause }))
-    )
+  _decodeConfigYaml({ ...input, schema: PnpmWorkspaceYamlSchema }).pipe(
+    Effect.map((parsed): ReadonlyArray<string> => parsed.packages ?? [])
+  )
 
 const _readPnpmPatterns = (input: {
   readonly env: GraphEnv
@@ -363,10 +378,7 @@ const _parseYarnRc = (input: {
   readonly path: string
   readonly text: string
 }): Effect.Effect<typeof YarnRcSchema.Type, WorkspaceConfigInvalid> =>
-  Effect.try(() => parseYaml(input.text) ?? {}).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(YarnRcSchema)),
-    Effect.mapError((cause) => new WorkspaceConfigInvalid({ path: input.path, cause }))
-  )
+  _decodeConfigYaml({ ...input, schema: YarnRcSchema })
 
 const _layoutOfLinker = (linker: string | undefined): Effect.Effect<NodeModulesLayout, UnsupportedYarnLinker> =>
   Match.value(linker).pipe(
@@ -559,11 +571,46 @@ export const lookupWorkspace = (input: {
   return input.workspaces.find((w) => w.relDir === rel) ?? input.workspaces.find((w) => w.name === input.target)
 }
 
-export const closureOf = (input: ClosureInput): Effect.Effect<ReadonlyArray<Workspace>, CircularWorkspaceDep> =>
+const _byName = (all: ReadonlyArray<Workspace>): ReadonlyMap<string, Workspace> =>
+  new Map(all.map((ws) => [ws.name, ws] as const))
+
+const _runtimeClosure = (input: { readonly all: ReadonlyArray<Workspace>; readonly target: Workspace }) =>
   _visit({
-    byName: new Map(input.all.map((ws) => [ws.name, ws] as const)),
-    includeDev: input.includeDev ?? false,
+    byName: _byName(input.all),
+    includeDev: false,
     ws: input.target,
     stack: [],
     state: { visited: new Set(), order: [] }
   }).pipe(Effect.map((result) => result.order))
+
+const _reachAll = (input: {
+  readonly byName: ReadonlyMap<string, Workspace>
+  readonly ws: Workspace
+  readonly state: Visit
+}): Visit => {
+  if (input.state.visited.has(input.ws.name)) return input.state
+
+  const entered: Visit = { ...input.state, visited: new Set([...input.state.visited, input.ws.name]) }
+
+  const done = workspaceDeps({ ws: input.ws, names: input.byName.keys(), includeDev: true })
+    .flatMap(({ to }) => input.byName.get(to) ?? [])
+    .reduce((acc, dep) => _reachAll({ byName: input.byName, ws: dep, state: acc }), entered)
+
+  return { ...done, order: [...done.order, input.ws] }
+}
+
+const _closureWithDev = (input: {
+  readonly all: ReadonlyArray<Workspace>
+  readonly target: Workspace
+}): Effect.Effect<ReadonlyArray<Workspace>, CircularWorkspaceDep> => {
+  const { order } = _reachAll({
+    byName: _byName(input.all),
+    ws: input.target,
+    state: { visited: new Set(), order: [] }
+  })
+
+  return Effect.forEach(order, (ws) => _runtimeClosure({ all: input.all, target: ws })).pipe(Effect.as(order))
+}
+
+export const closureOf = (input: ClosureInput): Effect.Effect<ReadonlyArray<Workspace>, CircularWorkspaceDep> =>
+  input.includeDev === true ? _closureWithDev(input) : _runtimeClosure(input)

@@ -101,3 +101,27 @@ describe("build-only workspace node_modules", () => {
       )
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
+
+const cycleFiles = {
+  "package.json": rootPkgJson({ workspaces: ["packages/*"], extra: { packageManager: "bun@1.3.5" } }),
+  "bun.lock": "{}",
+  "packages/app/package.json": pkgJson({
+    name: "app",
+    extra: { engines: { bun: "1.3.5" }, dependencies: { lib: "workspace:*" } }
+  }),
+  "packages/lib/package.json": pkgJson({ name: "lib", extra: { devDependencies: { "test-utils": "workspace:*" } } }),
+  "packages/test-utils/package.json": pkgJson({ name: "test-utils", extra: { dependencies: { lib: "workspace:*" } } })
+}
+
+describe("dev-only cycles", () => {
+  it.effect("buildClosure is {app, lib, test-utils} and closure is {app, lib}", () =>
+    Effect.gen(function*() {
+      const dir = yield* writeTree(cycleFiles)
+      const bundle = yield* lower({ target: `${dir}/packages/app`, spec: specWith({ production: true }) })
+      const lastRun = (name: string) => runsOf(requireStage({ bundle, name })).at(-1)?.cmd
+      expect(lastRun("deps")).toContain("packages/test-utils/node_modules")
+      expect(lastRun("deps")).toContain("packages/lib/node_modules")
+      expect(lastRun("prod-deps")).toContain("packages/lib/node_modules")
+      expect(lastRun("prod-deps")).not.toContain("test-utils")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})

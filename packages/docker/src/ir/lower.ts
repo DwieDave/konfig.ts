@@ -541,10 +541,12 @@ const _installInstructions = (input: CtxPm & { readonly installCmd: ReadonlyArra
   Instr.Run({ cmd: input.installCmd.join(" ") })
 ]
 
+export const _nodeModulesPath = (ws: Workspace): string => `${ws.relDir}/node_modules`
+
 const _ensureNodeModulesDirs = (input: CtxPm & { readonly workspaces: ReadonlyArray<Workspace> }): Instruction[] =>
   input.pm.pmImpl.nodeModulesLayout === "hoisted" || input.workspaces.length === 0
     ? []
-    : [Instr.Run({ cmd: `mkdir -p ${input.workspaces.map((ws) => `${ws.relDir}/node_modules`).join(" ")}` })]
+    : [Instr.Run({ cmd: shJoin(["mkdir", "-p", ...input.workspaces.map(_nodeModulesPath)]) })]
 
 const _depsStage = (input: CtxPm): Stage =>
   _stage({
@@ -587,7 +589,7 @@ const _buildInstructions = (input: { readonly build: BuildAtom; readonly pm: PmC
   Match.value(input.build).pipe(
     Match.tag(
       "BuildScript",
-      (b): Instruction[] => [Instr.Run({ cmd: `${input.pm.pmKind.toLowerCase()} run ${b.script}` })]
+      (b): Instruction[] => [Instr.Run({ cmd: shJoin([input.pm.pmKind.toLowerCase(), "run", b.script]) })]
     ),
     Match.tag("BuildCommand", (b): Instruction[] => [Instr.Run({ cmd: shJoin(b.argv) })]),
     Match.tag("BuildNone", (): Instruction[] => []),
@@ -748,13 +750,13 @@ const _runnerInstructions = (
 
 const _sourcesStage = (input: BuildIRInput): ReadonlyArray<Stage> => {
   const names = _sourceNames(_expandWorkspaceSourceAll({ copy: input.spec.runner.copy, closure: input.ctx.closure }))
-  const paths = input.ctx.closure.filter((ws) => names.has(ws.name)).map((ws) => `/app/${ws.relDir}/node_modules`)
+  const paths = input.ctx.closure.filter((ws) => names.has(ws.name)).map((ws) => `/app/${_nodeModulesPath(ws)}`)
 
   return !input.spec.runner.production || paths.length === 0 ? [] : [{
     name: "sources",
     from: FromOf.FromStage({ stage: "builder" }),
     workdir: "/app",
-    instructions: [Instr.Run({ cmd: `rm -rf ${paths.join(" ")}` })]
+    instructions: [Instr.Run({ cmd: shJoin(["rm", "-rf", ...paths]) })]
   }]
 }
 

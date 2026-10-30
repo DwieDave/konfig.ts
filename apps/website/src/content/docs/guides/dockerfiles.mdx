@@ -27,7 +27,7 @@ Optional fields of `runner`:
 | --- | --- |
 | `production` | Adds a `prod-deps` stage that installs production dependencies for the closure only (`bun install --filter`, `yarn workspaces focus --production` on Yarn Berry, or a trimmed-workspaces install for npm, pnpm, and Yarn classic) |
 | `env` | Environment variables baked into the image |
-| `expose` | Port number or array of ports |
+| `expose` | Integer port (1-65535) or array of ports |
 | `entrypoint` | `ENTRYPOINT` line |
 | `user` | Which user the process runs as |
 | `healthcheck` | `HEALTHCHECK` line |
@@ -57,8 +57,8 @@ Each option in the spec is a small tagged value rather than a raw string, so the
 | `Docker.runtime` | `bun({ alpine? })`, `node({ alpine? })` |
 | `Docker.pm` | `bun()`, `npm()`, `pnpm()`, `yarn({ variant? })` |
 | `Docker.build` | `script(name)`, `command(argv)`, `none()` |
-| `Docker.healthcheck` | `httpGet({ path, port, interval?, timeout?, retries?, startPeriod? })`, `command({ argv, ... })` |
-| `Docker.user` | `nonRoot({ uid?, gid?, name? })`, `root()` |
+| `Docker.healthcheck` | `httpGet({ path, port, interval?, timeout?, retries?, startPeriod? })`, `command({ argv, ... })`; `retries` is a non-negative integer |
+| `Docker.user` | `nonRoot({ uid?, gid?, name? })`, `root()`; `uid` and `gid` are integers from 1, `name` matches `^[a-z_][a-z0-9_-]{0,31}$` |
 | `Docker.platform` | `linuxAmd64()`, `linuxArm64()` |
 
 The copy atoms decide what lands in the final image, so they deserve a closer look.
