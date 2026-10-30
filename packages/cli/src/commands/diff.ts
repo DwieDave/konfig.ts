@@ -22,6 +22,11 @@ class DiffNonEmpty extends Data.TaggedError("DiffNonEmpty")<{
   readonly env: string
 }> {}
 
+class DiffBaselineInvalid extends Data.TaggedError("DiffBaselineInvalid")<{
+  readonly path: string
+  readonly cause: unknown
+}> {}
+
 export const readBaselineDir = (baselineDir: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
@@ -30,7 +35,7 @@ export const readBaselineDir = (baselineDir: string) =>
 
     const entries = yield* Effect.forEach(paths, (full) =>
       fs.readFileString(full).pipe(
-        Effect.orElseSucceed(() => ""),
+        Effect.mapError((cause) => new DiffBaselineInvalid({ path: full, cause })),
         Effect.map((content) => [path.relative(baselineDir, full), content] as const)
       ))
 
@@ -66,7 +71,7 @@ const _runDiff = ({ args, cfg, ctx }: RunDiffInput) =>
       rendered.files.map((file) => [path.relative(rendered.outDirAbs, file.path), file.content])
     )
 
-    const result = yield* diffFiles({ left, right }).pipe(Effect.orDie)
+    const result = yield* diffFiles({ left, right })
 
     if (hasDifferences(result)) {
       yield* Console.log(formatDiff({ result, format: args.format }))

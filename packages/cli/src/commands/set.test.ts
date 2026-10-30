@@ -1,8 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import * as fc from "fast-check"
 import { ImagesFileError, setImageEffect, SetUnknownApp, SetUnknownEnv } from "./set"
 
 const _konfigJson = JSON.stringify({
@@ -251,5 +252,62 @@ describe("setImageEffect", () => {
 
       expect(failure).toBeInstanceOf(ImagesFileError)
       expect(failure._tag).toBe("ImagesFileError")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("setImageEffect own-property targets", () => {
+  const _fail = (args: { env: string; app: string; create?: boolean }) =>
+    Effect.gen(function*() {
+      const { root } = yield* _setupConfigDir
+
+      return yield* Effect.flip(setImageEffect({ image: "img", cwd: root, ...args }))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+  it.effect("rejects prototype keys as apps", () =>
+    Effect.gen(function*() {
+      expect((yield* _fail({ env: "prod", app: "toString" }))._tag).toBe("SetUnknownApp")
+    }))
+  it.effect("rejects prototype keys as envs, even with create", () =>
+    Effect.gen(function*() {
+      expect((yield* _fail({ env: "constructor", app: "api", create: true }))._tag).toBe("SetUnknownEnv")
+      expect((yield* _fail({ env: "toString", app: "api" }))._tag).toBe("SetUnknownEnv")
+    }))
+})
+
+describe("setImageEffect own-property property", () => {
+  const key = fc.oneof(
+    fc.constantFrom("toString", "constructor", "__proto__", "hasOwnProperty"),
+    fc.constantFrom("prod", "staging", "api", "web", "zzz")
+  )
+
+  it("accepts a key only when own, or create for app keys", async () => {
+    await fc.assert(
+      fc.asyncProperty(key, key, fc.boolean(), async (env, app, create) => {
+        const exit = await Effect.runPromise(
+          Effect.gen(function*() {
+            const { root } = yield* _setupConfigDir
+
+            return yield* Effect.exit(setImageEffect({ env, app, create, image: "img", cwd: root }))
+          }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+        )
+
+        const envOk = env === "prod" || env === "staging"
+        const appOk = env === "prod" ? app === "api" || app === "web" : false
+        expect(Exit.isSuccess(exit)).toBe(envOk && (appOk || create))
+      }),
+      { numRuns: 40 }
+    )
+  })
+
+  it.effect("rejects env 'toString' without create when only prod exists", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-set-" })
+      yield* fs.makeDirectory(path.join(root, "infra"), { recursive: true })
+      yield* fs.writeFileString(path.join(root, "konfig.json"), _konfigJson)
+      yield* fs.writeFileString(path.join(root, "infra", "images.json"), `{"envs":{"prod":{"api":"x"}}}`)
+      const failure = yield* Effect.flip(setImageEffect({ env: "toString", app: "api", image: "img", cwd: root }))
+      expect(failure._tag).toBe("SetUnknownEnv")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

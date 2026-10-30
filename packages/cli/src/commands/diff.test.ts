@@ -216,3 +216,40 @@ describe("diffCommand", () => {
       expect(same?._tag).toBe("Same")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
+
+describe("readBaselineDir unreadable files", () => {
+  it.effect("fails with a typed error instead of reading as empty", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-baseline-" })
+      const file = path.join(root, "ConfigMap-x.yaml")
+      yield* _write(file, "a: 1\n")
+      yield* fs.chmod(file, 0)
+      const error = yield* Effect.flip(readBaselineDir(root))
+      expect(error._tag).toBe("DiffBaselineInvalid")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("diffCommand malformed baseline", () => {
+  it.effect("fails with a typed error, not a defect, for an unparseable baseline file", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-diffcmd-" })
+      yield* fs.makeDirectory(path.join(root, "infra", "env"), { recursive: true })
+      yield* fs.writeFileString(path.join(root, "konfig.json"), _konfigJsonWithDiff("baseline"))
+      yield* fs.writeFileString(path.join(root, "infra", "env", "test.ts"), _envBody)
+      const baselineDir = path.join(root, "infra", "baseline", "test")
+      yield* fs.makeDirectory(baselineDir, { recursive: true })
+      yield* fs.writeFileString(path.join(baselineDir, "ConfigMap-x.yaml"), "a: [")
+
+      const { exit } = yield* _runDiffCommand(["test"], root)
+      expect(Exit.isFailure(exit)).toBe(true)
+
+      if (Exit.isFailure(exit)) {
+        expect(Cause.hasDies(exit.cause)).toBe(false)
+        expect(_findFailure(exit.cause)).toBeDefined()
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})

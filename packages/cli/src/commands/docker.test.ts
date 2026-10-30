@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Console, Effect, Option, Predicate } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import * as fc from "fast-check"
 import { diffEffect, diffOne, emitFor, loadSpec, previewEffect, writeAtomic, writeEffect, writeOne } from "./docker"
 
 const minimalSpecBody = `
@@ -563,5 +564,78 @@ describe("diffEffect", () => {
       }
 
       yield* diffEffect({ target, format: "summary" })
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("diffOne exact comparison", () => {
+  const _drift = (onDisk: string, emitted: string) =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-diffone-" })
+      const dest = `${dir}/Dockerfile`
+      yield* fs.writeFileString(dest, onDisk)
+
+      return yield* Effect.flip(diffOne({ dest, emitted, kind: "prod", target: "t", format: "summary" }))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+
+  const emitted = "FROM node:22 AS base\nWORKDIR /app\nCMD [\"node\"]\n"
+
+  it.effect("drifts on comments, colons and folded lines", () =>
+    Effect.gen(function*() {
+      const variants = [
+        "FROM node:22 AS base\nWORKDIR /app\n# RUN rm -rf /\nCMD [\"node\"]\n",
+        "FROM node:22 AS base\nWORKDIR /app\nRUN echo hi: there\nCMD [\"node\"]\n",
+        "FROM node:22 AS base WORKDIR /app\nCMD [\"node\"]\n"
+      ]
+
+      const tags = yield* Effect.forEach(variants, (v) => _drift(v, emitted))
+      expect(tags.map((e) => e._tag)).toEqual(["DiffDrift", "DiffDrift", "DiffDrift"])
+    }))
+
+  it("drifts for any single-line edit", async () => {
+    const body = fc.array(fc.stringMatching(/^[A-Za-z0-9 :#]{1,12}$/), { minLength: 2, maxLength: 6 })
+    await fc.assert(
+      fc.asyncProperty(body, fc.nat(), fc.constantFrom("insert", "delete", "join"), async (lines, n, op) => {
+        const i = n % (lines.length - 1)
+
+        const edits = {
+          insert: () => [...lines.slice(0, i), "X: y", ...lines.slice(i)],
+          delete: () => [...lines.slice(0, i), ...lines.slice(i + 1)],
+          join: () => [...lines.slice(0, i), `${lines[i]} ${lines[i + 1]}`, ...lines.slice(i + 2)]
+        }
+
+        const edited = edits[op]()
+
+        const err = await Effect.runPromise(_drift(`${edited.join("\n")}\n`, `${lines.join("\n")}\n`))
+
+        expect(err._tag).toBe("DiffDrift")
+      }),
+      { numRuns: 25 }
+    )
+  })
+})
+
+describe("diffOne printed line diff", () => {
+  it.effect("reports each differing line number, including reordered lines", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-diffone-" })
+      const dest = `${dir}/Dockerfile`
+      yield* fs.writeFileString(dest, "A\nB\nC\n")
+      const lines: Array<string> = []
+
+      const testConsole: Console.Console = Object.assign(Object.create(console), {
+        log: (...args: ReadonlyArray<unknown>) => {
+          lines.push(args.map(String).join(" "))
+        }
+      })
+
+      yield* Effect.flip(
+        diffOne({ dest, emitted: "A\nC\nB\n", kind: "prod", target: "t", format: "summary" }).pipe(
+          Effect.provideService(Console.Console, testConsole)
+        )
+      )
+
+      expect(lines).toEqual(["- L2: B\n+ L2: C\n- L3: C\n+ L3: B"])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

@@ -48,11 +48,11 @@ const _readImages = (file: string) =>
 
 const _assertTarget = (input: { readonly current: ImagesConfig } & Pick<SetImageArgs, "env" | "app" | "create">) => {
   const { app, create, current, env } = input
-  const envApps = current.envs[env]
+  const envApps = Object.hasOwn(current.envs, env) ? current.envs[env] : undefined
 
   if (envApps === undefined) return Effect.fail(new SetUnknownEnv({ env, known: Object.keys(current.envs) }))
 
-  return app in envApps || (create ?? false)
+  return Object.hasOwn(envApps, app) || (create ?? false)
     ? Effect.void
     : Effect.fail(new SetUnknownApp({ env, app, known: Object.keys(envApps) }))
 }

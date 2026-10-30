@@ -24,3 +24,10 @@ describe("envEntryPath", () => {
       expect(yield* _entry("dev")).toBe("/c/r/env/dev.ts")
     }))
 })
+
+describe("envEntryPath prototype keys", () => {
+  it.effect("treats toString as an undeclared env", () =>
+    Effect.gen(function*() {
+      expect(yield* _entry("toString")).toBe("/c/r/env/toString.ts")
+    }))
+})

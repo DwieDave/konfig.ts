@@ -32,3 +32,40 @@ describe("walkFiles", () => {
     )
   })
 })
+
+describe("walkFiles symlinks", () => {
+  it("skips back-links and terminates quickly", async () => {
+    const root = fsNode.mkdtempSync(nodePath.join(os.tmpdir(), "walk-"))
+    fsNode.mkdirSync(nodePath.join(root, "a"))
+    fsNode.writeFileSync(nodePath.join(root, "a", "f"), "")
+    fsNode.symlinkSync("..", nodePath.join(root, "a", "l1"))
+    fsNode.symlinkSync("..", nodePath.join(root, "a", "l2"))
+    const found = await Effect.runPromise(walkFiles({ dir: root }).pipe(Effect.provide(NodeServices.layer)))
+    fsNode.rmSync(root, { recursive: true })
+    expect(found).toEqual([nodePath.join(root, "a", "f")])
+  }, 1000)
+})
+
+describe("walkFiles symlink handling", () => {
+  it("returns each file once with a single back-link", async () => {
+    const root = fsNode.mkdtempSync(nodePath.join(os.tmpdir(), "walk-"))
+    fsNode.mkdirSync(nodePath.join(root, "a"))
+    fsNode.writeFileSync(nodePath.join(root, "a", "f"), "")
+    fsNode.symlinkSync("..", nodePath.join(root, "a", "loop"))
+    const found = await Effect.runPromise(walkFiles({ dir: root }).pipe(Effect.provide(NodeServices.layer)))
+    fsNode.rmSync(root, { recursive: true })
+    expect(found).toEqual([nodePath.join(root, "a", "f")])
+  }, 1000)
+
+  it("returns symlinked files but skips symlinked directories", async () => {
+    const root = fsNode.mkdtempSync(nodePath.join(os.tmpdir(), "walk-"))
+    fsNode.writeFileSync(nodePath.join(root, "real"), "")
+    fsNode.symlinkSync("real", nodePath.join(root, "alias"))
+    fsNode.mkdirSync(nodePath.join(root, "d"))
+    fsNode.writeFileSync(nodePath.join(root, "d", "x"), "")
+    fsNode.symlinkSync("d", nodePath.join(root, "dlink"))
+    const found = await Effect.runPromise(walkFiles({ dir: root }).pipe(Effect.provide(NodeServices.layer)))
+    fsNode.rmSync(root, { recursive: true })
+    expect(found.sort()).toEqual(["alias", "d/x", "real"].map((f) => nodePath.join(root, f)).sort())
+  })
+})

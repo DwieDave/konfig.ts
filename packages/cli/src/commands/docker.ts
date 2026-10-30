@@ -1,4 +1,4 @@
-import { diffFiles, type DiffFormat, formatDiff, hasDifferences } from "@konfig.ts/core"
+import type { DiffFormat } from "@konfig.ts/core"
 import {
   type AnyDockerError,
   type DockerApp,
@@ -243,19 +243,41 @@ export interface DiffOneInput {
   readonly format: DiffFormat
 }
 
+interface LineChange {
+  readonly line: number
+  readonly removed: string | undefined
+  readonly added: string | undefined
+}
+
+const _lineChanges = (
+  { left, right }: { readonly left: string; readonly right: string }
+): ReadonlyArray<LineChange> => {
+  const l = left.split("\n")
+  const r = right.split("\n")
+
+  return Array.from({ length: Math.max(l.length, r.length) }, (_, i) => ({ line: i + 1, removed: l[i], added: r[i] }))
+    .filter((c) => c.removed !== c.added)
+}
+
+const _lineDiff = (input: { readonly left: string; readonly right: string; readonly format: DiffFormat }) => {
+  const changes = _lineChanges(input)
+
+  return input.format === "json"
+    ? JSON.stringify({ changes })
+    : changes.flatMap((c) => [
+      ...(c.removed === undefined ? [] : [`- L${c.line}: ${c.removed}`]),
+      ...(c.added === undefined ? [] : [`+ L${c.line}: ${c.added}`])
+    ]).join("\n")
+}
+
 export const diffOne = (input: DiffOneInput): Effect.Effect<void, DiffDrift, FileSystem | Path> =>
   Effect.gen(function*() {
     const { dest, emitted, format, kind, target } = input
     const fs = yield* FileSystem
     const onDisk = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
 
-    const result = yield* diffFiles({
-      left: { [dest]: onDisk },
-      right: { [dest]: emitted }
-    }).pipe(Effect.orDie)
-
-    if (!hasDifferences(result)) return
-    yield* Console.log(formatDiff({ result, format }))
+    if (onDisk === emitted) return
+    yield* Console.log(_lineDiff({ left: onDisk, right: emitted, format }))
 
     return yield* new DiffDrift({ target, kind })
   })
