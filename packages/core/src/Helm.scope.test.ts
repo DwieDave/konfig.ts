@@ -1,41 +1,20 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { ConfigProvider, Effect, Layer, Schema, Sink, Stream } from "effect"
+import { ConfigProvider, Effect, Layer, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { Command } from "effect/process/ChildProcess"
 import { isStandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { type ChildProcessHandle, ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import { isRecord } from "./guards"
 import { sha256Hex } from "./hash"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
+import { fakeHandle } from "./testing"
 
 const _isString = Schema.is(Schema.String)
 
-const _handle = (stdout: string): ChildProcessHandle =>
-  makeHandle(
-    {
-      pid: ProcessId(1),
-      exitCode: Effect.succeed(ExitCode(0)),
-      isRunning: Effect.succeed(false),
-      kill: () => Effect.void,
-      stdin: Sink.drain,
-      stdout: Stream.make(new TextEncoder().encode(stdout)),
-      stderr: Stream.empty,
-      all: Stream.make(new TextEncoder().encode(stdout)),
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.succeed(Effect.void)
-    }
-  )
+const _handle = (stdout: string): ChildProcessHandle => fakeHandle({ stdout })
 
 const _doc = (kind: string, extra = ""): string => `apiVersion: v1\nkind: ${kind}\nmetadata:\n  name: x\n${extra}`
 

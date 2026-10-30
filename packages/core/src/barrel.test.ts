@@ -4,13 +4,21 @@ import * as Core from "./index"
 import type { PvcRefName } from "./index"
 
 describe("core barrel", () => {
+  it("exposes RENDER_CONCURRENCY on Manifest and flattenDocs", () => {
+    expect(Core.Manifest.RENDER_CONCURRENCY).toBe(4)
+    expect("flattenDocs" in Core).toBe(true)
+  })
+
   it.each([
     "render",
     "parseYaml",
     "ProcessInvocationError",
     "decodeKonfigConfigEffect",
     "decodeKonfigConfigSync",
-    "helmCacheDirConfig"
+    "helmCacheDirConfig",
+    "unwrapDocs",
+    "isRawYaml",
+    "isParsedDoc"
   ])("does not export %s", (name) => {
     expect(name in Core).toBe(false)
   })

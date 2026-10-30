@@ -1,21 +1,16 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Cause, Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { type Command, isStandardCommand } from "effect/process/ChildProcess"
-import {
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
 import { describe, expect } from "vitest"
 import { sha256Hex } from "./hash"
 import { cacheFileName, ensureChartTarball, pullArgs } from "./helm/cache"
 import { HelmDigestMismatch, HelmRenderError } from "./RenderError"
+import { fakeHandle } from "./testing"
 
 describe("pullArgs", () => {
   it("property: always embeds repo, chart, version and destination after their flags", () => {
@@ -67,21 +62,7 @@ const _spawner = (opts: { readonly files: ReadonlyArray<string>; readonly pulls:
           const dest = args[args.indexOf("--destination") + 1] ?? ""
           yield* Effect.forEach(opts.files, (f) => fs.writeFile(path.join(dest, f), _content))
 
-          return makeHandle(
-            {
-              pid: ProcessId(1),
-              exitCode: Effect.succeed(ExitCode(0)),
-              isRunning: Effect.succeed(false),
-              kill: () => Effect.void,
-              stdin: Sink.drain,
-              stdout: Stream.empty,
-              stderr: Stream.empty,
-              all: Stream.empty,
-              getInputFd: () => Sink.drain,
-              getOutputFd: () => Stream.empty,
-              unref: Effect.succeed(Effect.void)
-            }
-          )
+          return fakeHandle({})
         })
       )
     })

@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
+import { Manifest, renderAllYaml, RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Cause, Effect, Exit, Option, Predicate, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -654,5 +654,29 @@ describe("_collectOutputs: kind/name routing", () => {
       const outcome = await _collect(value).then(() => "ok", _tagOf)
       expect(outcome).toBe("InvalidOutputObject")
     }))
+  })
+})
+
+describe("_collectOutputs: parity with renderAllYaml", () => {
+  const _obj = (kind: string) => ({ apiVersion: "v1", kind, metadata: { name: kind.toLowerCase() } })
+  const _raw = (kind: string) => ({ _tag: "RawYaml" as const, content: `kind: ${kind}\nmetadata:\n  name: x\n` })
+  const _parsed = (kind: string) => ({ _tag: "ParsedDoc" as const, value: _obj(kind) })
+
+  const nestedOutputs: ReadonlyArray<readonly [string, unknown]> = [
+    ["nested tuple", [_obj("Deployment"), [_obj("Service")]]],
+    ["wrappers inside arrays", [[_raw("A"), null], [[_parsed("B")], undefined, _obj("C")]]],
+    ["empty nesting", [[], [[]], null]]
+  ]
+
+  it.each(nestedOutputs)("%s: file contents equal the rendered documents in order", async (_name, value) => {
+    const files = await _collectOutputs({ value, appDir: "/out/app" }).pipe(
+      Effect.provide(NodeServices.layer),
+      Effect.runPromise
+    )
+
+    const rendered = await renderAllYaml({ manifests: [Manifest.make(() => value)] })
+    const expected = rendered === "" ? [] : rendered.split("---\n")
+
+    expect(files.map((f) => f.content.trim())).toEqual(expected.map((c) => c.trim()))
   })
 })

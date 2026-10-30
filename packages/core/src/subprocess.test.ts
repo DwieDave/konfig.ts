@@ -1,45 +1,12 @@
 import { it } from "@effect/vitest"
-import { Cause, Effect, Exit, Fiber, Layer, Option, Schema, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import type { Command } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import { TestClock } from "effect/testing"
 import { describe, expect } from "vitest"
 import { ProcessError, ProcessTimeout, runProcessExit, runProcessString } from "./subprocess"
-
-interface FakeProc {
-  readonly stdout?: string
-  readonly stderr?: string
-  readonly exitCode?: number
-  // When true the fake never exits — simulates helm blocked on a credential prompt.
-  readonly hangs?: boolean
-}
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
-
-const _handle = (proc: FakeProc): ChildProcessHandle =>
-  makeHandle(
-    {
-      pid: ProcessId(4242),
-      exitCode: proc.hangs === true ? Effect.never : Effect.succeed(ExitCode(proc.exitCode ?? 0)),
-      isRunning: Effect.succeed(false),
-      kill: () => Effect.void,
-      stdin: Sink.drain,
-      stdout: _bytes(proc.stdout ?? ""),
-      stderr: _bytes(proc.stderr ?? ""),
-      all: _bytes((proc.stdout ?? "") + (proc.stderr ?? "")),
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.succeed(Effect.void)
-    }
-  )
+import { fakeHandle, type FakeProc } from "./testing"
 
 const _spawnerFor = (proc: FakeProc, seen?: Command[]): Layer.Layer<ChildProcessSpawner> =>
   Layer.succeed(
@@ -47,7 +14,7 @@ const _spawnerFor = (proc: FakeProc, seen?: Command[]): Layer.Layer<ChildProcess
     makeSpawner((command: Command) => {
       seen?.push(command)
 
-      return Effect.succeed(_handle(proc))
+      return Effect.succeed(fakeHandle(proc))
     })
   )
 
@@ -88,7 +55,7 @@ describe("timeout", () => {
       const fiber = yield* Effect.forkChild(
         Effect.exit(
           runProcessExit({ command: _cmd, options: { timeout: "5 seconds" } }).pipe(
-            Effect.provide(_spawnerFor({ hangs: true, stderr: "Username: " }))
+            Effect.provide(_spawnerFor({ hang: true, stderr: "Username: " }))
           )
         )
       )

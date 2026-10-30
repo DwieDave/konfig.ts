@@ -2,14 +2,12 @@ import { applicationCRFilename, type AppOfAppsResult, serializeApplicationCR } f
 import {
   type AnyRenderError,
   existsOrFalse,
-  isParsedDoc,
-  isRawYaml,
+  flattenDocs,
   KONFIG_HELM_CACHE_ENV,
   Manifest as M,
   type RenderContext,
   renderManifest,
   type ResolvedKonfigConfig,
-  unwrapDocs,
   Yaml
 } from "@konfig.ts/core"
 import { Array as Arr, ConfigProvider, Data, Effect, Option, Predicate, Schema } from "effect"
@@ -212,33 +210,25 @@ interface _CollectOutputsInput {
   readonly appDir: string
 }
 
-type _UnwrapError = Effect.Error<ReturnType<typeof unwrapDocs>>
+type _FlattenError = Effect.Error<ReturnType<typeof flattenDocs>>
+
+const _routeDoc = (input: { readonly doc: unknown; readonly appDir: string }) =>
+  Predicate.isObject(input.doc)
+    ? _toOutputFile({ doc: input.doc, dir: input.appDir, routing: _routingOf(_decodeKindName(input.doc)) })
+    : Effect.fail(
+      new InvalidOutputObject({
+        kind: "non-object value",
+        objectName: JSON.stringify(input.doc),
+        dir: input.appDir
+      })
+    )
 
 export const _collectOutputs = (
   input: _CollectOutputsInput
-): Effect.Effect<OutputFile[], InvalidOutputObject | _UnwrapError, Path> => {
-  const { appDir, value } = input
-
-  const flatten = (values: ReadonlyArray<unknown>) =>
-    Effect.forEach(values, (v) => _collectOutputs({ value: v, appDir })).pipe(Effect.map((groups) => groups.flat()))
-
-  if (Array.isArray(value)) return flatten(value)
-
-  if (isRawYaml(value) || isParsedDoc(value)) return unwrapDocs(value).pipe(Effect.flatMap(flatten))
-
-  if (value === null || value === undefined) return Effect.succeed([])
-
-  if (!Predicate.isObject(value)) {
-    return Effect.fail(
-      new InvalidOutputObject({ kind: "non-object value", objectName: JSON.stringify(value), dir: appDir })
-    )
-  }
-
-  return Effect.map(
-    _toOutputFile({ doc: value, dir: appDir, routing: _routingOf(_decodeKindName(value)) }),
-    (file) => [file]
+): Effect.Effect<OutputFile[], InvalidOutputObject | _FlattenError, Path> =>
+  flattenDocs(input.value).pipe(
+    Effect.flatMap((docs) => Effect.forEach(docs, (doc) => _routeDoc({ doc, appDir: input.appDir })))
   )
-}
 
 interface OutputCollision {
   readonly path: string

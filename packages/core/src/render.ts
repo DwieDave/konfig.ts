@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
-import { Array as Arr, Effect, Predicate } from "effect"
+import { Effect } from "effect"
+import { flattenDocs } from "./flattenDocs"
 import type * as Manifest from "./Manifest"
 import { RenderContext } from "./RenderContext"
 import type { AnyRenderError } from "./RenderError"
-import { unwrapDocs } from "./unwrapDocs"
 import * as Yaml from "./yaml"
 
 const _resolveEnv = (env: string | undefined): string => env ?? "prod"
@@ -22,11 +22,9 @@ export const renderAllYamlEffect = (
   Effect.gen(function*() {
     const ctx = input.ctx ?? RenderContext.make(_resolveEnv(undefined))
     const rendered = yield* Effect.forEach(input.manifests, (m) => m.render(ctx))
-    const groups = yield* Effect.forEach(rendered.flatMap((r) => Arr.ensure(r)), unwrapDocs)
+    const docs = yield* flattenDocs(rendered)
 
-    return groups
-      .flat()
-      .filter(Predicate.isNotNullish)
+    return docs
       .map((doc) => Yaml.serialize({ value: doc }))
       .join("---\n")
   })

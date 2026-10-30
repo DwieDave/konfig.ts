@@ -1,53 +1,10 @@
 import { it } from "@effect/vitest"
-import { unsafeCoerce } from "@konfig.ts/core"
-import { ConfigProvider, Effect, Exit, Layer, Redacted, Schema, Sink, Stream } from "effect"
-import type { Command } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { type FakeProc, stubSpawner } from "@konfig.ts/core/testing"
+import { ConfigProvider, Effect, Exit, Redacted, Schema } from "effect"
 import { describe, expect } from "vitest"
 import { SecretSource, SecretSourceError } from "./source"
 
-interface FakeProc {
-  readonly stdout?: string
-  readonly stderr?: string
-  readonly exitCode?: number
-}
-
-const _asHandle = (handle: ReturnType<typeof makeHandle>): ChildProcessHandle =>
-  unsafeCoerce<ChildProcessHandle>({
-    value: handle,
-    reason: "the stub supplies every ChildProcessHandle member the spawner reads"
-  })
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
-
-const _fakeSpawner = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(
-    ChildProcessSpawner,
-    makeSpawner((_command: Command) =>
-      Effect.succeed(
-        _asHandle(makeHandle({
-          pid: ProcessId(1),
-          exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
-          isRunning: Effect.succeed(false),
-          kill: () => Effect.void,
-          stdin: Sink.drain,
-          stdout: _bytes(proc.stdout ?? ""),
-          stderr: _bytes(proc.stderr ?? ""),
-          all: _bytes(""),
-          getInputFd: () => Sink.drain,
-          getOutputFd: () => Stream.empty,
-          unref: Effect.succeed(Effect.void)
-        }))
-      )
-    )
-  )
+const _fakeSpawner = (proc: FakeProc) => stubSpawner({ respond: () => proc })
 
 describe("SecretSource.fromConfig", () => {
   it.effect("resolves each key via Config.Redacted", () =>

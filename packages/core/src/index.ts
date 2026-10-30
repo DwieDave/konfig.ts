@@ -68,9 +68,9 @@ export type { RawYaml } from "./Manifest"
 
 export * as Manifest from "./api/Manifest"
 
-export { isParsedDoc, isRawYaml } from "./Manifest"
-
 export * as Module from "./Module"
+
+export { flattenDocs } from "./flattenDocs"
 
 export { renderAllYaml, renderAllYamlEffect } from "./render"
 
@@ -83,8 +83,6 @@ export { omitUndefined } from "./omitUndefined"
 export { renderManifest } from "./renderManifest"
 
 export { runCliWithStdin, runProcessCollect, runProcessExit, runProcessString, runProcessWithStdin } from "./subprocess"
-
-export { unwrapDocs } from "./unwrapDocs"
 
 export { decodeYamlOutput, objectMetaSchema, parseYamlWith, stringRecordSchema } from "./yamlSchema"
 

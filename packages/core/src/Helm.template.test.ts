@@ -1,31 +1,11 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import {
-  Cause,
-  ConfigProvider,
-  Duration,
-  Effect,
-  Exit,
-  flow,
-  Layer,
-  Option,
-  Redacted,
-  Schema,
-  Sink,
-  Stream
-} from "effect"
+import { Cause, ConfigProvider, Duration, Effect, Exit, flow, Layer, Option, Redacted, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { Command, StandardCommand } from "effect/process/ChildProcess"
 import { isStandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { type ChildProcessHandle, ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import { unsafeCoerce } from "./_cast"
 import { sha256Hex } from "./hash"
 import * as Helm from "./Helm"
@@ -33,42 +13,15 @@ import { _parseHelmOutput } from "./helm/output"
 import { timeout } from "./helm/timeout"
 import { RenderContext } from "./RenderContext"
 import { HelmRenderError, YamlParseError } from "./RenderError"
+import { fakeHandle } from "./testing"
 
 const _isString = Schema.is(Schema.String)
 
 const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
   command.args.map((arg) => (_isString(arg) ? arg : Redacted.value(arg)))
 
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
+const _handle = (stdout: string, exitCode = 0): ChildProcessHandle => fakeHandle({ stdout, exitCode })
 
-const _handle = (stdout: string, exitCode = 0): ChildProcessHandle =>
-  makeHandle(
-    {
-      pid: ProcessId(1),
-      exitCode: Effect.succeed(ExitCode(exitCode)),
-      isRunning: Effect.succeed(false),
-      kill: () => Effect.void,
-      stdin: Sink.drain,
-      stdout: _bytes(stdout),
-      stderr: _bytes(""),
-      all: _bytes(stdout),
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.succeed(Effect.void)
-    }
-  )
-
-/**
- * Fake `helm` binary. `pull` writes a real tarball file into the
- * `--destination` dir (via the ambient `FileSystem`/`Path` services, so the
- * real, un-mocked cache logic in `Helm.ts` has something to find and
- * rename); `template` returns canned multi-doc YAML.
- *
- * `spawn`'s declared signature only requires `Scope.Scope`, but the
- * fake implementation additionally needs `FileSystem | Path` (already
- * supplied by `NodeServices.layer` at every call site below) — the cast
- * documents that gap rather than hiding a real R mismatch.
- */
 const _spawnerFor = (
   input: { readonly tarball: Buffer; readonly templateStdout: string; readonly captured?: string[][] }
 ) =>

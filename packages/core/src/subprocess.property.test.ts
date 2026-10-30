@@ -1,40 +1,18 @@
 import { it } from "@effect/vitest"
-import { Effect, Layer, Redacted, Sink, Stream } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import { ChildProcess } from "effect/process"
 import type { Command } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import * as fc from "fast-check"
 import { expect } from "vitest"
 import { type ProcessFailure, runProcessExit } from "./subprocess"
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
-
-const _handle = (stderr: string): ChildProcessHandle =>
-  makeHandle(
-    {
-      pid: ProcessId(1),
-      exitCode: Effect.succeed(ExitCode(1)),
-      isRunning: Effect.succeed(false),
-      kill: () => Effect.void,
-      stdin: Sink.drain,
-      stdout: _bytes(""),
-      stderr: _bytes(stderr),
-      all: _bytes(stderr),
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.succeed(Effect.void)
-    }
-  )
+import { fakeHandle } from "./testing"
 
 const _failing = (stderr: string): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(ChildProcessSpawner, makeSpawner((_command: Command) => Effect.succeed(_handle(stderr))))
+  Layer.succeed(
+    ChildProcessSpawner,
+    makeSpawner((_command: Command) => Effect.succeed(fakeHandle({ exitCode: 1, stderr })))
+  )
 
 const _flipped = (input: { readonly command: Command; readonly stderr: string }): ProcessFailure =>
   Effect.runSync(runProcessExit({ command: input.command }).pipe(Effect.provide(_failing(input.stderr)), Effect.flip))

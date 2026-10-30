@@ -1,49 +1,18 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Sink, Stream } from "effect"
+import { Cause, ConfigProvider, Effect, Exit, Layer, Option } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { Command } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import * as Helm from "./Helm"
 import { assertMinVersion } from "./helm/version"
 import { RenderContext } from "./RenderContext"
 import { HelmMinVersionInvalid, HelmRenderError, HelmVersionTooLow } from "./RenderError"
 import { ProcessError } from "./subprocess"
-
-interface FakeProc {
-  readonly stdout?: string
-  readonly stderr?: string
-  readonly exitCode?: number
-}
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
-
-const _handle = (proc: FakeProc): ChildProcessHandle =>
-  makeHandle(
-    {
-      pid: ProcessId(4242),
-      exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
-      isRunning: Effect.succeed(false),
-      kill: () => Effect.void,
-      stdin: Sink.drain,
-      stdout: _bytes(proc.stdout ?? ""),
-      stderr: _bytes(proc.stderr ?? ""),
-      all: _bytes((proc.stdout ?? "") + (proc.stderr ?? "")),
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.succeed(Effect.void)
-    }
-  )
+import { fakeHandle, type FakeProc } from "./testing"
 
 const _spawnerFor = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
-  Layer.succeed(ChildProcessSpawner, makeSpawner((_command: Command) => Effect.succeed(_handle(proc))))
+  Layer.succeed(ChildProcessSpawner, makeSpawner((_command: Command) => Effect.succeed(fakeHandle(proc))))
 
 const _release = (minVersion: string) =>
   Helm.release({
@@ -164,7 +133,7 @@ describe("Helm.release minVersion semantics", () => {
         makeSpawner((_command: Command) => {
           calls += 1
 
-          return Effect.succeed(_handle(calls === 1 ? { stderr: "boom", exitCode: 1 } : { stdout: "v3.10.0\n" }))
+          return Effect.succeed(fakeHandle(calls === 1 ? { stderr: "boom", exitCode: 1 } : { stdout: "v3.10.0\n" }))
         })
       )
 
@@ -188,7 +157,7 @@ describe("Helm version probe memoization", () => {
         makeSpawner((_command: Command) =>
           Effect.sync(() => {
             spawns.count += 1
-          }).pipe(Effect.andThen(Effect.yieldNow), Effect.as(_handle({ stdout: "v3.17.0\n" })))
+          }).pipe(Effect.andThen(Effect.yieldNow), Effect.as(fakeHandle({ stdout: "v3.17.0\n" })))
         )
       )
 
@@ -207,7 +176,7 @@ describe("Helm version probe memoization", () => {
           Effect.sync(() => {
             spawns.count += 1
 
-            return _handle({ stdout: "", stderr: "boom", exitCode: 1 })
+            return fakeHandle({ stdout: "", stderr: "boom", exitCode: 1 })
           })
         )
       )
