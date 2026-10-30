@@ -1,10 +1,12 @@
+import type { ConfigMapRef, SecretRef } from "@konfig.ts/core"
+
 // See packages/k8s/README.md for the build-time-hash vs runtime-reloader trade-off.
 export type ReloaderOption =
   | "off"
   | "stakater"
   | {
-    readonly secrets?: ReadonlyArray<string>
-    readonly configMaps?: ReadonlyArray<string>
+    readonly secrets?: ReadonlyArray<SecretRef<string>>
+    readonly configMaps?: ReadonlyArray<ConfigMapRef<string>>
   }
 
 const _STAKATER_AUTO = { "reloader.stakater.com/auto": "true" }

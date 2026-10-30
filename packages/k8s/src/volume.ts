@@ -1,5 +1,5 @@
 import { brand } from "@konfig.ts/core"
-import type { PvcRef } from "@konfig.ts/core"
+import type { ConfigMapRef, PvcRef, SecretRef } from "@konfig.ts/core"
 
 declare const VolumeNameBrand: unique symbol
 
@@ -12,12 +12,12 @@ const _volumeName = <const N extends string>(name: N): VolumeName<N> => brand<Vo
 export interface Volume<N extends string = string> {
   readonly name: VolumeName<N>
   readonly secret?: {
-    readonly secretName: string
+    readonly secretName: SecretRef<string>
     readonly optional?: boolean
     readonly defaultMode?: number
   }
   readonly configMap?: {
-    readonly name: string
+    readonly name: ConfigMapRef<string>
     readonly optional?: boolean
     readonly defaultMode?: number
     readonly items?: ReadonlyArray<{ readonly key: string; readonly path: string }>

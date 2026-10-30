@@ -61,14 +61,15 @@ const _lowerPeer = (peer: NetworkPolicyPeer): K8sNetworkPolicyPeer => ({
   ..._ipBlockPart(peer)
 })
 
+export const _policyManifest = (input: NetworkPolicyInput): Manifest.Manifest<K8sNetworkPolicy> =>
+  Manifest.make<K8sNetworkPolicy>(() => ({
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: toObjectMeta(input),
+    spec: structuredClone(input.spec)
+  }))
+
 export const NetworkPolicy = {
-  make: (input: NetworkPolicyInput): Manifest.Manifest<K8sNetworkPolicy> =>
-    Manifest.make<K8sNetworkPolicy>(() => ({
-      apiVersion: "networking.k8s.io/v1",
-      kind: "NetworkPolicy",
-      metadata: toObjectMeta(input),
-      spec: structuredClone(input.spec)
-    })),
   fromPodSet: <L extends StringMap>(
     input: NetworkPolicyFromPodSetInput<L>
   ): Manifest.Manifest<K8sNetworkPolicy> => {
@@ -82,7 +83,7 @@ export const NetworkPolicy = {
       ports: rule.ports === undefined ? undefined : [...rule.ports]
     }))
 
-    return NetworkPolicy.make({
+    return _policyManifest({
       name: input.name,
       namespace: input.namespace,
       labels: input.labels,

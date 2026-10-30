@@ -4,6 +4,7 @@ import { unsafeCoerce } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
 import type { Deployment as K8sDeployment, Ingress as K8sIngress, Service as K8sService } from "./.generated/k8s-types"
+import { ConfigMapRef, SecretRef } from "./refs"
 import { web } from "./workloadHelpers"
 
 const coerce = <T, V = unknown>(value: V): T =>
@@ -69,7 +70,7 @@ describe("Workload.web reloader annotations", () => {
     Effect.gen(function*() {
       const manifest = web({
         ...baseInput,
-        reloader: { secrets: ["s1", "s2"], configMaps: ["cm1"] }
+        reloader: { secrets: [SecretRef.of("s1"), SecretRef.of("s2")], configMaps: [ConfigMapRef.of("cm1")] }
       })
 
       const [deployment] = yield* manifest.render(ctx)
@@ -90,7 +91,7 @@ describe("Workload.web reloader annotations", () => {
 
   it.effect("reloader explicit with only secrets set adds only the secret annotation", () =>
     Effect.gen(function*() {
-      const manifest = web({ ...baseInput, reloader: { secrets: ["only-secret"] } })
+      const manifest = web({ ...baseInput, reloader: { secrets: [SecretRef.of("only-secret")] } })
       const [deployment] = yield* manifest.render(ctx)
       const dep = coerce<K8sDeployment>(deployment)
       expect(dep.metadata?.annotations).toEqual({ "secret.reloader.stakater.com/reload": "only-secret" })

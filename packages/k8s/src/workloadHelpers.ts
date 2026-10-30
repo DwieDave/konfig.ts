@@ -7,7 +7,7 @@ import type {
 } from "./.generated/k8s-types"
 import type { ContainerInput, ContainerSpec } from "./container"
 import { nonEmpty, type StringMap } from "./meta"
-import { Ingress, type IngressTLSInput, Service } from "./network"
+import { _serviceManifest, Ingress, type IngressTLSInput } from "./network"
 import type { ServicePortSpec } from "./ports"
 import { _reloaderAnnotations, type ReloaderOption } from "./reloader"
 import type { Volume } from "./volume"
@@ -16,8 +16,6 @@ import { Deployment } from "./workload"
 type _PortNamesOfContainers<Cs extends ReadonlyArray<ContainerInput>> = {
   readonly [K in keyof Cs]: Cs[K] extends ContainerSpec<infer P, string> ? P : never
 }[number]
-
-export type { ReloaderOption } from "./reloader"
 
 interface WebInput<Cs extends ReadonlyArray<ContainerInput>> {
   readonly name: string
@@ -79,7 +77,7 @@ const _webDeployment = <Cs extends ReadonlyArray<ContainerInput>>(
 const _webService = <Cs extends ReadonlyArray<ContainerInput>>(
   { input, selectorLabels }: _WebPartInput<Cs>
 ): Manifest.Manifest<K8sService> =>
-  Service.make({
+  _serviceManifest({
     name: input.name,
     namespace: input.namespace,
     labels: { ...selectorLabels, ...input.labels },

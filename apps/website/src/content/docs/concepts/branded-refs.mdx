@@ -1,6 +1,6 @@
 ---
 title: Branded refs
-description: SecretRef, ConfigMapRef, PvcRef, ServiceAccountRef, BuiltImageRef and PortName; where @konfig.ts/k8s demands them and what that catches.
+description: SecretRef, ConfigMapRef, PvcRef, BuiltImageRef and PortName; where @konfig.ts/k8s demands them and what that catches.
 sidebar:
   order: 2
 ---
@@ -17,7 +17,6 @@ Every ref serialises to YAML as the bare name; the brand exists only in the type
 | --- | --- | --- |
 | `SecretRef` | name, the keys it holds, its namespace | `Secret.make(...).ref`, `Secret.bind(...).ref`, `Environment.bind(...).members.X.ref`, `yield* Dep.Secret(name)` |
 | `ConfigMapRef` | name, the keys it holds | `ConfigMap.make(...).ref` |
-| `ServiceAccountRef` | name | `brand` |
 | `PvcRef` | name | `PvcRef.of(name)` |
 | `BuiltImageRef` | app name | `yield* Dep.Image(app)`, `BuiltImageRef.of({ app, registry, tag })` |
 | `PortName` | port name | `Port.make({ name, ... })`, `Port.ref(name)` |
@@ -31,10 +30,11 @@ For resources managed outside konfig.ts there are escape hatches: `PvcRef.of(nam
 The following inputs take a branded ref and reject a raw string:
 
 - Env vars: `EnvVar.fromSecret` and `EnvVar.secretEnv` (the secret name in `secretKeyRef`), `EnvVar.fromConfigMap` (the name in `configMapKeyRef`).
-- Volumes: `Volume.fromPvc({ claim })`.
+- Volumes: `Volume.fromPvc({ claim })`, `secret.secretName` (a `SecretRef`) and `configMap.name` (a `ConfigMapRef`).
+- Reloader: the `secrets` and `configMaps` lists of `reloader` take `SecretRef` / `ConfigMapRef` values.
 - Pull secrets: `imagePullSecrets` on `Workload.web` and the pod spec inputs.
 - TLS: the `tls` array of `Workload.web`'s `ingress`.
-- Ports: probes (`httpGet.port`, `tcpSocket.port`, `grpc.port`) and the `targetPort` of `Workload.web` service ports and `Service.fromContainer` accept a number or a `Port.ref` of a port declared on the containers. Plain `Service.make` takes untyped port objects.
+- Ports: probes (`httpGet.port`, `tcpSocket.port`, `grpc.port`) and the `targetPort` of `Workload.web` service ports and `Service.fromContainer` accept a number or a `Port.ref` of a port declared on the containers.
 
 ### Namespace match
 
@@ -59,13 +59,13 @@ Kubernetes silently keeps the last env var when two share a name. `Container.def
 
 It renders a Deployment and a Service, plus an Ingress when `ingress` is given. The Deployment's selector is fixed to `{ app: name }` and merged last into the pod labels, so a colliding `podLabels` entry cannot desync the selector from the pods.
 
-For anything outside that shape, use `Deployment.make` and `Service.make` directly, as `infra/modules/worker.ts` does with `Deployment.make`.
+For anything outside that shape, use `Deployment.make` directly, as `infra/modules/worker.ts` does with `Deployment.make`.
 
 ## Rolling on secret change
 
 A Deployment does not restart when a Secret it references changes. konfig.ts has two ways to make it roll.
 
-The first relies on Stakater Reloader. `Workload.web({ reloader: "stakater" })` adds `reloader.stakater.com/auto: "true"` to the Deployment. `{ secrets: [...], configMaps: [...] }` emits the comma-joined `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` annotations. `"off"` (the default) emits nothing. This requires Stakater Reloader in the cluster and rolls on in-cluster change.
+The first relies on Stakater Reloader. `Workload.web({ reloader: "stakater" })` adds `reloader.stakater.com/auto: "true"` to the Deployment. `{ secrets: [secret.ref], configMaps: [cm.ref] }` emits the comma-joined `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` annotations. `"off"` (the default) emits nothing. This requires Stakater Reloader in the cluster and rolls on in-cluster change.
 
 The second is a fingerprint of the values in the pod template. `hashSecretValues({ values, salt })` returns a SHA-256 hex digest of the secret's values (netstring-framed, prefixed with the version tag `konfig/secret-values-hash/v1` and the salt, keys sorted). Put it in a pod annotation and the pod template changes whenever the values change at render time. Values are captured at build time only; a rotation between builds needs the reloader.
 

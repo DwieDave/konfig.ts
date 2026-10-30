@@ -1,13 +1,12 @@
 import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
-import { ConfigMapRef, SecretRef, ServiceAccountRef } from "./refs"
+import { ConfigMapRef, SecretRef } from "./refs"
 
 describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
   it("constructors return the underlying string", () => {
     expect(SecretRef.of("api-creds")).toBe("api-creds")
     expect(ConfigMapRef.of("oauth-templates")).toBe("oauth-templates")
-    expect(ServiceAccountRef.of("api")).toBe("api")
   })
 
   it.effect("env-var (secretKeyRef) rejects raw string", () =>

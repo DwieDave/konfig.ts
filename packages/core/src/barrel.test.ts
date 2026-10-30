@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import * as Core from "./index"
 // @ts-expect-error PvcRefName is not part of the barrel
 import type { PvcRefName } from "./index"
+// @ts-expect-error ServiceAccountRef is not part of the barrel
+import type { ServiceAccountRef } from "./index"
 
 describe("core barrel", () => {
   it("exposes RENDER_CONCURRENCY on Manifest and flattenDocs", () => {
@@ -32,6 +34,11 @@ describe("core barrel", () => {
 
   it("does not export the PvcRefName type", () => {
     const probe: PvcRefName<string> = "x"
+    expect(probe).toBe("x")
+  })
+
+  it("does not export the ServiceAccountRef type", () => {
+    const probe: ServiceAccountRef<string> = "x"
     expect(probe).toBe("x")
   })
 })

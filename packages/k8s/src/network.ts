@@ -47,11 +47,13 @@ const _buildService = (input: ServiceInput): K8sService => ({
   }
 })
 
+export const _serviceManifest = (input: ServiceInput): Manifest.Manifest<K8sService> =>
+  Manifest.make(() => _buildService(input))
+
 export const Service = {
-  make: (input: ServiceInput): Manifest.Manifest<K8sService> => Manifest.make(() => _buildService(input)),
   fromContainer: <Ports extends string>(
     input: ServiceFromContainerInput<Ports>
-  ): Manifest.Manifest<K8sService> => Service.make(input)
+  ): Manifest.Manifest<K8sService> => _serviceManifest(input)
 }
 
 export interface IngressTLSInput {

@@ -50,7 +50,7 @@ const workload = Workload.web({
 **Branded refs** — `SecretRef`, `ConfigMapRef`, `PvcRef`.
 Identity constructors (`Secret.make`, `ConfigMap.make`, …) expose a typed
 `.ref`; the enforcement points (env `secretKeyRef`, volumes, `imagePullSecrets`,
-Ingress TLS) take the brand and reject raw strings.
+Ingress TLS, reloader lists) take the brand and reject raw strings.
 
 **Env vars** — `EnvVar.value`, `EnvVar.secretEnv` / `EnvVar.configMapEnv` (many vars from one ref), `EnvVar.fromConfigMap`.
 Duplicate names in one container's `env` are caught at compile time.
@@ -59,7 +59,7 @@ Duplicate names in one container's `env` are caught at compile time.
 port-name union, so a probe or Service targeting a typo'd port won't compile.
 
 **Workloads** — `Workload.web` (Deployment + Service + optional Ingress) covers
-the common shape. The lower-level `Deployment` / `Service` / `NetworkPolicy`
+the common shape. The lower-level `Deployment.make`, `Service.fromContainer`, `NetworkPolicy.fromPodSet`
 and the identity constructors are there for bespoke resources.
 
 **Env contracts & secrets** — `Environment.bind` and `Secret.bind` turn a

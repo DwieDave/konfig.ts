@@ -19,8 +19,7 @@ export type {
   SecretRef,
   SecretRefKeys,
   SecretRefName,
-  SecretRefNamespace,
-  ServiceAccountRef
+  SecretRefNamespace
 } from "./deps"
 
 export * as Dep from "./deps"

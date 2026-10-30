@@ -1,4 +1,4 @@
-import type { BuiltImageRef, SecretRef, ServiceAccountRef } from "@konfig.ts/core"
+import type { BuiltImageRef, SecretRef } from "@konfig.ts/core"
 import type { Container as K8sContainer, PodSpec as K8sPodSpec } from "./.generated/k8s-types"
 import type { EnvVar } from "./env"
 import type { ContainerPort, ProbeTarget } from "./ports"
@@ -129,7 +129,7 @@ export interface PodSpecInput extends
   readonly initContainers?: ReadonlyArray<ContainerInput>
   readonly volumes?: ReadonlyArray<Volume>
   readonly imagePullSecrets?: ReadonlyArray<{ readonly name: SecretRef<string> }>
-  readonly serviceAccountName?: ServiceAccountRef<string> | string
+  readonly serviceAccountName?: string
 }
 
 export const Pod = {

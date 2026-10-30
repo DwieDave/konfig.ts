@@ -1,12 +1,20 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { type AnyRenderError, brand, type Manifest, type PvcRef, RenderContext, type SecretRef } from "@konfig.ts/core"
+import {
+  type AnyRenderError,
+  brand,
+  type ConfigMapRef,
+  type Manifest,
+  type PvcRef,
+  RenderContext,
+  type SecretRef
+} from "@konfig.ts/core"
 import { Effect, Predicate } from "effect"
 import * as fc from "fast-check"
 import type { PodSpecInput } from "./container"
 import { ConfigMap, Namespace, Secret } from "./identity"
-import { Ingress, Service } from "./network"
-import { NetworkPolicy } from "./policy"
+import { _serviceManifest, Ingress } from "./network"
+import { _policyManifest } from "./policy"
 import type { VolumeName } from "./volume"
 import { Deployment } from "./workload"
 
@@ -37,9 +45,9 @@ const podSpec = (l: Record<string, string>, w: string): PodSpecInput => ({
   },
   volumes: [
     { name: volName("a"), emptyDir: { medium: w } },
-    { name: volName("b"), secret: { secretName: w } },
+    { name: volName("b"), secret: { secretName: brand<SecretRef<string>>(w) } },
     { name: volName("c"), persistentVolumeClaim: { claimName: brand<PvcRef<string>>(w) } },
-    { name: volName("d"), configMap: { name: w, items: [{ key: w, path: w }] } }
+    { name: volName("d"), configMap: { name: brand<ConfigMapRef<string>>(w), items: [{ key: w, path: w }] } }
   ],
   containers: [{
     name: "c",
@@ -92,12 +100,12 @@ const cases = {
       spec: { podSelector: { matchLabels: l }, ingress: [{ ports: [{ port: 80, protocol: w }] }] }
     }
 
-    return rendered(input, NetworkPolicy.make(input))
+    return rendered(input, _policyManifest(input))
   },
   Service: (l, w) => {
     const input = { ...meta(l), selector: l, ports: [{ port: 80, name: w }] }
 
-    return rendered(input, Service.make(input))
+    return rendered(input, _serviceManifest(input))
   },
   Ingress: (l, w) => {
     const input = {

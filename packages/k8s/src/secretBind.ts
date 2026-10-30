@@ -1,6 +1,6 @@
 import { Dep, Manifest, RenderError, type SecretRef } from "@konfig.ts/core"
 import type { SecretEntry, SecretSource } from "@konfig.ts/env"
-import { type Context, Effect, type Layer, Layer as L } from "effect"
+import { type Context, Duration, Effect, type Layer, Layer as L } from "effect"
 import { resolveSource } from "./backend"
 import type { SecretBackend } from "./backendKit"
 import { EnvVar } from "./env"
@@ -56,24 +56,20 @@ const _buildValuesLayer = <N extends string, K extends string>(
 
   const layer = L.effect(
     values,
-    _cachedSource(input.source).pipe(
-      Effect.flatMap((source) => resolveSource({ source, label: `SecretValues(${input.namespace}/${input.name})` }))
-    )
+    resolveSource({ source: input.source, label: `SecretValues(${input.namespace}/${input.name})` })
   )
 
   return { values, layer }
 }
 
-const _cachedSource = <K extends string>(
+// One resolution per bound secret, shared by manifest and layer; a failed attempt is invalidated so the next use retries.
+const _memoSource = <K extends string>(
   source: SecretSource<K, Manifest.RenderServices>
-): Effect.Effect<SecretSource<K, Manifest.RenderServices>> =>
-  Effect.cached(source.resolve).pipe(Effect.map((resolve) => ({ ...source, resolve })))
+): SecretSource<K, Manifest.RenderServices> => {
+  const [cached, invalidate] = Effect.runSync(Effect.cachedInvalidateWithTTL(source.resolve, Duration.infinity))
 
-const _cachedManifest = <K extends string>(input: {
-  readonly source: SecretSource<K, Manifest.RenderServices>
-  readonly build: (source: SecretSource<K, Manifest.RenderServices>) => Manifest.Manifest<unknown>
-}): Manifest.Manifest<unknown> =>
-  Manifest.make((ctx) => _cachedSource(input.source).pipe(Effect.flatMap((source) => input.build(source).render(ctx))))
+  return { ...source, resolve: cached.pipe(Effect.onError(() => invalidate)) }
+}
 
 interface _EnvVarsInput<N extends string, K extends string, Ns extends string> {
   readonly secret: SecretEntry<N, K, Readonly<Record<K, string>>>
@@ -129,7 +125,7 @@ const _backendManifest = <N extends string, K extends string, E extends Readonly
       source: resolved
     })
 
-  return source === undefined ? emit(undefined) : _cachedManifest({ source, build: emit })
+  return emit(source)
 }
 
 // Overloaded so the namespace type parameter `Ns` only narrows when an explicit
@@ -179,7 +175,7 @@ export const bindSecret: BindSecret = <
 >(
   input: BindSecretInput<N, K, E, string>
 ): DeclaredSecret<N, K, string> => {
-  const source = input.source
+  const source = input.source === undefined ? undefined : _memoSource(input.source)
   const namespace = input.namespace ?? input.secret.namespace
   const out = _declareBase({ input, source, namespace })
 

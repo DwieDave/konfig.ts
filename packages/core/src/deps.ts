@@ -11,7 +11,6 @@ export type Provide<K extends string, N extends string> = Need<K, N>
 
 declare const SecretRefBrand: unique symbol
 declare const ConfigMapRefBrand: unique symbol
-declare const ServiceAccountRefBrand: unique symbol
 declare const PvcRefBrand: unique symbol
 declare const BuiltImageRefBrand: unique symbol
 
@@ -31,10 +30,6 @@ export type SecretRef<
 
 export type ConfigMapRef<N extends string, K extends string = string> = string & {
   readonly [ConfigMapRefBrand]: { readonly name: N; readonly keys: K }
-}
-
-export type ServiceAccountRef<N extends string> = string & {
-  readonly [ServiceAccountRefBrand]: N
 }
 
 export type PvcRef<N extends string> = string & {

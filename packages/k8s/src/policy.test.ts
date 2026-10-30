@@ -2,15 +2,15 @@ import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
 import { RenderContext } from "@konfig.ts/core"
 import { Effect } from "effect"
-import { NetworkPolicy } from "./policy"
+import { _policyManifest, NetworkPolicy } from "./policy"
 import { Selector } from "./selector"
 
 const ctx = RenderContext.make("test")
 
-layer(NodeServices.layer)("NetworkPolicy.make", (it) => {
+layer(NodeServices.layer)("_policyManifest", (it) => {
   it.effect("passes the raw spec through unchanged", () =>
     Effect.gen(function*() {
-      const np = NetworkPolicy.make({
+      const np = _policyManifest({
         name: "deny-all",
         namespace: "prod",
         spec: { podSelector: {}, policyTypes: ["Ingress"] }

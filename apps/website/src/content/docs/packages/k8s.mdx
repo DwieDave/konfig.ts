@@ -35,7 +35,7 @@ Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNames
 | `Environment` | `Environment.define` re-exported with `bind` (manifest side) and `runtime` (process side) |
 | `NativeSecret` | `NativeSecret.backend({ type?, immutable?, silenceWarning? })`: built-in backend that emits a plain `Secret` from a source |
 | `Workload` | `Workload.web` (Deployment + Service + optional Ingress, `reloader: "stakater"`) |
-| `Deployment`, `Service`, `NetworkPolicy` | Lower-level resource constructors |
+| `Deployment`, `Service`, `NetworkPolicy` | Lower-level resource constructors: `Deployment.make`, `Service.fromContainer`, `NetworkPolicy.fromPodSet` |
 | `Volume`, `Selector` | Typed volumes/mounts; label selectors shared between workloads and NetworkPolicy peers |
 | `PvcRef` | `PvcRef.of(name)` brand constructor for an externally managed claim |
 | `hashSecretValues` | Stamp a pod-spec hash so pods roll on re-render |

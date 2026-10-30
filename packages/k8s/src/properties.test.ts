@@ -3,14 +3,20 @@ import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { toObjectMeta } from "./meta"
 import { hashSecretValues } from "./podHash"
+import { ConfigMapRef, SecretRef } from "./refs"
 import { _reloaderAnnotations, type ReloaderOption } from "./reloader"
 
 const stringMap = fc.dictionary(fc.string({ minLength: 1 }), fc.string())
 const names = fc.array(fc.string({ minLength: 1 }), { maxLength: 4 })
+const secretRefs = names.map((list) => list.map((n) => SecretRef.of(n)))
+const configMapRefs = names.map((list) => list.map((n) => ConfigMapRef.of(n)))
 
 const reloaderOption: fc.Arbitrary<ReloaderOption | undefined> = fc.oneof(
   fc.constantFrom<ReloaderOption | undefined>(undefined, "off", "stakater"),
-  fc.record({ secrets: fc.option(names, { nil: undefined }), configMaps: fc.option(names, { nil: undefined }) })
+  fc.record({
+    secrets: fc.option(secretRefs, { nil: undefined }),
+    configMaps: fc.option(configMapRefs, { nil: undefined })
+  })
 )
 
 describe("hashSecretValues properties", () => {
@@ -56,7 +62,7 @@ describe("_reloaderAnnotations properties", () => {
 
   it("joins explicit secrets and configMaps with commas, omitting empty lists", () => {
     fc.assert(
-      fc.property(names, names, (secrets, configMaps) => {
+      fc.property(secretRefs, configMapRefs, (secrets, configMaps) => {
         const out = _reloaderAnnotations({ secrets, configMaps })
         expect(out["secret.reloader.stakater.com/reload"]).toBe(secrets.length > 0 ? secrets.join(",") : undefined)
         expect(out["configmap.reloader.stakater.com/reload"]).toBe(
