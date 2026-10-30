@@ -1,3 +1,4 @@
+import { unsafeCoerce } from "@konfig.ts/core"
 import { type EnvMember, Literal, SecretSource } from "@konfig.ts/env"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
@@ -128,5 +129,21 @@ describe("Environment.bind properties", () => {
         })
       })
     )
+  })
+})
+
+type BadInput = number | string | boolean | null | undefined
+
+describe("Environment.bind rejects malformed secret option values", () => {
+  const env = Environment.define({ db: secretA })
+
+  const bindWith = (db: BadInput) =>
+    Environment.bind({
+      env,
+      secrets: unsafeCoerce<never>({ value: { db }, reason: "exercise runtime rejection of malformed input" })
+    }).manifests.length
+
+  it.each([42, "x", true, null])("%s is treated as omitted", (bad) => {
+    expect(bindWith(bad)).toBe(bindWith(undefined))
   })
 })

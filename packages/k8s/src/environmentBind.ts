@@ -155,7 +155,7 @@ export type BindEnvironmentInput<
 
 interface _BindLiteralInput {
   readonly entry: LiteralEntry<string, unknown>
-  readonly override?: _LiteralOverride
+  readonly override?: _LiteralValue | _LiteralNode
 }
 
 const _bindLiteral = (input: _BindLiteralInput): DeclaredLiteral<string, unknown> => {
@@ -191,11 +191,9 @@ const _bindDownward = (input: _BindDownwardInput): DeclaredDownward<string> => (
 // without a cast; `bindEnvironment` narrows the merged layer to the member-derived output once.
 type _CollectedLayer = Layer.Layer<never, RenderError, Manifest.RenderServices>
 
-type _LiteralOverride = AnyLiteralEntry["value"]
-
 type _Declared =
   | DeclaredSecret<string, string, string>
-  | DeclaredLiteral<string, _LiteralOverride>
+  | DeclaredLiteral<string, unknown>
   | DeclaredDownward<string>
   | _DeclaredNode
 
@@ -203,10 +201,14 @@ interface _DeclaredNode {
   readonly [key: string]: _Declared
 }
 
-type _NodeValue = SecretMemberInput<string, string> | _LiteralOverride | _Node
+type _LiteralValue = string | number | boolean | bigint | null | ReadonlyArray<_LiteralValue>
 
-interface _Node {
-  readonly [key: string]: _NodeValue
+interface _LiteralNode {
+  readonly [key: string]: _LiteralValue | _LiteralNode | undefined
+}
+
+interface _SecretNode {
+  readonly [key: string]: SecretMemberInput<string, string> | _SecretNode
 }
 
 interface _Fragment {
@@ -228,8 +230,8 @@ const _mergeFragments = (input: { readonly left: _Fragment; readonly right: _Fra
 interface _DispatchInput {
   readonly memberKey: string
   readonly entry: EnvMember
-  readonly secretsOpts: _Node | undefined
-  readonly literalsOpts: _Node | undefined
+  readonly secretsOpts: _SecretNode | undefined
+  readonly literalsOpts: _LiteralNode | undefined
   readonly namespace: string | undefined
 }
 
@@ -243,19 +245,36 @@ const _normalizeSecretMember = (
   return "emit" in raw ? { backend: raw } : { source: raw }
 }
 
-const _lookup = (input: { readonly node: _Node | undefined; readonly key: string }): _NodeValue | undefined =>
+type _SecretValue = SecretMemberInput<string, string> | _SecretNode
+
+const _lookup = <V>(input: { readonly node: { readonly [key: string]: V } | undefined; readonly key: string }) =>
   input.node === undefined ? undefined : Object.entries(input.node).find(([k]) => k === input.key)?.[1]
 
-const _asSecretInput = (value: _NodeValue | undefined): SecretMemberInput<string, string> | undefined =>
-  value === undefined ? undefined : unsafeCoerce<SecretMemberInput<string, string>>({
-    value,
-    reason: "the member's _kind is Secret, so the value at its key is a SecretMemberInput"
-  })
+const _isSecretInput = (value: _SecretValue | undefined): value is SecretMemberInput<string, string> =>
+  Predicate.isObject(value) &&
+  ("_tag" in value ? "emit" in value || "resolve" in value : "backend" in value || "source" in value)
 
-const _asNode = (value: _NodeValue | undefined): _Node | undefined =>
-  Predicate.isObject(value)
-    ? unsafeCoerce<_Node>({ value, reason: "the member's _kind is Environment, so an object at its key is a node" })
-    : undefined
+const _asSecretInput = (value: _SecretValue | undefined): SecretMemberInput<string, string> | undefined =>
+  _isSecretInput(value) ? value : undefined
+
+const _isSecretNode = (value: _SecretValue | undefined): value is _SecretNode => Predicate.isObject(value)
+
+const _isLiteralNode = (value: _LiteralValue | _LiteralNode | undefined): value is _LiteralNode =>
+  Predicate.isObject(value) && !Array.isArray(value)
+
+const _asSecretNode = (value: _SecretValue | undefined): _SecretNode | undefined =>
+  _isSecretNode(value) ? value : undefined
+
+const _isRootLiteralNode = <M extends Readonly<Record<string, EnvMember>>>(
+  value: LiteralMembersOpts<M> | undefined
+): value is LiteralMembersOpts<M> & _LiteralNode => Predicate.isObject(value) && !Array.isArray(value)
+
+const _rootLiteralNode = <M extends Readonly<Record<string, EnvMember>>>(
+  value: LiteralMembersOpts<M> | undefined
+): _LiteralNode | undefined => _isRootLiteralNode(value) ? value : undefined
+
+const _asLiteralNode = (value: _LiteralValue | _LiteralNode | undefined): _LiteralNode | undefined =>
+  _isLiteralNode(value) ? value : undefined
 
 const _handleSecret = (
   { entry, input }: { readonly entry: AnySecretEntry; readonly input: _DispatchInput }
@@ -301,8 +320,8 @@ const _handleEnvironment = (
 ): _Fragment => {
   const inner = _dispatchAllMembers({
     members: entry.members,
-    secretsOpts: _asNode(_lookup({ node: input.secretsOpts, key: input.memberKey })),
-    literalsOpts: _asNode(_lookup({ node: input.literalsOpts, key: input.memberKey })),
+    secretsOpts: _asSecretNode(_lookup({ node: input.secretsOpts, key: input.memberKey })),
+    literalsOpts: _asLiteralNode(_lookup({ node: input.literalsOpts, key: input.memberKey })),
     namespace: input.namespace
   })
 
@@ -321,8 +340,8 @@ const _dispatch = (input: _DispatchInput): _Fragment =>
 
 interface _DispatchAllInput {
   readonly members: Readonly<Record<string, EnvMember>>
-  readonly secretsOpts: _Node | undefined
-  readonly literalsOpts: _Node | undefined
+  readonly secretsOpts: _SecretNode | undefined
+  readonly literalsOpts: _LiteralNode | undefined
   readonly namespace: string | undefined
 }
 
@@ -353,8 +372,8 @@ export const bindEnvironment = <
 ): DeclaredEnvironment<M, Ns> => {
   const fragment = _dispatchAllMembers({
     members: input.env.members,
-    secretsOpts: _asNode(input.secrets),
-    literalsOpts: _asNode(input.literals),
+    secretsOpts: _asSecretNode(input.secrets),
+    literalsOpts: _rootLiteralNode(input.literals),
     namespace: input.namespace
   })
 
