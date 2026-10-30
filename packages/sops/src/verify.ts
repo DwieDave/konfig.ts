@@ -1,4 +1,4 @@
-import { boundary, type BoundaryDecodeError, decodeYamlOutput, RenderError } from "@konfig.ts/core"
+import { boundary, decodeYamlOutput, RenderError } from "@konfig.ts/core"
 import { Array as Arr, Data, Effect, Option } from "effect"
 import { compilePolicy, mustEncrypt } from "./encryption-policy"
 import { SopsEncryptedSecretSchema, type SopsSecret } from "./schema"
@@ -58,8 +58,15 @@ export const _assertEncrypted = (
 export const parseVerified = (input: {
   readonly yamlText: string
   readonly label: string
-}): Effect.Effect<SopsSecret, RenderError | BoundaryDecodeError> =>
-  decodeYamlOutput({ text: input.yamlText, label: input.label, decode: _decodeSopsSecret })
+}): Effect.Effect<SopsSecret, RenderError> =>
+  decodeYamlOutput({
+    text: input.yamlText,
+    label: input.label,
+    decode: (parsed) =>
+      _decodeSopsSecret(parsed).pipe(
+        Effect.mapError((cause) => new RenderError({ message: `${input.label}: file did not match SopsSecret`, cause }))
+      )
+  })
     .pipe(
       Effect.tap((decoded) => _assertEncrypted({ secret: decoded, label: input.label }))
     )

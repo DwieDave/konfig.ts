@@ -1,4 +1,4 @@
-import { boundary } from "@konfig.ts/core"
+import { boundary, RenderError } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { type SopsRecipients, SopsRecipientsSchema } from "./schema"
 
@@ -44,7 +44,11 @@ export const _sopsArgs = (input: {
 export const sopsArgs = (input: {
   readonly recipients: SopsRecipients
   readonly encryptedRegex?: string | undefined
+  readonly label: string
 }) =>
   _decodeRecipients(input.recipients).pipe(
+    Effect.mapError((cause) =>
+      new RenderError({ message: `${input.label}: sops recipients did not match SopsRecipients`, cause })
+    ),
     Effect.map((recipients) => _sopsArgs({ recipients, encryptedRegex: input.encryptedRegex }))
   )

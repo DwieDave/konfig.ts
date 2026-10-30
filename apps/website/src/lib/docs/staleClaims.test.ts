@@ -23,7 +23,13 @@ const STALE_CLAIMS: ReadonlyArray<RegExp> = [
   /HelmVersionTooLow[^\n|.]*(absent|missing)/,
   /render\(\{ program/,
   /`render\(\)` entrypoint/,
-  /platform-node@\^4\.1/
+  /platform-node@\^4\.1/,
+  /KubesealParseError/,
+  /Four are built in/,
+  /_tag: "Sops" \|/,
+  /number followed by `s`, `m`, or `h`/,
+  /`target` is passed through unchanged/,
+  /implement the `SecretBackend<N, K, RequiresSource>` contract/
 ]
 
 describe("stale doc claims", () => {

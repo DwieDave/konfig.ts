@@ -522,7 +522,7 @@ describe("Sops.backend recipient input boundary", () => {
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("SopsRecipients")
-        expect(text).toContain("BoundaryDecodeError")
+        expect(text).toContain("did not match SopsRecipients")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -609,7 +609,7 @@ sops:
 
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
-        expect(text).toContain("BoundaryDecodeError")
+        expect(text).toContain("did not match SopsSecret")
         expect(text).toContain("SopsSecret")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
@@ -651,7 +651,7 @@ metadata:
   name: db-creds
 `.trim()
 
-  it.effect("BoundaryDecodeError if sops stdout doesn't match SopsSecret schema", () =>
+  it.effect("RenderError if sops stdout doesn't match SopsSecret schema", () =>
     Effect.gen(function*() {
       const sink: CallSink = { calls: [] }
 
@@ -673,7 +673,7 @@ metadata:
 
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
-        expect(text).toContain("BoundaryDecodeError")
+        expect(text).toContain("output did not match SopsSecret")
         expect(text).toContain("SopsSecret")
       }
     }).pipe(Effect.provide(NodeServices.layer)))

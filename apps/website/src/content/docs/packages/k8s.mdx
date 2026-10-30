@@ -39,8 +39,7 @@ Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNames
 | `Volume`, `Selector` | Typed volumes/mounts; label selectors shared between workloads and NetworkPolicy peers |
 | `PvcRef` | `PvcRef.of(name)` brand constructor for an externally managed claim |
 | `hashSecretValues` | Stamp a pod-spec hash so pods roll on re-render |
-| `SecretBackend` (type) | The contract secret backends implement |
-| `Backend` | Kit for backend authors: `Backend.define` (one declaration per backend), `Backend.encrypting` (shared render-time encrypt pipeline), `Backend.plainSecret`, `Backend.secretMeta`; types `Backend.Contract`, `Backend.BaseInput`, `Backend.EmitInput`, `Backend.CliOptions` |
+| `Backend` | Kit for backend authors: `Backend.define` (one declaration per backend), `Backend.encrypting` (shared render-time encrypt pipeline), `Backend.plainSecret`, `Backend.secretMeta`; types `Backend.BaseInput`, `Backend.EmitInput`, `Backend.CliOptions` |
 
 ## Errors
 

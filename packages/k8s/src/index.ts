@@ -5,8 +5,6 @@ import { bindSecret } from "./secretBind"
 
 export { Backend } from "./api"
 
-export type { SecretBackend } from "./backendKit"
-
 export { Container, Pod } from "./container"
 
 export { Port } from "./ports"

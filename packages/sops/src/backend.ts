@@ -21,7 +21,7 @@ const _backend = Backend.encrypting({
     spec: { secretTemplates: [{ name: base.name, type: opts.type ?? "Opaque", stringData }] }
   }),
   bin: "sops",
-  args: ({ opts }) => sopsArgs({ recipients: opts.recipients, encryptedRegex: opts.encryptedRegex }),
+  args: ({ opts, label }) => sopsArgs({ recipients: opts.recipients, encryptedRegex: opts.encryptedRegex, label }),
   schema: SopsEncryptedSecretSchema,
   schemaLabel: "SopsSecret",
   verify: ({ decoded, label }) => _assertEncrypted({ secret: decoded, label })

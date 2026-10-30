@@ -237,7 +237,7 @@ describe("SealedSecrets.backend", () => {
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 
-  it.effect("BoundaryDecodeError if kubeseal stdout doesn't match SealedSecret schema", () =>
+  it.effect("labelled RenderError if kubeseal stdout doesn't match SealedSecret schema", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
 
@@ -258,8 +258,8 @@ describe("SealedSecrets.backend", () => {
 
       if (Exit.isFailure(exit)) {
         const text = Cause.pretty(exit.cause)
-        expect(text).toContain("BoundaryDecodeError")
-        expect(text).toContain("SealedSecret")
+        expect(text).toContain("RenderError")
+        expect(text).toContain("kubeseal output did not match SealedSecret")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 })

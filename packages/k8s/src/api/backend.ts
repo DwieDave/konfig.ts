@@ -9,13 +9,6 @@ export const Backend = {
 }
 
 export declare namespace Backend {
-  type Contract<
-    N extends string,
-    K extends string,
-    RequiresSource extends boolean = boolean,
-    Out = unknown
-  > = Kit.SecretBackend<N, K, RequiresSource, Out>
-
   type BaseInput<N extends string, K extends string, RequiresSource extends boolean = boolean> = Kit.BackendEmitInput<
     N,
     K,

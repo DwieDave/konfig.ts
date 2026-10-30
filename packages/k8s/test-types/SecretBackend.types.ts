@@ -1,8 +1,8 @@
 import { Manifest } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
-import type { SecretBackend } from "@konfig.ts/k8s"
 import { Backend, Environment, Secret } from "@konfig.ts/k8s"
 import { Effect } from "effect"
+import type { SecretBackend } from "../src/backendKit"
 
 type BackendEmitInput<N extends string, K extends string, RS extends boolean> = Backend.BaseInput<N, K, RS>
 
@@ -19,13 +19,19 @@ const defined = Backend.define({
     Manifest.make(() => Effect.succeed({ kind: input.base.name }))
 })
 
-const inferred: Backend.Contract<"n", "k", false, { readonly kind: string }> = defined()
+const inferred: SecretBackend<"n", "k", false, { readonly kind: string }> = defined()
 
 type _DefineInfersNameAndKeys = Expect<
   Equal<typeof inferred, SecretBackend<"n", "k", false, { readonly kind: string }>>
 >
 
 void inferred
+
+// @ts-expect-error SecretBackend is not exported from the barrel
+type _NoBarrelSecretBackend = import("../src/index").SecretBackend<"n", "k">
+
+// @ts-expect-error Backend.Contract was removed
+type _NoContract = Backend.Contract<"n", "k">
 
 type Expect<T extends true> = T
 

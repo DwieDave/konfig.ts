@@ -58,8 +58,8 @@ disk.
 
 ## Internals
 
-Backends implement the `SecretBackend<N, K, RequiresSource>` contract from
-`@konfig.ts/k8s`; `requiresSource: true` makes `source` a compile-time
+Backends are declared with `Backend.define` (or `Backend.encrypting` for the
+render-time encrypt pipeline) from `@konfig.ts/k8s`; `requiresSource: true` makes `source` a compile-time
 requirement.
 
 ## Requirements

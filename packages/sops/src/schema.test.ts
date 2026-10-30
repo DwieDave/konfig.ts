@@ -7,7 +7,9 @@ const decode = (value: SopsRecipients) => Effect.runSyncExit(Schema.decodeEffect
 
 const hex = (min: number, max: number) => fc.stringMatching(new RegExp(`^[0-9a-f]{${min},${max}}$`))
 
-const partition = fc.constantFrom("aws", "aws-cn", "aws-us-gov", "aws-iso", "aws-iso-b")
+const partition = fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { maxLength: 3 }).map((parts) =>
+  ["aws", ...parts].join("-")
+)
 
 const keyId = fc.oneof(
   hex(8, 32).map((h) => `key/${h}-12ab-34cd`),
@@ -15,7 +17,11 @@ const keyId = fc.oneof(
   fc.stringMatching(/^[A-Za-z0-9_-]{1,20}$/).map((n) => `alias/${n}`)
 )
 
-const arn = fc.tuple(partition, keyId).map(([p, k]) => `arn:${p}:kms:us-gov-west-1:123456789012:${k}`)
+const region = fc.stringMatching(/^[a-z]{2,6}(-[a-z]{2,8}){1,2}-[0-9]$/)
+
+const account = fc.stringMatching(/^[0-9]{12}$/)
+
+const arn = fc.tuple(partition, region, account, keyId).map(([p, r, a, k]) => `arn:${p}:kms:${r}:${a}:${k}`)
 
 const azureUrl = fc.tuple(
   fc.constantFrom("azure.net", "azure.cn", "usgovcloudapi.net", "microsoftazure.de"),

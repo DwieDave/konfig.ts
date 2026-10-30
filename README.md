@@ -112,7 +112,7 @@ console.log(`api listening on :${config.port}`)
 | Package                                                      | Description                                                                                                          |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | [`@konfig.ts/core`](./packages/core)                         | `Manifest<A>`, `Helm.release` (digest-verified), `Module.fixedNs`/`dynamicNs`, structural diff, stable YAML, `Dep.*` |
-| [`@konfig.ts/k8s`](./packages/k8s)                           | Kubernetes builders with branded refs; `Container.define`; `Workload.web`; `SecretBackend<N, K, RequiresSource>`     |
+| [`@konfig.ts/k8s`](./packages/k8s)                           | Kubernetes builders with branded refs; `Container.define`; `Workload.web`; `Backend.define`; `Backend.encrypting`    |
 | [`@konfig.ts/env`](./packages/env)                           | `Secret.define`/`Literal.define`/`Downward.define`/`Environment.define`; `Environment.runtime` decoder               |
 | [`@konfig.ts/sops`](./packages/sops)                         | `Sops.backend` + `Sops.passthrough`; SopsSecret schema; fail-closed on unencrypted values                            |
 | [`@konfig.ts/sealed-secrets`](./packages/sealed-secrets)     | `SealedSecret` CR backend; shells out to `kubeseal` with schema-validated stdout                                     |

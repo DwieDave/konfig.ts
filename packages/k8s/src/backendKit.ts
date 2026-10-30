@@ -1,13 +1,4 @@
-import {
-  boundary,
-  type BoundaryDecodeError,
-  decodeYamlOutput,
-  Manifest,
-  RenderError,
-  runCliWithStdin,
-  unsafeCoerce,
-  Yaml
-} from "@konfig.ts/core"
+import { boundary, decodeYamlOutput, Manifest, RenderError, runCliWithStdin, unsafeCoerce, Yaml } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
 import { type Duration, Effect, Redacted, type Schema } from "effect"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
@@ -132,7 +123,7 @@ interface EncryptingInput<Opts extends CliBackendOptions, Pre, S extends Schema.
     readonly opts: Opts
     readonly pre: Pre
     readonly label: string
-  }) => Effect.Effect<ReadonlyArray<string>, RenderError | BoundaryDecodeError>
+  }) => Effect.Effect<ReadonlyArray<string>, RenderError>
   readonly schema: S & { readonly DecodingServices: never }
   readonly schemaLabel: string
   readonly verify?: (input: {
@@ -150,7 +141,15 @@ const _decodeOutput = <Opts extends CliBackendOptions, Pre, S extends Schema.Top
     text: input.text,
     label: input.label,
     what: `${input.def.bin} failed`,
-    decode: boundary({ schema: input.def.schema, label: input.def.schemaLabel })
+    decode: (parsed) =>
+      boundary({ schema: input.def.schema, label: input.def.schemaLabel })(parsed).pipe(
+        Effect.mapError((cause) =>
+          new RenderError({
+            message: `${input.label}: ${input.def.bin} output did not match ${input.def.schemaLabel}`,
+            cause
+          })
+        )
+      )
   }).pipe(
     Effect.tap((decoded) => input.def.verify?.({ decoded, label: input.label }) ?? Effect.void)
   )

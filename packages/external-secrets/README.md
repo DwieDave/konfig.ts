@@ -52,8 +52,8 @@ const bound = Secret.bind({
 
 ## Internals
 
-Backends implement the `SecretBackend<N, K, RequiresSource>` contract from
-`@konfig.ts/k8s`; this one declares `requiresSource: false`, so no plaintext
+Backends are declared with `Backend.define` (or `Backend.encrypting` for the
+render-time encrypt pipeline) from `@konfig.ts/k8s`; this one declares `requiresSource: false`, so no plaintext
 source is needed at render time.
 
 ## Requirements

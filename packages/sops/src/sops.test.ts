@@ -39,7 +39,7 @@ describe("sopsArgs recipient rejection property", () => {
         Effect.runPromise(
           Effect.gen(function*() {
             const exit = yield* Effect.exit(
-              sopsArgs({ recipients: { age: [bad] } })
+              sopsArgs({ recipients: { age: [bad] }, label: "L" })
             )
 
             expect(Exit.isFailure(exit)).toBe(true)
@@ -64,6 +64,7 @@ describe("sopsArgs validates recipients itself", () => {
     Effect.gen(function*() {
       const exit = yield* Effect.exit(
         sopsArgs({
+          label: "Sops(ns/n)",
           recipients: {
             age: [
               "age1stub00000000000000000000000000000000000000000000000000ends,age1injected00000000000000000000000000000000000000000leak"
@@ -77,7 +78,8 @@ describe("sopsArgs validates recipients itself", () => {
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("SopsRecipients")
-        expect(text).toContain("BoundaryDecodeError")
+        expect(text).toContain("RenderError")
+        expect(text).toContain("Sops(ns/n)")
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 })

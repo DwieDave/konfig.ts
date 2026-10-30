@@ -4,7 +4,8 @@ import { Manifest, RenderContext } from "@konfig.ts/core"
 import { Downward, Literal, SecretSource } from "@konfig.ts/env"
 import { Data, Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import { Environment, NativeSecret, Secret, type SecretBackend } from "./index"
+import type { SecretBackend } from "./backendKit"
+import { Environment, NativeSecret, Secret } from "./index"
 
 const dbCreds = Secret.define({
   name: "db-creds",

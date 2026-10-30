@@ -5,7 +5,7 @@ import { Schema } from "effect"
 const _AGE_RECIPIENT = /^age1[0-9a-z]{58}$/
 
 const _AWS_KMS_ARN =
-  /^arn:aws(?:-cn|-us-gov|-iso|-iso-b)?:kms:[a-z0-9-]+:[0-9]+:(?:key\/(?:mrk-)?[0-9a-fA-F-]+|alias\/[A-Za-z0-9/_-]+)$/
+  /^arn:aws(?:-[a-z]+)*:kms:[a-z0-9-]+:[0-9]+:(?:key\/(?:mrk-)?[0-9a-fA-F-]+|alias\/[A-Za-z0-9/_-]+)$/
 
 const _GCP_KMS_PATH =
   /^projects\/[A-Za-z0-9-]+\/locations\/[A-Za-z0-9-]+\/keyRings\/[A-Za-z0-9_-]+\/cryptoKeys\/[A-Za-z0-9_-]+(?:\/cryptoKeyVersions\/[0-9]+)?$/
