@@ -37,7 +37,7 @@ interface _CheckDnsNameInput {
 }
 
 // Returns an error message when `value` violates `rule`, `undefined` when it's clean.
-const _checkDnsName = (input: _CheckDnsNameInput): string | undefined => {
+export const _checkDnsName = (input: _CheckDnsNameInput): string | undefined => {
   const { rule, value } = input
   const pattern = rule === "label" ? _DNS_LABEL : _DNS_SUBDOMAIN
   const maxLength = rule === "label" ? _MAX_LABEL_LENGTH : _MAX_SUBDOMAIN_LENGTH
@@ -97,58 +97,43 @@ interface ValidateInput {
   readonly content: string
 }
 
+const _docIssues = (input: {
+  readonly file: string
+  readonly doc: number
+  readonly parsed: unknown
+}) =>
+  Effect.gen(function*() {
+    const { file, doc, parsed } = input
+    if (!isRecord(parsed)) return []
+    const result = yield* Effect.result(_decodeEnvelope(parsed))
+    if (Result.isFailure(result)) {
+      const message = `does not satisfy KubeManifest envelope: ${String(result.failure)}`
+      return [{ file, doc, path: [], message }]
+    }
+    const { kind, metadata } = result.success
+    return _checkNames({ kind, name: metadata.name, namespace: metadata.namespace })
+      .map((issue) => ({ file, doc, path: issue.path, message: issue.message }))
+  })
+
+const _parseDocs = (content: string) =>
+  Effect.result(Effect.try({
+    try: () => parseYamlAll(content),
+    catch: (cause) => `YAML parse error: ${String(cause)}`
+  }))
+
 export const validateManifestFile = (
   input: ValidateInput
 ): Effect.Effect<ReadonlyArray<ValidationIssue>> =>
   Effect.gen(function*() {
-    const issues: ValidationIssue[] = []
-    const docsResult = yield* Effect.result(Effect.try({
-      try: () => parseYamlAll(input.content),
-      catch: (cause) => `YAML parse error: ${String(cause)}`
-    }))
+    const docsResult = yield* _parseDocs(input.content)
     if (Result.isFailure(docsResult)) {
-      return [
-        {
-          file: input.file,
-          doc: 0,
-          path: [],
-          message: docsResult.failure
-        }
-      ]
+      return [{ file: input.file, doc: 0, path: [], message: docsResult.failure }]
     }
-    const docs = docsResult.success
-    let docIndex = -1
-    for (const parsed of docs) {
-      docIndex++
-      if (!isRecord(parsed)) continue
-
-      const result = yield* Effect.result(_decodeEnvelope(parsed))
-      if (Result.isFailure(result)) {
-        issues.push({
-          file: input.file,
-          doc: docIndex,
-          path: [],
-          message: `does not satisfy KubeManifest envelope: ${String(result.failure)}`
-        })
-        continue
-      }
-      const envelope = result.success
-      for (
-        const nameIssue of _checkNames({
-          kind: envelope.kind,
-          name: envelope.metadata.name,
-          namespace: envelope.metadata.namespace
-        })
-      ) {
-        issues.push({
-          file: input.file,
-          doc: docIndex,
-          path: nameIssue.path,
-          message: nameIssue.message
-        })
-      }
-    }
-    return issues
+    const perDoc = yield* Effect.forEach(
+      docsResult.success,
+      (parsed, doc) => _docIssues({ file: input.file, doc, parsed })
+    )
+    return perDoc.flat()
   })
 
 export class KubeconformNotFound extends Data.TaggedError("KubeconformNotFound")<{

@@ -13,6 +13,7 @@ import {
   makeHandle,
   ProcessId
 } from "effect/process/ChildProcessSpawner"
+import fc from "fast-check"
 import * as crypto from "node:crypto"
 import {
   _crdNameToIdentifier,
@@ -524,4 +525,32 @@ describe("verifyCrdsEffect", () => {
       const drifted = yield* verifyCrdsEffect({ releases: [], committedDir })
       expect(drifted).toEqual([])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+describe("_crdNameToIdentifier properties", () => {
+  const _word = fc.stringMatching(/^[a-z][a-z0-9]{0,6}$/)
+
+  it("property: output is PascalCase of the resource segment with separators removed", () => {
+    fc.assert(
+      fc.property(
+        fc.array(_word, { minLength: 1, maxLength: 4 }),
+        fc.constantFrom("-", "_"),
+        fc.array(_word, { maxLength: 3 }),
+        (words, sep, groupParts) => {
+          const crdName = [words.join(sep), ...groupParts].join(".")
+          const id = _crdNameToIdentifier(crdName)
+          expect(id).toBe(words.map((w) => `${w.charAt(0).toUpperCase()}${w.slice(1)}`).join(""))
+          expect(id).toMatch(/^[A-Z][A-Za-z0-9]*$/)
+        }
+      )
+    )
+  })
+
+  it("property: only the first dot-separated segment influences the identifier", () => {
+    fc.assert(
+      fc.property(_word, fc.array(_word, { maxLength: 3 }), fc.array(_word, { maxLength: 3 }), (resource, a, b) => {
+        expect(_crdNameToIdentifier([resource, ...a].join("."))).toBe(_crdNameToIdentifier([resource, ...b].join(".")))
+      })
+    )
+  })
 })

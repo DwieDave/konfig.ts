@@ -73,38 +73,27 @@ const CrdDocumentSchema = Schema.Struct({
 
 const _decodeCrdDoc = Schema.decodeUnknownOption(CrdDocumentSchema)
 
-const _buildCrds = (parsedDocs: ReadonlyArray<unknown>): CrdDocument[] => {
-  const crds: CrdDocument[] = []
-  for (const parsed of parsedDocs) {
-    const doc = Option.getOrUndefined(_decodeCrdDoc(parsed))
-    if (doc === undefined) continue
+type DecodedCrd = typeof CrdDocumentSchema.Type
 
-    const crdName = doc.metadata.name
-    if (!crdName) continue
-
-    const group = doc.spec.group ?? ""
-    const versions = doc.spec.versions
-    if (versions === undefined || versions.length === 0) continue
-
-    const versionNames: string[] = []
-    let schema: CrdDocument["schema"] | undefined
-
-    for (const v of versions) {
-      if (v.name !== undefined && v.name !== "") versionNames.push(v.name)
-      if (!schema) {
-        const openAPI = v.schema?.openAPIV3Schema
-        if (openAPI) schema = openAPI
-      }
-    }
-
-    if (!schema) {
-      schema = { type: "object", additionalProperties: true }
-    }
-
-    crds.push({ crdName, group, schema, versions: versionNames })
+const _toCrdDocument = (doc: DecodedCrd): CrdDocument | undefined => {
+  const versions = doc.spec.versions
+  if (!doc.metadata.name || versions === undefined || versions.length === 0) return undefined
+  const schema: CrdDocument["schema"] = versions.map((v) => v.schema?.openAPIV3Schema).find(Boolean)
+    ?? { type: "object", additionalProperties: true }
+  return {
+    crdName: doc.metadata.name,
+    group: doc.spec.group ?? "",
+    schema,
+    versions: versions.flatMap((v) => (v.name !== undefined && v.name !== "" ? [v.name] : []))
   }
-  return crds
 }
+
+const _buildCrds = (parsedDocs: ReadonlyArray<unknown>): CrdDocument[] =>
+  parsedDocs.flatMap((parsed) => {
+    const doc = Option.getOrUndefined(_decodeCrdDoc(parsed))
+    const crd = doc === undefined ? undefined : _toCrdDocument(doc)
+    return crd === undefined ? [] : [crd]
+  })
 
 export const _parseCrdDocs = (yamlText: string): Effect.Effect<CrdDocument[], never> =>
   Effect.try(() => parseYamlAll(yamlText)).pipe(

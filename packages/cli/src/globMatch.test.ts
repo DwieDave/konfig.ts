@@ -60,3 +60,32 @@ describe("matchesGlob", () => {
     expect(matchesGlob({ pattern: "x/{a", path: "x/{a" })).toBe(true)
   })
 })
+
+describe("matchesGlob: totality and separator rules", () => {
+  it("property: * never matches across a path separator", () => {
+    fc.assert(
+      fc.property(_name, _name, _name, (dir, a, b) => {
+        expect(matchesGlob({ pattern: `${dir}/*`, path: `${dir}/${a}/${b}` })).toBe(false)
+        expect(matchesGlob({ pattern: `${dir}/*`, path: `${dir}/${a}` })).toBe(true)
+      })
+    )
+  })
+
+  it("property: **/ prefix matches a file at any directory depth", () => {
+    fc.assert(
+      fc.property(fc.array(_name, { maxLength: 4 }), _name, (dirs, file) => {
+        const path = [...dirs, `${file}.ts`].join("/")
+        expect(matchesGlob({ pattern: "**/*.ts", path })).toBe(true)
+        expect(matchesGlob({ pattern: "**/*.ts", path: `${path}x` })).toBe(false)
+      })
+    )
+  })
+
+  it("property: every arbitrary pattern compiles and matching is total", () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 24 }), fc.string({ maxLength: 24 }), (pattern, path) => {
+        expect(typeof matchesGlob({ pattern, path })).toBe("boolean")
+      })
+    )
+  })
+})

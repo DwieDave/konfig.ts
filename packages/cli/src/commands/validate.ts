@@ -4,7 +4,7 @@ import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { renderEnv, writeFilesToDir } from "../buildEnv"
 import { renderContextFlags, withRenderContext } from "../renderContextFlags"
-import { runKubeconform, validateManifestFile } from "../validator"
+import { runKubeconform, validateManifestFile, type ValidationIssue } from "../validator"
 
 export class StructuralValidationFailed extends Data.TaggedError("StructuralValidationFailed")<{
   readonly env: string
@@ -19,53 +19,51 @@ export interface RunValidateInput {
   readonly ignoreMissingSchemas: boolean
 }
 
+type Rendered = Effect.Success<ReturnType<typeof renderEnv>>
+
+const _structuralIssues = (rendered: Rendered) =>
+  Effect.forEach(
+    rendered.files,
+    (f) => validateManifestFile({ file: f.path, content: f.content }),
+    { concurrency: "unbounded" }
+  ).pipe(Effect.map((all) => all.flat()))
+
+const _failOnIssues = (input: {
+  readonly envName: string
+  readonly issues: ReadonlyArray<ValidationIssue>
+}) =>
+  Effect.gen(function*() {
+    for (const issue of input.issues) {
+      yield* Console.error(`${issue.file} (doc ${issue.doc}) ${issue.path.join(".")}: ${issue.message}`)
+    }
+    return yield* new StructuralValidationFailed({ env: input.envName, issueCount: input.issues.length })
+  })
+
+const _kubeconformArgs = (input: Pick<RunValidateInput, "ctx" | "ignoreMissingSchemas">): string[] => [
+  ...(input.ignoreMissingSchemas ? ["-ignore-missing-schemas"] : []),
+  ...(input.ctx.k8sVersion !== undefined ? ["-kubernetes-version", input.ctx.k8sVersion] : [])
+]
+
+const _runStrict = (input: RunValidateInput & { readonly rendered: Rendered }) =>
+  Effect.scoped(
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const scratchDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-validate-" })
+      yield* writeFilesToDir({ rendered: input.rendered, targetDir: scratchDir })
+      yield* Console.log(`Running kubeconform -strict against ${scratchDir}...`)
+      yield* runKubeconform({ dir: scratchDir, extraArgs: _kubeconformArgs(input) })
+      yield* Console.log(`kubeconform: OK`)
+    })
+  )
+
 export const runValidate = (input: RunValidateInput) =>
   Effect.gen(function*() {
-    const { cfg, ctx, envName, ignoreMissingSchemas, strict } = input
+    const { cfg, ctx, envName } = input
     const rendered = yield* renderEnv({ cfg, envName, ctx })
-
-    const allIssues = yield* Effect.forEach(
-      rendered.files,
-      (f) => validateManifestFile({ file: f.path, content: f.content }),
-      { concurrency: "unbounded" }
-    )
-    const issues = allIssues.flat()
-    if (issues.length > 0) {
-      for (const issue of issues) {
-        yield* Console.error(
-          `${issue.file} (doc ${issue.doc}) ${issue.path.join(".")}: ${issue.message}`
-        )
-      }
-      return yield* new StructuralValidationFailed({
-        env: envName,
-        issueCount: issues.length
-      })
-    }
-
-    yield* Console.log(
-      `OK — env '${envName}': ${rendered.files.length} file(s) pass structural validation`
-    )
-
-    if (strict) {
-      yield* Effect.scoped(
-        Effect.gen(function*() {
-          const fs = yield* FileSystem
-          // kubeconform must see the render this invocation just produced,
-          // not the on-disk output of a previous `konfig build` — so stage
-          // it into a scratch temp dir instead of pointing at rendered.outDirAbs.
-          const scratchDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-validate-" })
-          yield* writeFilesToDir({ rendered, targetDir: scratchDir })
-
-          yield* Console.log(`Running kubeconform -strict against ${scratchDir}...`)
-          const extraArgs = [
-            ...(ignoreMissingSchemas ? ["-ignore-missing-schemas"] : []),
-            ...(ctx.k8sVersion !== undefined ? ["-kubernetes-version", ctx.k8sVersion] : [])
-          ]
-          yield* runKubeconform({ dir: scratchDir, extraArgs })
-          yield* Console.log(`kubeconform: OK`)
-        })
-      )
-    }
+    const issues = yield* _structuralIssues(rendered)
+    if (issues.length > 0) return yield* _failOnIssues({ envName, issues })
+    yield* Console.log(`OK — env '${envName}': ${rendered.files.length} file(s) pass structural validation`)
+    if (input.strict) yield* _runStrict({ ...input, rendered })
   })
 
 export const validateCommand = Command.make(

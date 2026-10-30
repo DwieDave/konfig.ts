@@ -32,55 +32,58 @@ export interface SetImageArgs {
   readonly from?: string
 }
 
+const _imagesFileError = (file: string) => (cause: unknown) => new ImagesFileError({ path: file, cause })
+
+const _readImages = (file: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const toError = _imagesFileError(file)
+    const text = yield* fs.readFileString(file).pipe(Effect.mapError(toError))
+    const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+      Effect.mapError(toError)
+    )
+    return yield* decodeImagesEffect(parsed).pipe(Effect.mapError(toError))
+  })
+
+const _assertTarget = (input: { readonly current: ImagesConfig } & Pick<SetImageArgs, "env" | "app" | "create">) =>
+  Effect.gen(function*() {
+    const { current, env, app } = input
+    const envApps = current.envs[env]
+    if (envApps === undefined || !(env in current.envs)) {
+      const known = Object.keys(current.envs)
+      yield* Effect.logError(`unknown env '${env}'. Known: ${known.join(", ")}`)
+      return yield* new SetUnknownEnv({ env, known })
+    }
+    if (!(app in envApps) && !(input.create ?? false)) {
+      const known = Object.keys(envApps)
+      yield* Effect.logError(
+        `unknown app '${app}' in env '${env}'. Known: ${known.join(", ")} (pass --create to add it)`
+      )
+      return yield* new SetUnknownApp({ env, app, known })
+    }
+  })
+
+const _withImage = (
+  input: { readonly current: ImagesConfig } & Pick<SetImageArgs, "env" | "app" | "image">
+): ImagesConfig => ({
+  envs: {
+    ...input.current.envs,
+    [input.env]: { ...input.current.envs[input.env], [input.app]: input.image }
+  }
+})
+
 export const setImageEffect = (args: SetImageArgs) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
     const cfg = yield* resolveConfig(args.from)
-
     const file = path.join(cfg.configDir, cfg.config.root, "images.json")
-    const text = yield* fs
-      .readFileString(file)
-      .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))
-
-    const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-      Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
+    const current = yield* _readImages(file)
+    yield* _assertTarget({ ...args, current })
+    const decoded = yield* decodeImagesEffect(_withImage({ ...args, current })).pipe(
+      Effect.mapError(_imagesFileError(file))
     )
-
-    const current = yield* decodeImagesEffect(parsed).pipe(
-      Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
-    )
-
-    if (!(args.env in current.envs)) {
-      const known = Object.keys(current.envs)
-      yield* Effect.logError(`unknown env '${args.env}'. Known: ${known.join(", ")}`)
-      return yield* new SetUnknownEnv({ env: args.env, known })
-    }
-
-    if (!(args.app in current.envs[args.env]) && !(args.create ?? false)) {
-      const known = Object.keys(current.envs[args.env])
-      yield* Effect.logError(
-        `unknown app '${args.app}' in env '${args.env}'. Known: ${known.join(", ")} (pass --create to add it)`
-      )
-      return yield* new SetUnknownApp({ env: args.env, app: args.app, known })
-    }
-
-    const next: ImagesConfig = {
-      envs: {
-        ...current.envs,
-        [args.env]: { ...current.envs[args.env], [args.app]: args.image }
-      }
-    }
-
-    const decoded = yield* decodeImagesEffect(next).pipe(
-      Effect.mapError((cause) => new ImagesFileError({ path: file, cause }))
-    )
-
-    const out = _formatImagesConfig(decoded)
-    yield* fs
-      .writeFileString(file, out)
-      .pipe(Effect.mapError((cause) => new ImagesFileError({ path: file, cause })))
-
+    yield* fs.writeFileString(file, _formatImagesConfig(decoded)).pipe(Effect.mapError(_imagesFileError(file)))
     yield* Effect.log(`set ${args.env}.${args.app} = ${args.image}`)
   })
 

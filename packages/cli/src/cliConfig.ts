@@ -12,11 +12,6 @@ import {
 import { Config, Effect } from "effect"
 import { Path } from "effect/Path"
 
-// Re-exported under their historical cli-local names — @konfig.ts/core's
-// konfigDefaults.ts is now the single source of truth for these values,
-// shared with the konfig.json schema defaults in konfigConfig.ts.
-export const DEFAULT_MIN_HELM_VERSION = DEFAULT_HELM_MIN_VERSION
-export const DEFAULT_HELM_CACHE = DEFAULT_HELM_CACHE_DIR
 export { DEFAULT_CHARTS_DIR, DEFAULT_CRD_OUT_DIR }
 
 /**

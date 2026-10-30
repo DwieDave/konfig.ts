@@ -13,17 +13,22 @@ import {
 import { envOutDir, renderEnv, writeFiles } from "../buildEnv"
 import { renderContextFlags, withRenderContext } from "../renderContextFlags"
 
-const _formatReport = (
-  envName: string,
-  timing: {
-    renderMs: number
-    writeMs: number
-    files: number
-    outDir: string
-    cached?: boolean
-  },
-  logFmt: "text" | "json"
-): string => {
+interface Timing {
+  readonly renderMs: number
+  readonly writeMs: number
+  readonly files: number
+  readonly outDir: string
+  readonly cached?: boolean
+}
+
+type LogFormat = "text" | "json"
+
+const _formatReport = (input: {
+  readonly envName: string
+  readonly timing: Timing
+  readonly logFmt: LogFormat
+}): string => {
+  const { envName, timing, logFmt } = input
   if (logFmt === "json") {
     return JSON.stringify({
       env: envName,
@@ -45,100 +50,96 @@ export interface RunBuildInput {
   readonly cfg: ResolvedKonfigConfig
   readonly envName: string
   readonly ctx: RenderContext
-  readonly logFmt: "text" | "json"
+  readonly logFmt: LogFormat
   readonly verbose: boolean
   readonly noCache: boolean
 }
 
+type BuildTarget = Pick<RunBuildInput, "cfg" | "envName" | "ctx">
+
+type Rendered = Effect.Success<ReturnType<typeof renderEnv>>
+
+const _validCacheHit = (input: BuildTarget & { readonly inputHash: string; readonly outDir: string }) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const entry = yield* readCacheEntry(input)
+    if (entry === undefined || entry.inputHash !== input.inputHash || entry.outDirAbs !== input.outDir) {
+      return undefined
+    }
+    const exists = yield* fs.exists(entry.outDirAbs).pipe(Effect.orElseSucceed(() => false))
+    if (!exists) return undefined
+    const onDiskHash = yield* computeOnDiskOutputHash(entry.outDirAbs)
+    return onDiskHash === entry.outputHash ? entry : undefined
+  })
+
+const _timed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.gen(function*() {
+    const start = yield* Clock.currentTimeMillis
+    const value = yield* effect
+    return { value, ms: (yield* Clock.currentTimeMillis) - start }
+  })
+
+const _persistCacheEntry = (
+  input: BuildTarget & {
+    readonly inputHash: string
+    readonly rendered: Rendered
+    readonly fileCount: number
+  }
+) =>
+  Effect.gen(function*() {
+    const timestamp = yield* DateTime.now.pipe(Effect.map(DateTime.formatIso))
+    yield* writeCacheEntry({
+      cfg: input.cfg,
+      envName: input.envName,
+      ctx: input.ctx,
+      entry: {
+        inputHash: input.inputHash,
+        outputHash: computeOutputHash(input.rendered.files),
+        outDirAbs: input.rendered.outDirAbs,
+        fileCount: input.fileCount,
+        timestamp
+      }
+    })
+  })
+
+const _renderAndWrite = (input: RunBuildInput) => {
+  const program = renderEnv(input)
+  return Effect.gen(function*() {
+    const render = yield* _timed(
+      input.verbose ? program.pipe(Effect.withSpan(`konfig.render.${input.envName}`)) : program
+    )
+    const write = yield* _timed(writeFiles(render.value))
+    return { rendered: render.value, written: write.value, renderMs: render.ms, writeMs: write.ms }
+  })
+}
+
+const _buildFresh = (input: RunBuildInput & { readonly inputHash: string | undefined }) =>
+  Effect.gen(function*() {
+    if (input.logFmt === "text") yield* Console.log(`Rendering env '${input.envName}'...`)
+    const { rendered, written, renderMs, writeMs } = yield* _renderAndWrite(input)
+    if (input.inputHash !== undefined) {
+      yield* _persistCacheEntry({ ...input, inputHash: input.inputHash, rendered, fileCount: written.length })
+    }
+    const timing = { renderMs, writeMs, files: written.length, outDir: rendered.outDirAbs }
+    yield* Console.log(_formatReport({ envName: input.envName, timing, logFmt: input.logFmt }))
+  })
+
+const _reportCached = (input: RunBuildInput & { readonly fileCount: number; readonly outDir: string }) =>
+  Console.log(_formatReport({
+    envName: input.envName,
+    timing: { renderMs: 0, writeMs: 0, files: input.fileCount, outDir: input.outDir, cached: true },
+    logFmt: input.logFmt
+  }))
+
 export const runBuild = (input: RunBuildInput) =>
   Effect.gen(function*() {
-    const { cfg, ctx, envName, logFmt, noCache, verbose } = input
-    const fs = yield* FileSystem
-
     const path = yield* Path
-    const ctxOutDir = envOutDir({ cfg, envName, ctx, pathJoin: path.join })
-
-    let cachedInputHash: string | undefined
-    if (!noCache) {
-      const inputHash = yield* computeInputHash({ cfg, envName, ctx })
-      cachedInputHash = inputHash
-      const entry = yield* readCacheEntry({ cfg, envName, ctx })
-      if (
-        entry !== undefined &&
-        entry.inputHash === inputHash &&
-        entry.outDirAbs === ctxOutDir
-      ) {
-        const outDirExists = yield* fs
-          .exists(entry.outDirAbs)
-          .pipe(Effect.orElseSucceed(() => false))
-        // Honor the hit only if the on-disk tree still hashes to the
-        // recorded outputHash — an out-of-band edit/delete is a miss.
-        const onDiskHash = outDirExists
-          ? yield* computeOnDiskOutputHash(entry.outDirAbs)
-          : undefined
-        if (outDirExists && onDiskHash === entry.outputHash) {
-          yield* Console.log(
-            _formatReport(
-              envName,
-              {
-                renderMs: 0,
-                writeMs: 0,
-                files: entry.fileCount,
-                outDir: entry.outDirAbs,
-                cached: true
-              },
-              logFmt
-            )
-          )
-          return
-        }
-      }
-    }
-
-    if (logFmt === "text") {
-      yield* Console.log(`Rendering env '${envName}'...`)
-    }
-
-    const renderStart = yield* Clock.currentTimeMillis
-    const renderProgram = renderEnv({ cfg, envName, ctx })
-    const rendered = yield* (verbose
-      ? renderProgram.pipe(Effect.withSpan(`konfig.render.${envName}`))
-      : renderProgram)
-    const renderMs = (yield* Clock.currentTimeMillis) - renderStart
-
-    const writeStart = yield* Clock.currentTimeMillis
-    const written = yield* writeFiles(rendered)
-    const writeMs = (yield* Clock.currentTimeMillis) - writeStart
-
-    if (!noCache && cachedInputHash !== undefined) {
-      const outputHash = computeOutputHash(rendered.files)
-      const timestamp = yield* DateTime.now.pipe(Effect.map(DateTime.formatIso))
-      yield* writeCacheEntry({
-        cfg,
-        envName,
-        ctx,
-        entry: {
-          inputHash: cachedInputHash,
-          outputHash,
-          outDirAbs: rendered.outDirAbs,
-          fileCount: written.length,
-          timestamp
-        }
-      })
-    }
-
-    yield* Console.log(
-      _formatReport(
-        envName,
-        {
-          renderMs,
-          writeMs,
-          files: written.length,
-          outDir: rendered.outDirAbs
-        },
-        logFmt
-      )
-    )
+    const outDir = envOutDir({ cfg: input.cfg, envName: input.envName, ctx: input.ctx, pathJoin: path.join })
+    if (input.noCache) return yield* _buildFresh({ ...input, inputHash: undefined })
+    const inputHash = yield* computeInputHash(input)
+    const hit = yield* _validCacheHit({ ...input, inputHash, outDir })
+    if (hit !== undefined) return yield* _reportCached({ ...input, fileCount: hit.fileCount, outDir: hit.outDirAbs })
+    return yield* _buildFresh({ ...input, inputHash })
   })
 
 export const buildCommand = Command.make(

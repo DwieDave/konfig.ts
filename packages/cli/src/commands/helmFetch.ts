@@ -1,9 +1,8 @@
 import { Helm } from "@konfig.ts/core"
 import { Console, Data, Effect } from "effect"
 import { Command, Flag } from "effect/cli"
-import { loadChartRegistryEffect } from "../chartRegistry"
-import { resolveCliPaths } from "../cliConfig"
-import { digestOf, resolveOptionalConfig } from "../helmShared"
+import { type ChartRegistryEntry, loadChartRegistryEffect } from "../chartRegistry"
+import { digestOf, loadHelmPaths } from "../helmShared"
 
 export class MissingAllFlag extends Data.TaggedError("MissingAllFlag") {}
 
@@ -32,37 +31,22 @@ interface HelmFetchFlags {
   readonly all: boolean
 }
 
+const _fetchDef = (input: { readonly def: ChartRegistryEntry; readonly cacheDir: string }) =>
+  Effect.gen(function*() {
+    const { def, cacheDir } = input
+    yield* Console.log(`Fetching ${def.chart}@${def.version}...`)
+    yield* _fetchOne({ repo: def.repo, chart: def.chart, version: def.version, cacheDir, digest: digestOf(def) })
+  })
+
 export const helmFetchEffect = (flags: HelmFetchFlags) =>
   Effect.gen(function*() {
-    const cfg = yield* resolveOptionalConfig
-    const { cacheDir, chartsDir, minVersion } = yield* resolveCliPaths(cfg)
-
-    yield* Helm.assertMinVersion(minVersion)
-
+    const { cacheDir, chartsDir } = yield* loadHelmPaths
     if (!flags.all) {
       yield* Console.error("Specify --all to fetch all charts")
       return yield* new MissingAllFlag()
     }
-
     const registry = yield* loadChartRegistryEffect(chartsDir)
-
-    // Bounded at 4 (same as buildEnv): keeps the helm subprocess count manageable.
-    yield* Effect.forEach(
-      registry,
-      (def) =>
-        Effect.gen(function*() {
-          yield* Console.log(`Fetching ${def.chart}@${def.version}...`)
-          yield* _fetchOne({
-            repo: def.repo,
-            chart: def.chart,
-            version: def.version,
-            cacheDir,
-            digest: digestOf(def)
-          })
-        }),
-      { concurrency: 4, discard: true }
-    )
-
+    yield* Effect.forEach(registry, (def) => _fetchDef({ def, cacheDir }), { concurrency: 4, discard: true })
     yield* Console.log(`Done. Cache at ${cacheDir}`)
   })
 

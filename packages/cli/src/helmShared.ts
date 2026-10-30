@@ -1,5 +1,7 @@
+import { Helm } from "@konfig.ts/core"
 import { Effect } from "effect"
 import type { ChartRegistryEntry } from "./chartRegistry"
+import { resolveCliPaths } from "./cliConfig"
 import { resolveConfig } from "./configResolver"
 
 // The chart registry decodes a missing digest as "" (see chartRegistry.ts);
@@ -12,7 +14,7 @@ export const digestOf = (entry: { readonly digest: string }): string | undefined
 // konfig.json (ConfigParseError) should fail; a missing one means "use the
 // built-in/env defaults". Not Effect.void: resolveCliPaths needs an actual
 // `undefined` value here (ResolvedKonfigConfig | undefined), not `void`.
-export const resolveOptionalConfig = resolveConfig().pipe(
+const resolveOptionalConfig = resolveConfig().pipe(
   // oxlint-disable-next-line effecttsgo/effect-succeed-with-void
   Effect.catchTag("ConfigNotFound", () => Effect.succeed(undefined))
 )
@@ -31,4 +33,11 @@ export const toExtractOptions = ({ entry, outDir, cacheDir }: ExtractOptionsInpu
   outDir,
   cacheDir,
   digest: digestOf(entry)
+})
+
+export const loadHelmPaths = Effect.gen(function*() {
+  const cfg = yield* resolveOptionalConfig
+  const paths = yield* resolveCliPaths(cfg)
+  yield* Helm.assertMinVersion(paths.minVersion)
+  return paths
 })

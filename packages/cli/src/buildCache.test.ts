@@ -4,7 +4,9 @@ import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import fc from "fast-check"
 import {
+  _ctxSignature,
   type BuildCacheEntry,
   computeInputHash,
   computeOnDiskOutputHash,
@@ -481,5 +483,44 @@ describe("build cache lifecycle: miss / hit / stale transitions", () => {
       const after = yield* computeOnDiskOutputHash(outDirAbs)
 
       expect(before).not.toBe(after)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+})
+
+const _flagEntries = fc.uniqueArray(fc.tuple(fc.stringMatching(/^[a-z]{1,6}$/), fc.oneof(fc.boolean(), fc.string())), {
+  selector: ([key]) => key,
+  minLength: 1,
+  maxLength: 6
+})
+
+describe("input hash ordering invariance", () => {
+  it("property: the context signature ignores flag insertion order", () => {
+    fc.assert(
+      fc.property(_flagEntries, (entries) => {
+        const forward = RenderContext.makeFull({ env: "prod", flags: new Map(entries) })
+        const reversed = RenderContext.makeFull({ env: "prod", flags: new Map([...entries].reverse()) })
+        expect(_ctxSignature(forward)).toBe(_ctxSignature(reversed))
+      })
+    )
+  })
+
+  it.effect("property: file creation order never changes the input hash", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const path = yield* Path
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
+      const infra = path.join(root, "infra")
+      const names = ["a.txt", "b.txt", "c.txt", "d.txt"]
+      const ctx = RenderContext.make("prod")
+      const hashWithOrder = (order: ReadonlyArray<string>) =>
+        Effect.gen(function*() {
+          yield* fs.remove(infra, { recursive: true, force: true })
+          yield* fs.makeDirectory(infra, { recursive: true })
+          for (const name of order) yield* fs.writeFileString(path.join(infra, name), `content ${name}\n`)
+          return yield* computeInputHash({ cfg: _cfgFor(root, ["infra/*.txt"]), envName: "prod", ctx })
+        })
+      const baseline = yield* hashWithOrder(names)
+      for (const order of fc.sample(fc.shuffledSubarray(names, { minLength: names.length }), 12)) {
+        expect(yield* hashWithOrder(order)).toBe(baseline)
+      }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

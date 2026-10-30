@@ -44,7 +44,7 @@ interface ComputeInputHashInput {
   readonly ctx: RenderContext
 }
 
-const _ctxSignature = (ctx: RenderContext): string => {
+export const _ctxSignature = (ctx: RenderContext): string => {
   const flagPairs = ctx.flags === undefined
     ? []
     : [...ctx.flags.entries()]

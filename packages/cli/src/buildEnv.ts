@@ -375,6 +375,26 @@ export const writeFilesToDir = (
     return written
   })
 
+const _removeIfExists = (target: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
+    if (!exists) return
+    yield* fs
+      .remove(target, { recursive: true })
+      .pipe(Effect.mapError((cause) => new WriteEnvError({ path: target, cause })))
+  })
+
+const _promoteStaging = (input: { readonly stagingDir: string; readonly outDirAbs: string }) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const path = yield* Path
+    const toError = (cause: unknown) => new WriteEnvError({ path: input.outDirAbs, cause })
+    yield* _removeIfExists(input.outDirAbs)
+    yield* fs.makeDirectory(path.dirname(input.outDirAbs), { recursive: true }).pipe(Effect.mapError(toError))
+    yield* fs.rename(input.stagingDir, input.outDirAbs).pipe(Effect.mapError(toError))
+  })
+
 // Atomic write: stage all files under `<outDir>.tmp`, then remove the live
 // `<outDir>` and rename `.tmp` into place — a kill mid-write never leaves a
 // half-rewritten live tree.
@@ -382,36 +402,9 @@ export const writeFiles = (
   rendered: RenderedEnv
 ): Effect.Effect<ReadonlyArray<string>, WriteEnvError, FileSystem | Path> =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem
-    const path = yield* Path
-
     const stagingDir = `${rendered.outDirAbs}.tmp`
-
-    const stagingExists = yield* fs.exists(stagingDir).pipe(Effect.orElseSucceed(() => false))
-    if (stagingExists) {
-      yield* fs
-        .remove(stagingDir, { recursive: true })
-        .pipe(Effect.mapError((cause) => new WriteEnvError({ path: stagingDir, cause })))
-    }
-
+    yield* _removeIfExists(stagingDir)
     yield* writeFilesToDir({ rendered, targetDir: stagingDir })
-    const written = rendered.files.map((file) => file.path)
-
-    const liveExists = yield* fs.exists(rendered.outDirAbs).pipe(Effect.orElseSucceed(() => false))
-    if (liveExists) {
-      yield* fs
-        .remove(rendered.outDirAbs, { recursive: true })
-        .pipe(Effect.mapError((cause) => new WriteEnvError({ path: rendered.outDirAbs, cause })))
-    }
-    yield* fs
-      .makeDirectory(path.dirname(rendered.outDirAbs), { recursive: true })
-      .pipe(
-        Effect.mapError(
-          (cause) => new WriteEnvError({ path: rendered.outDirAbs, cause })
-        )
-      )
-    yield* fs
-      .rename(stagingDir, rendered.outDirAbs)
-      .pipe(Effect.mapError((cause) => new WriteEnvError({ path: rendered.outDirAbs, cause })))
-    return written
+    yield* _promoteStaging({ stagingDir, outDirAbs: rendered.outDirAbs })
+    return rendered.files.map((file) => file.path)
   })
