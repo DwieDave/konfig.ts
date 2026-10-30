@@ -4,12 +4,10 @@ import { Cause, ConfigProvider, Effect, Exit } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import * as fc from "fast-check"
-import * as crypto from "node:crypto"
+import { sha256Hex } from "./hash"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
 import { HelmDigestMismatch } from "./RenderError"
-
-const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
 interface Fixture {
   readonly cacheDir: string
@@ -27,7 +25,7 @@ const _setupFixture: Effect.Effect<Fixture, never, FileSystem | Path> = Effect.g
   const chart = "fixture"
   const version = "1.0.0"
   const tarball = Buffer.from("fake-helm-tarball-bytes\nDocument: kind: ConfigMap\nname: x")
-  const digest = `sha256:${_sha256Hex(tarball)}`
+  const digest = `sha256:${sha256Hex(tarball)}`
   const digestSuffix = digest.replace(/^sha256:/, "").slice(0, 12)
   const cachedTgz = path.join(cacheDir, `${chart}-${version}-${digestSuffix}.tgz`)
   yield* fs.writeFile(cachedTgz, tarball).pipe(Effect.orDie)

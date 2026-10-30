@@ -26,14 +26,12 @@ import {
   makeHandle,
   ProcessId
 } from "effect/process/ChildProcessSpawner"
-import * as crypto from "node:crypto"
 import { unsafeCoerce } from "./_cast"
+import { sha256Hex } from "./hash"
 import * as Helm from "./Helm"
 import { _parseHelmOutput } from "./Helm"
 import { RenderContext } from "./RenderContext"
 import { HelmRenderError, YamlParseError } from "./RenderError"
-
-const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
 
 const _isString = Schema.is(Schema.String)
 
@@ -143,7 +141,7 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-template-test-" })
 
       const tarball = Buffer.from("fake-chart-tarball")
-      const digest = `sha256:${_sha256Hex(tarball)}`
+      const digest = `sha256:${sha256Hex(tarball)}`
 
       const m = Helm.release({
         repo: "https://example.com/charts",
@@ -198,7 +196,7 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-template-cached-" })
 
       const tarball = Buffer.from("already-cached-bytes")
-      const digest = `sha256:${_sha256Hex(tarball)}`
+      const digest = `sha256:${sha256Hex(tarball)}`
       const digestSuffix = digest.replace(/^sha256:/, "").slice(0, 12)
       const cachedTgz = path.join(cacheDir, `mychart-2.0.0-${digestSuffix}.tgz`)
       yield* fs.writeFile(cachedTgz, tarball)
@@ -251,8 +249,8 @@ describe("Helm.release — full pull + template flow (mocked spawner)", () => {
 
         const tarballA = Buffer.from("tarball-for-version-a")
         const tarballB = Buffer.from("tarball-for-version-b")
-        const digestA = `sha256:${_sha256Hex(tarballA)}`
-        const digestB = `sha256:${_sha256Hex(tarballB)}`
+        const digestA = `sha256:${sha256Hex(tarballA)}`
+        const digestB = `sha256:${sha256Hex(tarballB)}`
 
         // Record every `--destination` the two concurrent pulls are given.
         // A pre-fix implementation passes the *shared* cacheDir straight
@@ -382,7 +380,7 @@ describe("Helm output parsing", () => {
         repo: "https://example.com/charts",
         chart: "mychart",
         version: "2.0.0",
-        digest: `sha256:${_sha256Hex(tarball)}`,
+        digest: `sha256:${sha256Hex(tarball)}`,
         values: {}
       })
 

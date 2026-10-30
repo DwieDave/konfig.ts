@@ -13,8 +13,8 @@ import {
   makeHandle,
   ProcessId
 } from "effect/process/ChildProcessSpawner"
-import * as crypto from "node:crypto"
 import { isRecord } from "./guards"
+import { sha256Hex } from "./hash"
 import * as Helm from "./Helm"
 import { RenderContext } from "./RenderContext"
 
@@ -53,7 +53,7 @@ const _namespaces = (input: _RenderInput) =>
     const path = yield* Path
     const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-helm-scope-" })
     const tarball = Buffer.from("scope-tarball")
-    const digest = `sha256:${crypto.createHash("sha256").update(tarball).digest("hex")}`
+    const digest = `sha256:${sha256Hex(tarball)}`
     yield* fs.writeFile(path.join(cacheDir, `c-1.0.0-${digest.slice(7, 19)}.tgz`), tarball)
 
     const spawner = Layer.succeed(

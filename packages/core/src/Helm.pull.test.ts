@@ -12,8 +12,8 @@ import {
   ProcessId
 } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
-import { createHash } from "node:crypto"
 import { describe, expect } from "vitest"
+import { sha256Hex } from "./hash"
 import { cacheFileName, ensureChartTarball, pullArgs } from "./Helm"
 import { HelmDigestMismatch, HelmRenderError } from "./RenderError"
 
@@ -50,7 +50,7 @@ describe("pullArgs", () => {
   })
 })
 
-const _sha = (bytes: Uint8Array) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`
+const _sha = (bytes: Uint8Array) => `sha256:${sha256Hex(bytes)}`
 const _content = new Uint8Array([1, 2, 3])
 
 const _spawner = (opts: { readonly files: ReadonlyArray<string>; readonly pulls: { count: number } }) =>

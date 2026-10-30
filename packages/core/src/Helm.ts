@@ -1,17 +1,4 @@
-import {
-  Cause,
-  Config,
-  Data,
-  Deferred,
-  Duration,
-  Effect,
-  Exit,
-  Option,
-  Predicate,
-  Schema,
-  SchemaIssue,
-  Stream
-} from "effect"
+import { Config, Data, Deferred, Duration, Effect, Option, Predicate, Schema, SchemaIssue, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import type { PlatformError } from "effect/PlatformError"
@@ -36,6 +23,7 @@ import {
   type YamlParseError
 } from "./RenderError"
 import { compareSemver, parseSemver } from "./semver"
+import { singleFlight } from "./singleFlight"
 import { type ProcessFailure, runProcessExit, runProcessString } from "./subprocess"
 import type { YamlRecord } from "./yaml/record"
 
@@ -218,40 +206,18 @@ const _helmVersionProbe: _HelmVersionProbe = Effect.gen(function*() {
 
 type _VersionError = ProcessFailure | Config.ConfigError
 
-type _VersionDeferred = Deferred.Deferred<string, _VersionError>
+const _helmVersionBySpawner = new WeakMap<ChildProcessSpawner["Service"], Deferred.Deferred<string, _VersionError>>()
 
-const _helmVersionBySpawner = new WeakMap<ChildProcessSpawner["Service"], _VersionDeferred>()
+const _memoizedHelmVersion: _HelmVersionProbe = Effect.gen(function*() {
+  const spawner = yield* ChildProcessSpawner
 
-interface _VersionSettle {
-  readonly spawner: ChildProcessSpawner["Service"]
-  readonly deferred: _VersionDeferred
-}
-
-const _settleVersion = (input: _VersionSettle) => (exit: Exit.Exit<string, _VersionError>) =>
-  Effect.sync(() => {
-    if (Exit.isFailure(exit)) _helmVersionBySpawner.delete(input.spawner)
-  }).pipe(Effect.andThen(Deferred.done(input.deferred, exit)))
-
-const _awaitVersion = (input: { readonly deferred: _VersionDeferred; readonly retry: _HelmVersionProbe }) =>
-  Effect.exit(Deferred.await(input.deferred)).pipe(
-    Effect.flatMap((exit) => Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause) ? input.retry : exit)
-  )
-
-const _memoizedHelmVersion: _HelmVersionProbe = Effect.uninterruptibleMask((restore) =>
-  Effect.gen(function*() {
-    const spawner = yield* ChildProcessSpawner
-    const existing = _helmVersionBySpawner.get(spawner)
-
-    if (existing !== undefined) {
-      return yield* restore(_awaitVersion({ deferred: existing, retry: _memoizedHelmVersion }))
-    }
-
-    const deferred = yield* Deferred.make<string, _VersionError>()
-    _helmVersionBySpawner.set(spawner, deferred)
-
-    return yield* Effect.onExit(restore(_helmVersionProbe), _settleVersion({ spawner, deferred }))
+  return yield* singleFlight({
+    store: _helmVersionBySpawner,
+    key: spawner,
+    run: _helmVersionProbe,
+    keepOnSuccess: true
   })
-)
+})
 
 // A failed `helm version` (not on PATH, permission denied, timeout) surfaces as
 // its ProcessError/ProcessTimeout; HelmVersionTooLow is reserved for a version
@@ -424,44 +390,8 @@ type _PullOnce = Effect.Effect<void, _PullError, FileSystem | Path | ChildProces
 // is retried by the next render rather than replayed from memory.
 const _pullsInFlight = new Map<string, Deferred.Deferred<void, _PullError>>()
 
-interface _Claim {
-  readonly owner: boolean
-  readonly deferred: Deferred.Deferred<void, _PullError>
-}
-
-const _claimPull = (input: { readonly key: string; readonly fresh: Deferred.Deferred<void, _PullError> }) =>
-  Effect.sync((): _Claim => {
-    const existing = _pullsInFlight.get(input.key)
-
-    if (existing !== undefined) return { owner: false, deferred: existing }
-    _pullsInFlight.set(input.key, input.fresh)
-
-    return { owner: true, deferred: input.fresh }
-  })
-
-const _settlePull =
-  (input: { readonly key: string; readonly deferred: Deferred.Deferred<void, _PullError> }) =>
-  (exit: Exit.Exit<void, _PullError>) =>
-    Effect.sync(() => _pullsInFlight.delete(input.key)).pipe(Effect.andThen(Deferred.done(input.deferred, exit)))
-
-const _ownerInterrupted = (exit: Exit.Exit<void, _PullError>) =>
-  Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
-
-const _awaitOwner = (input: { readonly deferred: Deferred.Deferred<void, _PullError>; readonly retry: _PullOnce }) =>
-  Effect.exit(Deferred.await(input.deferred)).pipe(
-    Effect.flatMap((exit) => _ownerInterrupted(exit) ? input.retry : exit)
-  )
-
 const _pullOnce = (input: { readonly cachedTgz: string; readonly pull: _PullOnce }): _PullOnce =>
-  Effect.uninterruptibleMask((restore) =>
-    Effect.gen(function*() {
-      const fresh = yield* Deferred.make<void, _PullError>()
-      const claim = yield* _claimPull({ key: input.cachedTgz, fresh })
-
-      if (!claim.owner) return yield* restore(_awaitOwner({ deferred: claim.deferred, retry: _pullOnce(input) }))
-      yield* Effect.onExit(restore(input.pull), _settlePull({ key: input.cachedTgz, deferred: fresh }))
-    })
-  )
+  singleFlight({ store: _pullsInFlight, key: input.cachedTgz, run: input.pull, keepOnSuccess: false })
 
 const _verifyPinned = (input: _SlotInput) =>
   input.digest === undefined
