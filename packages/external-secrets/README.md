@@ -46,7 +46,7 @@ const bound = Secret.bind({
 | --------------------- | -------------------------- | ----------------------------------------------------- |
 | `secretStoreRef.name` | required                   | name of the `SecretStore` / `ClusterSecretStore`      |
 | `secretStoreRef.kind` | `"SecretStore"`            | use `"ClusterSecretStore"` for cluster-scoped stores  |
-| `refreshInterval`     | ESO default                | reconcile cadence, e.g. `"1h"`, `"30m"`               |
+| `refreshInterval`     | ESO default                | reconcile cadence, e.g. `"1h"`, `"1h30m"`, `"0"`      |
 | `remoteRef`           | identity (`key → { key }`) | map each contract key to its path in the store        |
 | `target`              | omitted                    | `ExternalSecret` `target` (template / creationPolicy) |
 

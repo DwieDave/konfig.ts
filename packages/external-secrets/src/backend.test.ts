@@ -2,10 +2,11 @@ import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Yaml } from "@konfig.ts/core"
 import { Secret } from "@konfig.ts/k8s"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { describe, expect, it as vitestIt } from "vitest"
 import { ExternalSecrets } from "./backend"
 import type { ExternalSecret } from "./crd"
+import { InvalidRefreshIntervalError } from "./duration"
 
 const coerce = <T>(value: unknown): T => value as T
 
@@ -118,5 +119,43 @@ describe("ExternalSecrets.backend", () => {
         version: "2",
         conversionStrategy: "Default"
       })
+    }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+describe("ExternalSecrets.backend refreshInterval", () => {
+  const render = (refreshInterval: unknown) =>
+    Secret.bind({
+      secret: dbCreds,
+      backend: ExternalSecrets.backend({
+        secretStoreRef: { name: "s" },
+        refreshInterval: coerce<"1h">(refreshInterval)
+      })
+    }).manifest!.render(ctx)
+
+  it.effect("accepts Go durations such as 1h30m", () =>
+    Effect.gen(function*() {
+      const rendered = coerce<ExternalSecret>(yield* render("1h30m"))
+      expect(rendered.spec.refreshInterval).toBe("1h30m")
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("dies on an invalid refreshInterval", () =>
+    Effect.gen(function*() {
+      const exit = yield* Effect.exit(render("soon"))
+      const defect = Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isDieReason)?.defect : undefined
+      expect(defect).toBeInstanceOf(InvalidRefreshIntervalError)
+      expect(defect).toMatchObject({ value: "soon" })
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("renders without refreshInterval", () =>
+    Effect.gen(function*() {
+      const rendered = coerce<ExternalSecret>(yield* render(undefined))
+      expect(rendered.spec.refreshInterval).toBeUndefined()
+    }).pipe(Effect.provide(NodeServices.layer)))
+
+  it.effect("accepts 0 and 500ms", () =>
+    Effect.gen(function*() {
+      const zero = coerce<ExternalSecret>(yield* render("0"))
+      const ms = coerce<ExternalSecret>(yield* render("500ms"))
+      expect([zero.spec.refreshInterval, ms.spec.refreshInterval]).toEqual(["0", "500ms"])
     }).pipe(Effect.provide(NodeServices.layer)))
 })

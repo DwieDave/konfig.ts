@@ -1,5 +1,6 @@
 import { Manifest } from "@konfig.ts/core"
 import type { BackendEmitInput, SecretBackend } from "@konfig.ts/k8s"
+import { Effect } from "effect"
 import type {
   ExternalSecret,
   ExternalSecretDataEntry,
@@ -7,10 +8,11 @@ import type {
   ExternalSecretTarget,
   SecretStoreRef
 } from "./crd"
+import { type GoDuration, InvalidRefreshIntervalError, isGoDuration } from "./duration"
 
 export interface ExternalSecretsBackendOptions<K extends string> {
   readonly secretStoreRef: SecretStoreRef
-  readonly refreshInterval?: `${number}${"s" | "m" | "h"}`
+  readonly refreshInterval?: GoDuration
   readonly remoteRef?: (key: K) => ExternalSecretRemoteRef
   readonly target?: ExternalSecretTarget
 }
@@ -21,32 +23,43 @@ const _emit = <N extends string, K extends string>(
   base: BackendEmitInput<N, K, false>,
   opts: ExternalSecretsBackendOptions<K>
 ): Manifest.Manifest<ExternalSecret> =>
-  Manifest.make<ExternalSecret>(() => {
-    const remoteRef = opts.remoteRef ?? _identityRemoteRef
-    const data: ExternalSecretDataEntry[] = base.keys.map((key) => ({
-      secretKey: key,
-      remoteRef: remoteRef(key)
-    }))
-    return {
-      apiVersion: "external-secrets.io/v1",
-      kind: "ExternalSecret",
-      metadata: {
-        name: base.name,
-        namespace: base.namespace,
-        labels: base.labels,
-        annotations: base.annotations
+  Manifest.make<ExternalSecret>(() =>
+    _isValidInterval(opts.refreshInterval)
+      ? _build(base, opts)
+      : Effect.die(new InvalidRefreshIntervalError({ value: opts.refreshInterval }))
+  )
+
+const _isValidInterval = (value: unknown): boolean => value === undefined || isGoDuration(value)
+
+const _build = <N extends string, K extends string>(
+  base: BackendEmitInput<N, K, false>,
+  opts: ExternalSecretsBackendOptions<K>
+): ExternalSecret => {
+  const remoteRef = opts.remoteRef ?? _identityRemoteRef
+  const data: ExternalSecretDataEntry[] = base.keys.map((key) => ({
+    secretKey: key,
+    remoteRef: remoteRef(key)
+  }))
+  return {
+    apiVersion: "external-secrets.io/v1",
+    kind: "ExternalSecret",
+    metadata: {
+      name: base.name,
+      namespace: base.namespace,
+      labels: base.labels,
+      annotations: base.annotations
+    },
+    spec: {
+      refreshInterval: opts.refreshInterval,
+      secretStoreRef: {
+        name: opts.secretStoreRef.name,
+        kind: opts.secretStoreRef.kind ?? "SecretStore"
       },
-      spec: {
-        refreshInterval: opts.refreshInterval,
-        secretStoreRef: {
-          name: opts.secretStoreRef.name,
-          kind: opts.secretStoreRef.kind ?? "SecretStore"
-        },
-        target: opts.target,
-        data
-      }
+      target: opts.target,
+      data
     }
-  })
+  }
+}
 
 export const ExternalSecrets = {
   backend: <N extends string, K extends string>(
