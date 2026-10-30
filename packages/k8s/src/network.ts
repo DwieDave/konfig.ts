@@ -1,25 +1,20 @@
 import { Manifest, type SecretRef } from "@konfig.ts/core"
 import { Effect } from "effect"
-import { _lowerServicePorts } from "./_lower"
 import type {
-  IngressBackend as K8sIngressBackend,
   Ingress as K8sIngress,
+  IngressBackend as K8sIngressBackend,
   IngressRule as K8sIngressRule,
   IngressTLS as K8sIngressTLS,
   Service as K8sService,
   ServicePort as K8sServicePort
 } from "./.generated/k8s-types"
+import { _lowerServicePorts } from "./_lower"
 import type { ContainerSpec } from "./container"
+import { type NamespacedMetaInput, toObjectMeta } from "./meta"
 import type { ServicePortSpec } from "./ports"
 import type { Selector } from "./selector"
 
-export interface ServiceInput {
-  readonly name: string
-  readonly namespace: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
-  readonly selector: Readonly<Record<string, string>>
-  readonly ports: ReadonlyArray<K8sServicePort>
+interface ServiceBase extends NamespacedMetaInput {
   readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer"
   readonly clusterIP?: string
   readonly sessionAffinity?: string
@@ -28,48 +23,41 @@ export interface ServiceInput {
   readonly internalTrafficPolicy?: string
 }
 
-export interface ServiceFromContainerInput<Ports extends string> {
-  readonly name: string
-  readonly namespace: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+export interface ServiceInput extends ServiceBase {
+  readonly selector: Readonly<Record<string, string>>
+  readonly ports: ReadonlyArray<K8sServicePort>
+}
+
+export interface ServiceFromContainerInput<Ports extends string> extends ServiceBase {
   readonly selector: Readonly<Record<string, string>>
   readonly forContainer: ContainerSpec<Ports>
   readonly ports: ReadonlyArray<ServicePortSpec<NoInfer<Ports>>>
-  readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer"
-  readonly clusterIP?: string
-  readonly sessionAffinity?: string
-  readonly publishNotReadyAddresses?: boolean
-  readonly externalTrafficPolicy?: string
-  readonly internalTrafficPolicy?: string
 }
 
-export interface ServiceFromPodSetInput<L extends Readonly<Record<string, string>>> {
-  readonly name: string
-  readonly namespace: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+export interface ServiceFromPodSetInput<L extends Readonly<Record<string, string>>> extends ServiceBase {
   readonly podSet: Selector<L>
   readonly ports: ReadonlyArray<K8sServicePort>
-  readonly type?: "ClusterIP" | "NodePort" | "LoadBalancer"
-  readonly clusterIP?: string
-  readonly sessionAffinity?: string
-  readonly publishNotReadyAddresses?: boolean
-  readonly externalTrafficPolicy?: string
-  readonly internalTrafficPolicy?: string
 }
+
+const _serviceBase = (input: ServiceBase): ServiceBase => ({
+  name: input.name,
+  namespace: input.namespace,
+  labels: input.labels,
+  annotations: input.annotations,
+  type: input.type,
+  clusterIP: input.clusterIP,
+  sessionAffinity: input.sessionAffinity,
+  publishNotReadyAddresses: input.publishNotReadyAddresses,
+  externalTrafficPolicy: input.externalTrafficPolicy,
+  internalTrafficPolicy: input.internalTrafficPolicy
+})
 
 export const Service = {
   make: (input: ServiceInput): Manifest.Manifest<K8sService> => {
     const resource: K8sService = {
       apiVersion: "v1",
       kind: "Service",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
-      },
+      metadata: toObjectMeta(input),
       spec: {
         selector: input.selector,
         type: input.type,
@@ -87,35 +75,17 @@ export const Service = {
     input: ServiceFromContainerInput<Ports>
   ): Manifest.Manifest<K8sService> =>
     Service.make({
-      name: input.name,
-      namespace: input.namespace,
-      labels: input.labels,
-      annotations: input.annotations,
+      ..._serviceBase(input),
       selector: input.selector,
-      ports: _lowerServicePorts(input.ports),
-      type: input.type,
-      clusterIP: input.clusterIP,
-      sessionAffinity: input.sessionAffinity,
-      publishNotReadyAddresses: input.publishNotReadyAddresses,
-      externalTrafficPolicy: input.externalTrafficPolicy,
-      internalTrafficPolicy: input.internalTrafficPolicy
+      ports: _lowerServicePorts(input.ports)
     }),
   fromPodSet: <L extends Readonly<Record<string, string>>>(
     input: ServiceFromPodSetInput<L>
   ): Manifest.Manifest<K8sService> =>
     Service.make({
-      name: input.name,
-      namespace: input.namespace,
-      labels: input.labels,
-      annotations: input.annotations,
+      ..._serviceBase(input),
       selector: input.podSet.labels,
-      ports: input.ports,
-      type: input.type,
-      clusterIP: input.clusterIP,
-      sessionAffinity: input.sessionAffinity,
-      publishNotReadyAddresses: input.publishNotReadyAddresses,
-      externalTrafficPolicy: input.externalTrafficPolicy,
-      internalTrafficPolicy: input.internalTrafficPolicy
+      ports: input.ports
     })
 }
 
@@ -124,11 +94,7 @@ export interface IngressTLSInput {
   readonly secretName: SecretRef<string>
 }
 
-export interface IngressInput {
-  readonly name: string
-  readonly namespace: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+export interface IngressInput extends NamespacedMetaInput {
   readonly ingressClassName?: string
   readonly rules?: ReadonlyArray<K8sIngressRule>
   readonly tls?: ReadonlyArray<IngressTLSInput>
@@ -140,12 +106,7 @@ export const Ingress = {
     const resource: K8sIngress = {
       apiVersion: "networking.k8s.io/v1",
       kind: "Ingress",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
-      },
+      metadata: toObjectMeta(input),
       spec: {
         ingressClassName: input.ingressClassName,
         rules: input.rules === undefined ? undefined : [...input.rules],

@@ -80,6 +80,16 @@ export interface RawEnvInput<N extends string> {
   readonly valueFrom?: EnvVarSource
 }
 
+const _secretEnvVar = <EnvName extends string>(input: {
+  readonly name: EnvName
+  readonly ref: SecretRef<string>
+  readonly key: string
+  readonly optional?: boolean
+}): EnvVar<EnvName> => ({
+  name: input.name,
+  valueFrom: { secretKeyRef: { name: input.ref, key: input.key, optional: input.optional } }
+})
+
 export const EnvVar = {
   value: <const N extends string>(input: ValueEnvInput<N>): EnvVar<N> => ({
     name: input.name,
@@ -87,12 +97,7 @@ export const EnvVar = {
   }),
   fromSecret: <const EnvName extends string, N extends string, K extends string = string>(
     input: SecretEnvInput<EnvName, N, K>
-  ): EnvVar<EnvName> => ({
-    name: input.name,
-    valueFrom: {
-      secretKeyRef: { name: input.ref, key: input.key, optional: input.optional }
-    }
-  }),
+  ): EnvVar<EnvName> => _secretEnvVar(input),
   // kube-apiserver only resolves secretKeyRef within the pod's own namespace; Ns must match podNamespace.
   fromSecretForPod: <
     const EnvName extends string,
@@ -101,12 +106,7 @@ export const EnvVar = {
     const Ns extends string
   >(
     input: SecretEnvForPodInput<EnvName, N, K, Ns>
-  ): EnvVar<EnvName> => ({
-    name: input.name,
-    valueFrom: {
-      secretKeyRef: { name: input.ref, key: input.key, optional: input.optional }
-    }
-  }),
+  ): EnvVar<EnvName> => _secretEnvVar(input),
   // Batch form: many env vars from one secret ref; podNamespace folds in the fromSecretForPod check.
   // oxlint-disable-next-line app/no-multiple-function-params -- (ref, map, opts?) reads as a call, not a config
   secretEnv: <

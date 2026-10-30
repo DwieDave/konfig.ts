@@ -13,20 +13,8 @@ import type {
   Role as K8sRole,
   RoleBinding as K8sRoleBinding
 } from "./.generated/k8s-types"
+import { type ClusterMetaInput, type NamespacedMetaInput, toObjectMeta } from "./meta"
 import type { Selector } from "./selector"
-
-interface NamespacedMeta {
-  readonly name: string
-  readonly namespace: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
-}
-
-interface ClusterMeta {
-  readonly name: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
-}
 
 type PersistentVolumeAccessMode =
   | "ReadWriteOnce"
@@ -52,7 +40,7 @@ interface PersistentVolumeSpecInput extends
   readonly claimRef?: { readonly namespace: string; readonly name: string }
 }
 
-export interface PersistentVolumeInput extends ClusterMeta {
+export interface PersistentVolumeInput extends ClusterMetaInput {
   readonly spec: PersistentVolumeSpecInput
 }
 
@@ -73,11 +61,7 @@ export const PersistentVolume = {
       Effect.succeed({
         apiVersion: "v1",
         kind: "PersistentVolume",
-        metadata: {
-          name: input.name,
-          labels: input.labels,
-          annotations: input.annotations
-        },
+        metadata: toObjectMeta(input),
         spec: _lowerPvSpec(input.spec)
       })
     )
@@ -92,7 +76,7 @@ interface PersistentVolumeClaimSpecInput {
   readonly selector?: { readonly matchLabels?: Readonly<Record<string, string>> }
 }
 
-export interface PersistentVolumeClaimInput extends NamespacedMeta {
+export interface PersistentVolumeClaimInput extends NamespacedMetaInput {
   readonly spec: PersistentVolumeClaimSpecInput
 }
 
@@ -113,18 +97,13 @@ export const PersistentVolumeClaim = {
       Effect.succeed({
         apiVersion: "v1",
         kind: "PersistentVolumeClaim",
-        metadata: {
-          name: input.name,
-          namespace: input.namespace,
-          labels: input.labels,
-          annotations: input.annotations
-        },
+        metadata: toObjectMeta(input),
         spec: _lowerPvcSpec(input.spec)
       })
     )
 }
 
-export interface NetworkPolicyInput extends NamespacedMeta {
+export interface NetworkPolicyInput extends NamespacedMetaInput {
   readonly spec: K8sNetworkPolicy["spec"]
 }
 
@@ -144,7 +123,7 @@ export interface NetworkPolicyEgressRule {
   readonly ports?: K8sNetworkPolicyEgressRule["ports"]
 }
 
-export interface NetworkPolicyFromPodSetInput<L extends Readonly<Record<string, string>>> extends NamespacedMeta {
+export interface NetworkPolicyFromPodSetInput<L extends Readonly<Record<string, string>>> extends NamespacedMetaInput {
   readonly podSet: Selector<L>
   readonly policyTypes?: ReadonlyArray<"Ingress" | "Egress">
   readonly ingress?: ReadonlyArray<NetworkPolicyIngressRule>
@@ -180,12 +159,7 @@ export const NetworkPolicy = {
       Effect.succeed({
         apiVersion: "networking.k8s.io/v1",
         kind: "NetworkPolicy",
-        metadata: {
-          name: input.name,
-          namespace: input.namespace,
-          labels: input.labels === undefined ? undefined : { ...input.labels },
-          annotations: input.annotations === undefined ? undefined : { ...input.annotations }
-        },
+        metadata: toObjectMeta(input),
         spec: structuredClone(input.spec)
       })
     ),
@@ -215,7 +189,7 @@ export const NetworkPolicy = {
   }
 }
 
-export interface ClusterRoleInput extends ClusterMeta {
+export interface ClusterRoleInput extends ClusterMetaInput {
   readonly rules?: K8sClusterRole["rules"]
   readonly aggregationRule?: K8sClusterRole["aggregationRule"]
 }
@@ -226,18 +200,14 @@ export const ClusterRole = {
       Effect.succeed({
         apiVersion: "rbac.authorization.k8s.io/v1",
         kind: "ClusterRole",
-        metadata: {
-          name: input.name,
-          labels: input.labels,
-          annotations: input.annotations
-        },
+        metadata: toObjectMeta(input),
         rules: input.rules,
         aggregationRule: input.aggregationRule
       })
     )
 }
 
-export interface ClusterRoleBindingInput extends ClusterMeta {
+export interface ClusterRoleBindingInput extends ClusterMetaInput {
   readonly roleRef: K8sClusterRoleBinding["roleRef"]
   readonly subjects?: K8sClusterRoleBinding["subjects"]
 }
@@ -248,18 +218,14 @@ export const ClusterRoleBinding = {
       Effect.succeed({
         apiVersion: "rbac.authorization.k8s.io/v1",
         kind: "ClusterRoleBinding",
-        metadata: {
-          name: input.name,
-          labels: input.labels,
-          annotations: input.annotations
-        },
+        metadata: toObjectMeta(input),
         roleRef: input.roleRef,
         subjects: input.subjects
       })
     )
 }
 
-export interface RoleInput extends NamespacedMeta {
+export interface RoleInput extends NamespacedMetaInput {
   readonly rules?: K8sRole["rules"]
 }
 
@@ -269,18 +235,13 @@ export const Role = {
       Effect.succeed({
         apiVersion: "rbac.authorization.k8s.io/v1",
         kind: "Role",
-        metadata: {
-          name: input.name,
-          namespace: input.namespace,
-          labels: input.labels,
-          annotations: input.annotations
-        },
+        metadata: toObjectMeta(input),
         rules: input.rules
       })
     )
 }
 
-export interface RoleBindingInput extends NamespacedMeta {
+export interface RoleBindingInput extends NamespacedMetaInput {
   readonly roleRef: K8sRoleBinding["roleRef"]
   readonly subjects?: K8sRoleBinding["subjects"]
 }
@@ -291,12 +252,7 @@ export const RoleBinding = {
       Effect.succeed({
         apiVersion: "rbac.authorization.k8s.io/v1",
         kind: "RoleBinding",
-        metadata: {
-          name: input.name,
-          namespace: input.namespace,
-          labels: input.labels,
-          annotations: input.annotations
-        },
+        metadata: toObjectMeta(input),
         roleRef: input.roleRef,
         subjects: input.subjects
       })

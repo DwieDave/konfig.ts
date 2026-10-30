@@ -10,17 +10,13 @@ import type {
   Volume as K8sVolume
 } from "./.generated/k8s-types"
 import type { ContainerInput, PodSpecInput } from "./container"
+import { type PodTemplateMetaInput, toLabelsMeta } from "./meta"
 import type { ProbeTarget } from "./ports"
 import type { ServicePortSpec } from "./ports"
 import type { Volume } from "./volume"
 
-interface TemplateMetaInput {
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
-}
-
 export interface PodTemplateInput {
-  readonly metadata?: TemplateMetaInput
+  readonly metadata?: PodTemplateMetaInput
   readonly spec: PodSpecInput
 }
 
@@ -84,12 +80,7 @@ const _lowerPodSpec = (spec: PodSpecInput): K8sPodSpec => ({
 })
 
 export const _lowerPodTemplate = (template: PodTemplateInput): K8sPodTemplateSpec => ({
-  metadata: template.metadata === undefined ? undefined : {
-    labels: template.metadata.labels === undefined ? undefined : { ...template.metadata.labels },
-    annotations: template.metadata.annotations === undefined
-      ? undefined
-      : { ...template.metadata.annotations }
-  },
+  metadata: toLabelsMeta(template.metadata),
   spec: _lowerPodSpec(template.spec)
 })
 

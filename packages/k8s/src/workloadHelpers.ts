@@ -10,6 +10,7 @@ import type {
   ServiceAccount as K8sServiceAccount
 } from "./.generated/k8s-types"
 import type { ContainerInput, ContainerSpec } from "./container"
+import { ServiceAccount } from "./identity"
 import { Ingress, type IngressTLSInput, Service } from "./network"
 import type { ServicePortSpec } from "./ports"
 import type { Volume } from "./volume"
@@ -174,18 +175,12 @@ export const cron = (
 ): Manifest.Manifest<readonly [K8sServiceAccount, K8sCronJob]> => {
   const selectorLabels = { app: input.name }
 
-  const sa: Manifest.Manifest<K8sServiceAccount> = M.make<K8sServiceAccount>(() =>
-    Effect.succeed({
-      apiVersion: "v1",
-      kind: "ServiceAccount",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: { ...selectorLabels, ...input.labels },
-        annotations: input.annotations
-      }
-    })
-  )
+  const sa = ServiceAccount.make({
+    name: input.name,
+    namespace: input.namespace,
+    labels: { ...selectorLabels, ...input.labels },
+    annotations: input.annotations
+  })
 
   const cronJob = CronJob.make({
     name: input.name,

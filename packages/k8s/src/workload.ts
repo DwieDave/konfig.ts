@@ -11,27 +11,20 @@ import type {
 } from "./.generated/k8s-types"
 import { _lowerPodTemplate } from "./_lower"
 import type { PodSpecInput } from "./container"
+import { type NamespacedMetaInput, type PodTemplateMetaInput, toLabelsMeta, toObjectMeta } from "./meta"
 import type { Selector } from "./selector"
 
-interface WorkloadMeta {
-  readonly name: string
-  readonly namespace: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+interface PodTemplateShape {
+  readonly metadata?: PodTemplateMetaInput
+  readonly spec: PodSpecInput
 }
 
 interface SelectorAndTemplate {
   readonly selector: { readonly matchLabels: Readonly<Record<string, string>> }
-  readonly template: {
-    readonly metadata?: {
-      readonly labels?: Readonly<Record<string, string>>
-      readonly annotations?: Readonly<Record<string, string>>
-    }
-    readonly spec: PodSpecInput
-  }
+  readonly template: PodTemplateShape
 }
 
-export interface DeploymentInput extends WorkloadMeta, SelectorAndTemplate {
+export interface DeploymentInput extends NamespacedMetaInput, SelectorAndTemplate {
   readonly replicas?: number
   readonly strategy?: DeploymentStrategy
   readonly revisionHistoryLimit?: number
@@ -39,24 +32,10 @@ export interface DeploymentInput extends WorkloadMeta, SelectorAndTemplate {
   readonly minReadySeconds?: number
 }
 
-export interface DeploymentFromPodSetInput<L extends Readonly<Record<string, string>>> {
-  readonly name: string
-  readonly namespace: string
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
+export interface DeploymentFromPodSetInput<L extends Readonly<Record<string, string>>>
+  extends Omit<DeploymentInput, "selector">
+{
   readonly podSet: Selector<L>
-  readonly replicas?: number
-  readonly template: {
-    readonly metadata?: {
-      readonly labels?: Readonly<Record<string, string>>
-      readonly annotations?: Readonly<Record<string, string>>
-    }
-    readonly spec: PodSpecInput
-  }
-  readonly strategy?: DeploymentStrategy
-  readonly revisionHistoryLimit?: number
-  readonly progressDeadlineSeconds?: number
-  readonly minReadySeconds?: number
 }
 
 export const Deployment = {
@@ -64,12 +43,7 @@ export const Deployment = {
     const resource: K8sDeployment = {
       apiVersion: "apps/v1",
       kind: "Deployment",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: structuredClone(input.labels),
-        annotations: structuredClone(input.annotations)
-      },
+      metadata: toObjectMeta(input),
       spec: {
         replicas: input.replicas,
         selector: structuredClone(input.selector),
@@ -107,7 +81,7 @@ export const Deployment = {
     })
 }
 
-export interface StatefulSetInput extends WorkloadMeta, SelectorAndTemplate {
+export interface StatefulSetInput extends NamespacedMetaInput, SelectorAndTemplate {
   readonly replicas?: number
   readonly serviceName: string
   readonly volumeClaimTemplates?: ReadonlyArray<K8sPersistentVolumeClaim>
@@ -120,12 +94,7 @@ export const StatefulSet = {
     const resource: K8sStatefulSet = {
       apiVersion: "apps/v1",
       kind: "StatefulSet",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: structuredClone(input.labels),
-        annotations: structuredClone(input.annotations)
-      },
+      metadata: toObjectMeta(input),
       spec: {
         replicas: input.replicas,
         selector: structuredClone(input.selector),
@@ -142,20 +111,14 @@ export const StatefulSet = {
   }
 }
 
-export interface JobInput extends WorkloadMeta {
+export interface JobInput extends NamespacedMetaInput {
   readonly parallelism?: number
   readonly completions?: number
   readonly backoffLimit?: number
   readonly activeDeadlineSeconds?: number
   readonly ttlSecondsAfterFinished?: number
   readonly suspend?: boolean
-  readonly template: {
-    readonly metadata?: {
-      readonly labels?: Readonly<Record<string, string>>
-      readonly annotations?: Readonly<Record<string, string>>
-    }
-    readonly spec: PodSpecInput
-  }
+  readonly template: PodTemplateShape
 }
 
 export const Job = {
@@ -163,12 +126,7 @@ export const Job = {
     const resource: K8sJob = {
       apiVersion: "batch/v1",
       kind: "Job",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: structuredClone(input.labels),
-        annotations: structuredClone(input.annotations)
-      },
+      metadata: toObjectMeta(input),
       spec: {
         parallelism: input.parallelism,
         completions: input.completions,
@@ -183,7 +141,7 @@ export const Job = {
   }
 }
 
-export interface CronJobInput extends WorkloadMeta {
+export interface CronJobInput extends NamespacedMetaInput {
   readonly schedule: string
   readonly concurrencyPolicy?: string
   readonly successfulJobsHistoryLimit?: number
@@ -191,18 +149,9 @@ export interface CronJobInput extends WorkloadMeta {
   readonly startingDeadlineSeconds?: number
   readonly suspend?: boolean
   readonly jobTemplate: {
-    readonly metadata?: {
-      readonly labels?: Readonly<Record<string, string>>
-      readonly annotations?: Readonly<Record<string, string>>
-    }
+    readonly metadata?: PodTemplateMetaInput
     readonly spec: {
-      readonly template: {
-        readonly metadata?: {
-          readonly labels?: Readonly<Record<string, string>>
-          readonly annotations?: Readonly<Record<string, string>>
-        }
-        readonly spec: PodSpecInput
-      }
+      readonly template: PodTemplateShape
       readonly backoffLimit?: number
       readonly activeDeadlineSeconds?: number
       readonly ttlSecondsAfterFinished?: number
@@ -215,12 +164,7 @@ export const CronJob = {
     const resource: K8sCronJob = {
       apiVersion: "batch/v1",
       kind: "CronJob",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: input.labels === undefined ? undefined : { ...input.labels },
-        annotations: input.annotations === undefined ? undefined : { ...input.annotations }
-      },
+      metadata: toObjectMeta(input),
       spec: {
         schedule: input.schedule,
         concurrencyPolicy: input.concurrencyPolicy,
@@ -229,7 +173,7 @@ export const CronJob = {
         startingDeadlineSeconds: input.startingDeadlineSeconds,
         suspend: input.suspend,
         jobTemplate: {
-          metadata: structuredClone(input.jobTemplate.metadata),
+          metadata: toLabelsMeta(input.jobTemplate.metadata),
           spec: {
             template: _lowerPodTemplate(input.jobTemplate.spec.template),
             backoffLimit: input.jobTemplate.spec.backoffLimit,

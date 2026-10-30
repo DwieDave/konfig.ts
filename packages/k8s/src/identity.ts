@@ -7,18 +7,14 @@ import type {
   Secret as K8sSecret,
   ServiceAccount as K8sServiceAccount
 } from "./.generated/k8s-types"
+import { type MetaLabels, toObjectMeta } from "./meta"
 import {
   ConfigMapRef as ConfigMapRefValue,
   SecretRef as SecretRefValue,
   ServiceAccountRef as ServiceAccountRefValue
 } from "./refs"
 
-type CommonMeta = {
-  readonly labels?: Readonly<Record<string, string>>
-  readonly annotations?: Readonly<Record<string, string>>
-}
-
-export interface NamespaceInput<N extends string> extends CommonMeta {
+export interface NamespaceInput<N extends string> extends MetaLabels {
   readonly name: N
 }
 
@@ -31,18 +27,14 @@ export const Namespace = {
     const resource: K8sNamespace = {
       apiVersion: "v1",
       kind: "Namespace",
-      metadata: {
-        name: input.name,
-        labels: input.labels,
-        annotations: input.annotations
-      }
+      metadata: toObjectMeta(input)
     }
     const m = Manifest.make<K8sNamespace>(() => Effect.succeed(resource))
     return Object.assign(m, { ref: input.name })
   }
 }
 
-export interface ServiceAccountInput<N extends string> extends CommonMeta {
+export interface ServiceAccountInput<N extends string> extends MetaLabels {
   readonly name: N
   readonly namespace: string
   readonly automountServiceAccountToken?: boolean
@@ -58,12 +50,7 @@ export const ServiceAccount = {
     const resource: K8sServiceAccount = {
       apiVersion: "v1",
       kind: "ServiceAccount",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
-      },
+      metadata: toObjectMeta(input),
       automountServiceAccountToken: input.automountServiceAccountToken,
       imagePullSecrets: input.imagePullSecrets?.map((s) => ({ name: s.name }))
     }
@@ -72,7 +59,7 @@ export const ServiceAccount = {
   }
 }
 
-export interface ConfigMapInput<N extends string, K extends string = string> extends CommonMeta {
+export interface ConfigMapInput<N extends string, K extends string = string> extends MetaLabels {
   readonly name: N
   readonly namespace: string
   readonly data?: Readonly<Record<K, string>>
@@ -93,12 +80,7 @@ export const ConfigMap = {
     const resource: K8sConfigMap = {
       apiVersion: "v1",
       kind: "ConfigMap",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
-      },
+      metadata: toObjectMeta(input),
       data: input.data,
       binaryData: input.binaryData,
       immutable: input.immutable
@@ -112,7 +94,7 @@ export interface SecretInput<
   N extends string,
   Ns extends string = string,
   K extends string = string
-> extends CommonMeta {
+> extends MetaLabels {
   readonly name: N
   readonly namespace: Ns
   readonly type?: string
@@ -140,12 +122,7 @@ export const Secret = {
     const resource: K8sSecret = {
       apiVersion: "v1",
       kind: "Secret",
-      metadata: {
-        name: input.name,
-        namespace: input.namespace,
-        labels: input.labels,
-        annotations: input.annotations
-      },
+      metadata: toObjectMeta(input),
       type: input.type,
       data: input.data,
       stringData: input.stringData,
