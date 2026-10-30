@@ -53,6 +53,7 @@ disk.
 | ---------- | ---------------- | ---------------------------------------------------------------------------------------------- |
 | `scope`    | `"strict"`       | `strict` = same name + namespace; `namespace-wide` = rename within ns; `cluster-wide` = any ns |
 | `certPath` | `$KUBESEAL_CERT` | path to the sealed-secrets controller's public cert                                            |
+| `type`     | `"Opaque"`       | Secret `type` of the plain Secret, e.g. `kubernetes.io/dockerconfigjson`                       |
 
 ## Internals
 

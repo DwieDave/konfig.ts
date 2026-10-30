@@ -8,6 +8,7 @@ import { resolveCertPath, runKubeseal } from "./kubeseal"
 export interface SealedSecretsBackendOptions {
   readonly scope?: SealedSecretScope
   readonly certPath?: string
+  readonly type?: string
 }
 
 interface _EmitInput<N extends string, K extends string> {
@@ -49,9 +50,11 @@ const _emit = <N extends string, K extends string>(
         kind: "Secret" as const,
         metadata: {
           name: input.base.name,
-          namespace: input.base.namespace
+          namespace: input.base.namespace,
+          labels: input.base.labels,
+          annotations: input.base.annotations
         },
-        type: "Opaque" as const,
+        type: input.opts.type ?? "Opaque",
         stringData
       }
       const plainSecretYaml = Yaml.serialize({ value: plainSecret })

@@ -117,6 +117,22 @@ describe("SealedSecrets.backend", () => {
       expect(sink.lastStdin).toContain("password: p")
     }).pipe(Effect.provide(NodeServices.layer)))
 
+  it.effect("forwards labels, annotations and type to the plain Secret", () =>
+    Effect.gen(function*() {
+      const sink: SpawnerSink = {}
+      const bound = Secret.bind({
+        secret: dbCreds,
+        labels: { app: "db" },
+        annotations: { note: "x" },
+        backend: SealedSecrets.backend({ certPath: "/tmp/c.pem", type: "kubernetes.io/dockerconfigjson" }),
+        source: SecretSource.literal({ data: { url: "u", password: "p" } })
+      })
+      yield* bound.manifest!.render(ctx).pipe(Effect.provide(_makeStubSpawner(sink)))
+      expect(sink.lastStdin).toContain("app: db")
+      expect(sink.lastStdin).toContain("note: x")
+      expect(sink.lastStdin).toContain("type: kubernetes.io/dockerconfigjson")
+    }).pipe(Effect.provide(NodeServices.layer)))
+
   it.effect("defaults: scope=strict", () =>
     Effect.gen(function*() {
       const sink: SpawnerSink = {}
