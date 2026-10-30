@@ -12,6 +12,5 @@ export const pnpm = (opts: PnpmOptions): PackageManager => ({
   prodInstallCommand: ["pnpm", "install", "--ignore-scripts"],
   productionFlag: ["--prod"],
   nodeModulesLayout: opts.layout,
-  depsImage: ({ runtimeImage }) => runtimeImage,
   prependDepsRuns: (version) => [`corepack enable pnpm && corepack prepare pnpm@${version} --activate`]
 })

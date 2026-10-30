@@ -8,6 +8,5 @@ export const npm: PackageManager = {
   prodInstallCommand: ["npm", "install", "--ignore-scripts"],
   productionFlag: ["--omit=dev"],
   nodeModulesLayout: "isolated",
-  depsImage: ({ runtimeImage }) => runtimeImage,
   prependDepsRuns: () => []
 }

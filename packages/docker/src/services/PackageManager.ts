@@ -3,11 +3,6 @@ export interface ImageRef {
   readonly tag: string
 }
 
-export interface DepsImageInput {
-  readonly runtimeImage: ImageRef
-  readonly pmVersion: string
-}
-
 export type PmKind = "Bun" | "Npm" | "Pnpm" | "Yarn"
 export type YarnVariant = "classic" | "berry"
 export type NodeModulesLayout = "isolated" | "hoisted"
@@ -23,6 +18,5 @@ export interface PackageManager {
   readonly prodInstallCommand: ReadonlyArray<string>
   readonly productionFlag: ReadonlyArray<string>
   readonly nodeModulesLayout: NodeModulesLayout
-  readonly depsImage: (input: DepsImageInput) => ImageRef
   readonly prependDepsRuns: (pmVersion: string) => ReadonlyArray<string>
 }

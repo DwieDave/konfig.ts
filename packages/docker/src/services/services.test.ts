@@ -34,14 +34,6 @@ describe("PackageManager bun", () => {
 			}
 		`)
   })
-
-  it("depsImage returns the runtime image unchanged", () => {
-    const out = bunPm.depsImage({
-      runtimeImage: { image: "oven/bun", tag: "1.3.5-alpine" },
-      pmVersion: "1.3.5"
-    })
-    expect(out).toEqual({ image: "oven/bun", tag: "1.3.5-alpine" })
-  })
 })
 
 describe("PackageManager npm", () => {

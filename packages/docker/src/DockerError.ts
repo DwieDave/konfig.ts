@@ -33,11 +33,6 @@ export class BunVersionUnsupported extends Data.TaggedError("BunVersionUnsupport
   readonly minimum: string
 }> {}
 
-export class SpecDecodeError extends Data.TaggedError("SpecDecodeError")<{
-  readonly specPath: string
-  readonly cause: unknown
-}> {}
-
 export class BuildScriptMissing extends Data.TaggedError("BuildScriptMissing")<{
   readonly target: string
   readonly script: string
@@ -76,7 +71,6 @@ export type AnyDockerError =
   | CircularWorkspaceDep
   | EngineVersionMissing
   | BunVersionUnsupported
-  | SpecDecodeError
   | BuildScriptMissing
   | WorkspaceSourceUnknown
   | SharedRootFileMissing

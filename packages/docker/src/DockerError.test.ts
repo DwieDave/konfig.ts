@@ -9,7 +9,6 @@ import {
   EngineVersionMissing,
   MonorepoRootNotFound,
   SharedRootFileMissing,
-  SpecDecodeError,
   UnsupportedPm,
   WorkspaceNotFound,
   WorkspaceSourceUnknown
@@ -31,10 +30,6 @@ describe("DockerError", () => {
       [
         new EngineVersionMissing({ target: "apps/x", engineField: "engines.bun" }),
         "EngineVersionMissing"
-      ],
-      [
-        new SpecDecodeError({ specPath: "apps/x/docker.ts", cause: new Error("x") }),
-        "SpecDecodeError"
       ],
       [
         new BuildScriptMissing({ target: "apps/x", script: "build" }),
@@ -62,7 +57,7 @@ describe("DockerError", () => {
       ]
     ]
 
-    expect(all).toHaveLength(12)
+    expect(all).toHaveLength(11)
     for (const [err, tag] of all) {
       expect(err._tag).toBe(tag)
     }

@@ -5,7 +5,6 @@ import { render } from "./Renderer"
 
 const envLine = (value: string): string => {
   const df: Dockerfile = {
-    args: [],
     stages: [{
       name: "x",
       from: { _tag: "FromStage", stage: "base" },

@@ -3,11 +3,7 @@ import type { Dockerfile, From, HealthcheckIR, Instruction, PlatformIR, Stage } 
 
 const _json = (argv: ReadonlyArray<string>): string => JSON.stringify(argv)
 
-const _renderPlatformFlag = (p: PlatformIR | undefined): string => {
-  if (!p) return ""
-  if (p._tag === "Single") return `--platform=${p.value} `
-  return ""
-}
+const _renderPlatformFlag = (p: PlatformIR | undefined): string => (p ? `--platform=${p.value} ` : "")
 
 const _renderFrom = (f: From, platform: PlatformIR | undefined, name: string): string => {
   const platformFlag = _renderPlatformFlag(platform)
@@ -31,7 +27,6 @@ const _renderEnv = (i: Extract<Instruction, { _tag: "Env" }>): string => {
 const _quoteIfNeeded = (v: string): string => /[\s"'\\$]/.test(v) ? JSON.stringify(v).replaceAll("$", "\\$") : v
 
 const _renderHealthcheck = (h: HealthcheckIR): string => {
-  if (h._tag === "None") return "HEALTHCHECK NONE"
   const flags: string[] = []
   if (h.interval) flags.push(`--interval=${h.interval}`)
   if (h.timeout) flags.push(`--timeout=${h.timeout}`)
@@ -46,7 +41,7 @@ const _renderInstruction = (i: Instruction): string =>
     Match.tag("Copy", (c) => _renderCopy(c)),
     Match.tag("Run", (r) => `RUN ${r.cmd}`),
     Match.tag("Env", (e) => _renderEnv(e)),
-    Match.tag("Expose", (e) => `EXPOSE ${e.port}${e.protocol ? `/${e.protocol}` : ""}`),
+    Match.tag("Expose", (e) => `EXPOSE ${e.port}`),
     Match.tag("User", (u) => `USER ${u.user}`),
     Match.tag("Workdir", (w) => `WORKDIR ${w.path}`),
     Match.tag("Cmd", (c) => `CMD ${_json(c.argv)}`),
@@ -55,19 +50,11 @@ const _renderInstruction = (i: Instruction): string =>
     Match.exhaustive
   )
 
-const _renderStage = (s: Stage): string => {
-  const lines: string[] = [_renderFrom(s.from, s.platform, s.name)]
-  if (s.workdir) lines.push(`WORKDIR ${s.workdir}`)
-  for (const i of s.instructions) lines.push(_renderInstruction(i))
-  return lines.join("\n")
-}
+const _renderStage = (s: Stage): string =>
+  [
+    _renderFrom(s.from, s.platform, s.name),
+    ...(s.workdir ? [`WORKDIR ${s.workdir}`] : []),
+    ...s.instructions.map(_renderInstruction)
+  ].join("\n")
 
-const _renderArg = (a: { name: string; default?: string }): string =>
-  a.default === undefined ? `ARG ${a.name}` : `ARG ${a.name}=${a.default}`
-
-export const render = (df: Dockerfile): string => {
-  const sections: string[] = []
-  if (df.args.length > 0) sections.push(df.args.map(_renderArg).join("\n"))
-  for (const s of df.stages) sections.push(_renderStage(s))
-  return `${sections.join("\n\n")}\n`
-}
+export const render = (df: Dockerfile): string => `${df.stages.map(_renderStage).join("\n\n")}\n`

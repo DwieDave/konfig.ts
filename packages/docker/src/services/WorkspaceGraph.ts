@@ -89,47 +89,36 @@ const _isMonorepoRoot = (pkg: PackageJson | undefined, hasPnpmYaml: boolean): bo
   return true
 }
 
+interface FsEnv {
+  readonly fs: FileSystem
+  readonly p: Path
+}
+
+const _searchRoot = (input: {
+  readonly env: FsEnv
+  readonly cur: string
+  readonly remaining: number
+}): Effect.Effect<RootDir | undefined, PackageJsonInvalid> =>
+  Effect.gen(function*() {
+    const { env, cur } = input
+    const pkg = yield* _readPkgJsonIfExists(env.fs, env.p, cur)
+    const pnpmYamlExists = yield* existsOrFalse({ fs: env.fs, path: env.p.join(cur, "pnpm-workspace.yaml") })
+    if (_isMonorepoRoot(pkg, pnpmYamlExists)) return _brandRoot(cur)
+    const parent = env.p.dirname(cur)
+    if (input.remaining <= 1 || parent === cur) return undefined
+    return yield* _searchRoot({ env, cur: parent, remaining: input.remaining - 1 })
+  })
+
+const MAX_ROOT_SEARCH_DEPTH = 64
+
 export const findRoot = (
   from: string
 ): Effect.Effect<RootDir, MonorepoRootNotFound | PackageJsonInvalid, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
-    let cur = p.resolve(from)
-    for (let i = 0; i < 64; i++) {
-      const pkg = yield* _readPkgJsonIfExists(fs, p, cur)
-      const pnpmYamlExists = yield* existsOrFalse({ fs, path: p.join(cur, "pnpm-workspace.yaml") })
-      if (_isMonorepoRoot(pkg, pnpmYamlExists)) return _brandRoot(cur)
-      const parent = p.dirname(cur)
-      if (parent === cur) break
-      cur = parent
-    }
-    return yield* new MonorepoRootNotFound({ from })
-  })
-
-const _collectDescendantDirs = (
-  fs: FileSystem,
-  p: Path,
-  root: string,
-  dir: string
-): Effect.Effect<ReadonlyArray<string>, never> =>
-  Effect.gen(function*() {
-    const acc: string[] = [dir]
-    const children = yield* fs
-      .readDirectory(p.join(root, dir))
-      .pipe(Effect.orElseSucceed((): string[] => []))
-    for (const ch of children) {
-      if (ch === "node_modules" || ch.startsWith(".")) continue
-      const childRel = p.join(dir, ch)
-      const stat = yield* fs
-        .stat(p.join(root, childRel))
-        .pipe(Effect.option)
-      if (stat._tag === "Some" && stat.value.type === "Directory") {
-        const nested = yield* _collectDescendantDirs(fs, p, root, childRel)
-        for (const n of nested) acc.push(n)
-      }
-    }
-    return acc
+    const found = yield* _searchRoot({ env: { fs, p }, cur: p.resolve(from), remaining: MAX_ROOT_SEARCH_DEPTH })
+    return found ?? (yield* new MonorepoRootNotFound({ from }))
   })
 
 interface GlobEnv {
@@ -142,6 +131,35 @@ interface SegmentStep {
   readonly cur: string
   readonly part: string
 }
+
+const _isTraversable = (name: string): boolean => name !== "node_modules" && !name.startsWith(".")
+
+const _descendantsIfDir = (input: {
+  readonly env: GlobEnv
+  readonly rel: string
+}): Effect.Effect<ReadonlyArray<string>> =>
+  input.env.fs.stat(input.env.p.join(input.env.root, input.rel)).pipe(
+    Effect.option,
+    Effect.flatMap((stat) =>
+      stat._tag === "Some" && stat.value.type === "Directory"
+        ? _collectDescendantDirs({ env: input.env, dir: input.rel })
+        : Effect.succeed([])
+    )
+  )
+
+const _collectDescendantDirs = (input: {
+  readonly env: GlobEnv
+  readonly dir: string
+}): Effect.Effect<ReadonlyArray<string>> =>
+  _listChildren(input.env, input.dir).pipe(
+    Effect.flatMap((children) =>
+      Effect.forEach(
+        children.filter(_isTraversable),
+        (ch) => _descendantsIfDir({ env: input.env, rel: input.env.p.join(input.dir, ch) })
+      )
+    ),
+    Effect.map((nested) => [input.dir, ...nested.flat()])
+  )
 
 const _listChildren = (env: GlobEnv, dir: string): Effect.Effect<ReadonlyArray<string>> =>
   env.fs.readDirectory(env.p.join(env.root, dir)).pipe(Effect.orElseSucceed((): string[] => []))
@@ -156,7 +174,7 @@ const _wildcardChildren = (env: GlobEnv, step: SegmentStep): Effect.Effect<Reado
   )
 
 const _expandSegment = (env: GlobEnv, step: SegmentStep): Effect.Effect<ReadonlyArray<string>> => {
-  if (step.part === "**") return _collectDescendantDirs(env.fs, env.p, env.root, step.cur)
+  if (step.part === "**") return _collectDescendantDirs({ env, dir: step.cur })
   if (hasWildcard(step.part)) return _wildcardChildren(env, step)
   return Effect.succeed([env.p.join(step.cur, step.part)])
 }
@@ -323,6 +341,48 @@ const _finalizePm = (input: FinalizePmInput): Effect.Effect<DetectedPm, never, F
     }
   })
 
+interface PmLockfile {
+  readonly kind: PmKind
+  readonly file: string
+}
+
+const _presentLockfiles = (input: {
+  readonly env: FsEnv
+  readonly root: RootDir
+}): Effect.Effect<ReadonlyArray<PmLockfile>> =>
+  Effect.filter(
+    PM_LOCKFILES,
+    (entry) => existsOrFalse({ fs: input.env.fs, path: input.env.p.join(input.root, entry.file) })
+  )
+
+const _kindFromLockfiles = (present: ReadonlyArray<PmLockfile>): Effect.Effect<PmKind, UnsupportedPm> => {
+  const [first, ...rest] = [...new Set(present.map((l) => l.kind))]
+  if (first === undefined) {
+    return Effect.fail(new UnsupportedPm({ reason: "no packageManager field and no recognized lockfile" }))
+  }
+  return rest.length > 0
+    ? Effect.fail(
+      new UnsupportedPm({
+        reason: "multiple lockfiles present and no packageManager field to disambiguate",
+        candidates: [first, ...rest]
+      })
+    )
+    : Effect.succeed(first)
+}
+
+interface PmChoice {
+  readonly kind: PmKind
+  readonly version: string | undefined
+}
+
+const _chooseKind = (input: {
+  readonly corepack: PmChoice | undefined
+  readonly present: ReadonlyArray<PmLockfile>
+}): Effect.Effect<PmChoice, UnsupportedPm> =>
+  input.corepack
+    ? Effect.succeed(input.corepack)
+    : _kindFromLockfiles(input.present).pipe(Effect.map((kind): PmChoice => ({ kind, version: undefined })))
+
 export const detectPm = (
   root: RootDir
 ): Effect.Effect<DetectedPm, UnsupportedPm | PackageJsonInvalid, FileSystem | Path> =>
@@ -331,28 +391,9 @@ export const detectPm = (
     const p = yield* Path
     const pkg = yield* _readPkgJsonIfExists(fs, p, root)
     const corepack = pkg?.packageManager ? _parseCorepackField(pkg.packageManager) : undefined
-    const presentLockfiles: Array<{ kind: PmKind; file: string }> = []
-    for (const entry of PM_LOCKFILES) {
-      const ex = yield* existsOrFalse({ fs, path: p.join(root, entry.file) })
-      if (ex) presentLockfiles.push(entry)
-    }
-    if (corepack) {
-      return yield* _finalizePm({ root, kind: corepack.kind, version: corepack.version, presentLockfiles })
-    }
-    const kinds = new Set(presentLockfiles.map((l) => l.kind))
-    if (kinds.size === 0) {
-      return yield* new UnsupportedPm({
-        reason: "no packageManager field and no recognized lockfile"
-      })
-    }
-    if (kinds.size > 1) {
-      return yield* new UnsupportedPm({
-        reason: "multiple lockfiles present and no packageManager field to disambiguate",
-        candidates: [...kinds]
-      })
-    }
-    const kind = [...kinds][0]!
-    return yield* _finalizePm({ root, kind, version: undefined, presentLockfiles })
+    const presentLockfiles = yield* _presentLockfiles({ env: { fs, p }, root })
+    const choice = yield* _chooseKind({ corepack, present: presentLockfiles })
+    return yield* _finalizePm({ root, ...choice, presentLockfiles })
   })
 
 const _depNames = (pkg: PackageJson, includeDev: boolean): ReadonlyArray<string> =>
@@ -366,40 +407,53 @@ export interface ClosureInput {
   readonly includeDev?: boolean
 }
 
+interface Visit {
+  readonly visited: ReadonlySet<string>
+  readonly order: ReadonlyArray<Workspace>
+}
+
+interface VisitInput {
+  readonly byName: ReadonlyMap<string, Workspace>
+  readonly includeDev: boolean
+  readonly ws: Workspace
+  readonly stack: ReadonlyArray<string>
+  readonly state: Visit
+}
+
+const _visit = (input: VisitInput): Effect.Effect<Visit, CircularWorkspaceDep> => {
+  const { ws, stack, state } = input
+  if (state.visited.has(ws.name)) return Effect.succeed(state)
+  if (stack.includes(ws.name)) return Effect.fail(new CircularWorkspaceDep({ cycle: [...stack, ws.name] }))
+  const deps = _depNames(ws.pkg, input.includeDev).flatMap((name) => {
+    const dep = input.byName.get(name)
+    return dep ? [dep] : []
+  })
+  return Effect.reduce(
+    deps,
+    (): Visit => state,
+    (acc, dep) => _visit({ ...input, ws: dep, stack: [...stack, ws.name], state: acc })
+  )
+    .pipe(Effect.map((done): Visit => ({ visited: new Set([...done.visited, ws.name]), order: [...done.order, ws] })))
+}
+
+const _lookupWorkspace = (input: {
+  readonly all: ReadonlyArray<Workspace>
+  readonly ref: string
+}): Workspace | undefined =>
+  input.all.find((w) => w.name === input.ref) ?? input.all.find((w) => w.relDir === input.ref)
+
 export const closureOf = (
   input: ClosureInput
 ): Effect.Effect<ReadonlyArray<Workspace>, WorkspaceNotFound | CircularWorkspaceDep> =>
   Effect.gen(function*() {
-    const byName = new Map<string, Workspace>()
-    const byRelDir = new Map<string, Workspace>()
-    for (const ws of input.all) {
-      byName.set(ws.name, ws)
-      byRelDir.set(ws.relDir, ws)
-    }
-    const lookup = (ref: string): Workspace | undefined => byName.get(ref) ?? byRelDir.get(ref)
-    const root = lookup(input.target)
+    const root = _lookupWorkspace({ all: input.all, ref: input.target })
     if (!root) return yield* new WorkspaceNotFound({ target: input.target })
-    const visited = new Set<string>()
-    const onStack = new Set<string>()
-    const order: Workspace[] = []
-    const cycleErr = (cycle: string[]): CircularWorkspaceDep => new CircularWorkspaceDep({ cycle })
-    const dfs = (ws: Workspace, stack: string[]): CircularWorkspaceDep | undefined => {
-      if (visited.has(ws.name)) return undefined
-      if (onStack.has(ws.name)) return cycleErr([...stack, ws.name])
-      onStack.add(ws.name)
-      const deps = _depNames(ws.pkg, input.includeDev ?? false)
-      for (const depName of deps) {
-        const dep = byName.get(depName)
-        if (!dep) continue
-        const err = dfs(dep, [...stack, ws.name])
-        if (err) return err
-      }
-      onStack.delete(ws.name)
-      visited.add(ws.name)
-      order.push(ws)
-      return undefined
-    }
-    const err = dfs(root, [])
-    if (err) return yield* err
-    return order
+    const result = yield* _visit({
+      byName: new Map(input.all.map((ws) => [ws.name, ws] as const)),
+      includeDev: input.includeDev ?? false,
+      ws: root,
+      stack: [],
+      state: { visited: new Set(), order: [] }
+    })
+    return result.order
   })

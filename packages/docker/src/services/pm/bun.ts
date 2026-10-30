@@ -9,6 +9,5 @@ export const bun: PackageManager = {
   prodInstallCommand: ["bun", "install", "--ignore-scripts", "--frozen-lockfile"],
   productionFlag: ["--production"],
   nodeModulesLayout: "isolated",
-  depsImage: ({ runtimeImage }) => runtimeImage,
   prependDepsRuns: () => []
 }

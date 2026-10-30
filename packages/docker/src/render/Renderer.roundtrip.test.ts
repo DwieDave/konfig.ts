@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import type { Dockerfile, HealthcheckIR, Instruction, PlatformValue, Stage } from "../ir/DockerfileIR"
 import { render } from "./Renderer"
 
-
 const splitFromLine = (line: string): { platform?: PlatformValue; rest: string } => {
   const m = line.match(/^FROM (--platform=(\S+) )?(.+)$/)
   if (!m) throw new Error(`bad FROM: ${line}`)
@@ -62,7 +61,6 @@ const parseEnv = (line: string): Instruction => {
 
 const parseHealthcheck = (line: string): Instruction => {
   const body = line.slice("HEALTHCHECK ".length)
-  if (body === "NONE") return { _tag: "Healthcheck", check: { _tag: "None" } }
   const cmdIdx = body.indexOf(" CMD ")
   const flagsPart = cmdIdx < 0 ? "" : body.slice(0, cmdIdx)
   const cmdPart = cmdIdx < 0 ? body.slice("CMD ".length) : body.slice(cmdIdx + " CMD ".length)
@@ -85,9 +83,7 @@ const parseInstruction = (line: string): Instruction => {
   if (line.startsWith("ENV ")) return parseEnv(line)
   if (line.startsWith("EXPOSE ")) {
     const body = line.slice("EXPOSE ".length)
-    const [portStr, proto] = body.split("/")
-    const ins: Extract<Instruction, { _tag: "Expose" }> = { _tag: "Expose", port: Number(portStr) }
-    return proto ? { ...ins, protocol: proto as "tcp" | "udp" } : ins
+    return { _tag: "Expose", port: Number(body) }
   }
   if (line.startsWith("USER ")) return { _tag: "User", user: line.slice("USER ".length) }
   if (line.startsWith("WORKDIR ")) return { _tag: "Workdir", path: line.slice("WORKDIR ".length) }
@@ -101,19 +97,10 @@ const parseInstruction = (line: string): Instruction => {
 
 const parseDockerfile = (text: string): Dockerfile => {
   const lines = text.split("\n").filter((l) => l.length > 0 && !l.startsWith("#"))
-  const args: Array<Dockerfile["args"][number]> = []
   const stages: Stage[] = []
   let current: Stage | undefined
   let stageWorkdirSet = false
   for (const line of lines) {
-    if (line.startsWith("ARG ")) {
-      const body = line.slice("ARG ".length)
-      const eq = body.indexOf("=")
-      args.push(
-        eq < 0 ? { name: body } : { name: body.slice(0, eq), default: body.slice(eq + 1) }
-      )
-      continue
-    }
     if (line.startsWith("FROM ")) {
       const parsed = parseFrom(line)
       current = {
@@ -136,9 +123,8 @@ const parseDockerfile = (text: string): Dockerfile => {
     current = { ...current, instructions: [...current.instructions, parseInstruction(line)] }
     stages[stages.length - 1] = current
   }
-  return { args, stages }
+  return { stages }
 }
-
 
 const idChar = fc.constantFrom(
   "a",
@@ -191,9 +177,7 @@ const envArb: fc.Arbitrary<Instruction> = fc
   .array(fc.tuple(safeEnvKey, safeEnvVal), { minLength: 1, maxLength: 3 })
   .map((entries) => ({ _tag: "Env", entries }))
 
-const exposeArb: fc.Arbitrary<Instruction> = fc
-  .tuple(port, fc.option(fc.constantFrom<"tcp" | "udp">("tcp", "udp"), { nil: undefined }))
-  .map(([p, proto]) => ({ _tag: "Expose", port: p, ...(proto ? { protocol: proto } : {}) }))
+const exposeArb: fc.Arbitrary<Instruction> = port.map((p) => ({ _tag: "Expose", port: p }))
 
 const argvArb = fc.array(safeStr, { minLength: 1, maxLength: 3 })
 
@@ -254,9 +238,8 @@ const dockerfileArb: fc.Arbitrary<Dockerfile> = fc
       seen.add(name)
       unique.push({ ...s, name })
     }
-    return { args: [], stages: unique }
+    return { stages: unique }
   })
-
 
 describe("Renderer round-trip", () => {
   it("render→parse→render is fixed-point", () => {

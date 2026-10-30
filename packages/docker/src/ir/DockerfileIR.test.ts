@@ -9,7 +9,7 @@ describe("DockerfileIR", () => {
       from: { _tag: "FromImage", image: "alpine", tag: "3.20" },
       instructions: [instr]
     }
-    const df: Dockerfile = { args: [], stages: [stage] }
+    const df: Dockerfile = { stages: [stage] }
 
     expect(df.stages).toHaveLength(1)
     expect(df.stages[0]?.name).toBe("base")
@@ -17,7 +17,7 @@ describe("DockerfileIR", () => {
   })
 
   it("narrows Instruction union by _tag", () => {
-    const i: Instruction = { _tag: "Expose", port: 4000, protocol: "tcp" }
+    const i: Instruction = { _tag: "Expose", port: 4000 }
     if (i._tag === "Expose") {
       expect(i.port).toBe(4000)
     } else {

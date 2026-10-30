@@ -20,7 +20,6 @@ export const yarn = (opts: YarnOptions): PackageManager => {
       : ["yarn", "install", "--ignore-scripts"],
     productionFlag: isBerry ? [] : ["--production"],
     nodeModulesLayout: "hoisted",
-    depsImage: ({ runtimeImage }) => runtimeImage,
     prependDepsRuns: (version) =>
       version === ""
         ? []

@@ -46,8 +46,8 @@ docker build -f apps/api/Dockerfile .
 | `DockerSpec`, `RunnerSpec`, `DevSpec`, `decodeDockerSpec`, `decodeDockerSpecSync` | Schemas and decoders for the spec; the atom schemas (`CopyAtom`, `RuntimeAtom`, `PackageManagerAtom`, `BuildAtom`, `HealthcheckAtom`, `UserAtom`, `PlatformAtom`) are exported too |
 | `findRoot`, `allWorkspaces`, `closureOf`, `detectPm` | Workspace graph services |
 | `buildIR`, `lower`, `prepareContext`, `validateSpec`, `emit`, `render`, `renderFile`, `renderHeader`, `extractHeader`, `HEADER_MARKER`, `sha256Hex` | Building the intermediate representation and Dockerfile rendering with a hashed header |
-| `bunPm`, `npmPm`, `pnpmPm`, `bunRuntime`, `nodeRuntime` | Package manager and runtime implementations |
-| `isDockerApp`, `makeDockerApp`, `DockerAppTypeId`, `PACKAGE_NAME` | Spec identification helpers |
+| `bunPm`, `npmPm`, `pnpmPm`, `yarnPm`, `bunRuntime`, `nodeRuntime` | Package manager and runtime implementations |
+| `isDockerApp`, `makeDockerApp`, `DockerAppTypeId` | Spec identification helpers |
 
 ## Errors
 
@@ -60,7 +60,6 @@ Every failure the package can produce is a tagged error, and `AnyDockerError` is
 | `UnsupportedPm` | The package manager could not be determined: no `packageManager` field and either no recognized lockfile or several conflicting ones |
 | `CircularWorkspaceDep` | The workspace graph contains a cycle |
 | `EngineVersionMissing` | The app's `package.json` lacks the required `engines.*` entry |
-| `SpecDecodeError` | The `docker.ts` spec did not decode against the schema |
 | `BuildScriptMissing` | The spec names a build script the app's `package.json` does not define |
 | `WorkspaceSourceUnknown` | A `workspaceSource(name)` copy names a workspace outside the app's closure |
 | `SharedRootFileMissing` | A file listed in `sharedRootFiles` does not exist at the monorepo root |

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { PACKAGE_NAME } from "./index"
+import * as api from "./index"
 
-describe("@konfig.ts/docker", () => {
-  it("exports its package name", () => {
-    expect(PACKAGE_NAME).toBe("@konfig.ts/docker")
+describe("@konfig.ts/docker public API", () => {
+  it("exports sibling package managers and every raised error", () => {
+    expect(api.yarnPm({ variant: "classic" })._tag).toBe("Yarn")
+    expect(new api.PlatformMultiUnsupported({ target: "t", values: [] })._tag).toBe("PlatformMultiUnsupported")
   })
 })

@@ -16,7 +16,7 @@ const stage = (
   instructions
 })
 
-const df = (stages: ReadonlyArray<Stage>): Dockerfile => ({ args: [], stages })
+const df = (stages: ReadonlyArray<Stage>): Dockerfile => ({ stages })
 
 describe("Renderer per-instruction snapshots", () => {
   it("emits FROM image:tag AS name", () => {
@@ -85,12 +85,6 @@ describe("Renderer per-instruction snapshots", () => {
     )
   })
 
-  it("emits Expose with protocol", () => {
-    expect(
-      render(df([stage("x", [{ _tag: "Expose", port: 5353, protocol: "udp" }])]))
-    ).toContain("\nEXPOSE 5353/udp")
-  })
-
   it("emits User", () => {
     expect(render(df([stage("x", [{ _tag: "User", user: "bunjs" }])]))).toContain(
       "\nUSER bunjs"
@@ -113,12 +107,6 @@ describe("Renderer per-instruction snapshots", () => {
     expect(
       render(df([stage("x", [{ _tag: "Entrypoint", argv: ["/sbin/init"] }])]))
     ).toContain(`\nENTRYPOINT ["/sbin/init"]`)
-  })
-
-  it("emits Healthcheck NONE", () => {
-    expect(
-      render(df([stage("x", [{ _tag: "Healthcheck", check: { _tag: "None" } }])]))
-    ).toContain("\nHEALTHCHECK NONE")
   })
 
   it("emits Healthcheck CMD with flags", () => {
@@ -160,16 +148,5 @@ describe("Renderer per-instruction snapshots", () => {
     expect(render(df([a, b]))).toBe(
       "FROM alpine:latest AS a\nRUN echo a\n\nFROM base AS b\nRUN echo b\n"
     )
-  })
-
-  it("emits ARG entries when present", () => {
-    const out = render({
-      args: [
-        { name: "VERSION" },
-        { name: "TAG", default: "latest" }
-      ],
-      stages: [stage("a", [], "alpine")]
-    })
-    expect(out.startsWith("ARG VERSION\nARG TAG=latest\n\nFROM alpine:latest AS a")).toBe(true)
   })
 })

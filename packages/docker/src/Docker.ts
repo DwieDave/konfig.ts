@@ -1,4 +1,4 @@
-import { isRecord } from "@konfig.ts/core"
+import { isRecord, unsafeCoerce } from "@konfig.ts/core"
 import type { YarnVariant } from "./services/PackageManager"
 import type {
   BuildAtom,
@@ -32,13 +32,8 @@ export const makeDockerApp = (spec: DockerSpec): DockerApp => ({
 
 export const isDockerApp = (u: unknown): u is DockerApp => isRecord(u) && DockerAppTypeId in u
 
-const _omitUndef = <T extends object>(o: T): T => {
-  const out = { ...o }
-  for (const [k, v] of Object.entries(out)) {
-    if (v === undefined) Reflect.deleteProperty(out, k)
-  }
-  return out
-}
+const _omitUndef = <T extends object>(o: T): T =>
+  unsafeCoerce(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)), "fromEntries widens T")
 
 export const Docker = {
   app: (spec: DockerSpec): DockerApp => makeDockerApp(spec),

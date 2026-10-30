@@ -1,5 +1,3 @@
-export const PACKAGE_NAME = "@konfig.ts/docker"
-
 export {
   type AnyDockerError,
   BuildScriptMissing,
@@ -10,8 +8,8 @@ export {
   EngineVersionMissing,
   MonorepoRootNotFound,
   PackageJsonInvalid,
+  PlatformMultiUnsupported,
   SharedRootFileMissing,
-  SpecDecodeError,
   UnsupportedPm,
   WorkspaceNotFound,
   WorkspaceSourceUnknown
@@ -20,7 +18,6 @@ export {
 export { type DockerApp, DockerAppTypeId, isDockerApp, makeDockerApp } from "./Docker"
 
 export type {
-  Arg,
   Dockerfile,
   DockerfileBundle,
   From,
@@ -46,11 +43,12 @@ export {
   UserAtom
 } from "./spec"
 
-export type { DepsImageInput, ImageRef, NodeModulesLayout, PackageManager } from "./services/PackageManager"
+export type { ImageRef, NodeModulesLayout, PackageManager } from "./services/PackageManager"
 
 export { bun as bunPm } from "./services/pm/bun"
 export { npm as npmPm } from "./services/pm/npm"
 export { pnpm as pnpmPm, type PnpmOptions } from "./services/pm/pnpm"
+export { yarn as yarnPm, type YarnOptions } from "./services/pm/yarn"
 export type { Runtime, RuntimeImageInput } from "./services/Runtime"
 export { bun as bunRuntime } from "./services/runtime/bun"
 export { node as nodeRuntime } from "./services/runtime/node"
