@@ -6,6 +6,7 @@ import { Path } from "effect/Path"
 import * as fc from "fast-check"
 import { sha256Hex } from "./hash"
 import * as Helm from "./Helm"
+import { _normalizeDigest, verifyChartDigest } from "./helm/cache"
 import { RenderContext } from "./RenderContext"
 import { HelmDigestMismatch } from "./RenderError"
 
@@ -108,9 +109,9 @@ describe("digest case normalization", () => {
     fc.assert(
       fc.property(fc.stringMatching(/^[0-9a-fA-F]{0,64}$/), fc.boolean(), (hex, prefixed) => {
         const raw = prefixed ? `SHA256:${hex}` : hex
-        const once = Helm._normalizeDigest(raw)
+        const once = _normalizeDigest(raw)
         expect(once).toBe(`sha256:${hex.toLowerCase()}`)
-        expect(Helm._normalizeDigest(once)).toBe(once)
+        expect(_normalizeDigest(once)).toBe(once)
       })
     )
   })
@@ -120,7 +121,7 @@ describe("digest case normalization", () => {
       const fs = yield* FileSystem
       const fixture = yield* _setupFixture
       const upper = fixture.digest.toUpperCase().replace("SHA256:", "sha256:")
-      yield* Helm.verifyChartDigest({
+      yield* verifyChartDigest({
         chart: fixture.chart,
         version: fixture.version,
         digest: upper,

@@ -29,7 +29,8 @@ import {
 import { unsafeCoerce } from "./_cast"
 import { sha256Hex } from "./hash"
 import * as Helm from "./Helm"
-import { _parseHelmOutput } from "./Helm"
+import { _parseHelmOutput } from "./helm/output"
+import { timeout } from "./helm/timeout"
 import { RenderContext } from "./RenderContext"
 import { HelmRenderError, YamlParseError } from "./RenderError"
 
@@ -404,7 +405,7 @@ describe("Helm output parsing", () => {
 
 describe("Helm.timeout validation", () => {
   const _run = (value: string) =>
-    Helm.timeout.pipe(
+    timeout.pipe(
       Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({ KONFIG_HELM_TIMEOUT: value })),
       Effect.exit
     )

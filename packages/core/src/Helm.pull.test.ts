@@ -14,7 +14,7 @@ import {
 import fc from "fast-check"
 import { describe, expect } from "vitest"
 import { sha256Hex } from "./hash"
-import { cacheFileName, ensureChartTarball, pullArgs } from "./Helm"
+import { cacheFileName, ensureChartTarball, pullArgs } from "./helm/cache"
 import { HelmDigestMismatch, HelmRenderError } from "./RenderError"
 
 describe("pullArgs", () => {

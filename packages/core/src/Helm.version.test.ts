@@ -12,6 +12,7 @@ import {
   ProcessId
 } from "effect/process/ChildProcessSpawner"
 import * as Helm from "./Helm"
+import { assertMinVersion } from "./helm/version"
 import { RenderContext } from "./RenderContext"
 import { HelmMinVersionInvalid, HelmRenderError, HelmVersionTooLow } from "./RenderError"
 import { ProcessError } from "./subprocess"
@@ -191,7 +192,7 @@ describe("Helm version probe memoization", () => {
         )
       )
 
-      yield* Effect.all(Array.from({ length: 4 }, () => Helm.assertMinVersion("3.16.0")), { concurrency: "unbounded" })
+      yield* Effect.all(Array.from({ length: 4 }, () => assertMinVersion("3.16.0")), { concurrency: "unbounded" })
         .pipe(Effect.provide(spawner))
       expect(spawns.count).toBe(1)
     }))
@@ -211,7 +212,7 @@ describe("Helm version probe memoization", () => {
         )
       )
 
-      const probe = Effect.exit(Helm.assertMinVersion("3.16.0")).pipe(Effect.provide(spawner))
+      const probe = Effect.exit(assertMinVersion("3.16.0")).pipe(Effect.provide(spawner))
       yield* probe
       yield* probe
       expect(spawns.count).toBe(2)

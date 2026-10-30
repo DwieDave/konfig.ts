@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { cacheFileName } from "./Helm"
+import { cacheFileName } from "./helm/cache"
 
 describe("Helm.cacheFileName", () => {
   it("uses the plain <chart>-<version>.tgz form when no digest is given", () => {
