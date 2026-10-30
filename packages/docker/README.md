@@ -13,7 +13,10 @@ bun add -d @konfig.ts/docker
 
 The app's `package.json` must set `engines.<runtime>` (e.g. `engines.bun`) —
 that's where the runner image tag comes from. Missing it is a hard error
-(`EngineVersionMissing`).
+(`EngineVersionMissing`). Values must be an exact or major(.minor) version
+(`22`, `22.4`, `1.3.5`); ranges such as `>=22` fail with
+`EngineVersionInvalid`. The package manager version falls back to the root
+`packageManager` field when `engines.<pm>` is absent.
 
 ## Usage
 
@@ -23,7 +26,6 @@ Author the spec at `<app>/docker.ts`:
 import { Docker } from "@konfig.ts/docker"
 
 export default Docker.app({
-  target: "apps/api",
   runner: {
     production: true, // install prod-only deps for the closure
     workdir: "/app/apps/api",
@@ -57,20 +59,22 @@ With bun, `prod-deps` installs from the committed `bun.lock` via
 `bun install --frozen-lockfile --production --filter <target>`, so production
 images get exactly the locked versions. This needs `engines.bun` ≥ 1.2
 (otherwise lowering fails with `BunVersionUnsupported`) and an up-to-date
-`bun.lock`: a stale lockfile fails the image build.
+`bun.lock`: a stale lockfile fails the image build. Yarn Berry installs with
+`yarn workspaces focus --production <target>`; npm, pnpm and Yarn classic
+re-resolve against a root `package.json` trimmed to the closure.
 
 ## Spec atoms
 
-| Family               | Constructors                                                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `Docker.app`         | `Docker.app(spec)` — the spec entrypoint                                                                           |
-| `Docker.copy`        | `builderArtifact(src, dst)`, `workspaceSource(name)`, `workspaceSourceAll()`, `path(src, dst, opts?)`              |
-| `Docker.runtime`     | `bun({ alpine? })`, `node({ alpine? })` — defaults from the PM; `alpine` defaults `true`                           |
-| `Docker.pm`          | `bun()`, `npm()`, `pnpm()`, `yarn({ variant? })` — optional; auto-detected from the root `package.json` + lockfile |
-| `Docker.build`       | `script(name)`, `command(argv)`, `none()` — defaults to `script("build")` if present                               |
-| `Docker.healthcheck` | `httpGet({ path, port, … })`, `command(argv, opts?)`                                                               |
-| `Docker.user`        | `nonRoot({ uid?, gid?, name? })`, `root()` — a non-root user is injected if you omit one                           |
-| `Docker.platform`    | `linuxAmd64()`, `linuxArm64()`, `multi(values)`                                                                    |
+| Family               | Constructors                                                                                                                  |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `Docker.app`         | `Docker.app(spec)` — the spec entrypoint                                                                                      |
+| `Docker.copy`        | `builderArtifact({ src, dst, chown? })`, `workspaceSource(name)`, `workspaceSourceAll()`, `path({ src, dst, from?, chown? })` |
+| `Docker.runtime`     | `bun({ alpine? })`, `node({ alpine? })` — defaults from the PM; `alpine` defaults `true`                                      |
+| `Docker.pm`          | `bun()`, `npm()`, `pnpm()`, `yarn({ variant? })` — optional; auto-detected from the root `package.json` + lockfile            |
+| `Docker.build`       | `script(name)`, `command(argv)`, `none()` — defaults to `script("build")` if present                                          |
+| `Docker.healthcheck` | `httpGet({ path, port, … })` (path starts with `/`), `command({ argv, … })`                                                   |
+| `Docker.user`        | `nonRoot({ uid?, gid?, name? })`, `root()` — a non-root user is injected if you omit one                                      |
+| `Docker.platform`    | `linuxAmd64()`, `linuxArm64()`                                                                                                |
 
 `workspaceSourceAll()` expands to one workspace-source `COPY` per workspace in
 the target's closure, **including the target itself** — its own source is
@@ -78,7 +82,8 @@ what makes a `cmd`/`entrypoint` that runs from source (e.g.
 `bun run src/main.ts`) actually work in the runner. If your build instead
 produces a bundled artifact, skip `workspaceSourceAll()`/`workspaceSource()`
 for the target and copy the artifact explicitly with
-`Docker.copy.builderArtifact()` instead.
+`Docker.copy.builderArtifact()` instead. A relative `dst` is resolved under the
+target directory; an absolute `dst` is used as-is.
 
 ## Scope
 

@@ -4,8 +4,6 @@ import {
   BuildScriptMissing,
   BunVersionUnsupported,
   CircularWorkspaceDep,
-  DockerWriteError,
-  DockerWriteRefused,
   EngineVersionMissing,
   MonorepoRootNotFound,
   SharedRootFileMissing,
@@ -44,20 +42,12 @@ describe("DockerError", () => {
         "SharedRootFileMissing"
       ],
       [
-        new DockerWriteRefused({ path: "Dockerfile", reason: "no marker" }),
-        "DockerWriteRefused"
-      ],
-      [
-        new DockerWriteError({ path: "Dockerfile", cause: new Error("perm") }),
-        "DockerWriteError"
-      ],
-      [
         new BunVersionUnsupported({ target: "apps/x", version: "1.1.38", minimum: "1.2" }),
         "BunVersionUnsupported"
       ]
     ]
 
-    expect(all).toHaveLength(11)
+    expect(all).toHaveLength(9)
 
     for (const [err, tag] of all) {
       expect(err._tag).toBe(tag)

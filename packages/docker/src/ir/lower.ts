@@ -1,12 +1,13 @@
-import { Array as Arr, Data, Effect, Match, Struct } from "effect"
+import { Array as Arr, Effect, Match, Schema, Struct } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
+import { posix } from "node:path"
 import {
   type AnyDockerError,
   BuildScriptMissing,
   BunVersionUnsupported,
+  EngineVersionInvalid,
   EngineVersionMissing,
-  PlatformMultiUnsupported,
   SharedRootFileMissing,
   WorkspaceNotFound,
   WorkspaceSourceUnknown
@@ -26,20 +27,35 @@ import {
   detectPm,
   existsOrFalse,
   findRoot,
+  lookupWorkspace,
   type RootDir,
   type Workspace
 } from "../services/WorkspaceGraph"
-import { BuildAtom, CopyAtom, type DevSpec, type DockerSpec, HealthcheckAtom, type RunnerSpec, UserAtom } from "../spec"
+import {
+  BuildAtom,
+  CopyAtom,
+  type DevSpec,
+  type DockerSpec,
+  EngineVersion,
+  HealthcheckAtom,
+  PackageManagerAtom,
+  type RunnerSpec,
+  UserAtom
+} from "../spec"
 import { MIN_FILTERED_INSTALL, supportsFilteredInstall } from "./bunVersion"
-import type { Dockerfile, DockerfileBundle, From, HealthcheckIR, Instruction, PlatformIR, Stage } from "./DockerfileIR"
+import {
+  type Dockerfile,
+  type DockerfileBundle,
+  FromOf,
+  HealthOf,
+  Instr,
+  type Instruction,
+  PlatformOf,
+  type Stage
+} from "./DockerfileIR"
 import { shGlobQuote, shJoin } from "./shell"
 
-const Ins = Data.taggedEnum<Instruction>()
-const Frm = Data.taggedEnum<From>()
-const Hc = Data.taggedEnum<HealthcheckIR>()
-const Plat = Data.taggedEnum<PlatformIR>()
-
-export interface LowerContext {
+interface LowerContext {
   readonly root: RootDir
   readonly allWorkspaces: ReadonlyArray<Workspace>
   readonly closure: ReadonlyArray<Workspace>
@@ -49,53 +65,31 @@ export interface LowerContext {
   readonly hasPatchesDir: boolean
 }
 
-const _lookupTarget = (
-  all: ReadonlyArray<Workspace>,
-  ref: string,
-  root: string
-): Workspace | undefined => {
-  const byNameOrRel = all.find((w) => w.name === ref || w.relDir === ref)
-
-  if (byNameOrRel) return byNameOrRel
-
-  if (ref.startsWith(root)) {
-    const rel = ref.slice(root.length).replace(/^[/\\]+/, "")
-
-    return all.find((w) => w.relDir === rel)
-  }
-
-  return undefined
+export interface LowerInput {
+  readonly spec: DockerSpec
+  readonly target: string
 }
 
-export const prepareContext = (
-  spec: DockerSpec
+const _prepareContext = (
+  input: LowerInput
 ): Effect.Effect<LowerContext, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
-    const root = yield* findRoot(spec.target)
+    const root = yield* findRoot(input.target)
     const all = yield* allWorkspaces(root)
-    const target = _lookupTarget(all, spec.target, root)
+    const target = lookupWorkspace({ all, ref: input.target, root })
 
-    if (!target) return yield* new WorkspaceNotFound({ target: spec.target })
+    if (!target) return yield* new WorkspaceNotFound({ target: input.target })
     const detectedPm = yield* detectPm(root)
-    const closure = yield* closureOf({ all, target: target.name })
-    const buildClosure = yield* closureOf({ all, target: target.name, includeDev: true })
+    const closure = yield* closureOf({ all, target })
+    const buildClosure = yield* closureOf({ all, target, includeDev: true })
     const hasPatchesDir = yield* existsOrFalse({ fs, path: p.join(root, "patches") })
 
     return { root, allWorkspaces: all, closure, buildClosure, target, detectedPm, hasPatchesDir }
   })
 
 type RuntimeKind = "Bun" | "Node"
-
-const _specPmKind = (s: DockerSpec): PmKind | undefined =>
-  Match.value(s.packageManager?._tag).pipe(
-    Match.when("BunPm", (): PmKind => "Bun"),
-    Match.when("NpmPm", (): PmKind => "Npm"),
-    Match.when("PnpmPm", (): PmKind => "Pnpm"),
-    Match.when("YarnPm", (): PmKind => "Yarn"),
-    Match.orElse((): PmKind | undefined => undefined)
-  )
 
 const _specRuntimeKind = (s: DockerSpec): RuntimeKind | undefined =>
   Match.value(s.runtime?._tag).pipe(
@@ -106,12 +100,27 @@ const _specRuntimeKind = (s: DockerSpec): RuntimeKind | undefined =>
 
 const _defaultRuntimeFor = (pm: PmKind): RuntimeKind => (pm === "Bun" ? "Bun" : "Node")
 
-const _pmImpl = (input: { readonly kind: PmKind; readonly ctx: LowerContext }): PackageManager =>
-  Match.value(input.kind).pipe(
-    Match.when("Bun", (): PackageManager => bunPm),
-    Match.when("Npm", (): PackageManager => npmPm),
-    Match.when("Yarn", (): PackageManager => yarnPm({ variant: input.ctx.detectedPm.yarnVariant ?? "classic" })),
-    Match.when("Pnpm", (): PackageManager => pnpmPm({ layout: input.ctx.detectedPm.pnpmLayout ?? "isolated" })),
+const _atomOfKind = (kind: PmKind): PackageManagerAtom =>
+  Match.value(kind).pipe(
+    Match.when("Bun", (): PackageManagerAtom => PackageManagerAtom.cases.BunPm.make({})),
+    Match.when("Npm", (): PackageManagerAtom => PackageManagerAtom.cases.NpmPm.make({})),
+    Match.when("Pnpm", (): PackageManagerAtom => PackageManagerAtom.cases.PnpmPm.make({})),
+    Match.when("Yarn", (): PackageManagerAtom => PackageManagerAtom.cases.YarnPm.make({})),
+    Match.exhaustive
+  )
+
+export const pmFromAtom = (input: {
+  readonly atom: PackageManagerAtom
+  readonly detected: DetectedPm
+}): PackageManager =>
+  Match.value(input.atom).pipe(
+    Match.tag("BunPm", (): PackageManager => bunPm),
+    Match.tag("NpmPm", (): PackageManager => npmPm),
+    Match.tag("PnpmPm", (): PackageManager => pnpmPm({ layout: input.detected.pnpmLayout ?? "isolated" })),
+    Match.tag(
+      "YarnPm",
+      (atom): PackageManager => yarnPm({ variant: atom.variant ?? input.detected.yarnVariant ?? "classic" })
+    ),
     Match.exhaustive
   )
 
@@ -122,15 +131,23 @@ const _engineKey = (kind: PmKind | RuntimeKind): string => kind.toLowerCase()
 interface EngineInput {
   readonly ws: Workspace
   readonly kind: PmKind | RuntimeKind
+  readonly fallback?: string | undefined
 }
 
-const _requireEngineVersion = (input: EngineInput): Effect.Effect<string, EngineVersionMissing> => {
+const _decodeEngineVersion = Schema.decodeUnknownEffect(EngineVersion)
+
+const _requireEngineVersion = (
+  input: EngineInput
+): Effect.Effect<string, EngineVersionMissing | EngineVersionInvalid> => {
   const key = _engineKey(input.kind)
-  const version = input.ws.pkg.engines?.[key]
+  const engineField = `engines.${key}`
+  const version = input.ws.pkg.engines?.[key] ?? input.fallback
 
   return version
-    ? Effect.succeed(version)
-    : Effect.fail(new EngineVersionMissing({ target: input.ws.name, engineField: `engines.${key}` }))
+    ? _decodeEngineVersion(version).pipe(
+      Effect.mapError(() => new EngineVersionInvalid({ target: input.ws.name, engineField, value: version }))
+    )
+    : Effect.fail(new EngineVersionMissing({ target: input.ws.name, engineField }))
 }
 
 interface ValidateSpecInput {
@@ -148,14 +165,6 @@ const _checkWorkspaceSources = (input: ValidateSpecInput): Effect.Effect<void, W
   return missing === undefined
     ? Effect.void
     : Effect.fail(new WorkspaceSourceUnknown({ target: input.ctx.target.name, missingWorkspace: missing }))
-}
-
-const _checkPlatform = (input: ValidateSpecInput): Effect.Effect<void, PlatformMultiUnsupported> => {
-  const platform = input.spec.runner.platform
-
-  return platform?._tag === "PlatformMulti"
-    ? Effect.fail(new PlatformMultiUnsupported({ target: input.ctx.target.name, values: platform.values }))
-    : Effect.void
 }
 
 const _checkBuildScript = (input: ValidateSpecInput): Effect.Effect<void, BuildScriptMissing> => {
@@ -180,12 +189,11 @@ const _checkSharedRootFiles = (
       ), { discard: true })
   })
 
-export const validateSpec = (
+const _validateSpec = (
   input: ValidateSpecInput
 ): Effect.Effect<void, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
     yield* _checkWorkspaceSources(input)
-    yield* _checkPlatform(input)
     yield* _checkBuildScript(input)
     yield* _checkSharedRootFiles(input)
   })
@@ -198,7 +206,7 @@ const _envToInstruction = (env: Record<string, string> | undefined): Instruction
 
   if (entries.length === 0) return undefined
 
-  return Ins.Env({ entries })
+  return Instr.Env({ entries })
 }
 
 const _exposeToInstructions = (
@@ -206,7 +214,7 @@ const _exposeToInstructions = (
 ): ReadonlyArray<Instruction> => {
   if (expose === undefined) return []
 
-  return Arr.ensure(expose).map((port): Instruction => Ins.Expose({ port }))
+  return Arr.ensure(expose).map((port): Instruction => Instr.Expose({ port }))
 }
 
 const _expandWorkspaceSourceAll = (input: {
@@ -227,10 +235,10 @@ const _builderArtifactCopy = (input: {
   readonly atom: Extract<CopyAtom, { _tag: "BuilderArtifact" }>
   readonly target: Workspace
 }): Instruction =>
-  Ins.Copy({
+  Instr.Copy({
     from: "builder",
     src: [`/app/${input.target.relDir}/${input.atom.src}`],
-    dst: `/app/${input.target.relDir}/${input.atom.dst}`,
+    dst: posix.isAbsolute(input.atom.dst) ? input.atom.dst : `/app/${input.target.relDir}/${input.atom.dst}`,
     ...Struct.pick(input.atom, ["chown"])
   })
 
@@ -241,12 +249,12 @@ const _workspaceSourceCopy = (input: {
   const ws = input.closure.find((w) => w.name === input.name)
 
   return ws
-    ? Ins.Copy({ from: "builder", src: [`/app/${ws.relDir}`], dst: `/app/${ws.relDir}` })
+    ? Instr.Copy({ from: "builder", src: [`/app/${ws.relDir}`], dst: `/app/${ws.relDir}` })
     : undefined
 }
 
 const _copyPathCopy = (atom: Extract<CopyAtom, { _tag: "CopyPath" }>): Instruction =>
-  Ins.Copy({ src: [atom.src], dst: atom.dst, ...Struct.pick(atom, ["from", "chown"]) })
+  Instr.Copy({ src: [atom.src], dst: atom.dst, ...Struct.pick(atom, ["from", "chown"]) })
 
 const _copyAtomToInstruction = (input: {
   readonly atom: CopyAtom
@@ -301,8 +309,8 @@ const _userInstructions = (input: UserInput): UserInstructions => {
   const cmd = input.alpine ? _alpineAccountCmd(ids) : _debianAccountCmd(ids)
 
   return {
-    setupRun: Ins.Run({ cmd }),
-    user: Ins.User({ user: ids.name }),
+    setupRun: Instr.Run({ cmd }),
+    user: Instr.User({ user: ids.name }),
     chown: `${ids.name}:${ids.name}`
   }
 }
@@ -316,6 +324,7 @@ interface PmContext {
   readonly pmKind: PmKind
   readonly pmVersion: string
   readonly pmImpl: PackageManager
+  readonly runtimeKind: RuntimeKind
   readonly runtimeImage: ImageRef
   readonly alpine: boolean
   readonly rootFiles: ReadonlyArray<string>
@@ -339,16 +348,27 @@ const _resolveDefaults = (
 ): Effect.Effect<PmContext, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
     const { spec, ctx } = input
-    const pmKind: PmKind = _specPmKind(spec) ?? ctx.detectedPm.kind
+
+    const pmImpl = pmFromAtom({
+      atom: spec.packageManager ?? _atomOfKind(ctx.detectedPm.kind),
+      detected: ctx.detectedPm
+    })
+
+    const pmKind = pmImpl.kind
     const runtimeKind: RuntimeKind = _specRuntimeKind(spec) ?? _defaultRuntimeFor(pmKind)
     const alpine = spec.runtime?.alpine ?? true
-    const pmVersion = yield* _requireEngineVersion({ ws: ctx.target, kind: pmKind })
+
+    const pmVersion = yield* _requireEngineVersion({
+      ws: ctx.target,
+      kind: pmKind,
+      fallback: ctx.detectedPm.kind === pmKind ? ctx.detectedPm.version : undefined
+    })
+
     const runtimeVersion = yield* _requireEngineVersion({ ws: ctx.target, kind: runtimeKind })
-    const pmImpl = _pmImpl({ kind: pmKind, ctx })
     const runtimeImage = _runtimeImpl(runtimeKind).imageRef({ version: runtimeVersion, alpine })
     const rootFiles = yield* _presentRootFiles({ root: ctx.root, pm: pmImpl })
 
-    return { pmKind, pmVersion, pmImpl, runtimeImage, alpine, rootFiles }
+    return { pmKind, pmVersion, pmImpl, runtimeKind, runtimeImage, alpine, rootFiles }
   })
 
 // The bun prod-deps stage relies on `bun install --filter`.
@@ -365,17 +385,17 @@ const _checkBunFilterSupport = (input: BuildIRInput): Effect.Effect<void, BunVer
 
 const _baseStage = (img: ImageRef): Stage => ({
   name: "base",
-  from: Frm.FromImage({ image: img.image, tag: img.tag }),
+  from: FromOf.FromImage({ image: img.image, tag: img.tag }),
   instructions: []
 })
 
 const _rootCopyInstructions = (input: { readonly ctx: LowerContext; readonly pm: PmContext }): Instruction[] => [
-  Ins.Copy({ src: ["package.json", ...input.pm.rootFiles], dst: "./" }),
-  ...(input.ctx.hasPatchesDir ? [Ins.Copy({ src: ["patches"], dst: "./patches" })] : [])
+  Instr.Copy({ src: ["package.json", ...input.pm.rootFiles], dst: "./" }),
+  ...(input.ctx.hasPatchesDir ? [Instr.Copy({ src: ["patches"], dst: "./patches" })] : [])
 ]
 
 const _packageJsonCopyInstructions = (workspaces: ReadonlyArray<Workspace>): Instruction[] =>
-  workspaces.map((ws): Instruction => Ins.Copy({ src: [`${ws.relDir}/package.json`], dst: `./${ws.relDir}/` }))
+  workspaces.map((ws): Instruction => Instr.Copy({ src: [`${ws.relDir}/package.json`], dst: `./${ws.relDir}/` }))
 
 // Restricts root package.json's `workspaces` array to the closure so
 // install doesn't pull in unrelated workspaces' deps; also wipes
@@ -390,10 +410,10 @@ const _prodDepsWorkspaceRewriteInstruction = (ctx: LowerContext): Instruction =>
     ` delete p.devDependencies;` +
     ` fs.writeFileSync("package.json", JSON.stringify(p,null,2));`
 
-  return Ins.Run({ cmd: `node -e '${rewriteScript}'` })
+  return Instr.Run({ cmd: `node -e '${rewriteScript}'` })
 }
 
-export interface BuildIRInput {
+interface BuildIRInput {
   readonly spec: DockerSpec
   readonly ctx: LowerContext
   readonly pm: PmContext
@@ -404,41 +424,44 @@ interface CtxPm {
   readonly pm: PmContext
 }
 
-// Bun installs straight from the untouched lockfile: --frozen-lockfile pins
-// versions and --filter narrows to the target's closure. bun refuses a
-// lockfile whose workspaces aren't all on disk, so every package.json is copied.
-const _bunProdDepsInstructions = ({ ctx, pm }: CtxPm): Instruction[] => [
-  ..._packageJsonCopyInstructions(ctx.allWorkspaces),
-  ..._runs(pm.pmImpl.prependDepsRuns(pm.pmVersion)),
-  Ins.Run({ cmd: [..._prodInstallCmd(pm), "--filter", ctx.target.name].join(" ") })
+// Targeted managers install straight from the untouched lockfile, narrowed
+// to the target's closure. They refuse a lockfile whose workspaces aren't all
+// on disk, so every package.json is copied.
+const _targetedProdDepsInstructions = (
+  input: CtxPm & {
+    readonly command: (target: string) => ReadonlyArray<string>
+  }
+): Instruction[] => [
+  ..._packageJsonCopyInstructions(input.ctx.allWorkspaces),
+  ..._runs(input.pm.pmImpl.prependDepsRuns(input.pm.pmVersion)),
+  Instr.Run({ cmd: input.command(input.ctx.target.name).join(" ") })
 ]
 
 // Other managers keep the lockfile only as a hint and run a non-frozen
 // install (no --frozen-lockfile/--immutable/ci) against a root package.json
 // trimmed to the closure.
-const _rewriteProdDepsInstructions = ({ ctx, pm }: CtxPm): Instruction[] => [
-  _prodDepsWorkspaceRewriteInstruction(ctx),
-  ..._packageJsonCopyInstructions(ctx.closure),
-  ..._runs(pm.pmImpl.prependDepsRuns(pm.pmVersion)),
-  Ins.Run({ cmd: _prodInstallCmd(pm).join(" ") })
+const _rewriteProdDepsInstructions = (input: CtxPm & { readonly command: ReadonlyArray<string> }): Instruction[] => [
+  _prodDepsWorkspaceRewriteInstruction(input.ctx),
+  ..._packageJsonCopyInstructions(input.ctx.closure),
+  ..._runs(input.pm.pmImpl.prependDepsRuns(input.pm.pmVersion)),
+  Instr.Run({ cmd: input.command.join(" ") })
 ]
 
-const _runs = (cmds: ReadonlyArray<string>): Instruction[] => cmds.map((cmd): Instruction => Ins.Run({ cmd }))
-
-const _prodInstallCmd = (pm: PmContext): ReadonlyArray<string> => [
-  ...pm.pmImpl.prodInstallCommand,
-  ...pm.pmImpl.productionFlag
-]
+const _runs = (cmds: ReadonlyArray<string>): Instruction[] => cmds.map((cmd): Instruction => Instr.Run({ cmd }))
 
 const _prodDepsInstallInstructions = (input: CtxPm): Instruction[] =>
-  input.pm.pmKind === "Bun" ? _bunProdDepsInstructions(input) : _rewriteProdDepsInstructions(input)
+  Match.value(input.pm.pmImpl.prodInstall).pipe(
+    Match.tag("Targeted", ({ command }): Instruction[] => _targetedProdDepsInstructions({ ...input, command })),
+    Match.tag("Rewrite", ({ command }): Instruction[] => _rewriteProdDepsInstructions({ ...input, command })),
+    Match.exhaustive
+  )
 
 // Glob metacharacters stay bare so versioned store dirs such as
 // node_modules/.bun/<name>@<ver> expand in the shell.
 // Applied after install (not in the runner) so the deletion actually
 // shrinks the layer rather than just adding a deletion marker.
 const _removePathInstructions = (paths: ReadonlyArray<string> | undefined): Instruction[] =>
-  (paths ?? []).map((path): Instruction => Ins.Run({ cmd: `rm -rf ${shGlobQuote(path)}` }))
+  (paths ?? []).map((path): Instruction => Instr.Run({ cmd: `rm -rf ${shGlobQuote(path)}` }))
 
 const _prodDepsStage = (input: BuildIRInput): Stage =>
   _stage({
@@ -457,7 +480,7 @@ interface StageInput {
 
 const _stage = (input: StageInput): Stage => ({
   name: input.name,
-  from: Frm.FromStage({ stage: "base" }),
+  from: FromOf.FromStage({ stage: "base" }),
   workdir: "/app",
   instructions: input.instructions
 })
@@ -466,7 +489,7 @@ const _installInstructions = (input: CtxPm & { readonly installCmd: ReadonlyArra
   ..._rootCopyInstructions(input),
   ..._packageJsonCopyInstructions(input.ctx.allWorkspaces),
   ..._runs(input.pm.pmImpl.prependDepsRuns(input.pm.pmVersion)),
-  Ins.Run({ cmd: input.installCmd.join(" ") })
+  Instr.Run({ cmd: input.installCmd.join(" ") })
 ]
 
 const _depsStage = (input: CtxPm): Stage =>
@@ -476,10 +499,10 @@ const _depsStage = (input: CtxPm): Stage =>
   })
 
 const _sharedRootCopies = (spec: DockerSpec): Instruction[] =>
-  (spec.sharedRootFiles ?? []).map((path): Instruction => Ins.Copy({ src: [path], dst: `./${path}` }))
+  (spec.sharedRootFiles ?? []).map((path): Instruction => Instr.Copy({ src: [path], dst: `./${path}` }))
 
 const _closureSourceCopies = (ctx: LowerContext): Instruction[] =>
-  ctx.buildClosure.map((ws): Instruction => Ins.Copy({ src: [ws.relDir], dst: `./${ws.relDir}` }))
+  ctx.buildClosure.map((ws): Instruction => Instr.Copy({ src: [ws.relDir], dst: `./${ws.relDir}` }))
 
 const _envWithDefault = (input: {
   readonly env: Record<string, string> | undefined
@@ -490,7 +513,7 @@ const _optional = <A>(value: A | undefined): ReadonlyArray<A> => (value === unde
 
 const _depsNodeModulesCopies = (input: CtxPm): Instruction[] =>
   input.pm.pmImpl.nodeModulesLayout === "hoisted" ? [] : input.ctx.closure.map((ws): Instruction =>
-    Ins.Copy({
+    Instr.Copy({
       from: "deps",
       src: [`/app/${ws.relDir}/node_modules`],
       dst: `/app/${ws.relDir}/node_modules`
@@ -507,9 +530,9 @@ const _buildInstructions = (input: { readonly build: BuildAtom; readonly pm: PmC
   Match.value(input.build).pipe(
     Match.tag(
       "BuildScript",
-      (b): Instruction[] => [Ins.Run({ cmd: `${input.pm.pmKind.toLowerCase()} run ${b.script}` })]
+      (b): Instruction[] => [Instr.Run({ cmd: `${input.pm.pmKind.toLowerCase()} run ${b.script}` })]
     ),
-    Match.tag("BuildCommand", (b): Instruction[] => [Ins.Run({ cmd: shJoin(b.argv) })]),
+    Match.tag("BuildCommand", (b): Instruction[] => [Instr.Run({ cmd: shJoin(b.argv) })]),
     Match.tag("BuildNone", (): Instruction[] => []),
     Match.exhaustive
   )
@@ -519,18 +542,18 @@ const _builderStage = (input: BuildIRInput): Stage =>
     name: "builder",
     instructions: [
       ..._sharedRootCopies(input.spec),
-      Ins.Copy({ from: "deps", src: ["/app/node_modules"], dst: "/app/node_modules" }),
+      Instr.Copy({ from: "deps", src: ["/app/node_modules"], dst: "/app/node_modules" }),
       ..._depsNodeModulesCopies(input),
       ..._closureSourceCopies(input.ctx),
-      Ins.Workdir({ path: `/app/${input.ctx.target.relDir}` }),
+      Instr.Workdir({ path: `/app/${input.ctx.target.relDir}` }),
       ..._buildInstructions({ build: _resolveBuild(input), pm: input.pm })
     ]
   })
 
 const _platformAtomToIR = (p: DockerSpec["runner"]["platform"]): Stage["platform"] =>
   Match.value(p).pipe(
-    Match.when({ _tag: "PlatformLinuxAmd64" }, (): Stage["platform"] => Plat.Single({ value: "linux/amd64" })),
-    Match.when({ _tag: "PlatformLinuxArm64" }, (): Stage["platform"] => Plat.Single({ value: "linux/arm64" })),
+    Match.when({ _tag: "PlatformLinuxAmd64" }, (): Stage["platform"] => PlatformOf.Single({ value: "linux/amd64" })),
+    Match.when({ _tag: "PlatformLinuxArm64" }, (): Stage["platform"] => PlatformOf.Single({ value: "linux/arm64" })),
     Match.orElse((): Stage["platform"] => undefined)
   )
 
@@ -554,7 +577,7 @@ interface RunnerNodeModulesInput {
 // Workspace source needs the root node_modules too, so workspace:*
 // symlinks resolve at runtime.
 const _runnerRootNodeModulesInstructions = (input: RunnerNodeModulesInput): ReadonlyArray<Instruction> =>
-  !input.usesWorkspaceSource || _usesCustomBase(input.runner) ? [] : [Ins.Copy({
+  !input.usesWorkspaceSource || _usesCustomBase(input.runner) ? [] : [Instr.Copy({
     from: _nodeModulesFrom(input.runner),
     src: ["/app/node_modules"],
     dst: "/app/node_modules",
@@ -568,7 +591,7 @@ const _runnerWorkspaceNodeModulesInstructions = (input: RunnerNodeModulesInput):
   !input.usesWorkspaceSource || _usesCustomBase(input.runner) || input.pm.pmImpl.nodeModulesLayout === "hoisted"
     ? []
     : input.ctx.closure.map((ws): Instruction =>
-      Ins.Copy({
+      Instr.Copy({
         from: _nodeModulesFrom(input.runner),
         src: [`/app/${ws.relDir}/node_modules`],
         dst: `/app/${ws.relDir}/node_modules`,
@@ -577,8 +600,8 @@ const _runnerWorkspaceNodeModulesInstructions = (input: RunnerNodeModulesInput):
     )
 
 const _defaultChown = (input: { readonly instr: Instruction; readonly chown: string | undefined }): Instruction =>
-  Ins.$is("Copy")(input.instr) && !input.instr.chown && input.chown
-    ? Ins.Copy({ ...input.instr, chown: input.chown })
+  Instr.$is("Copy")(input.instr) && !input.instr.chown && input.chown
+    ? Instr.Copy({ ...input.instr, chown: input.chown })
     : input.instr
 
 const _runnerCopyInstructions = (input: {
@@ -592,23 +615,39 @@ const _runnerCopyInstructions = (input: {
     )
   )
 
-const _healthcheckArgv = (hc: HealthcheckAtom): ReadonlyArray<string> =>
-  HealthcheckAtom.guards.HealthcheckHttpGet(hc)
-    ? ["wget", "--spider", "-q", `http://localhost:${hc.port}${hc.path}`]
-    : hc.argv
+const _probeScript = (url: string): string =>
+  `fetch(${JSON.stringify(url)}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))`
 
-const _runnerHealthcheckInstruction = (hc: HealthcheckAtom | undefined): Instruction | undefined =>
-  hc === undefined ? undefined : Ins.Healthcheck({
-    check: Hc.Cmd({
-      argv: _healthcheckArgv(hc),
-      ...Struct.pick(hc, ["interval", "timeout", "retries", "startPeriod"])
+interface ProbeEnv {
+  readonly alpine: boolean
+  readonly runtimeKind: RuntimeKind
+}
+
+const _httpProbeArgv = (input: { readonly url: string; readonly probe: ProbeEnv }): ReadonlyArray<string> =>
+  input.probe.alpine
+    ? ["wget", "--spider", "-q", input.url]
+    : [input.probe.runtimeKind === "Bun" ? "bun" : "node", "-e", _probeScript(input.url)]
+
+const _healthcheckArgv = (input: { readonly hc: HealthcheckAtom; readonly probe: ProbeEnv }): ReadonlyArray<string> =>
+  HealthcheckAtom.guards.HealthcheckHttpGet(input.hc)
+    ? _httpProbeArgv({ url: `http://localhost:${input.hc.port}${input.hc.path}`, probe: input.probe })
+    : input.hc.argv
+
+const _runnerHealthcheckInstruction = (input: {
+  readonly hc: HealthcheckAtom | undefined
+  readonly probe: ProbeEnv
+}): Instruction | undefined =>
+  input.hc === undefined ? undefined : Instr.Healthcheck({
+    check: HealthOf.Cmd({
+      argv: _healthcheckArgv({ hc: input.hc, probe: input.probe }),
+      ...Struct.pick(input.hc, ["interval", "timeout", "retries", "startPeriod"])
     })
   })
 
 const _runnerFromIR = (runner: RunnerSpec): Stage["from"] =>
   runner.baseImage
-    ? Frm.FromImage({ image: runner.baseImage.image, tag: runner.baseImage.tag })
-    : Frm.FromStage({ stage: "base" })
+    ? FromOf.FromImage({ image: runner.baseImage.image, tag: runner.baseImage.tag })
+    : FromOf.FromStage({ stage: "base" })
 
 const _runnerInstructions = (
   input: { readonly runner: RunnerSpec; readonly ctx: LowerContext; readonly pm: PmContext }
@@ -631,10 +670,13 @@ const _runnerInstructions = (
     ..._runnerRootNodeModulesInstructions(nodeModules),
     ..._runnerCopyInstructions({ expandedCopy, ctx, chown: user.chown }),
     ..._runnerWorkspaceNodeModulesInstructions(nodeModules),
-    ..._optional(_runnerHealthcheckInstruction(runner.healthcheck)),
-    ..._optional(runner.entrypoint === undefined ? undefined : Ins.Entrypoint({ argv: runner.entrypoint })),
+    ..._optional(_runnerHealthcheckInstruction({
+      hc: runner.healthcheck,
+      probe: { alpine: _runnerIsAlpine({ runner, pm }), runtimeKind: pm.runtimeKind }
+    })),
+    ..._optional(runner.entrypoint === undefined ? undefined : Instr.Entrypoint({ argv: runner.entrypoint })),
     ..._optional(user.user),
-    Ins.Cmd({ argv: runner.cmd })
+    Instr.Cmd({ argv: runner.cmd })
   ]
 }
 
@@ -665,15 +707,15 @@ const _devStage = (input: BuildIRInput & { readonly dev: DevSpec }): Stage => {
       ..._installInstructions({ ctx, pm, installCmd: _devInstallCommand(pm) }),
       ..._sharedRootCopies(spec),
       ..._closureSourceCopies(ctx),
-      Ins.Workdir({ path: dev.workdir ?? `/app/${ctx.target.relDir}` }),
+      Instr.Workdir({ path: dev.workdir ?? `/app/${ctx.target.relDir}` }),
       ..._optional(_envWithDefault({ env: dev.env, nodeEnv: "development" })),
       ..._exposeToInstructions(dev.expose),
-      Ins.Cmd({ argv: dev.cmd })
+      Instr.Cmd({ argv: dev.cmd })
     ]
   })
 }
 
-export const buildIR = (input: BuildIRInput): DockerfileBundle => {
+const _buildIR = (input: BuildIRInput): DockerfileBundle => {
   const base = _baseStage(input.pm.runtimeImage)
 
   const prod: Dockerfile = {
@@ -692,13 +734,14 @@ export const buildIR = (input: BuildIRInput): DockerfileBundle => {
 }
 
 export const lower = (
-  spec: DockerSpec
+  input: LowerInput
 ): Effect.Effect<DockerfileBundle, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
-    const ctx = yield* prepareContext(spec)
-    yield* validateSpec({ spec, ctx })
+    const ctx = yield* _prepareContext(input)
+    const { spec } = input
+    yield* _validateSpec({ spec, ctx })
     const pm = yield* _resolveDefaults({ spec, ctx })
     yield* _checkBunFilterSupport({ spec, ctx, pm })
 
-    return buildIR({ spec, ctx, pm })
+    return _buildIR({ spec, ctx, pm })
   })

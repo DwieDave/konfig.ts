@@ -5,9 +5,9 @@ import { describe, expect } from "vitest"
 import { BuildAtom, CopyAtom, PackageManagerAtom, RuntimeAtom } from "../spec"
 import type { DockerSpec } from "../spec"
 import { pkgJson, rootPkgJson, writeTree } from "../testing/tree"
-import type { DockerfileBundle, Stage } from "./DockerfileIR"
-import { copiesOf, Instr, requireStage, runsOf } from "./irTesting"
-import { lower } from "./lower"
+import { type DockerfileBundle, Instr, type Stage } from "./DockerfileIR"
+import { copiesOf, requireStage, runsOf } from "./irTesting"
+import { lower, type LowerInput } from "./lower"
 
 const engines = { engines: { node: "22.0.0", npm: "10.5.0", pnpm: "9.0.0", bun: "1.3.5" } }
 
@@ -26,10 +26,12 @@ const baseFiles = {
   "packages/tsconfig/package.json": pkgJson({ name: "tsconfig" })
 }
 
-const specFor = (dir: string, over: Partial<DockerSpec> = {}): DockerSpec => ({
+const specFor = (dir: string, over: Partial<DockerSpec> = {}): LowerInput => ({
   target: `${dir}/packages/app`,
-  runner: { workdir: "/app/packages/app", copy: [CopyAtom.cases.WorkspaceSourceAll.make({})], cmd: ["node", "x.js"] },
-  ...over
+  spec: {
+    runner: { workdir: "/app/packages/app", copy: [CopyAtom.cases.WorkspaceSourceAll.make({})], cmd: ["node", "x.js"] },
+    ...over
+  }
 })
 
 const stage = (b: DockerfileBundle, name: string): Stage => requireStage({ bundle: b, name })
@@ -100,7 +102,7 @@ describe("lower fixes", () => {
 
       const b = yield* lower({
         ...spec,
-        runner: { ...spec.runner, baseImage: { image: "debian", tag: "12-slim" } }
+        spec: { ...spec.spec, runner: { ...spec.spec.runner, baseImage: { image: "debian", tag: "12-slim" } } }
       })
 
       expect(runCmds(stage(b, "runner"))[0]).toContain("useradd")

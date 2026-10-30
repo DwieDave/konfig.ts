@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { Dockerfile, Instruction, Stage } from "./DockerfileIR"
-import { FromOf, HealthOf, Instr } from "./irTesting"
+import { type Dockerfile, FromOf, HealthOf, Instr, type Instruction, type Stage } from "./DockerfileIR"
 
 describe("DockerfileIR", () => {
   it("constructs a minimal Dockerfile with one stage and one instruction", () => {

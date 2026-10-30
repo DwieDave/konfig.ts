@@ -7,8 +7,7 @@ import { CopyAtom, type DockerSpec, HealthcheckAtom, PlatformAtom, UserAtom } fr
 
 const FIXTURES = new URL("../fixtures/", import.meta.url).pathname
 
-const minimal = (target: string): DockerSpec => ({
-  target,
+const minimal = (): DockerSpec => ({
   runner: {
     workdir: "/app/packages/app",
     copy: [CopyAtom.cases.BuilderArtifact.make({ src: "dist", dst: "dist" })],
@@ -16,8 +15,7 @@ const minimal = (target: string): DockerSpec => ({
   }
 })
 
-const fullFeatured = (target: string): DockerSpec => ({
-  target,
+const fullFeatured = (): DockerSpec => ({
   sharedRootFiles: [],
   runner: {
     workdir: "/app/packages/app",
@@ -43,7 +41,8 @@ describe("emit snapshots — bun fixture", () => {
   it.effect("minimal spec", () =>
     Effect.gen(function*() {
       const out = yield* emit({
-        spec: minimal(`${FIXTURES}bun/packages/app`),
+        spec: minimal(),
+        target: `${FIXTURES}bun/packages/app`,
         specPath: "packages/app/docker.ts"
       })
 
@@ -53,7 +52,8 @@ describe("emit snapshots — bun fixture", () => {
   it.effect("full-featured spec", () =>
     Effect.gen(function*() {
       const out = yield* emit({
-        spec: fullFeatured(`${FIXTURES}bun/packages/app`),
+        spec: fullFeatured(),
+        target: `${FIXTURES}bun/packages/app`,
         specPath: "packages/app/docker.ts"
       })
 
@@ -66,7 +66,8 @@ describe("emit snapshots — npm fixture", () => {
   it.effect("minimal spec", () =>
     Effect.gen(function*() {
       const out = yield* emit({
-        spec: minimal(`${FIXTURES}npm/packages/app`),
+        spec: minimal(),
+        target: `${FIXTURES}npm/packages/app`,
         specPath: "packages/app/docker.ts"
       })
 
@@ -78,7 +79,8 @@ describe("emit snapshots — pnpm-isolated fixture", () => {
   it.effect("minimal spec", () =>
     Effect.gen(function*() {
       const out = yield* emit({
-        spec: minimal(`${FIXTURES}pnpm-isolated/packages/app`),
+        spec: minimal(),
+        target: `${FIXTURES}pnpm-isolated/packages/app`,
         specPath: "packages/app/docker.ts"
       })
 
@@ -90,7 +92,8 @@ describe("emit snapshots — pnpm-hoisted fixture", () => {
   it.effect("minimal spec", () =>
     Effect.gen(function*() {
       const out = yield* emit({
-        spec: minimal(`${FIXTURES}pnpm-hoisted/packages/app`),
+        spec: minimal(),
+        target: `${FIXTURES}pnpm-hoisted/packages/app`,
         specPath: "packages/app/docker.ts"
       })
 
@@ -98,8 +101,8 @@ describe("emit snapshots — pnpm-hoisted fixture", () => {
     }).pipe(Effect.provide(NodeServices.layer)))
 })
 
-const production = (target: string): DockerSpec => {
-  const base = minimal(target)
+const production = (): DockerSpec => {
+  const base = minimal()
 
   return { ...base, runner: { ...base.runner, production: true } }
 }
@@ -111,7 +114,8 @@ describe("emit snapshots — production spec (prod-deps stage)", () => {
     it.effect(fixture, () =>
       Effect.gen(function*() {
         const out = yield* emit({
-          spec: production(`${FIXTURES}${fixture}/packages/app`),
+          spec: production(),
+          target: `${FIXTURES}${fixture}/packages/app`,
           specPath: "packages/app/docker.ts"
         })
 
@@ -123,9 +127,9 @@ describe("emit snapshots — production spec (prod-deps stage)", () => {
 describe("emit determinism (NFR-2)", () => {
   it.effect("two runs of bun minimal produce byte-identical output", () =>
     Effect.gen(function*() {
-      const spec = minimal(`${FIXTURES}bun/packages/app`)
-      const a = yield* emit({ spec, specPath: "packages/app/docker.ts" })
-      const b = yield* emit({ spec, specPath: "packages/app/docker.ts" })
+      const input = { spec: minimal(), target: `${FIXTURES}bun/packages/app`, specPath: "packages/app/docker.ts" }
+      const a = yield* emit(input)
+      const b = yield* emit(input)
       expect(a.dockerfile).toBe(b.dockerfile)
     }).pipe(Effect.provide(NodeServices.layer)))
 })

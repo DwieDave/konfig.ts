@@ -12,8 +12,8 @@ Hand-written Dockerfiles in a monorepo tend to rot: every new internal package m
 ## Usage
 
 ```bash
-konfig docker preview <target> [--prod-only] [--dev-only]
-konfig docker write   <target> [--out-dir <dir>] [--prod-only] [--dev-only] [--force]
+konfig docker preview <target> [--only prod|dev]
+konfig docker write   <target> [--out-dir <dir>] [--only prod|dev] [--force]
 konfig docker diff    <target> [--format summary|detail|json]
 ```
 
@@ -27,8 +27,7 @@ konfig docker diff    <target> [--format summary|detail|json]
 
 | Command | Name | Default | Description |
 | --- | --- | --- | --- |
-| `preview`, `write` | `--prod-only` | `false` | Only emit the production `Dockerfile`. |
-| `preview`, `write` | `--dev-only` | `false` | Only emit `Dockerfile.dev`. |
+| `preview`, `write` | `--only prod\|dev` | both | Only emit the production `Dockerfile` (`prod`) or `Dockerfile.dev` (`dev`). |
 | `write` | `--out-dir <dir>` | `<target>` | Destination directory, relative to the cwd. |
 | `write` | `--force` | `false` | Overwrite a destination file even if it is not konfig-managed. |
 | `diff` | `--format` | `summary` | `summary`, `detail`, or `json`, same formatter as `konfig diff`. |
@@ -37,7 +36,7 @@ konfig docker diff    <target> [--format summary|detail|json]
 
 <Snippet file="apps/api/docker.ts" lang="ts" title="apps/api/docker.ts" />
 
-A spec is built with `Docker.app(...)`. Its two required parts are `target`, the workspace being packaged, and `runner`, which describes the final image: what to copy into it, from where, and how to run it. Optional parts add a `dev` image, override the detected package manager, pick the runtime image, configure the build step, and list shared root files.
+A spec is built with `Docker.app(...)`. Its one required part is `runner`, which describes the final image: what to copy into it, from where, and how to run it. The packaged workspace is the `<target>` argument of the command. Optional parts add a `dev` image, override the detected package manager, pick the runtime image, configure the build step, and list shared root files.
 
 The `runner.copy` list is made of small declarative atoms from `Docker.copy`, so the generator knows the origin of every file:
 
@@ -71,7 +70,7 @@ Every emitted file starts with a three-line header: `# konfig-managed: @konfig.t
 
 `preview` prints the production Dockerfile to stdout, followed by a `# ---- Dockerfile.dev ----` separator and the dev Dockerfile when the spec has `dev`.
 
-`diff` compares the files on disk with what would be emitted now. If the header hashes match, the comparison short-circuits. Otherwise a structural diff is printed and the command fails with `DiffDrift { target, kind }`. When nothing differs it prints an `OK` line: `<target> matches`.
+`diff` compares the files on disk with what would be emitted now. The on-disk content is compared with the emitted content, so an edited body fails even when the header is intact. A structural diff is printed and the command fails with `DiffDrift { target, kind }`. When nothing differs it prints an `OK` line: `<target> matches`.
 
 <Aside type="note">
 `docker` does not read `konfig.json`. It needs a TypeScript-capable runtime to import `docker.ts`, and it never builds, pushes, or tags images.
@@ -96,17 +95,18 @@ Errors from `@konfig.ts/docker` (the `AnyDockerError` union), raised while resol
 | `MonorepoRootNotFound` | No workspace root above the target. |
 | `EngineVersionMissing` | `engines.<pm>` or `engines.<runtime>` is missing from the target's `package.json`. |
 | `CircularWorkspaceDep` | The workspace graph contains a cycle. |
-| `WorkspaceNotFound` | The spec's `target` is not a workspace of the monorepo. |
+| `WorkspaceNotFound` | The `<target>` argument is not a workspace of the monorepo. |
 | `UnsupportedPm` | The package manager could not be determined or is not supported. |
 | `BuildScriptMissing` | The spec's build step names a `package.json` script the target does not have. |
 | `WorkspaceSourceUnknown` | A `workspaceSource(name)` atom names a workspace outside the closure. |
 | `SharedRootFileMissing` | A file listed in `sharedRootFiles` does not exist. |
-| `PlatformMultiUnsupported` | The spec requests several platforms; a single `FROM --platform` line can only express one. |
+| `EngineVersionInvalid` | An `engines.*` value is not an exact or major(.minor) version. |
+| `WorkspaceConfigInvalid` | `pnpm-workspace.yaml` is unreadable or malformed. |
 
 ## Example
 
 ```bash
-konfig docker preview apps/api --prod-only
+konfig docker preview apps/api --only prod
 konfig docker write apps/api            # apps/api/Dockerfile + Dockerfile.dev
 konfig docker diff apps/api             # CI gate
 docker build -f apps/api/Dockerfile .   # context = monorepo root

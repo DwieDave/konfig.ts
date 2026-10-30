@@ -406,7 +406,7 @@ CMD ["bun","run","dist/main.js"]
 exports[`emit snapshots — production spec (prod-deps stage) > yarn-berry > yarn-berry-production-Dockerfile 1`] = `
 "# konfig-managed: @konfig.ts/docker
 # spec: packages/app/docker.ts
-# hash: sha256:3acf86159996c6c39a272f7c563f67cdf718001375fb718f84f0aa0bdbc3d9cb
+# hash: sha256:fee983cb3cf252e38ec7a7370c2bbe521ce108fdcfb3afee9b591d7e6f38d789
 FROM node:22-alpine AS base
 
 FROM base AS deps
@@ -430,12 +430,11 @@ RUN yarn run build
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json yarn.lock .yarnrc.yml ./
-RUN node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json","utf-8")); p.workspaces=["packages/app","packages/shared","packages/util"]; delete p.devDependencies; fs.writeFileSync("package.json", JSON.stringify(p,null,2));'
+COPY packages/app/package.json ./packages/app/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/util/package.json ./packages/util/
-COPY packages/app/package.json ./packages/app/
 RUN corepack enable yarn && corepack prepare yarn@4.5.0 --activate
-RUN YARN_ENABLE_SCRIPTS=false yarn install
+RUN YARN_ENABLE_SCRIPTS=false yarn workspaces focus --production @fix/app
 
 FROM base AS runner
 WORKDIR /app/packages/app

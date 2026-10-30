@@ -1,4 +1,4 @@
-import type { PackageManager, YarnVariant } from "../PackageManager"
+import { type PackageManager, ProdInstall, type YarnVariant } from "../PackageManager"
 
 export interface YarnOptions {
   readonly variant: YarnVariant
@@ -16,10 +16,11 @@ export const yarn = (opts: YarnOptions): PackageManager => {
     installCommand: isBerry
       ? ["YARN_ENABLE_SCRIPTS=false", "yarn", "install", "--immutable"]
       : ["yarn", "install", "--frozen-lockfile", "--ignore-scripts"],
-    prodInstallCommand: isBerry
-      ? ["YARN_ENABLE_SCRIPTS=false", "yarn", "install"]
-      : ["yarn", "install", "--ignore-scripts"],
-    productionFlag: isBerry ? [] : ["--production"],
+    prodInstall: isBerry
+      ? ProdInstall.Targeted({
+        command: (target) => ["YARN_ENABLE_SCRIPTS=false", "yarn", "workspaces", "focus", "--production", target]
+      })
+      : ProdInstall.Rewrite({ command: ["yarn", "install", "--ignore-scripts", "--production"] }),
     nodeModulesLayout: "hoisted",
     prependDepsRuns: (version) =>
       version === ""

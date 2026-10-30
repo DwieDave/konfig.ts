@@ -1,15 +1,15 @@
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import type { Dockerfile } from "../ir/DockerfileIR"
-import { FromTag, InstructionTag } from "./irTags"
+import { FromOf, Instr } from "../ir/DockerfileIR"
 import { render } from "./Renderer"
 
 const envLine = (value: string): string => {
   const df: Dockerfile = {
     stages: [{
       name: "x",
-      from: FromTag.FromStage({ stage: "base" }),
-      instructions: [InstructionTag.Env({ entries: [["K", value]] })]
+      from: FromOf.FromStage({ stage: "base" }),
+      instructions: [Instr.Env({ entries: [["K", value]] })]
     }]
   }
 

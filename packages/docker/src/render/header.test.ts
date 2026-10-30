@@ -1,3 +1,4 @@
+import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import { extractHeader, HEADER_MARKER, renderFile, renderHeader, sha256Hex } from "./header"
 
@@ -60,5 +61,24 @@ describe("generation header", () => {
 
   it("rendering twice with the same inputs is byte-identical end-to-end", () => {
     expect(renderFile({ specPath, body })).toBe(renderFile({ specPath, body }))
+  })
+
+  const specPathArb = fc.stringMatching(/^[A-Za-z0-9_./-]{1,40}$/)
+
+  it("round-trips: extractHeader(renderFile) is managed with the same specPath and body hash (property)", () => {
+    fc.assert(fc.property(specPathArb, fc.string(), (path, text) => {
+      const head = extractHeader(renderFile({ specPath: path, body: text }))
+
+      return head.managed && head.specPath === path && head.hash === sha256Hex(text)
+    }))
+  })
+
+  it("stays managed when the file was saved with CRLF line endings (property)", () => {
+    fc.assert(fc.property(specPathArb, fc.string(), (path, text) => {
+      const crlf = renderFile({ specPath: path, body: text }).replace(/\n/g, "\r\n")
+      const head = extractHeader(crlf)
+
+      return head.managed && head.specPath === path && head.hash === sha256Hex(text)
+    }))
   })
 })

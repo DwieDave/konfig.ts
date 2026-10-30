@@ -1,4 +1,5 @@
 import { describe, it } from "@effect/vitest"
+import { Option } from "effect"
 import * as fc from "fast-check"
 import { variantsOf } from "./docker"
 
@@ -7,28 +8,30 @@ const emittedArb = fc.record({
   dockerfileDev: fc.option(fc.string({ minLength: 1 }), { nil: undefined })
 })
 
-describe("variantsOf", () => {
-  it("prodOnly never yields dev", () => {
-    fc.assert(
-      fc.property(
-        emittedArb,
-        (emitted) => variantsOf({ emitted, prodOnly: true, devOnly: false }).every((v) => v.kind === "prod")
-      )
-    )
-  })
-  it("devOnly never yields prod", () => {
-    fc.assert(
-      fc.property(
-        emittedArb,
-        (emitted) => variantsOf({ emitted, prodOnly: false, devOnly: true }).every((v) => v.kind === "dev")
-      )
-    )
-  })
-  it("dev appears only when dockerfileDev is present", () => {
-    fc.assert(fc.property(emittedArb, fc.boolean(), fc.boolean(), (emitted, prodOnly, devOnly) => {
-      const hasDev = variantsOf({ emitted, prodOnly, devOnly }).some((v) => v.kind === "dev")
+const onlyArb = fc.constantFrom(Option.none(), Option.some("prod" as const), Option.some("dev" as const))
 
-      return hasDev === (emitted.dockerfileDev !== undefined && !prodOnly)
+describe("variantsOf", () => {
+  it("only prod never yields dev", () => {
+    fc.assert(
+      fc.property(
+        emittedArb,
+        (emitted) => variantsOf({ emitted, only: Option.some("prod") }).every((v) => v.kind === "prod")
+      )
+    )
+  })
+  it("only dev never yields prod", () => {
+    fc.assert(
+      fc.property(
+        emittedArb,
+        (emitted) => variantsOf({ emitted, only: Option.some("dev") }).every((v) => v.kind === "dev")
+      )
+    )
+  })
+  it("dev appears only when dockerfileDev is present and not restricted to prod", () => {
+    fc.assert(fc.property(emittedArb, onlyArb, (emitted, only) => {
+      const hasDev = variantsOf({ emitted, only }).some((v) => v.kind === "dev")
+
+      return hasDev === (emitted.dockerfileDev !== undefined && !Option.contains(only, "prod"))
     }))
   })
 })

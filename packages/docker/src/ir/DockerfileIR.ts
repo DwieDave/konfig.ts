@@ -1,3 +1,5 @@
+import { Data } from "effect"
+
 export type DockerfileBundle = {
   readonly prod: Dockerfile
   readonly dev?: Dockerfile
@@ -21,7 +23,7 @@ export type From =
 
 export type PlatformIR = { readonly _tag: "Single"; readonly value: PlatformValue }
 
-export type PlatformValue = "linux/amd64" | "linux/arm64"
+type PlatformValue = "linux/amd64" | "linux/arm64"
 
 export type Instruction =
   | {
@@ -48,3 +50,11 @@ export type HealthcheckIR = {
   readonly retries?: number
   readonly startPeriod?: string
 }
+
+export const Instr = Data.taggedEnum<Instruction>()
+
+export const FromOf = Data.taggedEnum<From>()
+
+export const HealthOf = Data.taggedEnum<HealthcheckIR>()
+
+export const PlatformOf = Data.taggedEnum<PlatformIR>()

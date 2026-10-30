@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { Docker, DockerAppTypeId, isDockerApp, makeDockerApp } from "./Docker"
+import { Docker, isDockerApp } from "./Docker"
 import {
   BuildAtom,
   CopyAtom,
@@ -12,7 +12,6 @@ import {
 } from "./spec"
 
 const sampleSpec: DockerSpec = {
-  target: "apps/x",
   runner: {
     workdir: "/app",
     copy: [],
@@ -21,14 +20,8 @@ const sampleSpec: DockerSpec = {
 }
 
 describe("Docker brand", () => {
-  it("makeDockerApp produces an object carrying the brand symbol", () => {
-    const app = makeDockerApp(sampleSpec)
-    expect(DockerAppTypeId in app).toBe(true)
-    expect(app.spec).toBe(sampleSpec)
-  })
-
   it("isDockerApp accepts a branded value", () => {
-    const app = makeDockerApp(sampleSpec)
+    const app = Docker.app(sampleSpec)
     expect(isDockerApp(app)).toBe(true)
   })
 
@@ -203,12 +196,6 @@ describe("Docker.platform constructors", () => {
 
   it("Docker.platform.linuxArm64 produces a PlatformLinuxArm64 atom", () => {
     expect(Docker.platform.linuxArm64()).toEqual(PlatformAtom.cases.PlatformLinuxArm64.make({}))
-  })
-
-  it("Docker.platform.multi carries the values array", () => {
-    expect(Docker.platform.multi(["linux/amd64", "linux/arm64"])).toEqual(
-      PlatformAtom.cases.PlatformMulti.make({ values: ["linux/amd64", "linux/arm64"] })
-    )
   })
 })
 

@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import type { Dockerfile, Instruction, Stage } from "../ir/DockerfileIR"
-import { FromTag, HealthcheckTag, InstructionTag } from "./irTags"
+import { FromOf, HealthOf, Instr } from "../ir/DockerfileIR"
 import { render } from "./Renderer"
 
 const decodeArgv = Schema.decodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))
@@ -21,8 +21,8 @@ const parseFrom = (line: string): Stage => {
   const colonIdx = ref.indexOf(":")
 
   const from = colonIdx < 0
-    ? FromTag.FromStage({ stage: ref })
-    : FromTag.FromImage({ image: ref.slice(0, colonIdx), tag: ref.slice(colonIdx + 1) })
+    ? FromOf.FromStage({ stage: ref })
+    : FromOf.FromImage({ image: ref.slice(0, colonIdx), tag: ref.slice(colonIdx + 1) })
 
   return { name: m[2] ?? "", from, instructions: [] }
 }
@@ -34,7 +34,7 @@ const parseCopy = (body: string): Instruction => {
 
   if (rest.length < 2) throw new Error(`bad COPY: ${body}`)
 
-  return InstructionTag.Copy({
+  return Instr.Copy({
     src: rest.slice(0, -1),
     dst: rest[rest.length - 1] ?? "",
     from: flagValue(flags, "from"),
@@ -48,7 +48,7 @@ const parseEnvPair = (pair: string): ReadonlyArray<readonly [string, string]> =>
   return m ? [[m[1] ?? "", m[2] ?? ""]] : []
 }
 
-const parseEnv = (body: string): Instruction => InstructionTag.Env({ entries: body.split(" ").flatMap(parseEnvPair) })
+const parseEnv = (body: string): Instruction => Instr.Env({ entries: body.split(" ").flatMap(parseEnvPair) })
 
 const parseHealthcheck = (body: string): Instruction => {
   const m = body.match(/^(?:(.*?) )?CMD (.*)$/)
@@ -57,8 +57,8 @@ const parseHealthcheck = (body: string): Instruction => {
   const flags = (m[1] ?? "").split(" ")
   const retries = flagValue(flags, "retries")
 
-  return InstructionTag.Healthcheck({
-    check: HealthcheckTag.Cmd({
+  return Instr.Healthcheck({
+    check: HealthOf.Cmd({
       argv: parseArgv(m[2] ?? ""),
       interval: flagValue(flags, "interval"),
       timeout: flagValue(flags, "timeout"),
@@ -70,13 +70,13 @@ const parseHealthcheck = (body: string): Instruction => {
 
 const instructionParsers: ReadonlyArray<readonly [string, (body: string) => Instruction]> = [
   ["COPY ", parseCopy],
-  ["RUN ", (cmd) => InstructionTag.Run({ cmd })],
+  ["RUN ", (cmd) => Instr.Run({ cmd })],
   ["ENV ", parseEnv],
-  ["EXPOSE ", (body) => InstructionTag.Expose({ port: Number(body) })],
-  ["USER ", (user) => InstructionTag.User({ user })],
-  ["WORKDIR ", (path) => InstructionTag.Workdir({ path })],
-  ["CMD ", (body) => InstructionTag.Cmd({ argv: parseArgv(body) })],
-  ["ENTRYPOINT ", (body) => InstructionTag.Entrypoint({ argv: parseArgv(body) })],
+  ["EXPOSE ", (body) => Instr.Expose({ port: Number(body) })],
+  ["USER ", (user) => Instr.User({ user })],
+  ["WORKDIR ", (path) => Instr.Workdir({ path })],
+  ["CMD ", (body) => Instr.Cmd({ argv: parseArgv(body) })],
+  ["ENTRYPOINT ", (body) => Instr.Entrypoint({ argv: parseArgv(body) })],
   ["HEALTHCHECK ", parseHealthcheck]
 ]
 
@@ -142,7 +142,7 @@ const safeEnvVal = fc.array(envValChar, { minLength: 1, maxLength: 6 }).map((cs)
 const port = fc.integer({ min: 1, max: 65535 })
 const duration = fc.constantFrom("5s", "10s", "30s")
 
-const fromImage = fc.record({ image: safeStr, tag: safeStr }).map(FromTag.FromImage)
+const fromImage = fc.record({ image: safeStr, tag: safeStr }).map(FromOf.FromImage)
 
 const copyArb: fc.Arbitrary<Instruction> = fc
   .tuple(
@@ -150,13 +150,13 @@ const copyArb: fc.Arbitrary<Instruction> = fc
     fc.array(safeStr, { minLength: 1, maxLength: 3 }),
     safeStr
   )
-  .map(([from, src, dst]) => InstructionTag.Copy({ src, dst, from }))
+  .map(([from, src, dst]) => Instr.Copy({ src, dst, from }))
 
 const envArb: fc.Arbitrary<Instruction> = fc
   .array(fc.tuple(safeEnvKey, safeEnvVal), { minLength: 1, maxLength: 3 })
-  .map((entries) => InstructionTag.Env({ entries }))
+  .map((entries) => Instr.Env({ entries }))
 
-const exposeArb: fc.Arbitrary<Instruction> = port.map((p) => InstructionTag.Expose({ port: p }))
+const exposeArb: fc.Arbitrary<Instruction> = port.map((p) => Instr.Expose({ port: p }))
 
 const argvArb = fc.array(safeStr, { minLength: 1, maxLength: 3 })
 
@@ -166,19 +166,17 @@ const healthArb: fc.Arbitrary<Instruction> = fc
     fc.option(duration, { nil: undefined }),
     fc.option(fc.integer({ min: 1, max: 5 }), { nil: undefined })
   )
-  .map(([argv, interval, retries]) =>
-    InstructionTag.Healthcheck({ check: HealthcheckTag.Cmd({ argv, interval, retries }) })
-  )
+  .map(([argv, interval, retries]) => Instr.Healthcheck({ check: HealthOf.Cmd({ argv, interval, retries }) }))
 
 const instructionArb: fc.Arbitrary<Instruction> = fc.oneof(
   copyArb,
-  safeStr.map((s) => InstructionTag.Run({ cmd: `cmd-${s}` })),
+  safeStr.map((s) => Instr.Run({ cmd: `cmd-${s}` })),
   envArb,
   exposeArb,
-  safeStr.map((user) => InstructionTag.User({ user })),
-  safeStr.map((p) => InstructionTag.Workdir({ path: `/${p}` })),
-  argvArb.map((argv) => InstructionTag.Cmd({ argv })),
-  argvArb.map((argv) => InstructionTag.Entrypoint({ argv })),
+  safeStr.map((user) => Instr.User({ user })),
+  safeStr.map((p) => Instr.Workdir({ path: `/${p}` })),
+  argvArb.map((argv) => Instr.Cmd({ argv })),
+  argvArb.map((argv) => Instr.Entrypoint({ argv })),
   healthArb
 )
 

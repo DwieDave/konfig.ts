@@ -1,4 +1,4 @@
-import type { NodeModulesLayout, PackageManager } from "../PackageManager"
+import { type NodeModulesLayout, type PackageManager, ProdInstall } from "../PackageManager"
 
 export interface PnpmOptions {
   readonly layout: NodeModulesLayout
@@ -9,8 +9,7 @@ export const pnpm = (opts: PnpmOptions): PackageManager => ({
   lockfileNames: ["pnpm-lock.yaml"],
   auxFiles: ["pnpm-workspace.yaml", ".npmrc"],
   installCommand: ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"],
-  prodInstallCommand: ["pnpm", "install", "--ignore-scripts"],
-  productionFlag: ["--prod"],
+  prodInstall: ProdInstall.Rewrite({ command: ["pnpm", "install", "--ignore-scripts", "--prod"] }),
   nodeModulesLayout: opts.layout,
   prependDepsRuns: (version) => [`corepack enable pnpm && corepack prepare pnpm@${version} --activate`]
 })

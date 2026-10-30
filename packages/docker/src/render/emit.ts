@@ -14,6 +14,7 @@ export interface EmittedDockerfiles {
 
 export interface EmitInput {
   readonly spec: DockerSpec
+  readonly target: string
   readonly specPath: string
 }
 
@@ -21,7 +22,7 @@ export const emit = (
   input: EmitInput
 ): Effect.Effect<EmittedDockerfiles, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
-    const bundle = yield* lower(input.spec)
+    const bundle = yield* lower({ spec: input.spec, target: input.target })
     const dockerfile = renderFile({ specPath: input.specPath, body: render(bundle.prod) })
 
     if (!bundle.dev) return { dockerfile }

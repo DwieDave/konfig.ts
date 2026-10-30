@@ -1,10 +1,12 @@
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
+import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
 import {
   BuildAtom,
   CopyAtom,
   decodeDockerSpec,
   type DockerSpec,
+  EngineVersion,
   HealthcheckAtom,
   PackageManagerAtom,
   PlatformAtom,
@@ -13,7 +15,6 @@ import {
 } from "./spec"
 
 const minimalValid = {
-  target: "apps/kanban/server",
   runner: {
     workdir: "/app/apps/kanban/server",
     copy: [CopyAtom.cases.BuilderArtifact.make({ src: "dist", dst: "dist" })],
@@ -22,7 +23,6 @@ const minimalValid = {
 } as const
 
 const fullValid = {
-  target: "@konfig.ts/core",
   packageManager: PackageManagerAtom.cases.BunPm.make({}),
   runtime: RuntimeAtom.cases.BunRuntime.make({ alpine: true }),
   build: BuildAtom.cases.BuildScript.make({ script: "build" }),
@@ -61,7 +61,7 @@ describe("DockerSpec Schema", () => {
 
     if (Exit.isSuccess(exit)) {
       const decoded: DockerSpec = exit.value
-      expect(decoded.target).toBe("apps/kanban/server")
+      expect(decoded.runner.workdir).toBe("/app/apps/kanban/server")
       expect(decoded.runner.cmd).toEqual(["bun", "run", "dist/main.js"])
     }
   })
@@ -82,7 +82,6 @@ describe("DockerSpec Schema", () => {
   it("rejects a spec missing required runner.cmd", () => {
     const exit = Effect.runSyncExit(
       decodeDockerSpec({
-        target: "x",
         runner: { workdir: "/x", copy: [] }
       })
     )
@@ -94,7 +93,7 @@ describe("DockerSpec Schema", () => {
     const exit = Effect.runSyncExit(
       decodeDockerSpec({
         ...minimalValid,
-        runner: { ...minimalValid.runner, env: { STRIPE_KEY: "sk_live_abcdef" } }
+        runner: { ...minimalValid.runner, env: { STRIPE_KEY: "sk_live_abcdef0123456789ab" } }
       })
     )
 
@@ -195,17 +194,58 @@ describe("DockerSpec Schema", () => {
     expect(Exit.isFailure(exit)).toBe(true)
   })
 
-  it("decodes platform multi", () => {
-    const exit = Effect.runSyncExit(
-      decodeDockerSpec({
-        ...minimalValid,
-        runner: {
-          ...minimalValid.runner,
-          platform: PlatformAtom.cases.PlatformMulti.make({ values: ["linux/amd64", "linux/arm64"] })
-        }
-      })
+  const decodesEnv = (value: string): boolean =>
+    Exit.isSuccess(
+      Effect.runSyncExit(
+        decodeDockerSpec({ ...minimalValid, runner: { ...minimalValid.runner, env: { VALUE: value } } })
+      )
     )
 
-    expect(Exit.isSuccess(exit)).toBe(true)
+  it("never flags locale strings as secrets", () => {
+    const locale = fc.tuple(fc.stringMatching(/^[a-z]{2}$/), fc.stringMatching(/^[A-Z]{2}$/)).map(([l, c]) =>
+      `${l}_${c}.UTF-8`
+    )
+
+    fc.assert(fc.property(locale, decodesEnv))
+    expect(decodesEnv("sk_SK.UTF-8")).toBe(true)
+  })
+
+  it("never flags absolute paths as secrets", () => {
+    const segment = fc.stringMatching(/^[A-Za-z0-9._-]{1,20}$/)
+    const absPath = fc.array(segment, { minLength: 1, maxLength: 12 }).map((parts) => `/${parts.join("/")}`)
+
+    fc.assert(fc.property(absPath, decodesEnv))
+  })
+
+  it("rejects an http healthcheck path that does not start with a slash", () => {
+    const decodeWithPath = (path: string) =>
+      Effect.runSyncExit(
+        decodeDockerSpec({
+          ...minimalValid,
+          runner: {
+            ...minimalValid.runner,
+            healthcheck: { ...HealthcheckAtom.cases.HealthcheckHttpGet.make({ path: "/x", port: 80 }), path }
+          }
+        })
+      )
+
+    expect(Exit.isFailure(decodeWithPath("healthz"))).toBe(true)
+    expect(Exit.isSuccess(decodeWithPath("/healthz"))).toBe(true)
+  })
+})
+
+describe("EngineVersion", () => {
+  const DOCKER_TAG_RE = /^\w[\w.-]{0,127}$/
+  const accepts = Schema.is(EngineVersion)
+
+  it("accepts only values that are valid Docker tags", () => {
+    fc.assert(fc.property(fc.string(), (s) => !accepts(s) || DOCKER_TAG_RE.test(s)))
+    fc.assert(fc.property(fc.stringMatching(/^\d{1,3}(\.\d{1,3}){0,2}$/), accepts))
+  })
+
+  it("rejects ranges", () => {
+    for (const range of [">=22", "^22.1.0", "22.x", "~1.2", "22 || 24", "latest", ""]) {
+      expect(accepts(range)).toBe(false)
+    }
   })
 })

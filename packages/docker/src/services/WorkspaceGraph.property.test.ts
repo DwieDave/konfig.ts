@@ -1,7 +1,8 @@
 import { Effect, Exit, Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import { closureOf, type Workspace } from "./WorkspaceGraph"
+import { closureByRef } from "../testing/closure"
+import type { Workspace } from "./WorkspaceGraph"
 
 const _ws = (name: string, deps: ReadonlyArray<string>): Workspace => ({
   name,
@@ -52,7 +53,7 @@ describe("closureOf — property tests", () => {
       fc.property(arbDag, ({ names, deps }) => {
         const all = names.map((n) => _ws(n, deps[n] ?? []))
         const target = names[0]!
-        const result = Effect.runSyncExit(closureOf({ all, target }))
+        const result = Effect.runSyncExit(closureByRef({ all, ref: target }))
 
         if (!Exit.isSuccess(result)) return
 
@@ -80,7 +81,7 @@ describe("closureOf — property tests", () => {
       fc.property(arbDag, ({ names, deps }) => {
         const all = names.map((n) => _ws(n, deps[n] ?? []))
         const target = names[0]!
-        const result = Effect.runSyncExit(closureOf({ all, target }))
+        const result = Effect.runSyncExit(closureByRef({ all, ref: target }))
 
         if (!Exit.isSuccess(result)) return
         const last = result.value[result.value.length - 1]
@@ -92,7 +93,7 @@ describe("closureOf — property tests", () => {
 
   it("returns WorkspaceNotFound for a target that doesn't exist", () => {
     const all = [_ws("@fix/a", [])]
-    const result = Effect.runSyncExit(closureOf({ all, target: "@fix/missing" }))
+    const result = Effect.runSyncExit(closureByRef({ all, ref: "@fix/missing" }))
     expect(Exit.isFailure(result)).toBe(true)
 
     if (Exit.isFailure(result)) {
@@ -102,7 +103,7 @@ describe("closureOf — property tests", () => {
 
   it("detects a self-cycle", () => {
     const all = [_ws("@fix/a", ["@fix/a"])]
-    const result = Effect.runSyncExit(closureOf({ all, target: "@fix/a" }))
+    const result = Effect.runSyncExit(closureByRef({ all, ref: "@fix/a" }))
     expect(Exit.isFailure(result)).toBe(true)
 
     if (Exit.isFailure(result)) {
@@ -117,7 +118,7 @@ describe("closureOf — property tests", () => {
       _ws("@fix/c", ["@fix/a"])
     ]
 
-    const result = Effect.runSyncExit(closureOf({ all, target: "@fix/a" }))
+    const result = Effect.runSyncExit(closureByRef({ all, ref: "@fix/a" }))
     expect(Exit.isFailure(result)).toBe(true)
 
     if (Exit.isFailure(result)) {

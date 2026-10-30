@@ -8,7 +8,7 @@ import {
   MonorepoRootNotFound,
   PackageJsonInvalid,
   UnsupportedPm,
-  WorkspaceNotFound
+  WorkspaceConfigInvalid
 } from "../DockerError"
 import type { NodeModulesLayout, PmKind, YarnVariant } from "./PackageManager"
 import { hasWildcard, segmentMatches } from "./workspaceGlob"
@@ -50,14 +50,17 @@ export interface Workspace {
 export const existsOrFalse = (input: { readonly fs: FileSystem; readonly path: string }): Effect.Effect<boolean> =>
   input.fs.exists(input.path).pipe(Effect.orElseSucceed(() => false))
 
+interface GraphEnv {
+  readonly fs: FileSystem
+  readonly p: Path
+  readonly root: string
+}
+
 export interface DetectedPm {
   readonly kind: PmKind
   readonly version: string | undefined
   readonly pnpmLayout?: NodeModulesLayout | undefined
   readonly yarnVariant?: YarnVariant | undefined
-  // Lockfiles that actually exist on disk — Bun has two formats (text
-  // bun.lock, binary bun.lockb), lowering needs the one present, not both.
-  readonly presentLockfiles: ReadonlyArray<string>
 }
 
 interface DecodeInput {
@@ -70,52 +73,37 @@ const _decodePkgJson = (input: DecodeInput): Effect.Effect<PackageJson, PackageJ
     Effect.mapError((cause) => new PackageJsonInvalid({ path: input.path, cause }))
   )
 
-const _readPkgJsonIfExists = (
-  fs: FileSystem,
-  p: Path,
-  cur: string
-): Effect.Effect<PackageJson | undefined, PackageJsonInvalid> =>
+const _readPkgJsonIfExists = (env: GraphEnv): Effect.Effect<PackageJson | undefined, PackageJsonInvalid> =>
   Effect.gen(function*() {
-    const pkgPath = p.join(cur, "package.json")
-    const exists = yield* existsOrFalse({ fs, path: pkgPath })
+    const pkgPath = env.p.join(env.root, "package.json")
+    const exists = yield* existsOrFalse({ fs: env.fs, path: pkgPath })
 
     if (!exists) return undefined
-    const text = yield* fs.readFileString(pkgPath).pipe(Effect.option)
+    const text = yield* env.fs.readFileString(pkgPath).pipe(Effect.option)
 
     if (Option.isNone(text)) return undefined
 
     return yield* _decodePkgJson({ path: pkgPath, text: text.value })
   })
 
-const _isMonorepoRoot = (pkg: PackageJson | undefined, hasPnpmYaml: boolean): boolean => {
-  if (hasPnpmYaml) return true
-
-  if (!pkg?.workspaces) return false
-
-  return true
-}
-
-interface FsEnv {
-  readonly fs: FileSystem
-  readonly p: Path
-}
+const _isMonorepoRoot = (input: { readonly pkg: PackageJson | undefined; readonly hasPnpmYaml: boolean }): boolean =>
+  input.hasPnpmYaml || Boolean(input.pkg?.workspaces)
 
 const _searchRoot = (input: {
-  readonly env: FsEnv
-  readonly cur: string
+  readonly env: GraphEnv
   readonly remaining: number
 }): Effect.Effect<RootDir | undefined, PackageJsonInvalid> =>
   Effect.gen(function*() {
-    const { env, cur } = input
-    const pkg = yield* _readPkgJsonIfExists(env.fs, env.p, cur)
-    const pnpmYamlExists = yield* existsOrFalse({ fs: env.fs, path: env.p.join(cur, "pnpm-workspace.yaml") })
+    const { env } = input
+    const pkg = yield* _readPkgJsonIfExists(env)
+    const hasPnpmYaml = yield* existsOrFalse({ fs: env.fs, path: env.p.join(env.root, "pnpm-workspace.yaml") })
 
-    if (_isMonorepoRoot(pkg, pnpmYamlExists)) return _brandRoot(cur)
-    const parent = env.p.dirname(cur)
+    if (_isMonorepoRoot({ pkg, hasPnpmYaml })) return _brandRoot(env.root)
+    const parent = env.p.dirname(env.root)
 
-    if (input.remaining <= 1 || parent === cur) return undefined
+    if (input.remaining <= 1 || parent === env.root) return undefined
 
-    return yield* _searchRoot({ env, cur: parent, remaining: input.remaining - 1 })
+    return yield* _searchRoot({ env: { ...env, root: parent }, remaining: input.remaining - 1 })
   })
 
 const MAX_ROOT_SEARCH_DEPTH = 64
@@ -126,26 +114,25 @@ export const findRoot = (
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
-    const found = yield* _searchRoot({ env: { fs, p }, cur: p.resolve(from), remaining: MAX_ROOT_SEARCH_DEPTH })
+    const found = yield* _searchRoot({ env: { fs, p, root: p.resolve(from) }, remaining: MAX_ROOT_SEARCH_DEPTH })
 
     return found ?? (yield* new MonorepoRootNotFound({ from }))
   })
-
-interface GlobEnv {
-  readonly fs: FileSystem
-  readonly p: Path
-  readonly root: string
-}
 
 interface SegmentStep {
   readonly cur: string
   readonly part: string
 }
 
+interface StepInput {
+  readonly env: GraphEnv
+  readonly step: SegmentStep
+}
+
 const _isTraversable = (name: string): boolean => name !== "node_modules" && !name.startsWith(".")
 
 const _descendantsIfDir = (input: {
-  readonly env: GlobEnv
+  readonly env: GraphEnv
   readonly rel: string
 }): Effect.Effect<ReadonlyArray<string>> =>
   input.env.fs.stat(input.env.p.join(input.env.root, input.rel)).pipe(
@@ -158,10 +145,10 @@ const _descendantsIfDir = (input: {
   )
 
 const _collectDescendantDirs = (input: {
-  readonly env: GlobEnv
+  readonly env: GraphEnv
   readonly dir: string
 }): Effect.Effect<ReadonlyArray<string>> =>
-  _listChildren(input.env, input.dir).pipe(
+  _listChildren(input).pipe(
     Effect.flatMap((children) =>
       Effect.forEach(
         children.filter(_isTraversable),
@@ -171,11 +158,13 @@ const _collectDescendantDirs = (input: {
     Effect.map((nested) => [input.dir, ...nested.flat()])
   )
 
-const _listChildren = (env: GlobEnv, dir: string): Effect.Effect<ReadonlyArray<string>> =>
-  env.fs.readDirectory(env.p.join(env.root, dir)).pipe(Effect.orElseSucceed((): string[] => []))
+const _listChildren = (input: { readonly env: GraphEnv; readonly dir: string }): Effect.Effect<ReadonlyArray<string>> =>
+  input.env.fs.readDirectory(input.env.p.join(input.env.root, input.dir)).pipe(
+    Effect.orElseSucceed((): string[] => [])
+  )
 
-const _wildcardChildren = (env: GlobEnv, step: SegmentStep): Effect.Effect<ReadonlyArray<string>> =>
-  _listChildren(env, step.cur).pipe(
+const _wildcardChildren = ({ env, step }: StepInput): Effect.Effect<ReadonlyArray<string>> =>
+  _listChildren({ env, dir: step.cur }).pipe(
     Effect.map((children) =>
       children
         .filter((ch) => ch !== "node_modules" && segmentMatches({ segment: step.part, name: ch }))
@@ -183,38 +172,48 @@ const _wildcardChildren = (env: GlobEnv, step: SegmentStep): Effect.Effect<Reado
     )
   )
 
-const _expandSegment = (env: GlobEnv, step: SegmentStep): Effect.Effect<ReadonlyArray<string>> => {
+const _expandSegment = ({ env, step }: StepInput): Effect.Effect<ReadonlyArray<string>> => {
   if (step.part === "**") return _collectDescendantDirs({ env, dir: step.cur })
 
-  if (hasWildcard(step.part)) return _wildcardChildren(env, step)
+  if (hasWildcard(step.part)) return _wildcardChildren({ env, step })
 
   return Effect.succeed([env.p.join(step.cur, step.part)])
 }
 
-const _expandWorkspaceGlob = (env: GlobEnv, pattern: string): Effect.Effect<ReadonlyArray<string>> =>
+const _expandWorkspaceGlob = (input: {
+  readonly env: GraphEnv
+  readonly pattern: string
+}): Effect.Effect<ReadonlyArray<string>> =>
   Effect.reduce(
-    pattern.split("/").filter((s) => s.length > 0),
+    input.pattern.split("/").filter((s) => s.length > 0),
     (): ReadonlyArray<string> => [""],
     (currents, part) =>
-      Effect.forEach(currents, (cur) => _expandSegment(env, { cur, part })).pipe(
+      Effect.forEach(currents, (cur) => _expandSegment({ env: input.env, step: { cur, part } })).pipe(
         Effect.map((groups) => groups.flat())
       )
   )
 
-const _withPackageJson = (env: GlobEnv, dirs: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
+const _withPackageJson = (input: {
+  readonly env: GraphEnv
+  readonly dirs: ReadonlyArray<string>
+}): Effect.Effect<ReadonlyArray<string>> =>
   Effect.filter(
-    dirs,
-    (d) => existsOrFalse({ fs: env.fs, path: env.p.join(env.root, d, "package.json") })
+    input.dirs,
+    (d) => existsOrFalse({ fs: input.env.fs, path: input.env.p.join(input.env.root, d, "package.json") })
   )
 
-const _applyPattern = (env: GlobEnv, acc: ReadonlySet<string>, pattern: string): Effect.Effect<ReadonlySet<string>> =>
-  pattern.startsWith("!")
-    ? _expandWorkspaceGlob(env, pattern.slice(1)).pipe(
-      Effect.map((dirs) => new Set([...acc].filter((d) => !dirs.includes(d))))
+const _applyPattern = (input: {
+  readonly env: GraphEnv
+  readonly acc: ReadonlySet<string>
+  readonly pattern: string
+}): Effect.Effect<ReadonlySet<string>> =>
+  input.pattern.startsWith("!")
+    ? _expandWorkspaceGlob({ env: input.env, pattern: input.pattern.slice(1) }).pipe(
+      Effect.map((dirs) => new Set([...input.acc].filter((d) => !dirs.includes(d))))
     )
-    : _expandWorkspaceGlob(env, pattern).pipe(
-      Effect.flatMap((dirs) => _withPackageJson(env, dirs)),
-      Effect.map((dirs) => new Set([...acc, ...dirs]))
+    : _expandWorkspaceGlob({ env: input.env, pattern: input.pattern }).pipe(
+      Effect.flatMap((dirs) => _withPackageJson({ env: input.env, dirs })),
+      Effect.map((dirs) => new Set([...input.acc, ...dirs]))
     )
 
 const PnpmWorkspaceYamlSchema = Schema.Struct({
@@ -223,44 +222,53 @@ const PnpmWorkspaceYamlSchema = Schema.Struct({
 
 const _isStringArray = Schema.is(Schema.Array(Schema.String))
 
-const _readWorkspacePatterns = (
-  root: RootDir,
-  fs: FileSystem,
-  p: Path
+const _readPnpmPatterns = (input: {
+  readonly env: GraphEnv
+  readonly path: string
+}): Effect.Effect<ReadonlyArray<string>, WorkspaceConfigInvalid> =>
+  input.env.fs.readFileString(input.path).pipe(
+    Effect.flatMap((text) =>
+      text === ""
+        ? Effect.succeed<ReadonlyArray<string>>([])
+        : Effect.try(() => parseYaml(text)).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(PnpmWorkspaceYamlSchema)),
+          Effect.map((parsed): ReadonlyArray<string> => parsed.packages ?? [])
+        )
+    ),
+    Effect.mapError((cause) => new WorkspaceConfigInvalid({ path: input.path, cause }))
+  )
+
+const _readPackageJsonPatterns = (
+  env: GraphEnv
 ): Effect.Effect<ReadonlyArray<string>, PackageJsonInvalid> =>
+  _readPkgJsonIfExists(env).pipe(
+    Effect.map((pkg): ReadonlyArray<string> => {
+      const ws = pkg?.workspaces
+
+      if (!ws) return []
+
+      return _isStringArray(ws) ? ws : (ws.packages ?? [])
+    })
+  )
+
+const _readWorkspacePatterns = (
+  env: GraphEnv
+): Effect.Effect<ReadonlyArray<string>, PackageJsonInvalid | WorkspaceConfigInvalid> =>
   Effect.gen(function*() {
-    const pnpmPath = p.join(root, "pnpm-workspace.yaml")
-    const pnpmExists = yield* existsOrFalse({ fs, path: pnpmPath })
+    const pnpmPath = env.p.join(env.root, "pnpm-workspace.yaml")
+    const pnpmExists = yield* existsOrFalse({ fs: env.fs, path: pnpmPath })
 
-    if (pnpmExists) {
-      const text = yield* fs.readFileString(pnpmPath).pipe(Effect.orElseSucceed(() => ""))
-
-      if (text === "") return []
-
-      return yield* Effect.try(() => parseYaml(text)).pipe(
-        Effect.flatMap(Schema.decodeUnknownEffect(PnpmWorkspaceYamlSchema)),
-        Effect.map((parsed): ReadonlyArray<string> => parsed.packages ?? []),
-        Effect.orElseSucceed((): ReadonlyArray<string> => [])
-      )
-    }
-
-    const pkg = yield* _readPkgJsonIfExists(fs, p, root)
-    const ws = pkg?.workspaces
-
-    if (!ws) return []
-
-    return _isStringArray(ws) ? ws : (ws.packages ?? [])
+    return yield* (pnpmExists ? _readPnpmPatterns({ env, path: pnpmPath }) : _readPackageJsonPatterns(env))
   })
 
-const _parseWorkspacePackage = (
-  root: RootDir,
-  fs: FileSystem,
-  p: Path,
-  relDir: string
-): Effect.Effect<Workspace | undefined, PackageJsonInvalid> =>
+const _parseWorkspacePackage = (input: {
+  readonly env: GraphEnv
+  readonly relDir: string
+}): Effect.Effect<Workspace | undefined, PackageJsonInvalid> =>
   Effect.gen(function*() {
-    const pkgPath = p.join(root, relDir, "package.json")
-    const text = yield* fs.readFileString(pkgPath).pipe(Effect.option)
+    const { env, relDir } = input
+    const pkgPath = env.p.join(env.root, relDir, "package.json")
+    const text = yield* env.fs.readFileString(pkgPath).pipe(Effect.option)
 
     if (Option.isNone(text)) return undefined
     const pkg = yield* _decodePkgJson({ path: pkgPath, text: text.value })
@@ -272,22 +280,30 @@ const _parseWorkspacePackage = (
 
 export const allWorkspaces = (
   root: RootDir
-): Effect.Effect<ReadonlyArray<Workspace>, PackageJsonInvalid, FileSystem | Path> =>
+): Effect.Effect<ReadonlyArray<Workspace>, PackageJsonInvalid | WorkspaceConfigInvalid, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
-    const env: GlobEnv = { fs, p, root }
-    const patterns = yield* _readWorkspacePatterns(root, fs, p)
+    const env: GraphEnv = { fs, p, root }
+    const patterns = yield* _readWorkspacePatterns(env)
 
-    const dirSet = yield* Effect.reduce(patterns, (): ReadonlySet<string> =>
-      new Set<string>(), (acc, pat) =>
-      _applyPattern(env, acc, pat))
+    const dirSet = yield* Effect.reduce(
+      patterns,
+      (): ReadonlySet<string> => new Set<string>(),
+      (acc, pattern) => _applyPattern({ env, acc, pattern })
+    )
 
-    const parsed = yield* Effect.forEach([...dirSet], (d) =>
-      _parseWorkspacePackage(root, fs, p, d))
+    const parsed = yield* Effect.forEach([...dirSet], (relDir) => _parseWorkspacePackage({ env, relDir }))
 
     return parsed.filter((w): w is Workspace => w !== undefined).sort((a, b) => a.name.localeCompare(b.name))
   })
+
+const COREPACK_KINDS = new Map<string, PmKind>([
+  ["bun", "Bun"],
+  ["npm", "Npm"],
+  ["pnpm", "Pnpm"],
+  ["yarn", "Yarn"]
+])
 
 const _parseCorepackField = (
   pm: string
@@ -295,21 +311,18 @@ const _parseCorepackField = (
   const at = pm.lastIndexOf("@")
 
   if (at < 0) return undefined
-  const name = pm.slice(0, at)
+  const kind = COREPACK_KINDS.get(pm.slice(0, at))
   const version = pm.slice(at + 1).split("+")[0] ?? ""
 
-  if (name === "bun") return { kind: "Bun", version }
-
-  if (name === "npm") return { kind: "Npm", version }
-
-  if (name === "pnpm") return { kind: "Pnpm", version }
-
-  if (name === "yarn") return { kind: "Yarn", version }
-
-  return undefined
+  return kind === undefined ? undefined : { kind, version }
 }
 
-const PM_LOCKFILES: ReadonlyArray<{ kind: PmKind; file: string }> = [
+interface PmLockfile {
+  readonly kind: PmKind
+  readonly file: string
+}
+
+const PM_LOCKFILES: ReadonlyArray<PmLockfile> = [
   { kind: "Bun", file: "bun.lock" },
   { kind: "Bun", file: "bun.lockb" },
   { kind: "Pnpm", file: "pnpm-lock.yaml" },
@@ -317,79 +330,48 @@ const PM_LOCKFILES: ReadonlyArray<{ kind: PmKind; file: string }> = [
   { kind: "Yarn", file: "yarn.lock" }
 ]
 
-const _detectYarnVariant = (
-  root: RootDir,
-  fs: FileSystem,
-  p: Path,
-  corepackVersion?: string
-): Effect.Effect<YarnVariant, never> =>
+const _detectYarnVariant = (input: {
+  readonly env: GraphEnv
+  readonly corepackVersion: string | undefined
+}): Effect.Effect<YarnVariant> =>
+  input.corepackVersion && !input.corepackVersion.startsWith("1.")
+    ? Effect.succeed("berry")
+    : existsOrFalse({ fs: input.env.fs, path: input.env.p.join(input.env.root, ".yarnrc.yml") }).pipe(
+      Effect.map((exists): YarnVariant => exists ? "berry" : "classic")
+    )
+
+const _readOrEmpty = (input: { readonly env: GraphEnv; readonly file: string }): Effect.Effect<string> =>
+  input.env.fs.readFileString(input.env.p.join(input.env.root, input.file)).pipe(Effect.orElseSucceed(() => ""))
+
+const _detectPnpmLayout = (env: GraphEnv): Effect.Effect<NodeModulesLayout> =>
   Effect.gen(function*() {
-    if (corepackVersion && !corepackVersion.startsWith("1.")) return "berry"
-    const yarnrcExists = yield* existsOrFalse({ fs, path: p.join(root, ".yarnrc.yml") })
-
-    if (yarnrcExists) return "berry"
-
-    return "classic"
-  })
-
-const _detectPnpmLayout = (
-  root: RootDir,
-  fs: FileSystem,
-  p: Path
-): Effect.Effect<NodeModulesLayout, never> =>
-  Effect.gen(function*() {
-    const npmrc = yield* fs
-      .readFileString(p.join(root, ".npmrc"))
-      .pipe(Effect.orElseSucceed(() => ""))
+    const npmrc = yield* _readOrEmpty({ env, file: ".npmrc" })
 
     if (/^\s*node-linker\s*=\s*hoisted\s*$/m.test(npmrc)) return "hoisted"
+    const pnpmYaml = yield* _readOrEmpty({ env, file: "pnpm-workspace.yaml" })
 
-    const pnpmYaml = yield* fs
-      .readFileString(p.join(root, "pnpm-workspace.yaml"))
-      .pipe(Effect.orElseSucceed(() => ""))
-
-    if (/^\s*nodeLinker:\s*hoisted\s*$/m.test(pnpmYaml)) return "hoisted"
-
-    return "isolated"
+    return /^\s*nodeLinker:\s*hoisted\s*$/m.test(pnpmYaml) ? "hoisted" : "isolated"
   })
 
-interface FinalizePmInput {
-  readonly root: RootDir
+interface PmChoice {
   readonly kind: PmKind
   readonly version: string | undefined
-  readonly presentLockfiles: ReadonlyArray<{ kind: PmKind; file: string }>
 }
 
-const _finalizePm = (input: FinalizePmInput): Effect.Effect<DetectedPm, never, FileSystem | Path> =>
+const _finalizePm = (input: { readonly env: GraphEnv; readonly choice: PmChoice }): Effect.Effect<DetectedPm> =>
   Effect.gen(function*() {
-    const { root, kind, version } = input
-    const fs = yield* FileSystem
-    const p = yield* Path
-    const layout = kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined
-    const yarnVariant = kind === "Yarn" ? yield* _detectYarnVariant(root, fs, p, version) : undefined
+    const { env, choice } = input
+    const pnpmLayout = choice.kind === "Pnpm" ? yield* _detectPnpmLayout(env) : undefined
 
-    return {
-      kind,
-      version,
-      presentLockfiles: input.presentLockfiles.filter((l) => l.kind === kind).map((l) => l.file),
-      pnpmLayout: layout,
-      yarnVariant
-    }
+    const yarnVariant = choice.kind === "Yarn"
+      ? yield* _detectYarnVariant({ env, corepackVersion: choice.version })
+      : undefined
+
+    return { kind: choice.kind, version: choice.version, pnpmLayout, yarnVariant }
   })
 
-interface PmLockfile {
-  readonly kind: PmKind
-  readonly file: string
-}
-
-const _presentLockfiles = (input: {
-  readonly env: FsEnv
-  readonly root: RootDir
-}): Effect.Effect<ReadonlyArray<PmLockfile>> =>
-  Effect.filter(
-    PM_LOCKFILES,
-    (entry) => existsOrFalse({ fs: input.env.fs, path: input.env.p.join(input.root, entry.file) })
-  )
+const _presentLockfiles = (env: GraphEnv): Effect.Effect<ReadonlyArray<PmLockfile>> =>
+  Effect.filter(PM_LOCKFILES, (entry) => existsOrFalse({ fs: env.fs, path: env.p.join(env.root, entry.file) }))
 
 const _kindFromLockfiles = (present: ReadonlyArray<PmLockfile>): Effect.Effect<PmKind, UnsupportedPm> => {
   const [first, ...rest] = [...new Set(present.map((l) => l.kind))]
@@ -408,11 +390,6 @@ const _kindFromLockfiles = (present: ReadonlyArray<PmLockfile>): Effect.Effect<P
     : Effect.succeed(first)
 }
 
-interface PmChoice {
-  readonly kind: PmKind
-  readonly version: string | undefined
-}
-
 const _chooseKind = (input: {
   readonly corepack: PmChoice | undefined
   readonly present: ReadonlyArray<PmLockfile>
@@ -427,12 +404,13 @@ export const detectPm = (
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const p = yield* Path
-    const pkg = yield* _readPkgJsonIfExists(fs, p, root)
+    const env: GraphEnv = { fs, p, root }
+    const pkg = yield* _readPkgJsonIfExists(env)
     const corepack = pkg?.packageManager ? _parseCorepackField(pkg.packageManager) : undefined
-    const presentLockfiles = yield* _presentLockfiles({ env: { fs, p }, root })
-    const choice = yield* _chooseKind({ corepack, present: presentLockfiles })
+    const present = yield* _presentLockfiles(env)
+    const choice = yield* _chooseKind({ corepack, present })
 
-    return yield* _finalizePm({ root, ...choice, presentLockfiles })
+    return yield* _finalizePm({ env, choice })
   })
 
 const _depNames = (pkg: PackageJson, includeDev: boolean): ReadonlyArray<string> =>
@@ -442,7 +420,7 @@ const _depNames = (pkg: PackageJson, includeDev: boolean): ReadonlyArray<string>
 
 export interface ClosureInput {
   readonly all: ReadonlyArray<Workspace>
-  readonly target: string
+  readonly target: Workspace
   readonly includeDev?: boolean
 }
 
@@ -480,27 +458,27 @@ const _visit = (input: VisitInput): Effect.Effect<Visit, CircularWorkspaceDep> =
     .pipe(Effect.map((done): Visit => ({ visited: new Set([...done.visited, ws.name]), order: [...done.order, ws] })))
 }
 
-const _lookupWorkspace = (input: {
+const _relativeUnder = (input: { readonly ref: string; readonly root: string }): string | undefined =>
+  input.ref.startsWith(input.root) ? input.ref.slice(input.root.length).replace(/^[/\\]+/, "") : undefined
+
+export const lookupWorkspace = (input: {
   readonly all: ReadonlyArray<Workspace>
   readonly ref: string
-}): Workspace | undefined =>
-  input.all.find((w) => w.name === input.ref) ?? input.all.find((w) => w.relDir === input.ref)
+  readonly root?: string
+}): Workspace | undefined => {
+  const direct = input.all.find((w) => w.name === input.ref) ?? input.all.find((w) => w.relDir === input.ref)
 
-export const closureOf = (
-  input: ClosureInput
-): Effect.Effect<ReadonlyArray<Workspace>, WorkspaceNotFound | CircularWorkspaceDep> =>
-  Effect.gen(function*() {
-    const root = _lookupWorkspace({ all: input.all, ref: input.target })
+  if (direct || input.root === undefined) return direct
+  const rel = _relativeUnder({ ref: input.ref, root: input.root })
 
-    if (!root) return yield* new WorkspaceNotFound({ target: input.target })
+  return rel === undefined ? undefined : input.all.find((w) => w.relDir === rel)
+}
 
-    const result = yield* _visit({
-      byName: new Map(input.all.map((ws) => [ws.name, ws] as const)),
-      includeDev: input.includeDev ?? false,
-      ws: root,
-      stack: [],
-      state: { visited: new Set(), order: [] }
-    })
-
-    return result.order
-  })
+export const closureOf = (input: ClosureInput): Effect.Effect<ReadonlyArray<Workspace>, CircularWorkspaceDep> =>
+  _visit({
+    byName: new Map(input.all.map((ws) => [ws.name, ws] as const)),
+    includeDev: input.includeDev ?? false,
+    ws: input.target,
+    stack: [],
+    state: { visited: new Set(), order: [] }
+  }).pipe(Effect.map((result) => result.order))

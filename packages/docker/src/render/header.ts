@@ -4,25 +4,20 @@ export const HEADER_MARKER = "# konfig-managed: @konfig.ts/docker"
 
 const HASH_PREFIX = "# hash: sha256:"
 
-export interface RenderHeaderInput {
+interface HeaderInput {
   readonly specPath: string
   readonly body: string
 }
 
 export const sha256Hex = (s: string): string => createHash("sha256").update(s, "utf8").digest("hex")
 
-export const renderHeader = (input: RenderHeaderInput): string => {
+export const renderHeader = (input: HeaderInput): string => {
   const hash = sha256Hex(input.body)
 
   return [HEADER_MARKER, `# spec: ${input.specPath}`, `${HASH_PREFIX}${hash}`].join("\n")
 }
 
-export interface RenderFileInput {
-  readonly specPath: string
-  readonly body: string
-}
-
-export const renderFile = (input: RenderFileInput): string => {
+export const renderFile = (input: HeaderInput): string => {
   const header = renderHeader(input)
 
   return `${header}\n${input.body}`
@@ -35,7 +30,7 @@ export interface ExtractedHeader {
 }
 
 export const extractHeader = (file: string): ExtractedHeader => {
-  const lines = file.split("\n", 3)
+  const lines = file.split("\n", 3).map((line) => line.replace(/\r$/, ""))
 
   if (lines.length < 3 || lines[0] !== HEADER_MARKER) return { managed: false }
   const specLine = lines[1] ?? ""

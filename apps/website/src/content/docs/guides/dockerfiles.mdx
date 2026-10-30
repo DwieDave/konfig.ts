@@ -11,13 +11,12 @@ Writing a Dockerfile for one app inside a monorepo is tedious because the image 
 
 ## The spec
 
-The spec is a typed object you pass to `Docker.app`. The type checker validates it as you write it. If you need to validate untyped input, for example a spec loaded from JSON, `decodeDockerSpec` and `decodeDockerSpecSync` do the same check at runtime. The `konfig docker` commands import the default export of `docker.ts` and reject anything that is not a Docker app with `SpecNotADockerApp`. The example's API service:
+The spec is a typed object you pass to `Docker.app`. The type checker validates it as you write it. If you need to validate untyped input, for example a spec loaded from JSON, the schemas do the same check at runtime. The `konfig docker` commands import the default export of `docker.ts` and reject anything that is not a Docker app with `SpecNotADockerApp`. The example's API service:
 
 <Snippet file="apps/api/docker.ts" startAt="export default Docker.app" title="apps/api/docker.ts" lang="ts" />
 
-The spec has four kinds of fields.
+The spec has three kinds of fields. The app being packaged is the workspace the `konfig docker` command targets, so the spec does not name it.
 
-- `target` is the app's workspace directory, relative to the monorepo root.
 - `runner` describes the production stage. `workdir`, `copy`, and `cmd` are required. Setting `production: true` adds a stage that installs production dependencies only (see the table below).
 - `dev` is optional and describes a single-stage development image. `cmd` is required; `env`, `expose`, and `workdir` are optional. Without a `dev` block only `Dockerfile` is emitted, not `Dockerfile.dev`.
 - `packageManager`, `runtime`, `build`, and `sharedRootFiles` override what is otherwise detected. Their defaults are described further down.
@@ -26,7 +25,7 @@ Optional fields of `runner`:
 
 | Field | Meaning |
 | --- | --- |
-| `production` | Adds a `prod-deps` stage that trims the root `package.json` workspaces to the closure and runs `bun install --production` (or the package manager's equivalent) |
+| `production` | Adds a `prod-deps` stage that installs production dependencies for the closure only (`bun install --filter`, `yarn workspaces focus --production` on Yarn Berry, or a trimmed-workspaces install for npm, pnpm, and Yarn classic) |
 | `env` | Environment variables baked into the image |
 | `expose` | Port number or array of ports |
 | `entrypoint` | `ENTRYPOINT` line |
@@ -60,13 +59,13 @@ Each option in the spec is a small tagged value rather than a raw string, so the
 | `Docker.build` | `script(name)`, `command(argv)`, `none()` |
 | `Docker.healthcheck` | `httpGet({ path, port, interval?, timeout?, retries?, startPeriod? })`, `command({ argv, ... })` |
 | `Docker.user` | `nonRoot({ uid?, gid?, name? })`, `root()` |
-| `Docker.platform` | `linuxAmd64()`, `linuxArm64()`, `multi(values)` |
+| `Docker.platform` | `linuxAmd64()`, `linuxArm64()` |
 
 The copy atoms decide what lands in the final image, so they deserve a closer look.
 
 - `Docker.copy.workspaceSourceAll()` copies the source of every closure member, including the target itself, from the builder stage. Bun needs this for `workspace:*` links and export conditions to resolve, and the target's own source is needed when the command runs from source, for example `bun run src/main.ts`. If your build produces a bundled artifact instead, skip the workspace source atoms for the target and copy the artifact explicitly with `builderArtifact`.
 - `Docker.copy.workspaceSource("@example/env-contracts")` copies one workspace package. Naming a package that is not in the closure fails with `WorkspaceSourceUnknown`.
-- `Docker.copy.builderArtifact({ src, dst })` copies a build output such as `dist` from the builder stage. Both paths are relative to the target directory.
+- `Docker.copy.builderArtifact({ src, dst })` copies a build output such as `dist` from the builder stage. `src` is relative to the target directory; `dst` is too, unless it is absolute, in which case it is used as-is.
 - `Docker.copy.path({ src, dst, from? })` is a raw `COPY` for anything else.
 
 Whenever at least one workspace source atom is present, `node_modules` (root and per-workspace) is copied in as well. It comes from the `prod-deps` stage when `production` is set and from the builder stage otherwise. Setting `runner.baseImage` switches this off: no `node_modules` is copied automatically and the copy list must include everything the runner needs.
@@ -81,7 +80,7 @@ The overrides default as follows:
 
 ## Runtime version from engines
 
-The generator never writes a floating `latest` tag. The base image version comes from the target's `package.json`: `engines.bun` or `engines.node` picks the runtime version, and `engines.bun`, `engines.npm`, `engines.pnpm`, or `engines.yarn` picks the package manager version. The example declares `"engines": { "bun": "1.3.5" }`, which covers both, so every stage starts with `FROM oven/bun:1.3.5-alpine`. Alpine images are the default; pass `Docker.runtime.bun({ alpine: false })` for the Debian image. A missing engines field is a hard `EngineVersionMissing` error.
+The generator never writes a floating `latest` tag. The base image version comes from the target's `package.json`: `engines.bun` or `engines.node` picks the runtime version, and `engines.bun`, `engines.npm`, `engines.pnpm`, or `engines.yarn` picks the package manager version. The example declares `"engines": { "bun": "1.3.5" }`, which covers both, so every stage starts with `FROM oven/bun:1.3.5-alpine`. Alpine images are the default; pass `Docker.runtime.bun({ alpine: false })` for the Debian image. A missing engines field is a hard `EngineVersionMissing` error, and a value that is not an exact or major(.minor) version (for example `>=22`) fails with `EngineVersionInvalid`.
 
 ## Workspace closure resolution
 
@@ -102,8 +101,8 @@ The production Dockerfile is a multi-stage build: `base → deps → builder →
 - `base`: `FROM <runtime>:<engines version>[-alpine]`.
 - `deps`: copies every workspace `package.json` plus the lockfile and installs with scripts disabled.
 - `builder`: copies `node_modules` from `deps`, copies closure sources, runs the build atom.
-- `prod-deps` (optional): rewrites `workspaces` to the closure, drops `devDependencies`, installs with `--production`.
-- `runner`: creates a non-root user (`app`, uid/gid 1001 unless `user` says otherwise), sets `ENV` (with `NODE_ENV=production` unless you set it), `EXPOSE`, copies the declared artifacts with `--chown`, then `HEALTHCHECK`, optional `ENTRYPOINT`, `USER`, and `CMD`. A multi-platform value is rejected here with `PlatformMultiUnsupported`, because a single `FROM` line cannot express it.
+- `prod-deps` (optional): installs production dependencies for the closure only. Bun and Yarn Berry install from the untouched lockfile (`--filter` / `workspaces focus --production`); the other managers rewrite `workspaces` to the closure, drop `devDependencies`, and install with their production flag.
+- `runner`: creates a non-root user (`app`, uid/gid 1001 unless `user` says otherwise), sets `ENV` (with `NODE_ENV=production` unless you set it), `EXPOSE`, copies the declared artifacts with `--chown`, then `HEALTHCHECK` (an `httpGet` path must start with `/`; it probes with `wget` on Alpine images and with `node -e` or `bun -e` fetch otherwise), optional `ENTRYPOINT`, `USER`, and `CMD`.
 
 The dev Dockerfile is `base → dev`: one install with scripts enabled, closure sources copied in, `NODE_ENV=development`, the watch-mode command, no user or healthcheck.
 
@@ -117,12 +116,12 @@ Every generated file starts with a three-line header so the tooling can recognis
 
    ```bash
    konfig docker preview apps/api            # both files
-   konfig docker preview apps/api --prod-only
+   konfig docker preview apps/api --only prod
    ```
 
-   `--dev-only` is the counterpart. The target argument is a workspace directory relative to the current working directory.
+   `--only dev` is the counterpart. The target argument is a workspace directory relative to the current working directory.
 
-2. Write `Dockerfile` and `Dockerfile.dev` next to the target. `--out-dir` places them elsewhere, `--prod-only` / `--dev-only` writes one of the two, `--force` replaces unmanaged files.
+2. Write `Dockerfile` and `Dockerfile.dev` next to the target. `--out-dir` places them elsewhere, `--only prod|dev` writes one of the two, `--force` replaces unmanaged files.
 
    ```bash
    konfig docker write apps/api

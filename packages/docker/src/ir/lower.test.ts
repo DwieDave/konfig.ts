@@ -3,42 +3,38 @@ import { it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, expect } from "vitest"
-import { BuildAtom, CopyAtom, PlatformAtom } from "../spec"
+import { BuildAtom, CopyAtom } from "../spec"
 import type { DockerSpec } from "../spec"
-import type { Stage } from "./DockerfileIR"
-import { copiesOf, envOf, FromOf, Instr, requireDefined, requireStage, runsOf, stageOf } from "./irTesting"
-import { lower } from "./lower"
+import { FromOf, Instr, type Stage } from "./DockerfileIR"
+import { copiesOf, envOf, requireDefined, requireStage, runsOf, stageOf } from "./irTesting"
+import { lower, type LowerInput } from "./lower"
 
 const FIXTURES = new URL("../../fixtures/", import.meta.url).pathname
 
-const minimalSpec = (target: string): DockerSpec => ({
+const minimalSpec = (target: string): LowerInput => ({
   target,
-  runner: {
-    workdir: "/app/packages/app",
-    copy: [CopyAtom.cases.BuilderArtifact.make({ src: "dist", dst: "dist" })],
-    cmd: ["bun", "run", "dist/main.js"]
+  spec: {
+    runner: {
+      workdir: "/app/packages/app",
+      copy: [CopyAtom.cases.BuilderArtifact.make({ src: "dist", dst: "dist" })],
+      cmd: ["bun", "run", "dist/main.js"]
+    }
   }
 })
 
+const withSpec = (input: { readonly base: LowerInput; readonly over: Partial<DockerSpec> }): LowerInput => ({
+  ...input.base,
+  spec: { ...input.base.spec, ...input.over }
+})
+
+const withRunner = (
+  input: { readonly base: LowerInput; readonly runner: Partial<DockerSpec["runner"]> }
+): LowerInput => ({
+  ...input.base,
+  spec: { ...input.base.spec, runner: { ...input.base.spec.runner, ...input.runner } }
+})
+
 describe("lower (bun fixture)", () => {
-  it.effect("rejects a multi-arch platform with PlatformMultiUnsupported (FROM takes one value)", () =>
-    Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
-        runner: {
-          ...minimalSpec(`${FIXTURES}bun/packages/app`).runner,
-          platform: PlatformAtom.cases.PlatformMulti.make({ values: ["linux/amd64", "linux/arm64"] })
-        }
-      }
-
-      const exit = yield* Effect.exit(lower(spec))
-      expect(Exit.isFailure(exit)).toBe(true)
-
-      if (Exit.isFailure(exit)) {
-        expect(exit.cause.toString()).toContain("PlatformMultiUnsupported")
-      }
-    }).pipe(Effect.provide(NodeServices.layer)))
-
   it.effect("emits prod bundle with deps/builder/runner from base", () =>
     Effect.gen(function*() {
       const bundle = yield* lower(minimalSpec(`${FIXTURES}bun/packages/app`))
@@ -92,10 +88,10 @@ describe("lower (bun fixture)", () => {
 
   it.effect("dev stage is emitted only when spec.dev is set", () =>
     Effect.gen(function*() {
-      const specWithDev: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
-        dev: { cmd: ["bun", "--watch", "main.ts"] }
-      }
+      const specWithDev = withSpec({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
+        over: { dev: { cmd: ["bun", "--watch", "main.ts"] } }
+      })
 
       const bundle = yield* lower(specWithDev)
       expect(bundle.dev).toBeDefined()
@@ -104,11 +100,10 @@ describe("lower (bun fixture)", () => {
 
   it.effect("dev stage copies sharedRootFiles like the builder stage does", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
-        sharedRootFiles: ["tsconfig.base.json"],
-        dev: { cmd: ["bun", "--watch", "main.ts"] }
-      }
+      const spec = withSpec({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
+        over: { sharedRootFiles: ["tsconfig.base.json"], dev: { cmd: ["bun", "--watch", "main.ts"] } }
+      })
 
       const bundle = yield* lower(spec)
       const dev = bundle.dev?.stages.find((s) => s.name === "dev")
@@ -121,14 +116,14 @@ describe("lower (bun fixture)", () => {
 
   it.effect("workspaceSourceAll expands to per-workspace COPYs (including target)", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
+      const spec = withRunner({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
         runner: {
           workdir: "/app/packages/app",
           copy: [CopyAtom.cases.WorkspaceSourceAll.make({})],
           cmd: ["bun", "run", "main.ts"]
         }
-      }
+      })
 
       const bundle = yield* lower(spec)
       const runner = requireStage({ bundle, name: "runner" })
@@ -143,14 +138,14 @@ describe("lower (bun fixture)", () => {
 
   it.effect("workspaceSourceAll copies the target's own source into the runner so its cmd can run", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
+      const spec = withRunner({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
         runner: {
           workdir: "/app/packages/app",
           copy: [CopyAtom.cases.WorkspaceSourceAll.make({})],
           cmd: ["bun", "run", "main.ts"]
         }
-      }
+      })
 
       const bundle = yield* lower(spec)
       const runner = requireStage({ bundle, name: "runner" })
@@ -164,15 +159,15 @@ describe("lower (bun fixture)", () => {
 
   it.effect("isolated linker copies each closure workspace's node_modules (incl. target) from the deps stage", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
+      const spec = withRunner({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
         runner: {
           workdir: "/app/packages/app",
           production: true,
           copy: [CopyAtom.cases.WorkspaceSourceAll.make({})],
           cmd: ["bun", "run", "main.ts"]
         }
-      }
+      })
 
       const bundle = yield* lower(spec)
       const runner = requireStage({ bundle, name: "runner" })
@@ -190,10 +185,9 @@ describe("lower (bun fixture)", () => {
     Effect.gen(function*() {
       const base = minimalSpec(`${FIXTURES}bun/packages/app`)
 
-      const spec: DockerSpec = {
-        ...base,
+      const spec = withRunner({
+        base,
         runner: {
-          ...base.runner,
           production: true,
           removePaths: [
             "node_modules/sharp",
@@ -202,7 +196,7 @@ describe("lower (bun fixture)", () => {
             "node_modules/$(whoami)"
           ]
         }
-      }
+      })
 
       const bundle = yield* lower(spec)
       const stage = requireStage({ bundle, name: "prod-deps" })
@@ -222,10 +216,9 @@ describe("lower (bun fixture)", () => {
     Effect.gen(function*() {
       const base = minimalSpec(`${FIXTURES}bun/packages/app`)
 
-      const spec: DockerSpec = {
-        ...base,
+      const spec = withRunner({
+        base,
         runner: {
-          ...base.runner,
           production: true,
           removePaths: [
             "/app/node_modules/.bun/sharp@*",
@@ -234,7 +227,7 @@ describe("lower (bun fixture)", () => {
             "/app/node_modules/.bun/$(whoami)@?"
           ]
         }
-      }
+      })
 
       const bundle = yield* lower(spec)
       const stage = requireStage({ bundle, name: "prod-deps" })
@@ -254,7 +247,7 @@ describe("lower (bun fixture)", () => {
         const base = minimalSpec(`${FIXTURES}bun/packages/app`)
 
         const bundle = await Effect.runPromise(
-          lower({ ...base, runner: { ...base.runner, production: true, removePaths: [path] } }).pipe(
+          lower(withRunner({ base, runner: { production: true, removePaths: [path] } })).pipe(
             Effect.provide(NodeServices.layer)
           )
         )
@@ -279,13 +272,10 @@ describe("lower (bun fixture)", () => {
 
   it.effect("user-supplied env is sorted alphabetically and NODE_ENV not overridden", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
-        runner: {
-          ...minimalSpec(`${FIXTURES}bun/packages/app`).runner,
-          env: { ZED: "9", ABE: "1", NODE_ENV: "staging" }
-        }
-      }
+      const spec = withRunner({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
+        runner: { env: { ZED: "9", ABE: "1", NODE_ENV: "staging" } }
+      })
 
       const bundle = yield* lower(spec)
       const runner = requireStage({ bundle, name: "runner" })
@@ -300,10 +290,10 @@ describe("lower (bun fixture)", () => {
 describe("lower error paths", () => {
   it.effect("fails BuildScriptMissing when spec asks for a script the target doesn't have", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
-        build: BuildAtom.cases.BuildScript.make({ script: "nope" })
-      }
+      const spec = withSpec({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
+        over: { build: BuildAtom.cases.BuildScript.make({ script: "nope" }) }
+      })
 
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
@@ -316,14 +306,14 @@ describe("lower error paths", () => {
 
   it.effect("fails WorkspaceSourceUnknown for a workspace not in closure", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
+      const spec = withRunner({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
         runner: {
           workdir: "/app/packages/app",
           copy: [CopyAtom.cases.WorkspaceSource.make({ name: "@fix/other" })],
           cmd: ["bun", "run", "main.ts"]
         }
-      }
+      })
 
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
@@ -336,10 +326,10 @@ describe("lower error paths", () => {
 
   it.effect("fails SharedRootFileMissing for a missing shared file", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
-        ...minimalSpec(`${FIXTURES}bun/packages/app`),
-        sharedRootFiles: ["no-such-file.json"]
-      }
+      const spec = withSpec({
+        base: minimalSpec(`${FIXTURES}bun/packages/app`),
+        over: { sharedRootFiles: ["no-such-file.json"] }
+      })
 
       const exit = yield* Effect.exit(lower(spec))
       expect(Exit.isFailure(exit)).toBe(true)
@@ -352,13 +342,9 @@ describe("lower error paths", () => {
 
   it.effect("fails EngineVersionMissing when target has no engines.<runtime>", () =>
     Effect.gen(function*() {
-      const spec: DockerSpec = {
+      const spec: LowerInput = {
         target: `${FIXTURES}bun/packages/shared`,
-        runner: {
-          workdir: "/app/packages/shared",
-          copy: [],
-          cmd: ["bun", "run", "main.ts"]
-        }
+        spec: { runner: { workdir: "/app/packages/shared", copy: [], cmd: ["bun", "run", "main.ts"] } }
       }
 
       const exit = yield* Effect.exit(lower(spec))
@@ -376,7 +362,7 @@ describe("lower (bun < 1.2)", () => {
   it.effect("fails with BunVersionUnsupported when runner.production needs a filtered install", () =>
     Effect.gen(function*() {
       const base = minimalSpec(legacy)
-      const exit = yield* Effect.exit(lower({ ...base, runner: { ...base.runner, production: true } }))
+      const exit = yield* Effect.exit(lower(withRunner({ base, runner: { production: true } })))
       expect(Exit.isFailure(exit)).toBe(true)
 
       if (Exit.isFailure(exit)) {
@@ -406,10 +392,7 @@ describe("lower prod-deps stage (production install per package manager)", () =>
       Effect.gen(function*() {
         const base = minimalSpec(c.target)
 
-        const spec: DockerSpec = {
-          ...base,
-          runner: { ...base.runner, production: true }
-        }
+        const spec = withRunner({ base, runner: { production: true } })
 
         const bundle = yield* lower(spec)
         const stage = bundle.prod.stages.find((s) => s.name === "prod-deps")
@@ -441,7 +424,7 @@ describe("lower prod-deps stage (bun keeps bun.lock authoritative)", () => {
       yield* Effect.forEach(samples, (removePaths) =>
         Effect.gen(function*() {
           const base = minimalSpec(`${FIXTURES}bun/packages/app`)
-          const bundle = yield* lower({ ...base, runner: { ...base.runner, production: true, removePaths } })
+          const bundle = yield* lower(withRunner({ base, runner: { production: true, removePaths } }))
           const stage = stageOf("prod-deps")(bundle)
           const runs = runCmds(stage)
           expect(runs).toContain("bun install --ignore-scripts --frozen-lockfile --production --filter @fix/app")

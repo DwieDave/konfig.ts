@@ -2,7 +2,10 @@ import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
 import { describe, expect } from "vitest"
-import { allWorkspaces, closureOf, detectPm, findRoot, type Workspace } from "./WorkspaceGraph"
+import { CircularWorkspaceDep } from "../DockerError"
+import { closureByRef } from "../testing/closure"
+import { pkgJson, writeTree } from "../testing/tree"
+import { allWorkspaces, detectPm, findRoot, lookupWorkspace, type Workspace } from "./WorkspaceGraph"
 
 const FIXTURES = new URL("../../fixtures/", import.meta.url).pathname
 
@@ -143,7 +146,7 @@ describe("closureOf", () => {
     Effect.gen(function*() {
       const root = yield* findRoot(`${FIXTURES}bun`)
       const all = yield* allWorkspaces(root)
-      const closure = yield* closureOf({ all, target: "@fix/app" })
+      const closure = yield* closureByRef({ all, ref: "@fix/app" })
       expect(closure.map((w) => w.name)).toEqual(["@fix/shared", "@fix/util", "@fix/app"])
     }).pipe(Effect.provide(NodeServices.layer)))
 
@@ -151,13 +154,13 @@ describe("closureOf", () => {
     Effect.gen(function*() {
       const root = yield* findRoot(`${FIXTURES}bun`)
       const all = yield* allWorkspaces(root)
-      const closure = yield* closureOf({ all, target: "@fix/shared" })
+      const closure = yield* closureByRef({ all, ref: "@fix/shared" })
       expect(closure.map((w) => w.name)).toEqual(["@fix/shared"])
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it("WorkspaceNotFound when target is unknown", () => {
     const all: ReadonlyArray<Workspace> = [_ws("@a", {})]
-    const exit = Effect.runSyncExit(closureOf({ all, target: "@missing" }))
+    const exit = Effect.runSyncExit(closureByRef({ all, ref: "@missing" }))
     expect(Exit.isFailure(exit)).toBe(true)
 
     if (Exit.isFailure(exit)) {
@@ -168,7 +171,7 @@ describe("closureOf", () => {
   it("detects a cycle", () => {
     const a = _ws("@a", { "@b": "workspace:*" })
     const b = _ws("@b", { "@a": "workspace:*" })
-    const exit = Effect.runSyncExit(closureOf({ all: [a, b], target: "@a" }))
+    const exit = Effect.runSyncExit(closureByRef({ all: [a, b], ref: "@a" }))
     expect(Exit.isFailure(exit)).toBe(true)
 
     if (Exit.isFailure(exit)) {
@@ -180,7 +183,45 @@ describe("closureOf", () => {
     Effect.gen(function*() {
       const root = yield* findRoot(`${FIXTURES}bun`)
       const all = yield* allWorkspaces(root)
-      const closure = yield* closureOf({ all, target: "packages/app" })
+      const closure = yield* closureByRef({ all, ref: "packages/app" })
       expect(closure.map((w) => w.name)).toEqual(["@fix/shared", "@fix/util", "@fix/app"])
     }).pipe(Effect.provide(NodeServices.layer)))
+})
+
+describe("lookupWorkspace", () => {
+  const all: ReadonlyArray<Workspace> = [
+    { name: "@a", relDir: "packages/a", pkg: {}, hasBuildScript: false }
+  ]
+
+  it("resolves by name, relDir, or absolute path under root", () => {
+    expect(lookupWorkspace({ all, ref: "@a" })?.name).toBe("@a")
+    expect(lookupWorkspace({ all, ref: "packages/a" })?.name).toBe("@a")
+    expect(lookupWorkspace({ all, ref: "/r/packages/a", root: "/r" })?.name).toBe("@a")
+    expect(lookupWorkspace({ all, ref: "/r/packages/a" })).toBeUndefined()
+    expect(lookupWorkspace({ all, ref: "/r/packages/zz", root: "/r" })).toBeUndefined()
+  })
+})
+
+describe("CircularWorkspaceDep", () => {
+  it("carries the cycle in its message", () => {
+    expect(new CircularWorkspaceDep({ cycle: ["@a", "@b", "@a"] }).message).toBe(
+      "circular workspace dependency: @a -> @b -> @a"
+    )
+  })
+})
+
+describe("allWorkspaces pnpm-workspace.yaml", () => {
+  it.effect("fails WorkspaceConfigInvalid carrying the path when the yaml is malformed", () =>
+    Effect.gen(function*() {
+      const dir = yield* writeTree({
+        "package.json": pkgJson({ name: "root" }),
+        "pnpm-workspace.yaml": "packages: [unclosed",
+        "packages/a/package.json": pkgJson({ name: "a" })
+      })
+
+      const root = yield* findRoot(dir)
+      const failure = yield* Effect.flip(allWorkspaces(root))
+      expect(failure._tag).toBe("WorkspaceConfigInvalid")
+      expect("path" in failure && failure.path.endsWith("pnpm-workspace.yaml")).toBe(true)
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

@@ -2,15 +2,14 @@ import { Schema } from "effect"
 
 const BASE64_CHARSET_RE = /^[A-Za-z0-9+/]{40,}={0,2}$/
 const HEX_RE = /^[0-9a-fA-F]+$/
+const SK_KEY_RE = /sk_(live|test)_[A-Za-z0-9]{16,}/
+const MAX_PATH_SEGMENTS = 3
 
-// Heuristic for a base64-encoded secret, deliberately narrower than "long
-// base64 charset": excludes pure-hex strings (git SHAs, sha256 digests) and
-// requires a base64 special char or a mixed upper+lower+digit signal.
+const _looksLikePath = (s: string): boolean => s.startsWith("/") || s.split("/").length > MAX_PATH_SEGMENTS
+
 const _looksLikeBase64Secret = (s: string): boolean => {
-  if (!BASE64_CHARSET_RE.test(s)) return false
-
-  if (HEX_RE.test(s)) return false
-  const hasSpecial = s.includes("+") || s.includes("/") || s.includes("=")
+  if (!BASE64_CHARSET_RE.test(s) || HEX_RE.test(s) || _looksLikePath(s)) return false
+  const hasSpecial = s.includes("+") || s.includes("=")
   const hasUpper = /[A-Z]/.test(s)
   const hasLower = /[a-z]/.test(s)
   const hasDigit = /[0-9]/.test(s)
@@ -19,7 +18,7 @@ const _looksLikeBase64Secret = (s: string): boolean => {
 }
 
 const _looksLikeSecret = (s: string): boolean =>
-  s.startsWith("sk_") || s.includes("BEGIN PRIVATE KEY") || _looksLikeBase64Secret(s)
+  SK_KEY_RE.test(s) || s.includes("BEGIN PRIVATE KEY") || _looksLikeBase64Secret(s)
 
 const notASecret = Schema.makeFilter<string>(
   (s) =>
@@ -80,7 +79,7 @@ export type CopyAtom = typeof CopyAtom.Type
 
 export const HealthcheckAtom = Schema.TaggedUnion({
   HealthcheckHttpGet: {
-    path: Schema.String,
+    path: Schema.String.check(Schema.isStartingWith("/")),
     port: PortNumber,
     interval: Schema.optionalKey(Schema.String),
     timeout: Schema.optionalKey(Schema.String),
@@ -109,12 +108,9 @@ export const UserAtom = Schema.TaggedUnion({
 
 export type UserAtom = typeof UserAtom.Type
 
-const PlatformValue = Schema.Literals(["linux/amd64", "linux/arm64"])
-
 export const PlatformAtom = Schema.TaggedUnion({
   PlatformLinuxAmd64: {},
-  PlatformLinuxArm64: {},
-  PlatformMulti: { values: Schema.Array(PlatformValue) }
+  PlatformLinuxArm64: {}
 })
 
 export type PlatformAtom = typeof PlatformAtom.Type
@@ -150,7 +146,6 @@ export const DevSpec = Schema.Struct({
 export type DevSpec = typeof DevSpec.Type
 
 export const DockerSpec = Schema.Struct({
-  target: Schema.String,
   packageManager: Schema.optionalKey(PackageManagerAtom),
   runtime: Schema.optionalKey(RuntimeAtom),
   build: Schema.optionalKey(BuildAtom),
@@ -161,7 +156,6 @@ export const DockerSpec = Schema.Struct({
 
 export type DockerSpec = typeof DockerSpec.Type
 
-export const decodeDockerSpec = Schema.decodeUnknownEffect(DockerSpec)
+export const EngineVersion = Schema.String.check(Schema.isPattern(/^\d+(\.\d+){0,2}$/))
 
-// oxlint-disable-next-line app/no-sync-schema-apis
-export const decodeDockerSpecSync = Schema.decodeUnknownSync(DockerSpec)
+export const decodeDockerSpec = Schema.decodeUnknownEffect(DockerSpec)

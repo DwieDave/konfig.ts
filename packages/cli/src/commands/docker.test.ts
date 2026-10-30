@@ -6,9 +6,8 @@ import { Path } from "effect/Path"
 import { diffEffect, diffOne, emitFor, loadSpec, previewEffect, writeAtomic, writeEffect, writeOne } from "./docker"
 
 const minimalSpecBody = `
-import { makeDockerApp } from "@konfig.ts/docker"
-export default makeDockerApp({
-  target: "IGNORED",
+import { Docker } from "@konfig.ts/docker"
+export default Docker.app({
   runner: {
     workdir: "/app/packages/app",
     copy: [{ _tag: "BuilderArtifact", src: "dist", dst: "dist" }],
@@ -18,9 +17,8 @@ export default makeDockerApp({
 `
 
 const withDevSpecBody = `
-import { makeDockerApp } from "@konfig.ts/docker"
-export default makeDockerApp({
-  target: "IGNORED",
+import { Docker } from "@konfig.ts/docker"
+export default Docker.app({
   runner: {
     workdir: "/app/packages/app",
     copy: [{ _tag: "BuilderArtifact", src: "dist", dst: "dist" }],
@@ -149,7 +147,7 @@ describe("writeAtomic", () => {
       const p = yield* Path
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-atomic-" })
       const dest = p.join(dir, "Dockerfile")
-      yield* writeAtomic({ fs, path: dest, content: "FROM scratch\n" })
+      yield* writeAtomic({ path: dest, content: "FROM scratch\n" })
       const content = yield* fs.readFileString(dest)
       expect(content).toBe("FROM scratch\n")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
@@ -160,7 +158,7 @@ describe("writeAtomic", () => {
       const p = yield* Path
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-atomic-" })
       const dest = p.join(dir, "missing-subdir", "Dockerfile")
-      const failure = yield* Effect.flip(writeAtomic({ fs, path: dest, content: "FROM scratch\n" }))
+      const failure = yield* Effect.flip(writeAtomic({ path: dest, content: "FROM scratch\n" }))
       expect(failure._tag).toBe("DockerWriteError")
       expect(failure.path).toBe(dest)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
@@ -279,6 +277,22 @@ describe("diffOne", () => {
       expect(failure.kind).toBe("dev")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
+  it.effect("fails with DiffDrift when the header is valid but the on-disk body was edited", () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem
+      const p = yield* Path
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-docker-diffone-" })
+      const dest = p.join(dir, "Dockerfile")
+      const emitted = "# konfig-managed: @konfig.ts/docker\n# spec: docker.ts\n# hash: sha256:abc\nFROM scratch\n"
+      yield* fs.writeFileString(dest, emitted.replace("FROM scratch", "FROM alpine"))
+
+      const failure = yield* Effect.flip(
+        diffOne({ dest, emitted, kind: "prod", target: "packages/app", format: "summary" })
+      )
+
+      expect(failure._tag).toBe("DiffDrift")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+
   it.effect("fails with DiffDrift when the destination is entirely missing", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
@@ -304,7 +318,7 @@ describe("previewEffect", () => {
       const target = p.join(root, "packages", "app")
       yield* fs.writeFileString(p.join(target, "docker.ts"), minimalSpecBody)
 
-      yield* previewEffect({ target, prodOnly: false, devOnly: false })
+      yield* previewEffect({ target, only: Option.none() })
       const entries = yield* fs.readDirectory(target)
       expect(entries.sort()).toEqual(["docker.ts", "package.json"])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
@@ -318,7 +332,7 @@ describe("previewEffect", () => {
       const target = p.join(root, "packages", "app")
       yield* fs.writeFileString(p.join(target, "docker.ts"), notADockerAppBody)
 
-      const failure = yield* Effect.flip(previewEffect({ target, prodOnly: false, devOnly: false }))
+      const failure = yield* Effect.flip(previewEffect({ target, only: Option.none() }))
       expect(failure._tag).toBe("SpecNotADockerApp")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -332,7 +346,7 @@ describe("previewEffect", () => {
       yield* fs.writeFileString(p.join(target, "docker.ts"), withDevSpecBody)
       const lines: Array<string> = []
 
-      yield* previewEffect({ target, prodOnly: false, devOnly: false }).pipe(
+      yield* previewEffect({ target, only: Option.none() }).pipe(
         Effect.provideService(Console.Console, _capturingConsole(lines))
       )
 
@@ -356,8 +370,7 @@ describe("writeEffect", () => {
       yield* writeEffect({
         target,
         outDir: Option.none(),
-        prodOnly: false,
-        devOnly: false,
+        only: Option.none(),
         force: false
       })
 
@@ -381,8 +394,7 @@ describe("writeEffect", () => {
       yield* writeEffect({
         target,
         outDir: Option.some(outDir),
-        prodOnly: false,
-        devOnly: false,
+        only: Option.none(),
         force: false
       })
 
@@ -392,7 +404,7 @@ describe("writeEffect", () => {
       expect(inTargetExists).toBe(false)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("skips writing Dockerfile when devOnly is set", () =>
+  it.effect("skips writing Dockerfile when only dev is set", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const p = yield* Path
@@ -404,8 +416,7 @@ describe("writeEffect", () => {
       yield* writeEffect({
         target,
         outDir: Option.none(),
-        prodOnly: false,
-        devOnly: true,
+        only: Option.some("dev"),
         force: false
       })
 
@@ -424,7 +435,7 @@ describe("writeEffect", () => {
       yield* fs.writeFileString(p.join(target, "Dockerfile"), "FROM alpine\n# hand-written\n")
 
       const failure = yield* Effect.flip(
-        writeEffect({ target, outDir: Option.none(), prodOnly: false, devOnly: false, force: false })
+        writeEffect({ target, outDir: Option.none(), only: Option.none(), force: false })
       )
 
       expect(failure._tag).toBe("DockerWriteRefused")
@@ -442,8 +453,7 @@ describe("writeEffect", () => {
       yield* writeEffect({
         target,
         outDir: Option.none(),
-        prodOnly: false,
-        devOnly: false,
+        only: Option.none(),
         force: false
       })
 
@@ -452,7 +462,7 @@ describe("writeEffect", () => {
       expect(dev).toContain(`CMD ["bun","--watch","main.ts"]`)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
-  it.effect("skips Dockerfile.dev when prodOnly is set even if the spec declares a dev stage", () =>
+  it.effect("skips Dockerfile.dev when only prod is set even if the spec declares a dev stage", () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const p = yield* Path
@@ -464,8 +474,7 @@ describe("writeEffect", () => {
       yield* writeEffect({
         target,
         outDir: Option.none(),
-        prodOnly: true,
-        devOnly: false,
+        only: Option.some("prod"),
         force: false
       })
 

@@ -1,11 +1,5 @@
 import { Data } from "effect"
-import type { DockerfileBundle, From, HealthcheckIR, Instruction, Stage } from "./DockerfileIR"
-
-export const Instr = Data.taggedEnum<Instruction>()
-
-export const FromOf = Data.taggedEnum<From>()
-
-export const HealthOf = Data.taggedEnum<HealthcheckIR>()
+import { type DockerfileBundle, Instr, type Stage } from "./DockerfileIR"
 
 export const stageOf = (name: string) => (bundle: DockerfileBundle): Stage | undefined =>
   bundle.prod.stages.find((s) => s.name === name)

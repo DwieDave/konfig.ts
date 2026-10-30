@@ -1,8 +1,7 @@
 import { Docker } from "@konfig.ts/docker"
 
-// runner.production re-runs `bun install --production` after trimming workspaces to the closure.
+// runner.production re-installs production-only dependencies for the target closure with `bun install --filter`.
 export default Docker.app({
-  target: "apps/api",
   runner: {
     production: true,
     workdir: "/app/apps/api",

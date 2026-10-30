@@ -3,8 +3,9 @@ import { it } from "@effect/vitest"
 import { Effect, Exit } from "effect"
 import * as fc from "fast-check"
 import { describe, expect } from "vitest"
+import { closureByRef } from "../testing/closure"
 import { type Files, pkgJson as pkg, rootPkgJson as rootPkg, writeTree } from "../testing/tree"
-import { allWorkspaces, closureOf, findRoot, type PackageJson, type Workspace } from "./WorkspaceGraph"
+import { allWorkspaces, findRoot, type PackageJson, type Workspace } from "./WorkspaceGraph"
 
 const relDirsOf = (files: Files) =>
   Effect.gen(function*() {
@@ -84,7 +85,7 @@ describe("closureOf protocol-agnostic", () => {
           ws("shared", {})
         ]
 
-        const result = Effect.runSyncExit(closureOf({ all, target: "app" }))
+        const result = Effect.runSyncExit(closureByRef({ all, ref: "app" }))
         expect(Exit.isSuccess(result) && result.value.map((w) => w.name)).toEqual(["shared", "util", "app"])
       })
     )
@@ -94,7 +95,7 @@ describe("closureOf protocol-agnostic", () => {
     const all = [ws("app", { devDependencies: { tsconfig: "^1.0.0" } }), ws("tsconfig", {})]
 
     const run = (includeDev: boolean) => {
-      const r = Effect.runSyncExit(closureOf({ all, target: "app", includeDev }))
+      const r = Effect.runSyncExit(closureByRef({ all, ref: "app", includeDev }))
 
       return Exit.isSuccess(r) ? r.value.map((w) => w.name) : []
     }

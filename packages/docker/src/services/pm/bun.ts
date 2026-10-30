@@ -1,4 +1,4 @@
-import type { PackageManager } from "../PackageManager"
+import { type PackageManager, ProdInstall } from "../PackageManager"
 
 // Both lockfile formats are valid for Bun; detectPm reports which exists.
 export const bun: PackageManager = {
@@ -6,8 +6,9 @@ export const bun: PackageManager = {
   lockfileNames: ["bun.lock", "bun.lockb"],
   auxFiles: ["bunfig.toml"],
   installCommand: ["bun", "install", "--ignore-scripts"],
-  prodInstallCommand: ["bun", "install", "--ignore-scripts", "--frozen-lockfile"],
-  productionFlag: ["--production"],
+  prodInstall: ProdInstall.Targeted({
+    command: (target) => ["bun", "install", "--ignore-scripts", "--frozen-lockfile", "--production", "--filter", target]
+  }),
   nodeModulesLayout: "isolated",
   prependDepsRuns: () => []
 }

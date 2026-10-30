@@ -20,11 +20,26 @@ export class UnsupportedPm extends Data.TaggedError("UnsupportedPm")<{
 
 export class CircularWorkspaceDep extends Data.TaggedError("CircularWorkspaceDep")<{
   readonly cycle: ReadonlyArray<string>
-}> {}
+}> {
+  override get message(): string {
+    return `circular workspace dependency: ${this.cycle.join(" -> ")}`
+  }
+}
 
 export class EngineVersionMissing extends Data.TaggedError("EngineVersionMissing")<{
   readonly target: string
   readonly engineField: string
+}> {}
+
+export class EngineVersionInvalid extends Data.TaggedError("EngineVersionInvalid")<{
+  readonly target: string
+  readonly engineField: string
+  readonly value: string
+}> {}
+
+export class WorkspaceConfigInvalid extends Data.TaggedError("WorkspaceConfigInvalid")<{
+  readonly path: string
+  readonly cause: unknown
 }> {}
 
 export class BunVersionUnsupported extends Data.TaggedError("BunVersionUnsupported")<{
@@ -48,21 +63,6 @@ export class SharedRootFileMissing extends Data.TaggedError("SharedRootFileMissi
   readonly path: string
 }> {}
 
-export class PlatformMultiUnsupported extends Data.TaggedError("PlatformMultiUnsupported")<{
-  readonly target: string
-  readonly values: ReadonlyArray<string>
-}> {}
-
-export class DockerWriteRefused extends Data.TaggedError("DockerWriteRefused")<{
-  readonly path: string
-  readonly reason: string
-}> {}
-
-export class DockerWriteError extends Data.TaggedError("DockerWriteError")<{
-  readonly path: string
-  readonly cause: unknown
-}> {}
-
 export type AnyDockerError =
   | MonorepoRootNotFound
   | WorkspaceNotFound
@@ -70,10 +70,9 @@ export type AnyDockerError =
   | UnsupportedPm
   | CircularWorkspaceDep
   | EngineVersionMissing
+  | EngineVersionInvalid
+  | WorkspaceConfigInvalid
   | BunVersionUnsupported
   | BuildScriptMissing
   | WorkspaceSourceUnknown
   | SharedRootFileMissing
-  | PlatformMultiUnsupported
-  | DockerWriteRefused
-  | DockerWriteError

@@ -3,25 +3,12 @@ import type { YarnVariant } from "./services/PackageManager"
 import { BuildAtom, CopyAtom, HealthcheckAtom, PackageManagerAtom, PlatformAtom, RuntimeAtom, UserAtom } from "./spec"
 import type { DockerSpec } from "./spec"
 
-export const DockerAppTypeId: unique symbol = Symbol.for("@konfig.ts/docker/DockerApp")
-
-export type DockerAppTypeId = typeof DockerAppTypeId
-
-interface Variance {
-  readonly _A: (_: never) => never
-}
-
-const variance: Variance = { _A: (_: never) => _ }
+const DockerAppTypeId: unique symbol = Symbol.for("@konfig.ts/docker/DockerApp")
 
 export interface DockerApp {
-  readonly [DockerAppTypeId]: Variance
+  readonly [DockerAppTypeId]: true
   readonly spec: DockerSpec
 }
-
-export const makeDockerApp = (spec: DockerSpec): DockerApp => ({
-  [DockerAppTypeId]: variance,
-  spec
-})
 
 export const isDockerApp = (u: unknown): u is DockerApp => isRecord(u) && DockerAppTypeId in u
 
@@ -29,7 +16,7 @@ const _omitUndef = <T extends object>(o: T): T =>
   unsafeCoerce(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)), "fromEntries widens T")
 
 export const Docker = {
-  app: (spec: DockerSpec): DockerApp => makeDockerApp(spec),
+  app: (spec: DockerSpec): DockerApp => ({ [DockerAppTypeId]: true, spec }),
   pm: {
     bun: (): PackageManagerAtom => PackageManagerAtom.cases.BunPm.make({}),
     npm: (): PackageManagerAtom => PackageManagerAtom.cases.NpmPm.make({}),
@@ -85,8 +72,6 @@ export const Docker = {
   },
   platform: {
     linuxAmd64: (): PlatformAtom => PlatformAtom.cases.PlatformLinuxAmd64.make({}),
-    linuxArm64: (): PlatformAtom => PlatformAtom.cases.PlatformLinuxArm64.make({}),
-    multi: (values: ReadonlyArray<"linux/amd64" | "linux/arm64">): PlatformAtom =>
-      PlatformAtom.cases.PlatformMulti.make({ values })
+    linuxArm64: (): PlatformAtom => PlatformAtom.cases.PlatformLinuxArm64.make({})
   }
 } as const
