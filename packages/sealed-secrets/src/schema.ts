@@ -25,3 +25,6 @@ export const SealedSecretSchema = Schema.Struct({
   metadata: objectMetaSchema,
   spec: SealedSecretSpecSchema
 })
+
+export type SealedSecretScope = "strict" | "namespace-wide" | "cluster-wide"
+

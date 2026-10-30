@@ -1,6 +1,6 @@
 import { RenderError } from "@konfig.ts/core"
 import { Effect } from "effect"
-import type { SopsSecret } from "./crd"
+import type { SopsSecret } from "./schema"
 
 export type SopsMetadata = SopsSecret["sops"]
 

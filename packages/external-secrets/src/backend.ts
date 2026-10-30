@@ -1,5 +1,5 @@
 import { Manifest, RenderError } from "@konfig.ts/core"
-import { type EmitInput, SecretBackend, secretMeta } from "@konfig.ts/k8s"
+import { Backend } from "@konfig.ts/k8s"
 import { Effect } from "effect"
 import type {
   ExternalSecret,
@@ -11,7 +11,7 @@ import type {
 } from "./crd"
 import { type GoDuration, InvalidRefreshIntervalError, isGoDuration } from "./duration"
 
-export interface ExternalSecretsBackendOptions<K extends string> {
+interface ExternalSecretsBackendOptions<K extends string = string> {
   readonly secretStoreRef: SecretStoreRef
   readonly refreshInterval?: GoDuration
   readonly remoteRef?: (key: K) => ExternalSecretRemoteRef
@@ -29,7 +29,7 @@ export const _esoData = <K extends string>(input: {
   input.keys.map((key) => ({ secretKey: key, remoteRef: (input.remoteRef ?? _identityRemoteRef)(key) }))
 
 const _esoSpec = <N extends string, K extends string>(
-  { base, opts }: EmitInput<N, K, ExternalSecretsBackendOptions<K>, false>
+  { base, opts }: Omit<Backend.EmitInput<N, K, ExternalSecretsBackendOptions, false>, "label">
 ): ExternalSecretSpec => ({
   refreshInterval: opts.refreshInterval,
   secretStoreRef: {
@@ -41,16 +41,16 @@ const _esoSpec = <N extends string, K extends string>(
 })
 
 const _build = <N extends string, K extends string>(
-  { base, opts }: EmitInput<N, K, ExternalSecretsBackendOptions<K>, false>
+  { base, opts }: Omit<Backend.EmitInput<N, K, ExternalSecretsBackendOptions, false>, "label">
 ): ExternalSecret => ({
   apiVersion: "external-secrets.io/v1",
   kind: "ExternalSecret",
-  metadata: secretMeta(base),
+  metadata: Backend.secretMeta(base),
   spec: _esoSpec({ base, opts })
 })
 
 const _emit = <N extends string, K extends string>(
-  { base, label, opts }: EmitInput<N, K, ExternalSecretsBackendOptions<K>, false> & { readonly label: string }
+  { base, label, opts }: Backend.EmitInput<N, K, ExternalSecretsBackendOptions, false>
 ): Manifest.Manifest<ExternalSecret> =>
   Manifest.make<ExternalSecret>(() =>
     _isValidInterval(opts.refreshInterval)
@@ -64,12 +64,5 @@ const _emit = <N extends string, K extends string>(
   )
 
 export const ExternalSecrets = {
-  backend: <N extends string, K extends string>(
-    opts: ExternalSecretsBackendOptions<K>
-  ): SecretBackend<N, K, false, ExternalSecret> =>
-    SecretBackend.make<N, K, false, ExternalSecret>({
-      tag: "ExternalSecrets",
-      requiresSource: false,
-      emit: ({ base, label }) => _emit({ base, label, opts })
-    })
+  backend: Backend.define({ tag: "ExternalSecrets", requiresSource: false, emit: _emit })
 }

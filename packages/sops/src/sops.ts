@@ -1,8 +1,6 @@
 import { boundary } from "@konfig.ts/core"
-import { encryptWithCli } from "@konfig.ts/k8s"
-import { type Duration, Effect } from "effect"
-import type { SopsRecipients } from "./crd"
-import { SopsRecipientsSchema } from "./schema"
+import { Effect } from "effect"
+import { type SopsRecipients, SopsRecipientsSchema } from "./schema"
 
 const _decodeRecipients = boundary({
   schema: SopsRecipientsSchema,
@@ -43,21 +41,10 @@ export const _sopsArgs = (input: {
   "/dev/stdin"
 ]
 
-export const sopsEncrypt = (input: {
-  readonly plainYaml: string
+export const sopsArgs = (input: {
   readonly recipients: SopsRecipients
   readonly encryptedRegex?: string | undefined
-  readonly timeout?: Duration.Input | undefined
-  readonly label: string
 }) =>
   _decodeRecipients(input.recipients).pipe(
-    Effect.flatMap((recipients) =>
-      encryptWithCli({
-        bin: "sops",
-        args: _sopsArgs({ recipients, encryptedRegex: input.encryptedRegex }),
-        stdin: input.plainYaml,
-        label: input.label,
-        timeout: input.timeout
-      })
-    )
+    Effect.map((recipients) => _sopsArgs({ recipients, encryptedRegex: input.encryptedRegex }))
   )

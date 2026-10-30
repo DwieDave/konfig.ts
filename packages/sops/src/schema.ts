@@ -66,3 +66,7 @@ export const SopsEncryptedSecretSchema = Schema.Struct({
   spec: SopsSecretSpecSchema,
   sops: SopsMetadataSchema
 })
+
+export type SopsSecret = typeof SopsEncryptedSecretSchema.Type
+
+export type SopsRecipients = typeof SopsRecipientsSchema.Type

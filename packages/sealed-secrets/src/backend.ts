@@ -1,49 +1,22 @@
-import { Manifest } from "@konfig.ts/core"
-import { type EmitInput, encryptVia, plainSecret, SecretBackend } from "@konfig.ts/k8s"
-import { type Duration, Effect } from "effect"
-import type { SealedSecret, SealedSecretScope } from "./crd"
-import { parseSealed, resolveCertPath, runKubeseal } from "./kubeseal"
+import { Backend } from "@konfig.ts/k8s"
+import { Effect } from "effect"
+import { _kubesealArgs, resolveCertPath } from "./kubeseal"
+import { SealedSecretSchema, type SealedSecretScope } from "./schema"
 
-export interface SealedSecretsBackendOptions {
+export interface SealedSecretsBackendOptions extends Backend.CliOptions {
   readonly scope?: SealedSecretScope
   readonly certPath?: string
-  readonly type?: string
-  readonly timeout?: Duration.Input
 }
 
-const _emit = <N extends string, K extends string>(
-  input: EmitInput<N, K, SealedSecretsBackendOptions> & { readonly label: string }
-): Manifest.Manifest<SealedSecret> =>
-  Manifest.make<SealedSecret>((_ctx) => {
-    const { label } = input
-
-    return resolveCertPath({ certPath: input.opts.certPath, label }).pipe(
-      Effect.flatMap((certPath) =>
-        encryptVia({
-          base: input.base,
-          label,
-          toPlain: (stringData) => plainSecret({ base: input.base, type: input.opts.type ?? "Opaque", stringData }),
-          encrypt: (plainYaml) =>
-            runKubeseal({
-              plainYaml,
-              certPath,
-              scope: input.opts.scope ?? "strict",
-              timeout: input.opts.timeout,
-              label
-            }),
-          verify: (stdout) => parseSealed({ stdout, label })
-        })
-      )
-    )
-  })
-
 export const SealedSecrets = {
-  backend: <N extends string, K extends string>(
-    opts: SealedSecretsBackendOptions = {}
-  ): SecretBackend<N, K, true, SealedSecret> =>
-    SecretBackend.make({
-      tag: "SealedSecrets",
-      requiresSource: true,
-      emit: ({ base, label }) => _emit({ base, label, opts })
-    })
+  backend: Backend.encrypting({
+    tag: "SealedSecrets",
+    precheck: ({ label, opts }: { readonly opts: SealedSecretsBackendOptions; readonly label: string }) =>
+      resolveCertPath({ certPath: opts.certPath, label }),
+    toPlain: ({ base, opts, stringData }) => Backend.plainSecret({ base, type: opts.type ?? "Opaque", stringData }),
+    bin: "kubeseal",
+    args: ({ opts, pre }) => Effect.succeed(_kubesealArgs({ certPath: pre, scope: opts.scope ?? "strict" })),
+    schema: SealedSecretSchema,
+    schemaLabel: "SealedSecret"
+  })
 }

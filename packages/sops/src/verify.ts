@@ -1,9 +1,7 @@
-import { boundary, type BoundaryDecodeError, RenderError } from "@konfig.ts/core"
-import { decodeYamlOutput } from "@konfig.ts/k8s"
+import { boundary, type BoundaryDecodeError, decodeYamlOutput, RenderError } from "@konfig.ts/core"
 import { Array as Arr, Data, Effect, Option } from "effect"
-import type { SopsSecret } from "./crd"
 import { compilePolicy, mustEncrypt } from "./encryption-policy"
-import { SopsEncryptedSecretSchema } from "./schema"
+import { SopsEncryptedSecretSchema, type SopsSecret } from "./schema"
 
 const _decodeSopsSecret = boundary({
   schema: SopsEncryptedSecretSchema,

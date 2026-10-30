@@ -1,72 +1,37 @@
-import { Manifest } from "@konfig.ts/core"
-import { type EmitInput, encryptVia, SecretBackend, secretMeta } from "@konfig.ts/k8s"
-import { type Duration, Effect } from "effect"
-import type { SopsRecipients, SopsSecret } from "./crd"
+import { Backend } from "@konfig.ts/k8s"
 import { compileRegex } from "./encryption-policy"
 import { passthroughManifest } from "./passthrough"
-import { sopsEncrypt } from "./sops"
-import { parseVerified } from "./verify"
+import { SopsEncryptedSecretSchema, type SopsRecipients } from "./schema"
+import { sopsArgs } from "./sops"
+import { _assertEncrypted } from "./verify"
 
-export interface SopsBackendOptions {
+interface SopsBackendOptions extends Backend.CliOptions {
   readonly recipients: SopsRecipients
-  readonly type?: string
   readonly encryptedRegex?: string
-  readonly timeout?: Duration.Input
 }
 
-const _plainCR = <N extends string, K extends string>(
-  input: EmitInput<N, K, SopsBackendOptions> & { readonly stringData: Record<string, string> }
-) => ({
-  apiVersion: "isindir.github.com/v1alpha3" as const,
-  kind: "SopsSecret" as const,
-  metadata: secretMeta(input.base),
-  spec: {
-    secretTemplates: [{ name: input.base.name, type: input.opts.type ?? "Opaque", stringData: input.stringData }]
-  }
+const _backend = Backend.encrypting({
+  tag: "Sops",
+  precheck: ({ label, opts }: { readonly opts: SopsBackendOptions; readonly label: string }) =>
+    compileRegex({ field: "encrypted_regex", raw: opts.encryptedRegex ?? "", label }),
+  toPlain: ({ base, opts, stringData }) => ({
+    apiVersion: "isindir.github.com/v1alpha3",
+    kind: "SopsSecret",
+    metadata: Backend.secretMeta(base),
+    spec: { secretTemplates: [{ name: base.name, type: opts.type ?? "Opaque", stringData }] }
+  }),
+  bin: "sops",
+  args: ({ opts }) => sopsArgs({ recipients: opts.recipients, encryptedRegex: opts.encryptedRegex }),
+  schema: SopsEncryptedSecretSchema,
+  schemaLabel: "SopsSecret",
+  verify: ({ decoded, label }) => _assertEncrypted({ secret: decoded, label })
 })
 
-const _checkRegex = (input: { readonly raw: string | undefined; readonly label: string }) =>
-  compileRegex({ field: "encrypted_regex", raw: input.raw ?? "", label: input.label })
+const _passthrough = Backend.define({
+  tag: "Sops.passthrough",
+  requiresSource: false,
+  emit: ({ base, label, opts }: Backend.EmitInput<string, string, { readonly file: string }, false>) =>
+    passthroughManifest({ base, label, file: opts.file })
+})
 
-const _emit = <N extends string, K extends string>(
-  input: EmitInput<N, K, SopsBackendOptions> & { readonly label: string }
-): Manifest.Manifest<SopsSecret> =>
-  Manifest.make<SopsSecret>((_ctx) => {
-    const { label } = input
-
-    return _checkRegex({ raw: input.opts.encryptedRegex, label }).pipe(Effect.flatMap(() =>
-      encryptVia({
-        base: input.base,
-        label,
-        toPlain: (stringData) => _plainCR({ ...input, stringData }),
-        encrypt: (plainYaml) =>
-          sopsEncrypt({
-            plainYaml,
-            recipients: input.opts.recipients,
-            encryptedRegex: input.opts.encryptedRegex,
-            timeout: input.opts.timeout,
-            label
-          }),
-        verify: (yamlText) => parseVerified({ yamlText, label })
-      })
-    ))
-  })
-
-export const Sops = {
-  backend: <N extends string, K extends string>(
-    opts: SopsBackendOptions
-  ): SecretBackend<N, K, true, SopsSecret> =>
-    SecretBackend.make({
-      tag: "Sops",
-      requiresSource: true,
-      emit: ({ base, label }) => _emit({ base, label, opts })
-    }),
-  passthrough: <N extends string, K extends string>(opts: {
-    readonly file: string
-  }): SecretBackend<N, K, false, SopsSecret> =>
-    SecretBackend.make({
-      tag: "Sops.passthrough",
-      requiresSource: false,
-      emit: ({ base, label }) => passthroughManifest({ base, label, file: opts.file })
-    })
-}
+export const Sops = { backend: _backend, passthrough: _passthrough }

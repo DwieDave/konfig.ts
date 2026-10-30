@@ -13,7 +13,7 @@ import type {
   SecretSource
 } from "@konfig.ts/env"
 import { Layer, Match, Predicate } from "effect"
-import type { SecretBackend } from "./backend"
+import type { SecretBackend } from "./backendKit"
 import type { EnvVar } from "./env"
 import type { StringMap } from "./meta"
 import { bindSecret, type DeclaredSecret } from "./secretBind"

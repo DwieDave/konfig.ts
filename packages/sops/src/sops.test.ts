@@ -1,11 +1,10 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { stubSpawner } from "@konfig.ts/core/testing"
 import { Effect, Exit, Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it as plainIt } from "vitest"
-import type { SopsRecipients } from "./crd"
-import { _recipientArgs, _sopsArgs, sopsEncrypt } from "./sops"
+import type { SopsRecipients } from "./schema"
+import { _recipientArgs, _sopsArgs, sopsArgs } from "./sops"
 
 const _agePool = fc.stringMatching(/^age1[0-9a-z]{58}$/)
 
@@ -30,19 +29,17 @@ describe("_recipientArgs properties", () => {
   })
 })
 
-describe("sopsEncrypt recipient rejection property", () => {
+describe("sopsArgs recipient rejection property", () => {
   const _tainted = fc.tuple(_agePool, fc.constantFrom(",", ";", " ", "$", "`", "|"), fc.string({ minLength: 1 }))
     .map(([age, sep, tail]) => `${age}${sep}${tail}`)
 
-  it.effect("rejects any recipient that is not a plain age key, without spawning sops", () =>
+  it.effect("rejects any recipient that is not a plain age key", () =>
     Effect.promise(() =>
       fc.assert(fc.asyncProperty(_tainted, (bad) =>
         Effect.runPromise(
           Effect.gen(function*() {
             const exit = yield* Effect.exit(
-              sopsEncrypt({ plainYaml: "url: u\n", label: "L", recipients: { age: [bad] } }).pipe(
-                Effect.provide(stubSpawner({ respond: () => ({ stdout: "ok: yes\n" }) }))
-              )
+              sopsArgs({ recipients: { age: [bad] } })
             )
 
             expect(Exit.isFailure(exit)).toBe(true)
@@ -62,19 +59,17 @@ describe("_sopsArgs properties", () => {
   })
 })
 
-describe("sopsEncrypt validates recipients itself", () => {
-  it.effect("rejects an unvalidated age recipient containing a comma, without spawning sops", () =>
+describe("sopsArgs validates recipients itself", () => {
+  it.effect("rejects an unvalidated age recipient containing a comma", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(
-        sopsEncrypt({
-          plainYaml: "url: u\n",
-          label: "L",
+        sopsArgs({
           recipients: {
             age: [
               "age1stub00000000000000000000000000000000000000000000000000ends,age1injected00000000000000000000000000000000000000000leak"
             ]
           }
-        }).pipe(Effect.provide(stubSpawner({ respond: () => ({ stdout: "ok: yes\n" }) })))
+        })
       )
 
       expect(Exit.isFailure(exit)).toBe(true)

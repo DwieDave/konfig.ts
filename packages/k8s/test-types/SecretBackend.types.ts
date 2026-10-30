@@ -1,9 +1,31 @@
-import type { Manifest } from "@konfig.ts/core"
+import { Manifest } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
-import type { BackendEmitInput, SecretBackend } from "@konfig.ts/k8s"
-import { Environment, plainSecret, Secret, SecretBackend as BackendFactory, secretMeta } from "@konfig.ts/k8s"
+import type { SecretBackend } from "@konfig.ts/k8s"
+import { Backend, Environment, Secret } from "@konfig.ts/k8s"
+import { Effect } from "effect"
 
-type _BarrelHelpers = [typeof plainSecret, typeof secretMeta, typeof BackendFactory.make]
+type BackendEmitInput<N extends string, K extends string, RS extends boolean> = Backend.BaseInput<N, K, RS>
+
+type _BarrelHelpers = [typeof Backend.plainSecret, typeof Backend.secretMeta, typeof Backend.define]
+
+interface DefinedOpts {
+  readonly flag?: boolean
+}
+
+const defined = Backend.define({
+  tag: "Defined",
+  requiresSource: false,
+  emit: <N extends string, K extends string>(input: Backend.EmitInput<N, K, DefinedOpts, false>) =>
+    Manifest.make(() => Effect.succeed({ kind: input.base.name }))
+})
+
+const inferred: Backend.Contract<"n", "k", false, { readonly kind: string }> = defined()
+
+type _DefineInfersNameAndKeys = Expect<
+  Equal<typeof inferred, SecretBackend<"n", "k", false, { readonly kind: string }>>
+>
+
+void inferred
 
 type Expect<T extends true> = T
 
@@ -68,7 +90,8 @@ export type _Tests = readonly [
   _Backend_NotAssignable,
   _BackendEmitInputRequired,
   _BackendEmitInputOptional,
-  _Defaulted
+  _Defaulted,
+  _DefineInfersNameAndKeys
 ]
 
 void reqFalse

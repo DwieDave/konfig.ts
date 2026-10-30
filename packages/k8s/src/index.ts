@@ -3,16 +3,9 @@ import { bindEnvironment } from "./environmentBind"
 import { Secret as _SecretIdentity } from "./identity"
 import { bindSecret } from "./secretBind"
 
-export {
-  type BackendEmitInput,
-  decodeYamlOutput,
-  type EmitInput,
-  encryptVia,
-  encryptWithCli,
-  plainSecret,
-  SecretBackend,
-  secretMeta
-} from "./backend"
+export { Backend } from "./api"
+
+export type { SecretBackend } from "./backendKit"
 
 export { Container, Pod } from "./container"
 

@@ -1,8 +1,8 @@
 import { Effect, Exit } from "effect"
 import * as fc from "fast-check"
 import { describe, expect, it } from "vitest"
-import type { SopsSecret } from "./crd"
 import { _assertCoversKeys, _assertSingleTemplate, _restampIdentity } from "./passthrough"
+import type { SopsSecret } from "./schema"
 import { _assertEncrypted } from "./verify"
 
 const ident = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/)

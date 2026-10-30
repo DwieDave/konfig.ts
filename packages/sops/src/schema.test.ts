@@ -1,8 +1,7 @@
 import { Effect, Exit, Schema } from "effect"
 import * as fc from "fast-check"
 import { describe, it } from "vitest"
-import type { SopsRecipients } from "./crd"
-import { SopsRecipientsSchema } from "./schema"
+import { type SopsRecipients, SopsRecipientsSchema } from "./schema"
 
 const decode = (value: SopsRecipients) => Effect.runSyncExit(Schema.decodeEffect(SopsRecipientsSchema)(value))
 

@@ -1,8 +1,8 @@
 import { Manifest, RenderError } from "@konfig.ts/core"
-import type { BackendEmitInput } from "@konfig.ts/k8s"
+import type { Backend } from "@konfig.ts/k8s"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
-import type { SopsSecret } from "./crd"
+import type { SopsSecret } from "./schema"
 import { parseVerified } from "./verify"
 
 type _Record = Readonly<Record<string, string>>
@@ -130,7 +130,7 @@ const _readFile = (input: { readonly file: string; readonly label: string }) =>
   })
 
 export const passthroughManifest = <N extends string, K extends string>(input: {
-  readonly base: BackendEmitInput<N, K, false>
+  readonly base: Backend.BaseInput<N, K, false>
   readonly file: string
   readonly label: string
 }): Manifest.Manifest<SopsSecret> =>

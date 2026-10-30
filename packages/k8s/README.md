@@ -71,6 +71,12 @@ backend's CRs ([sops](../sops), [sealed-secrets](../sealed-secrets),
 [Stakater Reloader](https://github.com/stakater/Reloader) (rolls on in-cluster
 change); `hashSecretValues` stamps a pod-spec hash that rolls on re-render.
 
+**Writing a backend** — `Backend.define({ tag, requiresSource, emit })` turns one
+declaration into a `(opts) => SecretBackend`; `emit` receives `{ base, opts, label }`.
+`Backend.encrypting({ tag, precheck, toPlain, bin, args, schema, schemaLabel, verify? })`
+adds the shared plaintext, CLI, decode and verify pipeline. `Backend.plainSecret` and
+`Backend.secretMeta` build the plain Secret and metadata.
+
 ## Internals
 
 Built on `@konfig.ts/core`'s `Manifest<A>` carrier; refs and `Dep.*` needs
