@@ -14,7 +14,7 @@ import { Aside } from "@/components/docs"
 1. The CLI finds `konfig.json` by walking up from the working directory and decodes it strictly. It then resolves the entry file for the env: `<root>/<envs.<env>.entry>`, or `<root>/env/<env>.ts` when the env is not listed. From the env name and the `--cluster`, `--k8s-version`, and `--flag k=v` flags it builds the render context. Errors at this step: `ConfigNotFound`, `ConfigParseError`, `EnvEntryNotFound`.
 2. It imports the entry module. The default export must be an Effect: an `AppOfApps.fromModules({ ... })` or `Bundle.fromModules({ ... })` program. A missing default export, a non-Effect, or an import failure fails with `EnvLoadError { entry, cause }`.
 3. It runs that Effect. The result is a list of Applications (or Bundles), each carrying its `manifests` array.
-4. It renders every manifest. Each manifest's `render` is called with the context; concurrency is unbounded within an app, four apps at a time. Results are flattened: typed objects, arrays, and raw YAML blobs are all accepted, and raw YAML is split into documents. Values without a string `kind` and `metadata.name` are dropped silently.
+4. It renders every manifest. Each manifest's `render` is called with the context; concurrency is unbounded within an app, four apps at a time. Results are flattened: typed objects, arrays, and raw YAML blobs are all accepted, and raw YAML is split into documents. `null` and empty documents are skipped; any other value lacking a string `kind` and `metadata.name` fails with `InvalidOutputObject`.
 5. It assigns file names. Each document becomes one file at `<outDir>/<env>[/<cluster>]/<app>/<Kind>-<name>.yaml`, where `outDir` is `<root>/<outDir.manifests>` from `konfig.json`. The Argo CD Application CR for each app is written to `<outDir>/<env>[/<cluster>]/<apps-name>/Application-<app>.yaml`; `apps-name` is the `name` given to `AppOfApps.fromModules`, default `apps`. Bundles emit no CR.
 6. It writes atomically. Files are staged under `<outDir>/<env>[/<cluster>].tmp` with mode `0600`. The previous live directory is then removed and the staged tree renamed into its place, so a build that dies while rendering never touches the previous output.
 
@@ -77,9 +77,9 @@ Every manifest's `render` fails with `AnyRenderError`, a tagged union you can `E
 | `RenderError` | General render failures: secret sources, sops verification, sealed-secrets, missing backend source, and anything a builder cannot type more precisely. Carries `message` and optional `cause`. |
 | `EmbedYamlReadError` | `Manifest.embedYaml({ path })` when the file cannot be read. Carries `path` and `cause`. |
 | `BoundaryDecodeError` | Schema decode failures at a boundary (`boundary({ schema, label? })`), for example a malformed `SopsSecret` document. Carries `schema` (the label, default `"boundary"`) and `cause`. |
-| `HelmVersionTooLow` | `Helm.release({ minVersion })`, `konfig helm fetch`, or `konfig crd` when the `helm` binary is older than required or missing. Carries `required` and `found`. |
-| `HelmRenderError` | Every other `Helm.release` failure (pull, template, digest); wraps `HelmDigestMismatch` and process errors as `cause`. Carries `chart`, `version`, `cause`. |
-| `HelmDigestMismatch` | Chart tarball hash differs from `digest`; carries `chart`, `version`, `expected`, `actual`. Reaches you as the `cause` of a `HelmRenderError`. |
+| `HelmVersionTooLow` | `Helm.release({ minVersion })`, `konfig helm fetch`, or `konfig crd` when the `helm` binary was read and is older than required or its version is unparseable. Carries `required` and `found`. |
+| `HelmRenderError` | Every other `Helm.release` failure (pull, template), including a missing or failing `helm` binary (phase `version-check`); wraps the process error as `cause`. Carries `chart`, `version`, `phase`, `cause`. |
+| `HelmDigestMismatch` | Chart tarball hash differs from `digest`; carries `chart`, `version`, `expected`, `actual`. Surfaced directly, not wrapped in a `HelmRenderError`. |
 | `CrdExtractError` | `konfig crd extract` / `verify` failures for one chart; carries `chart` and `cause`. |
 
 `EmbedYamlReadError` and `HelmRenderError` are members of the union and are matched by tag; core does not export their classes.

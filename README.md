@@ -142,7 +142,7 @@ accepts any 4.x build from 4.0.0 on:
 
 - `effect@^4.0.0`, a peer dependency of every package.
 - `@effect/platform-node@^4.0.0`, a regular dependency of
-  `@konfig.ts/core` and the CLI (`render()` needs the Node filesystem and
+  `@konfig.ts/core` and the CLI (`renderAllYaml` / `renderAllYamlEffect` need the Node filesystem and
   subprocess services), so it is installed automatically.
 
 ## Quickstart

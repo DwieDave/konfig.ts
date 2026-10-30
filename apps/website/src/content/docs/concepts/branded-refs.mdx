@@ -65,7 +65,7 @@ For anything outside that shape, use `Deployment.make` and `Service.make` direct
 
 A Deployment does not restart when a Secret it references changes. konfig.ts has two ways to make it roll.
 
-The first relies on Stakater Reloader. `Workload.web({ reloader: "stakater" })` adds `reloader.stakater.com/auto: "true"` to the Deployment. `"stakater-strict"` adds `reloader.stakater.com/match: "true"` as well. `{ secrets: [...], configMaps: [...] }` emits the comma-joined `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` annotations. `"off"` (the default) emits nothing. This requires Stakater Reloader in the cluster and rolls on in-cluster change.
+The first relies on Stakater Reloader. `Workload.web({ reloader: "stakater" })` adds `reloader.stakater.com/auto: "true"` to the Deployment. `{ secrets: [...], configMaps: [...] }` emits the comma-joined `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` annotations. `"off"` (the default) emits nothing. This requires Stakater Reloader in the cluster and rolls on in-cluster change.
 
 The second is a fingerprint of the values in the pod template. `hashSecretValues({ values, salt })` returns a SHA-256 hex digest of the secret's values (netstring-framed, prefixed with the version tag `konfig/secret-values-hash/v1` and the salt, keys sorted). Put it in a pod annotation and the pod template changes whenever the values change at render time. Values are captured at build time only; a rotation between builds needs the reloader.
 

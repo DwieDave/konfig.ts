@@ -49,13 +49,13 @@ const bound = Secret.bind({
 | Export | Purpose |
 | --- | --- |
 | `Sops.passthrough` | `({ file })`: read and verify the file's `SopsSecret` and emit it; `requiresSource: false`. The file must hold exactly one `secretTemplates` entry covering every contract key. Name, namespace, labels and annotations are restamped or merged only when the file was encrypted with `mac_only_encrypted: true`; otherwise a mismatch fails the render |
-| `Sops.backend` | `({ recipients, type?, encryptedRegex?, timeout? })`: re-encrypt to `age` / `kms` / `gcpKms` / `azureKv` / `pgp` recipients; `encryptedRegex` defaults to `^(data|stringData)$` so only secret values are encrypted; `requiresSource: true` |
+| `Sops.backend` | `({ recipients, type?, encryptedRegex?, timeout? })`: re-encrypt to `age` / `kms` / `gcpKms` / `azureKv` / `pgp` recipients; `encryptedRegex` defaults to `^(data|stringData)$` so only secret values are encrypted; `requiresSource: true`. `encryptedRegex` accepts RE2 syntax limited to a leading `(?flags)` plus `\A` / `\z`; other RE2-only constructs are rejected when the backend is constructed |
 
 ## Errors
 
 | Error | When it is raised |
 | --- | --- |
-| `RenderError` (cause: `ProcessInvocationError`) | The `sops` process failed, timed out or was not found while `Sops.backend` encrypted |
+| `RenderError` (cause: the subprocess failure) | The `sops` process failed, timed out or was not found while `Sops.backend` encrypted |
 | `RenderError` | A passthrough file has more than one `secretTemplates` entry, lacks a contract key, or needs restamping while fully MAC'd |
 | `RenderError` (cause: `SopsUnencryptedValueError`) | A value about to be emitted was still plaintext. Every emitted value is checked for the `ENC[` marker (honouring `sops.encrypted_regex`); rather than emit plaintext dressed as a secret, the render fails with a `RenderError` whose cause is the internal `SopsUnencryptedValueError` |
 

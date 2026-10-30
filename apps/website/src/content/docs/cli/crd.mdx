@@ -51,7 +51,7 @@ export const chart = {
 
 ## Behaviour
 
-Both subcommands start by running `helm version --short`. When `helm` is missing or older than the minimum version, the command fails with `HelmVersionTooLow`.
+Both subcommands start by running `helm version --short`. When the version read is older than the minimum (or unparseable), the command fails with `HelmVersionTooLow`. A missing or failing `helm` binary surfaces as the raw `ProcessError`.
 
 For each release, the command pulls the chart tarball into the cache (verifying the digest when one is recorded) and runs `helm template <chart> <tgz> --include-crds --no-hooks` on that tarball. `--include-crds` emits the chart's `crds/` content, so nothing is pulled or unpacked separately. The CRDs are parsed and de-duplicated by CRD name. The pulled tarball is located by listing the pull directory, so a chart whose file name differs from `<chart>-<version>.tgz` (for example `v1.2.3` versus `1.2.3`) works.
 
@@ -74,7 +74,8 @@ The generated types are inputs for `Manifest.make` from `@konfig.ts/core`, which
 | `ReleaseNotFound { releaseId }` | `--release` names an id that is not in the registry; the message names the charts directory and lists the available ids. |
 | `MissingCrdFlags` | Neither `--release` nor `--all` was given. |
 | `CrdDrift { drifted }` | `verify` found differences; the message lists the drifted files and says to run `konfig crd extract --all`. |
-| `HelmVersionTooLow` | `helm` is missing or older than the minimum version. |
+| `HelmVersionTooLow` | The `helm` version was read but is older than the minimum, or could not be parsed. |
+| `ProcessError` | `helm` is missing or failed to run; surfaced raw by `konfig helm fetch` and `konfig crd`. |
 | `ChartRegistryError` | Loading the chart registry failed: the charts directory does not exist, or a chart file could not be imported. |
 | `EmptyChartRegistry { chartsDir }` | `verify` found no chart definitions, so nothing was checked. |
 | `HelmMinVersionInvalid` | The configured minimum Helm version is not `major.minor` or `major.minor.patch`. |

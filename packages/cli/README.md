@@ -97,5 +97,5 @@ konfig.ts is built on [Effect](https://effect.website/) 4. The CLI accepts any 4
 of `effect` from 4.0.0 on:
 
 - **`effect@^4.0.0`** — peer dependency.
-- **`@effect/platform-node@^4.1.0`** — a regular dependency; the CLI uses `render()` and the
-  Node filesystem/subprocess services.
+- **`@effect/platform-node@^4.0.0`** — a regular dependency; `renderAllYaml` /
+  `renderAllYamlEffect` need the Node filesystem/subprocess services (`NodeServices`).

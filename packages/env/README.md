@@ -65,7 +65,7 @@ console.log(`listening on :${config.http.port}`)
 
 Two members claiming the same `envName` is a compile-time error
 (`_konfig_error` hint) for top-level members; `Environment.define` also throws
-`EnvNameCollision` at runtime, which covers nested environments.
+`EnvNameCollision` synchronously at module load, which covers nested environments. The class is not exported; match it by `_tag`.
 
 ## Internals
 

@@ -43,7 +43,7 @@ Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNames
 
 ## Errors
 
-This package exports no tagged error classes of its own. When a bind or render fails, the error comes from one of two places: the secret backend in use (`@konfig.ts/sops`, `@konfig.ts/sealed-secrets`), or `@konfig.ts/env`, which raises `SecretSourceError` when a plaintext source cannot be resolved and `EnvNameCollision` when two entries claim the same env var name.
+This package exports no tagged error classes of its own. When a bind or render fails, the error comes from one of two places: the secret backend in use (`@konfig.ts/sops`, `@konfig.ts/sealed-secrets`), or `@konfig.ts/env`, which raises `SecretSourceError` when a plaintext source cannot be resolved and an `EnvNameCollision` (not exported; thrown synchronously at module load, matched by `_tag`) when two entries claim the same env var name.
 
 <Aside type="tip">
 `Selector.make({ app: "api" })` mirrors the `{ app: <name> }` labels `Workload.web` applies, so a `NetworkPolicy` peer and the workload it targets share one definition.

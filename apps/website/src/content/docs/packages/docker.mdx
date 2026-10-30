@@ -63,6 +63,7 @@ Every failure the package can produce is a tagged error, and `AnyDockerError` is
 | `BuildScriptMissing` | The spec names a build script the app's `package.json` does not define |
 | `WorkspaceSourceUnknown` | A `workspaceSource(name)` copy names a workspace outside the app's closure |
 | `SharedRootFileMissing` | A file listed in `sharedRootFiles` does not exist at the monorepo root |
+| `SpecInvalid` | `emit` validates the spec first and fails with this when it is invalid: an env secret pattern, a port outside the valid range, or a health-check path that is not acceptable. Carries the validation `cause` |
 
 <Aside type="caution">
 Workspace `COPY` instructions only resolve from the monorepo root, so always pass the root as the Docker build context.
