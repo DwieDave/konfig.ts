@@ -50,9 +50,9 @@ A pod declares its volumes once; each container mounts them by name. A Persisten
 
 <Diagnostics case="volume-mismatch" />
 
-Why it fails: `Pod.define` compares the mount names of every container against the pod's declared volume names, and `Volume.fromPvc` only accepts a `PvcRef`. A branded reference comes from `PvcRef.of(name)` when the claim is managed elsewhere, or from a `Dep.Pvc` provider when another module creates it, so the graph knows the claim exists.
+Why it fails: `Pod.define` compares the mount names of every container against the pod's declared volume names, and `Volume.fromPvc` only accepts a `PvcRef`. A branded reference comes from `PvcRef.of(name)` when the claim is managed elsewhere.
 
-Fix: mount `Volume.mountRef("data")`, and pass `PvcRef.of("postgres-data")` (or a provided reference) as the claim.
+Fix: mount `Volume.mountRef("data")`, and pass `PvcRef.of("postgres-data")` as the claim.
 
 ## widened-name.ts: an Application name that is not a literal
 

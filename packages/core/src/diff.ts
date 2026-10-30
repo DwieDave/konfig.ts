@@ -294,14 +294,14 @@ const _keyedDocs = (docs: ReadonlyArray<Json>): ReadonlyArray<readonly [string, 
   })
 }
 
-export type DocDiff = Data.TaggedEnum<{
+type DocDiff = Data.TaggedEnum<{
   Same: { readonly key: string }
   MissingLeft: { readonly key: string; readonly right: Json }
   MissingRight: { readonly key: string; readonly left: Json }
   Changed: { readonly key: string; readonly left: Json; readonly right: Json }
 }>
 
-export type FileDiff = Data.TaggedEnum<{
+type FileDiff = Data.TaggedEnum<{
   Same: { readonly file: string }
   MissingLeft: { readonly file: string }
   MissingRight: { readonly file: string }

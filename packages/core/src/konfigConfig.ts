@@ -16,52 +16,38 @@ const _stringArrayWithKeyDefault = (def: ReadonlyArray<string>) =>
     Schema.withDecodingDefaultKey(Effect.succeed(def))
   )
 
-export const EnvEntry = Schema.Struct({
+const EnvEntry = Schema.Struct({
   entry: Schema.String
 })
 
-export type EnvEntry = typeof EnvEntry.Type
-
-export const OutDir = Schema.Struct({
+const OutDir = Schema.Struct({
   manifests: Schema.String
 })
 
-export type OutDir = typeof OutDir.Type
-
-export const CrdConfig = Schema.Struct({
+const CrdConfig = Schema.Struct({
   outDir: _stringWithKeyDefault(DEFAULT_CRD_OUT_DIR)
 })
 
-export type CrdConfig = typeof CrdConfig.Type
-
-export const HelmConfig = Schema.Struct({
+const HelmConfig = Schema.Struct({
   cacheDir: _stringWithKeyDefault(DEFAULT_HELM_CACHE_DIR),
   minVersion: _stringWithKeyDefault(DEFAULT_HELM_MIN_VERSION)
 })
 
-export type HelmConfig = typeof HelmConfig.Type
-
-export const ClusterSpec = Schema.Struct({
+const ClusterSpec = Schema.Struct({
   registry: Schema.optionalKey(Schema.String),
   ingressClass: Schema.optionalKey(Schema.String),
   storageClass: Schema.optionalKey(Schema.String),
   repositoryUrl: Schema.optionalKey(Schema.String)
 })
 
-export type ClusterSpec = typeof ClusterSpec.Type
-
-export const DiffConfig = Schema.Struct({
+const DiffConfig = Schema.Struct({
   baseline: Schema.String
 })
 
-export type DiffConfig = typeof DiffConfig.Type
-
-export const ServicesConfig = Schema.Struct({
+const ServicesConfig = Schema.Struct({
   outFile: Schema.optionalKey(Schema.String),
   globalPaths: _stringArrayWithKeyDefault([])
 })
-
-export type ServicesConfig = typeof ServicesConfig.Type
 
 export const KonfigConfig = Schema.Struct({
   root: Schema.String,

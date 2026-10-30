@@ -16,9 +16,9 @@ Every ref serialises to YAML as the bare name; the brand exists only in the type
 | Ref | What the type tracks | Produced by |
 | --- | --- | --- |
 | `SecretRef` | name, the keys it holds, its namespace | `Secret.make(...).ref`, `Secret.bind(...).ref`, `Environment.bind(...).members.X.ref`, `yield* Dep.Secret(name)` |
-| `ConfigMapRef` | name, the keys it holds | `ConfigMap.make(...).ref`, `yield* Dep.ConfigMap(name)` |
-| `ServiceAccountRef` | name | `yield* Dep.ServiceAccount(name)` |
-| `PvcRef` | name | `yield* Dep.Pvc(name)`, `PvcRef.of(name)` |
+| `ConfigMapRef` | name, the keys it holds | `ConfigMap.make(...).ref` |
+| `ServiceAccountRef` | name | `brand` |
+| `PvcRef` | name | `PvcRef.of(name)` |
 | `BuiltImageRef` | app name | `yield* Dep.Image(app)`, `BuiltImageRef.of({ app, registry, tag })` |
 | `PortName` | port name | `Port.make({ name, ... })`, `Port.ref(name)` |
 

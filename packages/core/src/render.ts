@@ -47,7 +47,7 @@ export const render = <E, RIn>(
   runMain(_compose(program, options))
 }
 
-export interface RenderAllYamlEffectInput {
+interface RenderAllYamlEffectInput {
   // Defaults to RenderContext.make("prod").
   readonly ctx?: RenderContext
   readonly manifests: ReadonlyArray<Manifest.Manifest<unknown>>

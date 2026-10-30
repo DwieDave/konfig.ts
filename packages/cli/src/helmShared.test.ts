@@ -2,16 +2,11 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Exit } from "effect"
 import fc from "fast-check"
 import { ConfigNotFound } from "./configResolver"
-import { digestOf, toExtractOptions } from "./helmShared"
+import { toChartRef, toExtractOptions } from "./helmShared"
 
 const word = fc.stringMatching(/^[a-z0-9.-]{1,12}$/)
 
 describe("helmShared", () => {
-  it("property: digestOf maps empty to undefined and preserves others", () => {
-    fc.assert(fc.property(word, (d) => digestOf({ digest: d }) === d))
-    expect(digestOf({ digest: "" })).toBeUndefined()
-  })
-
   it("property: toExtractOptions maps every entry field", () => {
     fc.assert(
       fc.property(word, word, word, word, word, word, word, (repo, chart, version, id, digest, outDir, cacheDir) => {
@@ -23,9 +18,10 @@ describe("helmShared", () => {
           id,
           outDir,
           cacheDir,
-          digest: digestOf(entry)
+          digest
         })
-        expect(toExtractOptions({ entry: { ...entry, digest: "" }, outDir, cacheDir }).digest).toBeUndefined()
+        expect(toExtractOptions({ entry: { id, repo, chart, version }, outDir, cacheDir }).digest).toBeUndefined()
+        expect(toChartRef({ entry, cacheDir })).toEqual({ repo, chart, version, cacheDir, digest })
       })
     )
   })

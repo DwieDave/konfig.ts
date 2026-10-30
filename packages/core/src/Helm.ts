@@ -201,7 +201,7 @@ export const timeout: Config.Config<Duration.Duration> = _timeoutFromEnv.pipe(
 )
 
 // The `helm version` preflight is local; capped at the smaller of 30s and the configured timeout.
-export const versionTimeout: Config.Config<Duration.Duration> = Config.map(
+const versionTimeout: Config.Config<Duration.Duration> = Config.map(
   timeout,
   (t) => Duration.min(t, Duration.seconds(DEFAULT_HELM_VERSION_TIMEOUT_SECONDS))
 )

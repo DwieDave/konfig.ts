@@ -37,7 +37,7 @@ export interface HandleKind extends Module.HandleKind {
   >
 }
 
-export type LiteralName<T extends string> = Module.LiteralName<T>
+type LiteralName<T extends string> = Module.LiteralName<T>
 
 export interface BundleDefineOptions<
   Name extends string,
@@ -128,7 +128,7 @@ export interface BundleSetResult {
   readonly bundles: ReadonlyArray<Bundle>
 }
 
-export interface BundleSetMakeOptions {
+interface BundleSetMakeOptions {
   readonly name?: string
   readonly bundles: ReadonlyArray<Bundle>
 }

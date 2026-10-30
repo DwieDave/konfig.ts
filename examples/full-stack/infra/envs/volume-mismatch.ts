@@ -20,7 +20,7 @@ void _typo
 
 const _rawClaim = Volume.fromPvc({
   name: "data",
-  // @ts-expect-error a plain string is not a PvcRef; use PvcRef.of(...) or a Dep.Pvc provider.
+  // @ts-expect-error a plain string is not a PvcRef; use PvcRef.of(...).
   claim: "postgres-data"
 })
 

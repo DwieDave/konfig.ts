@@ -137,7 +137,7 @@ The pod declares only the volume "data"; the mount names "dat".`
           find: 'claim: "postgres-data"',
           code: "2322",
           message: `Type 'string' is not assignable to type 'PvcRef<string>'.
-Use PvcRef.of("postgres-data") or a Dep.Pvc provider so the claim is tracked.`
+Use PvcRef.of("postgres-data") so the claim is tracked.`
         }
       ]
     },
