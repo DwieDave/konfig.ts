@@ -1,21 +1,13 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Effect, Layer, Redacted, Sink, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import type { Command, StandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { type Command, isStandardCommand } from "effect/process/ChildProcess"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
+import { fakeHandle, plainArgs } from "../fakeProcess.testing"
 import { runValidate, StructuralValidationFailed } from "./validate"
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
 
 interface _CapturedKubeconform {
   args: ReadonlyArray<string> | undefined
@@ -23,9 +15,6 @@ interface _CapturedKubeconform {
   // while the process "runs" — i.e. before the scoped scratch dir is removed.
   filesInDir: ReadonlyArray<string> | undefined
 }
-
-const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
-  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
 
 // A fake `kubeconform` that exits 0 and records the args it was spawned
 // with plus the contents of the directory it was pointed at.
@@ -36,29 +25,20 @@ const _kubeconformSpawner = (
     ChildProcessSpawner,
     Effect.gen(function*() {
       const fs = yield* FileSystem
+
       return makeSpawner((command: Command) =>
         Effect.gen(function*() {
-          const args = command._tag === "StandardCommand" ? _plainArgs(command) : []
+          const args = isStandardCommand(command) ? plainArgs(command) : []
           captured.args = args
           const dir = args[args.length - 1]
+
           if (dir !== undefined) {
             captured.filesInDir = yield* fs.readDirectory(dir, { recursive: true }).pipe(
               Effect.orElseSucceed(() => [])
             )
           }
-          return makeHandle({
-            pid: ProcessId(1),
-            exitCode: Effect.succeed(ExitCode(0)),
-            isRunning: Effect.succeed(false),
-            kill: () => Effect.void,
-            stdin: Sink.drain,
-            stdout: _bytes(""),
-            stderr: _bytes(""),
-            all: _bytes(""),
-            getInputFd: () => Sink.drain,
-            getOutputFd: () => Stream.empty,
-            unref: Effect.succeed(Effect.void)
-          }) as ChildProcessHandle
+
+          return fakeHandle({})
         })
       )
     })
@@ -158,6 +138,7 @@ describe("runValidate", () => {
       if (!(failure instanceof StructuralValidationFailed)) {
         throw new Error(`expected StructuralValidationFailed, got ${String(failure)}`)
       }
+
       expect(failure.env).toBe("prod")
       expect(failure.issueCount).toBe(1)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))

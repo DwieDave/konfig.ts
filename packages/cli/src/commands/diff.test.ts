@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Cause, Console, Effect, Exit, Option, Schema } from "effect"
+import { Cause, Console, Effect, Exit, Option, Predicate, Schema } from "effect"
 import { Command } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -76,24 +76,28 @@ const _konfigJsonNoDiff = JSON.stringify({
   outDir: { manifests: "rendered" }
 })
 
-const _findFailure = (cause: Cause.Cause<unknown>): unknown => Option.getOrUndefined(Cause.findErrorOption(cause))
+const _findFailure = (cause: Cause.Cause<unknown>) => Option.getOrUndefined(Cause.findErrorOption(cause))
 
 /** Runs `diffCommand` against a temp config dir, capturing Console.log output. */
 const _runDiffCommand = (argv: ReadonlyArray<string>, root: string) =>
   Effect.gen(function*() {
     const lines: string[] = []
+
     const testConsole: Console.Console = Object.assign(Object.create(console), {
       log: (...args: ReadonlyArray<unknown>) => {
         lines.push(args.map(String).join(" "))
       }
     })
+
     const previousCwd = process.cwd()
     process.chdir(root)
+
     const exit = yield* Effect.exit(
       Command.runWith(diffCommand, { version: "test" })(argv).pipe(
         Effect.provideService(Console.Console, testConsole)
       )
     ).pipe(Effect.ensuring(Effect.sync(() => process.chdir(previousCwd))))
+
     return { exit, lines }
   })
 
@@ -109,8 +113,10 @@ describe("diffCommand", () => {
 
       const { exit } = yield* _runDiffCommand(["test"], root)
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
-        expect(_findFailure(exit.cause)).toMatchObject({ _tag: "DiffBaselineMissing", env: "test" })
+        expect(Predicate.isTagged(_findFailure(exit.cause), "DiffBaselineMissing")).toBe(true)
+        expect(_findFailure(exit.cause)).toMatchObject({ env: "test" })
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -164,9 +170,12 @@ describe("diffCommand", () => {
 
         const { exit, lines } = yield* _runDiffCommand(["test", "--format", "summary"], root)
         expect(Exit.isFailure(exit)).toBe(true)
+
         if (Exit.isFailure(exit)) {
-          expect(_findFailure(exit.cause)).toMatchObject({ _tag: "DiffNonEmpty", env: "test" })
+          expect(Predicate.isTagged(_findFailure(exit.cause), "DiffNonEmpty")).toBe(true)
+          expect(_findFailure(exit.cause)).toMatchObject({ env: "test" })
         }
+
         expect(lines).toHaveLength(1)
         const printed = (lines[0] ?? "").split("\n")
         expect(printed).toContain("- api/ConfigMap-retired.yaml")
@@ -195,9 +204,11 @@ describe("diffCommand", () => {
       const { exit, lines } = yield* _runDiffCommand(["test", "--format", "json"], root)
       expect(Exit.isFailure(exit)).toBe(true)
       expect(lines).toHaveLength(1)
+
       const DiffResultJson = Schema.Struct({
         entries: Schema.Array(Schema.Struct({ _tag: Schema.String, file: Schema.String }))
       })
+
       const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(DiffResultJson))(lines[0] ?? "")
       const changed = parsed.entries.find((e) => e.file === "api/ConfigMap-web-conf.yaml")
       expect(changed?._tag).toBe("Changed")

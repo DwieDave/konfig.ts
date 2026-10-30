@@ -1,17 +1,11 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { ConfigProvider, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect"
+import { ConfigProvider, Effect, Exit, Layer, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { type Command, isStandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
+import { fakeHandle } from "../fakeProcess.testing"
 import {
   CrdDrift,
   crdExtractEffect,
@@ -20,25 +14,6 @@ import {
   MissingCrdFlags,
   ReleaseNotFound
 } from "./crd"
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
-
-const _handle = (proc: { stdout?: string; stderr?: string; exitCode?: number }): ChildProcessHandle =>
-  makeHandle(
-    {
-      pid: ProcessId(4242),
-      exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
-      isRunning: Effect.succeed(false),
-      kill: () => Effect.void,
-      stdin: Sink.drain,
-      stdout: _bytes(proc.stdout ?? ""),
-      stderr: _bytes(proc.stderr ?? ""),
-      all: _bytes((proc.stdout ?? "") + (proc.stderr ?? "")),
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.succeed(Effect.void)
-    } as Parameters<typeof makeHandle>[0]
-  )
 
 /**
  * Fake `helm` spawner covering every subcommand the crd command path
@@ -51,17 +26,22 @@ const _helmSpawner = (templateStdout: string): Layer.Layer<ChildProcessSpawner, 
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
+
       return makeSpawner((command: Command) =>
         Effect.gen(function*() {
           const args = isStandardCommand(command) ? command.args : []
-          if (args.includes("version")) return _handle({ stdout: "v3.16.0\n", exitCode: 0 })
-          if (args.includes("template")) return _handle({ stdout: templateStdout, exitCode: 0 })
+
+          if (args.includes("version")) return fakeHandle({ stdout: "v3.16.0\n", exitCode: 0 })
+
+          if (args.includes("template")) return fakeHandle({ stdout: templateStdout, exitCode: 0 })
+
           if (args[0] === "pull") {
             const dest = args.map(String)[args.indexOf("--destination") + 1] ?? ""
             const chart = args.map(String)[args.indexOf("--version") - 1] ?? "chart"
             yield* fs.writeFile(path.join(dest, `${chart}-0.0.0.tgz`), new Uint8Array([1]))
           }
-          return _handle({ stdout: "", exitCode: 0 })
+
+          return fakeHandle({ stdout: "", exitCode: 0 })
         })
       )
     })
@@ -132,6 +112,7 @@ export const chart = {
 }
 `
     )
+
     return chartsDir
   })
 
@@ -168,6 +149,7 @@ describe("crdExtractEffect", () => {
       )
 
       expect(failure).toBeInstanceOf(ReleaseNotFound)
+
       if (failure instanceof ReleaseNotFound) {
         expect(failure.releaseId).toBe("does-not-exist")
       }
@@ -274,6 +256,7 @@ describe("crdVerifyEffect", () => {
       )
 
       expect(failure).toBeInstanceOf(CrdDrift)
+
       if (failure instanceof CrdDrift) {
         expect(failure.drifted).toEqual(["widgets.ts"])
       }
@@ -327,7 +310,9 @@ describe("crdExtractEffect failure encoding", () => {
         { chartsDir, outDir, cacheDir },
         Effect.exit(crdExtractEffect({ release: Option.some("nope"), all: false }))
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("ReleaseNotFound")

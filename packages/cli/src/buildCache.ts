@@ -20,10 +20,7 @@ const _orAbsentIfNotFound = <A, R>(
   onAbsent: () => A
 ): Effect.Effect<A, PlatformError, R> =>
   effect.pipe(
-    Effect.catchIf(
-      (e) => e.reason._tag === "NotFound",
-      () => Effect.succeed(onAbsent())
-    )
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(onAbsent()))
   )
 
 const BuildCacheEntrySchema = Schema.Struct({
@@ -50,6 +47,7 @@ export const _ctxSignature = (ctx: RenderContext): string => {
     : [...ctx.flags.entries()]
       .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
       .sort()
+
   return [
     `cluster:${ctx.cluster ?? ""}`,
     `k8sVersion:${ctx.k8sVersion ?? ""}`,
@@ -64,6 +62,7 @@ const _hashEntry = (
 ): Effect.Effect<void, PlatformError> =>
   Effect.gen(function*() {
     const entryExists = yield* _orAbsentIfNotFound(fs.exists(entry), () => false)
+
     if (!entryExists) return
     const content = yield* _orAbsentIfNotFound(fs.readFileString(entry), () => "")
     hash.update(`entry:${entry}\n`)
@@ -76,6 +75,7 @@ const _toPosix = (value: string, sep: string): string => value.split(sep).join("
 const _globMatcher = (extra: string, cfg: ResolvedKonfigConfig, path: Path) => {
   const relative = !path.isAbsolute(extra)
   const pattern = relative ? extra.replace(/^(\.\/)+/, "") : extra
+
   return (candidate: string): boolean =>
     matchesGlob({
       pattern,
@@ -91,13 +91,16 @@ const _resolveCacheIncludeFiles = (
   Effect.gen(function*() {
     const files: string[] = []
     const skipDirs = _outputDirs(cfg, path)
+
     for (const extra of cfg.config.cacheInclude ?? []) {
       const abs = path.isAbsolute(extra) ? extra : path.join(cfg.configDir, extra)
+
       if (_GLOB_CHARS.test(extra)) {
         const candidates = yield* _collectFiles({ dir: _globBase(abs, path.sep), skipDirs })
         files.push(...candidates.filter(_globMatcher(extra, cfg, path)))
       } else {
         const stat = yield* _orAbsentIfNotFound(fs.stat(abs), () => null)
+
         if (stat?.type === "Directory") {
           files.push(...(yield* _collectFiles({ dir: abs, skipDirs })))
         } else if (stat?.type === "File") {
@@ -105,6 +108,7 @@ const _resolveCacheIncludeFiles = (
         }
       }
     }
+
     return files
   })
 
@@ -153,10 +157,12 @@ const _GLOB_CHARS = /[*?[{]/
 
 const _globBase = (pattern: string, sep: string): string => {
   const staticSegs: string[] = []
+
   for (const seg of pattern.split(sep)) {
     if (_GLOB_CHARS.test(seg)) break
     staticSegs.push(seg)
   }
+
   return staticSegs.join(sep) || sep
 }
 
@@ -189,12 +195,15 @@ const _findLockfiles = (
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
+
     const present = yield* Effect.filter(
       _LOCKFILES.map((name) => path.join(dir, name)),
       (candidate) => fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))
     )
+
     if (present.length > 0) return present
     const parent = path.dirname(dir)
+
     return parent === dir ? [] : yield* _findLockfiles(parent)
   })
 
@@ -203,11 +212,13 @@ export const computeOutputHash = (
 ): string => {
   const hash = crypto.createHash("sha256")
   const sorted = [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+
   for (const f of sorted) {
     hash.update(`${f.path}\n`)
     hash.update(f.content)
     hash.update("\n")
   }
+
   return hash.digest("hex")
 }
 
@@ -217,11 +228,13 @@ export const computeOnDiskOutputHash = (
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const paths = yield* walkFiles({ dir: outDirAbs })
+
     const files = yield* Effect.forEach(paths, (path) =>
       fs.readFileString(path).pipe(
         Effect.orElseSucceed(() => ""),
         Effect.map((content) => ({ path, content }))
       ))
+
     return computeOutputHash(files)
   })
 
@@ -234,6 +247,7 @@ const _cacheFilePath = (
   joinFn: (...parts: string[]) => string
 ): string => {
   const ctxKey = crypto.createHash("sha256").update(_ctxSignature(ctx)).digest("hex").slice(0, 16)
+
   return joinFn(cfg.configDir, ".konfig", "cache", `${envName}-${ctxKey}.json`)
 }
 
@@ -249,9 +263,12 @@ export const readCacheEntry = (input: ReadEntryInput) =>
     const path = yield* Path
     const cacheFile = _cacheFilePath(input.cfg, input.envName, input.ctx, path.join)
     const exists = yield* fs.exists(cacheFile).pipe(Effect.orElseSucceed(() => false))
+
     if (!exists) return undefined
     const text = yield* fs.readFileString(cacheFile).pipe(Effect.orElseSucceed(() => ""))
+
     if (text === "") return undefined
+
     // A decode failure (stale/corrupt cache file) is just a cache miss.
     return yield* _decodeCacheEntryJson(text).pipe(
       Effect.orElseSucceed((): BuildCacheEntry | undefined => undefined)

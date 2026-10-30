@@ -1,49 +1,18 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Helm } from "@konfig.ts/core"
-import { ConfigProvider, Effect, Exit, Layer, Redacted, Sink, Stream } from "effect"
+import { ConfigProvider, Effect, Exit, Layer, Predicate } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { ChildProcess } from "effect/process"
-import type { Command, StandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import type { Command } from "effect/process/ChildProcess"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import * as crypto from "node:crypto"
 import { ChartRegistryEntryDecodeError } from "../chartRegistry"
+import { fakeHandle, type FakeProc, plainArgs } from "../fakeProcess.testing"
 import { _fetchOne, helmFetchEffect, MissingAllFlag } from "./helmFetch"
 
 const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")
-
-interface FakeProc {
-  readonly stdout?: string
-  readonly stderr?: string
-  readonly exitCode?: number
-}
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
-
-const _handle = (proc: FakeProc): ChildProcessHandle =>
-  makeHandle(
-    {
-      pid: ProcessId(1),
-      exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
-      isRunning: Effect.succeed(false),
-      kill: () => Effect.void,
-      stdin: Sink.drain,
-      stdout: _bytes(proc.stdout ?? ""),
-      stderr: _bytes(proc.stderr ?? ""),
-      all: _bytes((proc.stdout ?? "") + (proc.stderr ?? "")),
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.succeed(Effect.void)
-    } as Parameters<typeof makeHandle>[0]
-  )
 
 /**
  * Records every command argv the fake spawner is asked to run, so tests
@@ -60,27 +29,28 @@ const _recordingSpawner = (
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
+
       return makeSpawner(
         (command: Command) =>
           Effect.gen(function*() {
-            if (!ChildProcess.isStandardCommand(command)) return _handle(proc)
-            const args = _plainArgs(command)
-            if (args.includes("version")) return _handle({ stdout: "v3.99.0\n", exitCode: 0 })
+            if (!ChildProcess.isStandardCommand(command)) return fakeHandle(proc)
+            const args = plainArgs(command)
+
+            if (args.includes("version")) return fakeHandle({ stdout: "v3.99.0\n", exitCode: 0 })
             calls.push([command.command, ...args])
+
             if (args[0] === "pull") {
               const dest = args[args.indexOf("--destination") + 1] ?? ""
               yield* fs.writeFile(path.join(dest, `${args[3]}-${args[5]}.tgz`), Buffer.from("t"))
             }
-            return _handle(proc)
+
+            return fakeHandle(proc)
           })
       )
     })
   )
 
 const _pullDest = expect.stringMatching(/\.konfig-helm-pull-/)
-
-const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
-  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
 
 /**
  * A `pull` here writes `tarball`'s bytes to `<destination>/<chart>-<version>.tgz`
@@ -93,21 +63,26 @@ const _pullingSpawner = (tarball: Buffer): Layer.Layer<ChildProcessSpawner, neve
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
+
       return makeSpawner(
         (command: Command) =>
           Effect.gen(function*() {
-            if (!ChildProcess.isStandardCommand(command)) return _handle({ exitCode: 0 })
-            const args = _plainArgs(command)
-            if (args.includes("version")) return _handle({ stdout: "v3.99.0\n", exitCode: 0 })
+            if (!ChildProcess.isStandardCommand(command)) return fakeHandle({ exitCode: 0 })
+            const args = plainArgs(command)
+
+            if (args.includes("version")) return fakeHandle({ stdout: "v3.99.0\n", exitCode: 0 })
+
             if (args[0] === "pull") {
               const destIdx = args.indexOf("--destination")
               const dest = args[destIdx + 1] ?? ""
               const chart = args[3] ?? "chart"
               const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
               yield* fs.writeFile(path.join(dest, `${chart}-${version}.tgz`), tarball)
-              return _handle({ exitCode: 0 })
+
+              return fakeHandle({ exitCode: 0 })
             }
-            return _handle({ exitCode: 0 })
+
+            return fakeHandle({ exitCode: 0 })
           })
       )
     })
@@ -266,6 +241,7 @@ describe("helmFetchEffect", () => {
       const cacheDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-cache-" })
 
       const calls: Array<ReadonlyArray<string>> = []
+
       const exit = yield* Effect.exit(
         helmFetchEffect({ all: false }).pipe(
           Effect.provide(Layer.merge(_recordingSpawner({ exitCode: 0 }, calls), _configFor({ chartsDir, cacheDir })))
@@ -273,10 +249,12 @@ describe("helmFetchEffect", () => {
       )
 
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = yield* Effect.flip(Effect.failCause(exit.cause))
         expect(err).toBeInstanceOf(MissingAllFlag)
       }
+
       expect(calls).toEqual([])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -337,6 +315,7 @@ describe("helmFetchEffect", () => {
       )
 
       const calls: Array<ReadonlyArray<string>> = []
+
       const exit = yield* Effect.exit(
         helmFetchEffect({ all: true }).pipe(
           Effect.provide(Layer.merge(_recordingSpawner({ exitCode: 0 }, calls), _configFor({ chartsDir, cacheDir })))
@@ -344,6 +323,7 @@ describe("helmFetchEffect", () => {
       )
 
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = yield* Effect.flip(Effect.failCause(exit.cause))
         expect(err).toBeInstanceOf(ChartRegistryEntryDecodeError)
@@ -358,7 +338,7 @@ describe("helmFetchEffect", () => {
 
       const spawner = Layer.succeed(
         ChildProcessSpawner,
-        makeSpawner((_command: Command) => Effect.succeed(_handle({ stdout: "v1.0.0\n", exitCode: 0 })))
+        makeSpawner((_command: Command) => Effect.succeed(fakeHandle({ stdout: "v1.0.0\n", exitCode: 0 })))
       )
 
       const exit = yield* Effect.exit(
@@ -368,9 +348,10 @@ describe("helmFetchEffect", () => {
       )
 
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = yield* Effect.flip(Effect.failCause(exit.cause))
-        expect((err as { readonly _tag?: string })._tag).toBe("HelmVersionTooLow")
+        expect(Predicate.isTagged(err, "HelmVersionTooLow")).toBe(true)
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

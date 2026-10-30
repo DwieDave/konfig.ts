@@ -5,7 +5,7 @@ import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { runGraph } from "./graph"
 
-const _write = (root: string, rel: string, body: unknown) =>
+const _write = <A>(root: string, rel: string, body: A) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* Path
@@ -46,10 +46,12 @@ const _buildWorkspace = (root: string) =>
 const _captured = () => {
   const messages: string[] = []
   const errors: string[] = []
+
   const testConsole: Console.Console = Object.assign(Object.create(console), {
     log: (...args: ReadonlyArray<unknown>) => messages.push(args.join(" ")),
     error: (...args: ReadonlyArray<unknown>) => errors.push(args.join(" "))
   })
+
   return { messages, errors, testConsole }
 }
 
@@ -65,8 +67,7 @@ describe("runGraph", () => {
         cwd: root,
         target: Option.none(),
         withDev: false,
-        full: false,
-        width: Option.none()
+        full: false
       }).pipe(Effect.provideService(Console.Console, testConsole))
 
       expect(messages).toHaveLength(1)
@@ -88,7 +89,7 @@ describe("runGraph", () => {
       yield* _write(root, "packages/a/package.json", { name: "@s/a", dependencies: { "@s/b": "^1.0.0" } })
       yield* _write(root, "packages/b/package.json", { name: "@s/b", version: "1.0.0" })
       const { messages, testConsole } = _captured()
-      yield* runGraph({ cwd: root, target: Option.none(), withDev: false, full: false, width: Option.none() }).pipe(
+      yield* runGraph({ cwd: root, target: Option.none(), withDev: false, full: false }).pipe(
         Effect.provideService(Console.Console, testConsole)
       )
       expect(messages[0] ?? "").toContain("1 runtime edge")
@@ -105,8 +106,7 @@ describe("runGraph", () => {
         cwd: root,
         target: Option.none(),
         withDev: true,
-        full: false,
-        width: Option.none()
+        full: false
       }).pipe(Effect.provideService(Console.Console, testConsole))
 
       const out = messages[0] ?? ""
@@ -125,8 +125,7 @@ describe("runGraph", () => {
         cwd: root,
         target: Option.some("packages/app"),
         withDev: false,
-        full: false,
-        width: Option.none()
+        full: false
       }).pipe(Effect.provideService(Console.Console, testConsole))
 
       const out = messages[0] ?? ""
@@ -146,8 +145,7 @@ describe("runGraph", () => {
           cwd: root,
           target: Option.some("nope"),
           withDev: false,
-          full: false,
-          width: Option.none()
+          full: false
         }).pipe(Effect.provideService(Console.Console, testConsole))
       )
 
@@ -180,8 +178,7 @@ describe("runGraph", () => {
           cwd: root,
           target: Option.none(),
           withDev: false,
-          full: false,
-          width: Option.none()
+          full: false
         }).pipe(Effect.provideService(Console.Console, testConsole))
       )
 
@@ -208,8 +205,7 @@ describe("runGraph", () => {
         cwd: root,
         target: Option.some("@fix/app"),
         withDev: false,
-        full: false,
-        width: Option.none()
+        full: false
       }).pipe(Effect.provideService(Console.Console, testConsole))
 
       expect(messages[0] ?? "").toContain("closure: @fix/app")
@@ -240,8 +236,7 @@ describe("runGraph", () => {
         cwd: root,
         target: Option.none(),
         withDev: false,
-        full: false,
-        width: Option.none()
+        full: false
       }).pipe(Effect.provideService(Console.Console, c1))
       expect(reduced[0] ?? "").toContain("2 runtime edges")
 
@@ -250,29 +245,9 @@ describe("runGraph", () => {
         cwd: root,
         target: Option.none(),
         withDev: false,
-        full: true,
-        width: Option.none()
+        full: true
       }).pipe(Effect.provideService(Console.Console, c2))
       expect(full[0] ?? "").toContain("3 runtime edges")
       expect(full[0] ?? "").toContain("full")
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
-
-  it.effect("a narrow --width forces the tree-view fallback notice", () =>
-    Effect.gen(function*() {
-      const fs = yield* FileSystem
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-graph-width-" })
-      yield* _buildWorkspace(root)
-      const { messages, testConsole } = _captured()
-
-      yield* runGraph({
-        cwd: root,
-        target: Option.none(),
-        withDev: false,
-        full: false,
-        width: Option.some(1)
-      }).pipe(Effect.provideService(Console.Console, testConsole))
-
-      const out = messages[0] ?? ""
-      expect(out).toContain("falling back to tree view")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })

@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Console, Effect } from "effect"
+import { Console, Effect, Option, Predicate } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { diffEffect, diffOne, emitFor, loadSpec, previewEffect, writeAtomic, writeEffect, writeOne } from "./docker"
@@ -273,6 +273,7 @@ describe("diffOne", () => {
       const failure = yield* Effect.flip(
         diffOne({ dest, emitted: "FROM scratch\n", kind: "dev", target: "packages/app", format: "summary" })
       )
+
       expect(failure._tag).toBe("DiffDrift")
       expect(failure.target).toBe("packages/app")
       expect(failure.kind).toBe("dev")
@@ -288,6 +289,7 @@ describe("diffOne", () => {
       const failure = yield* Effect.flip(
         diffOne({ dest, emitted: "FROM scratch\n", kind: "prod", target: "packages/app", format: "json" })
       )
+
       expect(failure._tag).toBe("DiffDrift")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
@@ -353,7 +355,7 @@ describe("writeEffect", () => {
 
       yield* writeEffect({
         target,
-        outDir: { _tag: "None" },
+        outDir: Option.none(),
         prodOnly: false,
         devOnly: false,
         force: false
@@ -378,7 +380,7 @@ describe("writeEffect", () => {
 
       yield* writeEffect({
         target,
-        outDir: { _tag: "Some", value: outDir },
+        outDir: Option.some(outDir),
         prodOnly: false,
         devOnly: false,
         force: false
@@ -401,7 +403,7 @@ describe("writeEffect", () => {
 
       yield* writeEffect({
         target,
-        outDir: { _tag: "None" },
+        outDir: Option.none(),
         prodOnly: false,
         devOnly: true,
         force: false
@@ -422,8 +424,9 @@ describe("writeEffect", () => {
       yield* fs.writeFileString(p.join(target, "Dockerfile"), "FROM alpine\n# hand-written\n")
 
       const failure = yield* Effect.flip(
-        writeEffect({ target, outDir: { _tag: "None" }, prodOnly: false, devOnly: false, force: false })
+        writeEffect({ target, outDir: Option.none(), prodOnly: false, devOnly: false, force: false })
       )
+
       expect(failure._tag).toBe("DockerWriteRefused")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -438,7 +441,7 @@ describe("writeEffect", () => {
 
       yield* writeEffect({
         target,
-        outDir: { _tag: "None" },
+        outDir: Option.none(),
         prodOnly: false,
         devOnly: false,
         force: false
@@ -460,7 +463,7 @@ describe("writeEffect", () => {
 
       yield* writeEffect({
         target,
-        outDir: { _tag: "None" },
+        outDir: Option.none(),
         prodOnly: true,
         devOnly: false,
         force: false
@@ -530,8 +533,8 @@ describe("diffEffect", () => {
       yield* fs.writeFileString(p.join(target, "Dockerfile.dev"), "FROM alpine\n# stale dev\n")
 
       const failure = yield* Effect.flip(diffEffect({ target, format: "summary" }))
-      expect(failure._tag).toBe("DiffDrift")
-      expect((failure as { kind: string }).kind).toBe("dev")
+      expect(Predicate.isTagged(failure, "DiffDrift")).toBe(true)
+      expect(failure).toMatchObject({ kind: "dev" })
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("succeeds when both Dockerfile and Dockerfile.dev match the emitted spec", () =>
@@ -545,6 +548,7 @@ describe("diffEffect", () => {
       const load = yield* loadSpec(target)
       const emitted = yield* emitFor(load)
       yield* fs.writeFileString(p.join(target, "Dockerfile"), emitted.dockerfile)
+
       if (emitted.dockerfileDev) {
         yield* fs.writeFileString(p.join(target, "Dockerfile.dev"), emitted.dockerfileDev)
       }

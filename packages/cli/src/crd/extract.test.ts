@@ -1,20 +1,14 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
 import { Helm } from "@konfig.ts/core"
-import { Effect, Exit, Layer, Redacted, Schema, Sink, Stream } from "effect"
+import { Effect, Exit, Layer, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
-import { type Command, isStandardCommand, type StandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { type Command, isStandardCommand } from "effect/process/ChildProcess"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
 import * as crypto from "node:crypto"
+import { fakeHandle, plainArgs } from "../fakeProcess.testing"
 import {
   _crdNameToIdentifier,
   _dedupeCrdDocuments,
@@ -33,28 +27,6 @@ const validOpts = {
   outDir: "/tmp/konfig-test-out",
   cacheDir: "/tmp/konfig-test-cache"
 }
-
-const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
-  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
-
-const _handle = (proc: { stdout?: string; stderr?: string; exitCode?: number }): ChildProcessHandle =>
-  makeHandle(
-    {
-      pid: ProcessId(4242),
-      exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
-      isRunning: Effect.succeed(false),
-      kill: () => Effect.void,
-      stdin: Sink.drain,
-      stdout: _bytes(proc.stdout ?? ""),
-      stderr: _bytes(proc.stderr ?? ""),
-      all: _bytes((proc.stdout ?? "") + (proc.stderr ?? "")),
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.succeed(Effect.void)
-    } as Parameters<typeof makeHandle>[0]
-  )
 
 const _validCrdYaml = `
 apiVersion: apiextensions.k8s.io/v1
@@ -100,18 +72,22 @@ const _pullingHelmSpawner = (
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const path = yield* Path
+
       return makeSpawner((command: Command) =>
         Effect.gen(function*() {
-          const args = isStandardCommand(command) ? _plainArgs(command) : []
+          const args = isStandardCommand(command) ? plainArgs(command) : []
           options.calls?.push({ args })
-          if (args.includes("template")) return _handle({ stdout: templateStdout, exitCode: 0 })
+
+          if (args.includes("template")) return fakeHandle({ stdout: templateStdout, exitCode: 0 })
+
           if (args[0] === "pull") {
             const dest = args[args.indexOf("--destination") + 1] ?? ""
             const chart = args[3] ?? "chart"
             const version = args[args.indexOf("--version") + 1] ?? "0.0.0"
             yield* fs.writeFile(path.join(dest, options.tarballName ?? `${chart}-${version}.tgz`), tarball)
           }
-          return _handle({ stdout: "", exitCode: 0 })
+
+          return fakeHandle({ stdout: "", exitCode: 0 })
         })
       )
     })
@@ -127,7 +103,9 @@ layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
       const exit = yield* Effect.exit(
         extractCrdsEffect({ ...validOpts, chart: "x; touch /tmp/pwned" })
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const failure = exit.cause
         const fails = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(failure)
@@ -140,6 +118,7 @@ layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
       const exit = yield* Effect.exit(
         extractCrdsEffect({ ...validOpts, version: "1.0.0 && rm -rf /" })
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
     }))
 
@@ -151,6 +130,7 @@ layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
           repo: "https://foo.example.com/`whoami`"
         })
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
     }))
 
@@ -159,6 +139,7 @@ layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
       const exit = yield* Effect.exit(
         extractCrdsEffect({ ...validOpts, repo: "file:///etc/passwd" })
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
     }))
 
@@ -167,6 +148,7 @@ layer(NodeServices.layer)("extractCrdsEffect input boundary", (it) => {
       const exit = yield* Effect.exit(
         extractCrdsEffect({ ...validOpts, chart: "postgresql\nrm -rf /" })
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
     }))
 })
@@ -232,10 +214,12 @@ describe("extractCrdsEffect end-to-end", () => {
       )
 
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const fails = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(fails).toContain("HelmDigestMismatch")
       }
+
       expect(yield* fs.readDirectory(cacheDir)).toEqual([])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -298,7 +282,7 @@ describe("extractCrdsEffect end-to-end", () => {
 
       const failingSpawner = Layer.succeed(
         ChildProcessSpawner,
-        makeSpawner(() => Effect.succeed(_handle({ stderr: "network unreachable", exitCode: 1 })))
+        makeSpawner(() => Effect.succeed(fakeHandle({ stderr: "network unreachable", exitCode: 1 })))
       )
 
       const exit = yield* Effect.exit(
@@ -306,7 +290,9 @@ describe("extractCrdsEffect end-to-end", () => {
           Effect.provide(failingSpawner)
         )
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const text = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(exit.cause)
         expect(text).toContain("CrdExtractError")
@@ -335,6 +321,7 @@ metadata:
 ---
 ${_validCrdYaml}
 `)
+
     expect(docs).toHaveLength(1)
     expect(docs[0]?.crdName).toBe("widgets.example.com")
   })
@@ -387,6 +374,7 @@ spec:
     - name: v1
     - name: v2
 `)
+
     expect(docs).toHaveLength(1)
     expect(docs[0]?.schema).toEqual({ type: "object", additionalProperties: true })
     expect(docs[0]?.versions).toEqual(["v1", "v2"])
@@ -428,6 +416,7 @@ spec:
   versions:
     - name: v1
 `
+
     const second = `
 kind: CustomResourceDefinition
 metadata:
@@ -437,6 +426,7 @@ spec:
   versions:
     - name: v2
 `
+
     const deduped = dedupe([first, second])
     expect(deduped.size).toBe(1)
     expect(deduped.get("foo.example.com")?.group).toBe("first.example.com")
@@ -455,6 +445,7 @@ spec:
     - name: v1
 `
     ])
+
     expect([...deduped.keys()].sort()).toEqual(["gadgets.example.com", "widgets.example.com"])
   })
 })

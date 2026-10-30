@@ -84,7 +84,7 @@ describe("matchesGlob: totality and separator rules", () => {
   it("property: every arbitrary pattern compiles and matching is total", () => {
     fc.assert(
       fc.property(fc.string({ maxLength: 24 }), fc.string({ maxLength: 24 }), (pattern, path) => {
-        expect(typeof matchesGlob({ pattern, path })).toBe("boolean")
+        expect(matchesGlob({ pattern, path })).toBeTypeOf("boolean")
       })
     )
   })

@@ -1,16 +1,10 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Layer, Option, Redacted, Sink, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option } from "effect"
 import * as PlatformError from "effect/PlatformError"
-import type { Command, StandardCommand } from "effect/process/ChildProcess"
-import {
-  type ChildProcessHandle,
-  ChildProcessSpawner,
-  ExitCode,
-  make as makeSpawner,
-  makeHandle,
-  ProcessId
-} from "effect/process/ChildProcessSpawner"
+import { type Command, isStandardCommand } from "effect/process/ChildProcess"
+import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
+import { fakeHandle, type FakeProc, plainArgs } from "./fakeProcess.testing"
 import {
   _checkDnsName,
   KubeconformNotFound,
@@ -19,63 +13,33 @@ import {
   validateManifestFile
 } from "./validator"
 
-interface FakeProc {
-  readonly stdout?: string
-  readonly stderr?: string
-  readonly exitCode?: number
+interface _CapturedArgs {
+  args: ReadonlyArray<string> | undefined
 }
-
-const _bytes = (s: string): Stream.Stream<Uint8Array> => Stream.make(new TextEncoder().encode(s))
 
 const _spawnerFor = (proc: FakeProc): Layer.Layer<ChildProcessSpawner> =>
   Layer.succeed(
     ChildProcessSpawner,
     makeSpawner((_command: Command) =>
       Effect.succeed(
-        makeHandle({
-          pid: ProcessId(1),
-          exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
-          isRunning: Effect.succeed(false),
-          kill: () => Effect.void,
-          stdin: Sink.drain,
-          stdout: _bytes(proc.stdout ?? ""),
-          stderr: _bytes(proc.stderr ?? ""),
-          all: _bytes(""),
-          getInputFd: () => Sink.drain,
-          getOutputFd: () => Stream.empty,
-          unref: Effect.succeed(Effect.void)
-        }) as ChildProcessHandle
+        fakeHandle(proc)
       )
     )
   )
-
-const _plainArgs = (command: StandardCommand): ReadonlyArray<string> =>
-  command.args.map((arg) => (typeof arg === "string" ? arg : Redacted.value(arg)))
 
 // Captures the args each spawned `Command` carried, so tests can assert on
 // what `runKubeconform` actually forwards (e.g. `-kubernetes-version`).
 const _spawnerCapturing = (
   proc: FakeProc,
-  captured: { args: ReadonlyArray<string> | undefined }
+  captured: _CapturedArgs
 ): Layer.Layer<ChildProcessSpawner> =>
   Layer.succeed(
     ChildProcessSpawner,
     makeSpawner((command: Command) => {
-      captured.args = command._tag === "StandardCommand" ? _plainArgs(command) : []
+      captured.args = isStandardCommand(command) ? plainArgs(command) : []
+
       return Effect.succeed(
-        makeHandle({
-          pid: ProcessId(1),
-          exitCode: Effect.succeed(ExitCode(proc.exitCode ?? 0)),
-          isRunning: Effect.succeed(false),
-          kill: () => Effect.void,
-          stdin: Sink.drain,
-          stdout: _bytes(proc.stdout ?? ""),
-          stderr: _bytes(proc.stderr ?? ""),
-          all: _bytes(""),
-          getInputFd: () => Sink.drain,
-          getOutputFd: () => Stream.empty,
-          unref: Effect.succeed(Effect.void)
-        }) as ChildProcessHandle
+        fakeHandle(proc)
       )
     })
   )
@@ -104,6 +68,7 @@ metadata:
   namespace: prod
 spec: {}
 `
+
       const issues = yield* validateManifestFile({ file: "Deployment-api.yaml", content })
       expect(issues).toEqual([])
     }))
@@ -124,6 +89,7 @@ spec: {}
 metadata:
   name: api
 `
+
       const issues = yield* validateManifestFile({ file: "x.yaml", content })
       expect(issues).toHaveLength(1)
       expect(issues[0]?.message).toContain("envelope")
@@ -136,6 +102,7 @@ kind: ConfigMap
 metadata:
   name: NotADnsLabel
 `
+
       const issues = yield* validateManifestFile({ file: "x.yaml", content })
       expect(issues).toHaveLength(1)
       expect(issues[0]?.message).toContain("metadata.name")
@@ -153,6 +120,7 @@ kind: Service
 metadata:
   name: SVC
 `
+
       const issues = yield* validateManifestFile({ file: "multi.yaml", content })
       expect(issues).toHaveLength(1)
       expect(issues[0]?.doc).toBe(1)
@@ -170,6 +138,7 @@ data:
     ---
     line three
 `
+
       const issues = yield* validateManifestFile({ file: "cm.yaml", content })
       expect(issues).toEqual([])
     }))
@@ -181,6 +150,7 @@ kind: Namespace
 metadata:
   name: app
 `
+
       const issues = yield* validateManifestFile({ file: "ns.yaml", content })
       expect(issues).toEqual([])
     }))
@@ -192,6 +162,7 @@ kind: CustomResourceDefinition
 metadata:
   name: sopssecrets.isindir.github.com
 `
+
       const issues = yield* validateManifestFile({ file: "crd.yaml", content })
       expect(issues).toEqual([])
     }))
@@ -203,6 +174,7 @@ kind: ConfigMap
 metadata:
   name: Invalid_Name
 `
+
       const issues = yield* validateManifestFile({ file: "cm.yaml", content })
       expect(issues).toHaveLength(1)
       expect(issues[0]?.message).toContain("metadata.name")
@@ -216,6 +188,7 @@ kind: Service
 metadata:
   name: my.service
 `
+
       const issues = yield* validateManifestFile({ file: "svc.yaml", content })
       expect(issues).toHaveLength(1)
       expect(issues[0]?.message).toContain("metadata.name")
@@ -230,6 +203,7 @@ metadata:
   name: cm
   namespace: my.app
 `
+
       const issues = yield* validateManifestFile({ file: "cm.yaml", content })
       expect(issues).toHaveLength(1)
       expect(issues[0]?.message).toContain("metadata.namespace")
@@ -241,9 +215,11 @@ describe("runKubeconform", () => {
   it.effect("returns stdout on a zero exit even when stdout mentions the word Invalid", () =>
     Effect.gen(function*() {
       const summary = "Summary: 3 resources found parsing, 0 Invalid, 0 Errors"
+
       const out = yield* runKubeconform({ dir: "/rendered" }).pipe(
         Effect.provide(_spawnerFor({ stdout: summary, exitCode: 0 }))
       )
+
       expect(out).toBe(summary)
     }))
 
@@ -260,10 +236,13 @@ describe("runKubeconform", () => {
           )
         )
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
         expect(err).toBeInstanceOf(KubeconformReportError)
+
         if (err instanceof KubeconformReportError) {
           expect(err.stdout).toContain("missing required field")
           expect(err.stderr).toContain("could not resolve schema")
@@ -274,7 +253,7 @@ describe("runKubeconform", () => {
 
   it.effect("forwards extraArgs, placing every flag before the directory", () =>
     Effect.gen(function*() {
-      const captured: { args: ReadonlyArray<string> | undefined } = { args: undefined }
+      const captured: _CapturedArgs = { args: undefined }
       yield* runKubeconform({
         dir: "/rendered",
         extraArgs: ["-ignore-missing-schemas", "-kubernetes-version", "1.29.0"]
@@ -296,10 +275,13 @@ describe("runKubeconform", () => {
       const exit = yield* Effect.exit(
         runKubeconform({ dir: "/rendered" }).pipe(Effect.provide(_spawnFails()))
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         const err = Option.getOrUndefined(Cause.findErrorOption(exit.cause))
         expect(err).toBeInstanceOf(KubeconformNotFound)
+
         if (err instanceof KubeconformNotFound) {
           expect(err.message).toContain("kubeconform binary not found")
         }
@@ -308,6 +290,7 @@ describe("runKubeconform", () => {
 })
 
 const _alnum = fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz0123456789".split(""))
+
 const _labelOf = (maxLength: number) =>
   fc.tuple(
     _alnum,

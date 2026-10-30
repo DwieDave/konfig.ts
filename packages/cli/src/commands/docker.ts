@@ -8,7 +8,7 @@ import {
   HEADER_MARKER,
   isDockerApp
 } from "@konfig.ts/docker"
-import { Console, Data, Effect } from "effect"
+import { Console, Data, Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -47,16 +47,21 @@ export const loadSpec = (
     const p = yield* Path
     const targetAbs = p.resolve(process.cwd(), targetArg)
     const dockerTsPath = p.join(targetAbs, "docker.ts")
+
     const mod = yield* Effect.tryPromise({
       try: () => import(dockerTsPath),
       catch: (e) => new SpecImportError({ specPath: dockerTsPath, cause: e })
     })
+
     const app = moduleDefault(mod)
+
     if (!isDockerApp(app)) {
       return yield* new SpecNotADockerApp({ specPath: dockerTsPath })
     }
+
     const root = yield* findRoot(targetAbs)
     const specPath = p.relative(root, dockerTsPath)
+
     return { app, targetAbs, specPath, root }
   })
 
@@ -109,18 +114,23 @@ export const writeOne = (
     const { content, dest, force } = input
     const fs = yield* FileSystem
     const existed = yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false))
+
     if (existed) {
       const existing = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
       const head = extractHeader(existing)
+
       if (!head.managed && !force) {
         return yield* new DockerWriteRefused({
           path: dest,
           reason: `destination is not konfig-managed (missing marker "${HEADER_MARKER}"). Use --force to overwrite.`
         })
       }
+
       if (head.managed && existing === content) return { written: false }
     }
+
     yield* writeAtomic({ fs, path: dest, content })
+
     return { written: true }
   })
 
@@ -162,7 +172,7 @@ const previewCommand = Command.make(
 
 export interface WriteArgs {
   readonly target: string
-  readonly outDir: { readonly _tag: "Some"; readonly value: string } | { readonly _tag: "None" }
+  readonly outDir: Option.Option<string>
   readonly prodOnly: boolean
   readonly devOnly: boolean
   readonly force: boolean
@@ -183,9 +193,12 @@ export const writeEffect = (
     const p = yield* Path
     const load = yield* loadSpec(args.target)
     const e = yield* emitFor(load)
-    const outDirAbs = args.outDir._tag === "Some"
-      ? p.resolve(process.cwd(), args.outDir.value)
-      : load.targetAbs
+
+    const outDirAbs = Option.match(args.outDir, {
+      onNone: () => load.targetAbs,
+      onSome: (dir) => p.resolve(process.cwd(), dir)
+    })
+
     yield* Effect.forEach(variantsOf({ emitted: e, ...args }), (v) =>
       Effect.gen(function*() {
         const dest = p.join(outDirAbs, v.file)
@@ -227,13 +240,17 @@ export const diffOne = (input: DiffOneInput): Effect.Effect<void, DiffDrift, Fil
     const onDisk = yield* fs.readFileString(dest).pipe(Effect.orElseSucceed(() => ""))
     const head = extractHeader(onDisk)
     const emittedHead = extractHeader(emitted)
+
     if (head.managed && emittedHead.managed && head.hash === emittedHead.hash) return
+
     const result = diffFiles({
       left: { [dest]: onDisk },
       right: { [dest]: emitted }
     })
+
     if (!hasDifferences(result)) return
     yield* Console.log(formatDiff({ result, format }))
+
     return yield* new DiffDrift({ target, kind })
   })
 

@@ -47,17 +47,19 @@ const _decodeOpts = (opts: CrdExtractOptions) =>
 export interface CrdDocument {
   readonly crdName: string
   readonly group: string
-  readonly schema: { readonly [key: string]: unknown }
+  readonly schema: typeof OpenApiSchema.Type
   readonly versions: readonly string[]
 }
 
 // One checked boundary for raw parsed CRD YAML — a doc that doesn't decode
 // (wrong kind, missing metadata.name, malformed versions) is skipped.
+const OpenApiSchema = Schema.Record(Schema.String, Schema.Unknown)
+
 const CrdVersionSchema = Schema.Struct({
   name: Schema.optional(Schema.String),
   schema: Schema.optional(
     Schema.Struct({
-      openAPIV3Schema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown))
+      openAPIV3Schema: Schema.optional(OpenApiSchema)
     })
   )
 })
@@ -77,9 +79,12 @@ type DecodedCrd = typeof CrdDocumentSchema.Type
 
 const _toCrdDocument = (doc: DecodedCrd): CrdDocument | undefined => {
   const versions = doc.spec.versions
+
   if (!doc.metadata.name || versions === undefined || versions.length === 0) return undefined
+
   const schema: CrdDocument["schema"] = versions.map((v) => v.schema?.openAPIV3Schema).find(Boolean)
     ?? { type: "object", additionalProperties: true }
+
   return {
     crdName: doc.metadata.name,
     group: doc.spec.group ?? "",
@@ -92,6 +97,7 @@ const _buildCrds = (parsedDocs: ReadonlyArray<unknown>): CrdDocument[] =>
   parsedDocs.flatMap((parsed) => {
     const doc = Option.getOrUndefined(_decodeCrdDoc(parsed))
     const crd = doc === undefined ? undefined : _toCrdDocument(doc)
+
     return crd === undefined ? [] : [crd]
   })
 
@@ -103,6 +109,7 @@ export const _parseCrdDocs = (yamlText: string): Effect.Effect<CrdDocument[], ne
 
 export const _crdNameToIdentifier = (crdName: string): string => {
   const resource = crdName.split(".")[0] ?? crdName
+
   return resource
     .split(/[-_]/)
     .map((s) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`)
@@ -148,18 +155,22 @@ const _templateChartYaml = (opts: CrdExtractOptions) =>
       "--include-crds",
       "--no-hooks"
     ])
+
     return yield* runProcessString(templateCmd, { allowEmptyStdout: true, timeout: yield* Helm.timeout })
   })
 
 export const _dedupeCrdDocuments = (allYaml: ReadonlyArray<string>): Effect.Effect<Map<string, CrdDocument>, never> =>
   Effect.gen(function*() {
     const seen = new Map<string, CrdDocument>()
+
     for (const yaml of allYaml) {
       const crds = yield* _parseCrdDocs(yaml)
+
       for (const crd of crds) {
         if (!seen.has(crd.crdName)) seen.set(crd.crdName, crd)
       }
     }
+
     return seen
   })
 
@@ -181,6 +192,7 @@ const _writeGeneratedTypes = (opts: CrdExtractOptions, crds: ReadonlyArray<CrdDo
     const path = yield* Path
 
     const parts: string[] = [GENERATED_HEADER, ""]
+
     for (const crd of crds) {
       const ts = yield* _generateCrdTs(crd)
       parts.push(ts, "")
@@ -199,6 +211,7 @@ export const extractCrdsEffect = (opts: CrdExtractOptions) =>
 
     if (crds.size === 0) {
       yield* _writeStub(decoded)
+
       return
     }
 
@@ -207,6 +220,7 @@ export const extractCrdsEffect = (opts: CrdExtractOptions) =>
     Effect.scoped,
     Effect.mapError((cause) => {
       if (cause instanceof CrdInputDecodeError) return cause
+
       return new CrdExtractError({ chart: opts.chart, cause })
     })
   )
@@ -223,12 +237,14 @@ export const verifyCrdsEffect = (input: VerifyCrdsInput) =>
 
     const tmpDir = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-verify-" })
     const drifted: string[] = []
+
     for (const release of input.releases) {
       yield* extractCrdsEffect({ ...release, outDir: tmpDir })
       const tmpFile = path.join(tmpDir, `${release.id}.ts`)
       const committedFile = path.join(input.committedDir, `${release.id}.ts`)
 
       const tmpContent = yield* fs.readFileString(tmpFile).pipe(Effect.orElseSucceed(() => ""))
+
       const committedContent = yield* fs
         .readFileString(committedFile)
         .pipe(Effect.orElseSucceed(() => ""))
@@ -242,5 +258,6 @@ export const verifyCrdsEffect = (input: VerifyCrdsInput) =>
         drifted.push(`${release.id}.ts`)
       }
     }
+
     return drifted
   }).pipe(Effect.scoped)

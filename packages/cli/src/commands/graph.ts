@@ -21,6 +21,7 @@ const _depEdges = (input: {
 
 const _buildEdges = (workspaces: ReadonlyArray<Workspace>): GraphEdge[] => {
   const names = new Set(workspaces.map((w) => w.name))
+
   return workspaces.flatMap((workspace) => [
     ..._depEdges({ workspace, names, record: workspace.pkg.dependencies, kind: "runtime" }),
     ..._depEdges({ workspace, names, record: workspace.pkg.peerDependencies, kind: "runtime" }),
@@ -35,18 +36,11 @@ const _resolveTargetName = (input: {
   (input.workspaces.find((w) => w.name === input.rawTarget) ??
     input.workspaces.find((w) => w.relDir === input.rawTarget))?.name
 
-const _detectWidth = (override: Option.Option<number>): number => {
-  if (Option.isSome(override)) return override.value
-  const cols = process.stdout.columns
-  return typeof cols === "number" && cols > 0 ? cols : 100
-}
-
 export interface RunGraphArgs {
   readonly cwd: string
   readonly target: Option.Option<string>
   readonly withDev: boolean
   readonly full: boolean
-  readonly width: Option.Option<number>
 }
 
 const _resolveTarget = (input: {
@@ -56,7 +50,9 @@ const _resolveTarget = (input: {
   Effect.gen(function*() {
     if (Option.isNone(input.target)) return undefined
     const resolved = _resolveTargetName({ workspaces: input.workspaces, rawTarget: input.target.value })
+
     if (resolved) return resolved
+
     return yield* new GraphTargetNotFound({
       target: input.target.value,
       candidates: input.workspaces.map((w) => w.name)
@@ -66,13 +62,16 @@ const _resolveTarget = (input: {
 const _logTargetNotFound = (err: GraphTargetNotFound) =>
   Effect.gen(function*() {
     yield* Console.error(`error: workspace '${err.target}' not found. Available workspaces:`)
+
     for (const name of err.candidates) yield* Console.error(`  ${name}`)
+
     return yield* err
   })
 
 const _logCycle = (err: CircularWorkspaceDep) =>
   Effect.gen(function*() {
     yield* Console.error(`error: workspace cycle detected: ${err.cycle.join(" → ")}`)
+
     return yield* err
   })
 
@@ -83,23 +82,27 @@ export const runGraph = (
     const p = yield* Path
     const root = yield* findRoot(p.resolve(args.cwd))
     const workspaces = yield* allWorkspaces(root)
+
     const nodes: GraphNode[] = workspaces.map((w) => ({
       name: w.name,
       relDir: w.relDir,
       hasBuildScript: w.hasBuildScript
     }))
+
     const edges = _buildEdges(workspaces)
     const target = yield* _resolveTarget({ workspaces, target: args.target })
     const cycle = detectCycle({ nodes, edges, withDev: args.withDev, target })
+
     if (cycle !== null) return yield* new CircularWorkspaceDep({ cycle: cycle.slice() })
+
     const out = renderGraph({
       nodes,
       edges,
       target,
-      width: _detectWidth(args.width),
       withDev: args.withDev,
       reduce: !args.full
     })
+
     yield* Console.log(out)
   }).pipe(
     Effect.catchTags({ GraphTargetNotFound: _logTargetNotFound, CircularWorkspaceDep: _logCycle })
@@ -116,7 +119,7 @@ export const graphCommand = Command.make(
         Argument.optional
       ),
     withDev: Flag.Boolean("with-dev").pipe(
-      Flag.withDescription("also draw devDependency edges (annotated with ▽)"),
+      Flag.withDescription("also draw devDependency edges (annotated with (dev))"),
       Flag.withDefault(false)
     ),
     full: Flag.Boolean("full").pipe(
@@ -124,12 +127,6 @@ export const graphCommand = Command.make(
         "show every direct edge (default hides transitively-implied edges, e.g. A→C when A→B→C exists)"
       ),
       Flag.withDefault(false)
-    ),
-    width: Flag.Int("width").pipe(
-      Flag.withDescription(
-        "override detected terminal width (defaults to stdout.columns or 100)"
-      ),
-      Flag.optional
     )
   },
   (args) => runGraph({ ...args, cwd: process.cwd() })

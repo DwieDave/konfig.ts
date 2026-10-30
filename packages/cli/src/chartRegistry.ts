@@ -1,5 +1,4 @@
-import { isRecord } from "@konfig.ts/core"
-import { Data, Effect, Schema } from "effect"
+import { Data, Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { ChartId, ChartName, ChartRepoUrl, ChartVersion } from "./chartSchemas"
@@ -34,12 +33,18 @@ export class ChartRegistryEntryDecodeError extends Data.TaggedError("ChartRegist
   }
 }
 
-const _hasHelmReleaseMarker = (val: unknown): val is Record<string, unknown> =>
-  isRecord(val) &&
-  HELM_RELEASE_MARKER in val &&
-  val[HELM_RELEASE_MARKER] === true
+const HelmReleaseExportSchema = Schema.Struct({
+  [HELM_RELEASE_MARKER]: Schema.Literal(true),
+  id: Schema.optional(Schema.Unknown),
+  repo: Schema.optional(Schema.Unknown),
+  chart: Schema.optional(Schema.Unknown),
+  version: Schema.optional(Schema.Unknown),
+  digest: Schema.optional(Schema.Unknown)
+})
 
-const _decodeEntry = (val: Record<string, unknown>, file: string, defaultId: string) =>
+const _decodeHelmReleaseExport = Schema.decodeUnknownOption(HelmReleaseExportSchema)
+
+const _decodeEntry = (val: typeof HelmReleaseExportSchema.Type, file: string, defaultId: string) =>
   Schema.decodeUnknownEffect(ChartRegistryEntrySchema)({
     id: val.id ?? defaultId,
     repo: val.repo,
@@ -61,18 +66,15 @@ const _loadOne = (
 ): Effect.Effect<ChartRegistryEntry | undefined, ChartRegistryEntryDecodeError | ChartRegistryError> =>
   Effect.gen(function*() {
     const { absPath, chartsDir, file } = input
+
     const mod = yield* Effect.tryPromise({
       try: () => import(absPath),
       catch: (cause) => new ChartRegistryError({ chartsDir, cause: `failed to import ${absPath}: ${String(cause)}` })
     })
 
-    for (const key of Object.keys(mod)) {
-      const val = mod[key]
-      if (_hasHelmReleaseMarker(val)) {
-        return yield* _decodeEntry(val, file, file.replace(/\.ts$/, ""))
-      }
-    }
-    return undefined
+    const release = Object.values(mod).map((entry) => _decodeHelmReleaseExport(entry)).find(Option.isSome)
+
+    return release === undefined ? undefined : yield* _decodeEntry(release.value, file, file.replace(/\.ts$/, ""))
   })
 
 export const loadChartRegistryEffect = (
@@ -85,12 +87,16 @@ export const loadChartRegistryEffect = (
     const allFiles = yield* fs.readDirectory(chartsDir).pipe(
       Effect.mapError((cause) => new ChartRegistryError({ chartsDir, cause }))
     )
+
     const files = allFiles.filter((f) => f.endsWith(".ts") && !f.startsWith("_"))
 
     const entries: ChartRegistryEntry[] = []
+
     for (const file of files) {
       const entry = yield* _loadOne({ absPath: path.resolve(chartsDir, file), file, chartsDir })
+
       if (entry !== undefined) entries.push(entry)
     }
+
     return entries
   })

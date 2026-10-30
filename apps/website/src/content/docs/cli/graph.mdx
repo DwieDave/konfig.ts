@@ -10,7 +10,7 @@ sidebar:
 ## Usage
 
 ```bash
-konfig graph [target] [--with-dev] [--full] [--width <n>]
+konfig graph [target] [--with-dev] [--full]
 ```
 
 ## Arguments
@@ -23,9 +23,8 @@ konfig graph [target] [--with-dev] [--full] [--width <n>]
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `--with-dev` | `false` | Also draw `devDependencies` edges, annotated with `▽`. |
+| `--with-dev` | `false` | Also draw `devDependencies` edges, annotated with `(dev)`. |
 | `--full` | `false` | Show every direct edge. By default transitively implied edges are hidden (A→C is dropped when A→B→C exists). |
-| `--width <n>` | `stdout.columns` or `100` | Override the detected terminal width. |
 
 ## Behaviour
 
@@ -50,5 +49,5 @@ Nodes that define a `build` script are marked, so you can see which packages the
 ```bash
 konfig graph                          # whole monorepo
 konfig graph apps/api --with-dev      # api's closure, including dev edges
-konfig graph @example/api --full --width 140
+konfig graph @example/api --full
 ```

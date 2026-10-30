@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { isRecord } from "@konfig.ts/core"
-import { Cause, Console, Effect, Runtime } from "effect"
+import { Cause, Console, Effect, Option, Predicate, Runtime, Schema } from "effect"
 import { Command } from "effect/cli"
 import { createRequire } from "node:module"
 import { buildCommand } from "./commands/build"
@@ -33,9 +32,11 @@ const root = Command.make(
 // At runtime this module is `dist/main.mjs`, so `../package.json` resolves to
 // the package root in both source and bundled layouts.
 const _pkg: unknown = createRequire(import.meta.url)("../package.json")
-const version = isRecord(_pkg) && "version" in _pkg && typeof _pkg.version === "string"
-  ? _pkg.version
-  : "0.0.0"
+
+const version = Option.match(Schema.decodeUnknownOption(Schema.Struct({ version: Schema.String }))(_pkg), {
+  onNone: () => "0.0.0",
+  onSome: (pkg) => pkg.version
+})
 
 const _FULL_CAUSE_LOG_LEVELS: ReadonlySet<string> = new Set(["debug", "trace", "all"])
 
@@ -45,30 +46,32 @@ const _FULL_CAUSE_LOG_LEVELS: ReadonlySet<string> = new Set(["debug", "trace", "
 const _wantsFullCause = (argv: readonly string[]): boolean => {
   if (argv.includes("--verbose")) return true
   const at = argv.indexOf("--log-level")
+
   const level = at >= 0
     ? argv[at + 1]
     : argv.find((arg) => arg.startsWith("--log-level="))?.slice("--log-level=".length)
+
   return level !== undefined && _FULL_CAUSE_LOG_LEVELS.has(level.toLowerCase())
 }
 
 // Tagged errors without a `message` getter still carry their fields; those are
 // the message in that case, so the line never ends in a bare tag.
 const _errorFields = (error: Error): string => {
-  const fields: string[] = []
-  for (const [key, value] of Object.entries(error)) {
-    if (key === "_tag" || key === "cause" || typeof value === "function") continue
-    fields.push(`${key}=${typeof value === "string" ? value : JSON.stringify(value)}`)
-  }
-  return fields.join(" ")
+  return Object.entries(error)
+    .filter(([key, value]) => key !== "_tag" && key !== "cause" && !Predicate.isFunction(value))
+    .map(([key, value]) => `${key}=${Predicate.isString(value) ? value : JSON.stringify(value)}`)
+    .join(" ")
 }
 
-const _oneLiner = (error: unknown): string => {
-  if (error instanceof Error) {
-    const tag = "_tag" in error && typeof error._tag === "string" ? `${error._tag}: ` : ""
-    const body = error.message.length > 0 ? error.message : _errorFields(error)
-    return `${tag}${body}`
-  }
-  return String(error)
+const _TaggedSchema = Schema.Struct({ _tag: Schema.String })
+
+const _errorLine = (error: Error): string => {
+  const tag = Option.match(Schema.decodeUnknownOption(_TaggedSchema)(error), {
+    onNone: () => "",
+    onSome: (tagged) => `${tagged._tag}: `
+  })
+
+  return `${tag}${error.message.length > 0 ? error.message : _errorFields(error)}`
 }
 
 // Replaces runMain's default reporter, which logs the whole Cause tree: a
@@ -78,10 +81,12 @@ const _oneLiner = (error: unknown): string => {
 const _reportFailure = (cause: Cause.Cause<unknown>): Effect.Effect<void> => {
   if (Cause.hasInterruptsOnly(cause)) return Effect.void
   const error = Cause.squash(cause)
+
   if (!Runtime.getErrorReported(error)) return Effect.void
+
   return _wantsFullCause(process.argv)
     ? Console.error(Cause.pretty(cause))
-    : Console.error(`konfig: ${_oneLiner(error)}`)
+    : Console.error(`konfig: ${Predicate.isError(error) ? _errorLine(error) : String(error)}`)
 }
 
 NodeRuntime.runMain(

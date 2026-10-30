@@ -3,7 +3,6 @@ import {
   type AnyRenderError,
   isParsedDoc,
   isRawYaml,
-  isRecord,
   KONFIG_HELM_CACHE_ENV,
   Manifest as M,
   type RenderContext,
@@ -27,6 +26,7 @@ export interface EnvOutDirInput {
   readonly ctx: RenderContext
   readonly pathJoin: (...parts: string[]) => string
 }
+
 export const envOutDir = (input: EnvOutDirInput): string =>
   input.pathJoin(
     input.cfg.configDir,
@@ -63,6 +63,7 @@ interface _ResolveEnvEntryInput {
   readonly cfg: ResolvedKonfigConfig
   readonly envName: string
 }
+
 const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
   Effect.gen(function*() {
     const { cfg, envName } = input
@@ -72,9 +73,11 @@ const _resolveEnvEntry = (input: _ResolveEnvEntryInput) =>
     const entry = envEntryPath({ cfg, envName, pathJoin: path.join })
 
     const exists = yield* fs.exists(entry).pipe(Effect.orElseSucceed(() => false))
+
     if (!exists) {
       return yield* new EnvEntryNotFound({ env: envName, entry })
     }
+
     return entry
   })
 
@@ -86,21 +89,27 @@ const _loadEnv = (entry: string) =>
       try: () => import(entry),
       catch: (cause) => new EnvLoadError({ entry, cause })
     })
+
     const program = moduleDefault(mod)
+
     if (program === undefined) {
       return yield* new EnvLoadError({ entry, cause: "default export is missing" })
     }
+
     const isEffectProgram: boolean = Effect.isEffect(program)
+
     if (!isEffectProgram) {
       return yield* new EnvLoadError({
         entry,
         cause: "default export is not an Effect — env entries must default-export an AppOfApps or Bundle program Effect"
       })
     }
+
     const result = yield* unsafeCoerce<Effect.Effect<unknown, AnyRenderError>>(
       program,
       "isEffectProgram confirmed above; only the R/E channels are narrowed, the result value is decoded below"
     )
+
     return yield* decodeEnvResult(result).pipe(
       Effect.mapError((cause) => new EnvResultInvalid({ entry, cause }))
     )
@@ -128,6 +137,7 @@ const _KindNameSchema = Schema.Struct({
     Schema.Struct({ name: Schema.optional(Schema.String), namespace: Schema.optional(Schema.String) })
   )
 })
+
 const _decodeKindName = Schema.decodeUnknownOption(_KindNameSchema)
 
 interface Routing {
@@ -136,26 +146,28 @@ interface Routing {
   readonly namespace: string | undefined
 }
 
-const _routingOf = (doc: object): Routing | undefined => {
-  const parsed = Option.getOrUndefined(_decodeKindName(doc))
-  const kind = parsed?.kind
-  const name = parsed?.metadata?.name
+const _routingOf = (parsed: typeof _KindNameSchema.Type): Routing | undefined => {
+  const kind = parsed.kind
+  const name = parsed.metadata?.name
+
   return kind === undefined || name === undefined
     ? undefined
-    : { kind, name, namespace: parsed?.metadata?.namespace }
+    : { kind, name, namespace: parsed.metadata?.namespace }
 }
 
 const _describeObject = (routing: Routing): string =>
   `${routing.kind} ${routing.namespace === undefined ? "" : `${routing.namespace}/`}${routing.name}`
 
 interface _ToOutputFileInput {
-  readonly doc: object
+  readonly doc: unknown
   readonly routing: Routing
   readonly dir: string
   readonly pathJoin: (...parts: string[]) => string
 }
+
 const _toOutputFile = (input: _ToOutputFileInput): Effect.Effect<OutputFile, InvalidOutputObject> => {
   const { dir, doc, pathJoin, routing } = input
+
   return routing.kind === "" || routing.name === ""
     ? Effect.fail(new InvalidOutputObject({ kind: routing.kind, objectName: routing.name, dir }))
     : Effect.succeed({
@@ -166,12 +178,13 @@ const _toOutputFile = (input: _ToOutputFileInput): Effect.Effect<OutputFile, Inv
 }
 
 const _objectOutputs = (
-  input: Omit<_ToOutputFileInput, "routing">
+  input: Omit<_ToOutputFileInput, "routing"> & { readonly parsed: typeof _KindNameSchema.Type }
 ): Effect.Effect<OutputFile[], InvalidOutputObject> => {
-  const routing = _routingOf(input.doc)
+  const routing = _routingOf(input.parsed)
+
   return routing === undefined
     ? Effect.succeed([])
-    : Effect.map(_toOutputFile({ ...input, routing }), (file) => [file])
+    : Effect.map(_toOutputFile({ doc: input.doc, dir: input.dir, pathJoin: input.pathJoin, routing }), (file) => [file])
 }
 
 interface _CollectOutputsInput {
@@ -179,14 +192,22 @@ interface _CollectOutputsInput {
   readonly appDir: string
   readonly pathJoin: (...parts: string[]) => string
 }
+
 const _collectOutputs = (input: _CollectOutputsInput): Effect.Effect<OutputFile[], InvalidOutputObject> => {
   const { appDir, pathJoin, value } = input
-  const recurse = (v: unknown) => _collectOutputs({ value: v, appDir, pathJoin })
+  const recurse = (v: _CollectOutputsInput["value"]) => _collectOutputs({ value: v, appDir, pathJoin })
+
   const flatten = (values: ReadonlyArray<unknown>) =>
     Effect.forEach(values, recurse).pipe(Effect.map((groups) => groups.flat()))
+
   if (Array.isArray(value)) return flatten(value)
+
   if (isRawYaml(value) || isParsedDoc(value)) return flatten(unwrapDocs(value))
-  return isRecord(value) ? _objectOutputs({ doc: value, dir: appDir, pathJoin }) : Effect.succeed([])
+
+  return Option.match(_decodeKindName(value), {
+    onNone: () => Effect.succeed([]),
+    onSome: (parsed) => _objectOutputs({ doc: value, dir: appDir, pathJoin, parsed })
+  })
 }
 
 export interface OutputCollision {
@@ -199,6 +220,7 @@ class OutputFileCollision extends Data.TaggedError("OutputFileCollision")<{
 }> {
   get message(): string {
     const lines = this.collisions.map((c) => `  ${c.path}: ${c.objects.join(" vs ")}`)
+
     return `distinct rendered objects map to the same output file:\n${lines.join("\n")}`
   }
 }
@@ -212,6 +234,7 @@ export const findOutputCollisions = (files: ReadonlyArray<OutputFile>): OutputCo
 
 const _failOnCollisions = (files: ReadonlyArray<OutputFile>) => {
   const collisions = findOutputCollisions(files)
+
   return collisions.length === 0 ? Effect.void : Effect.fail(new OutputFileCollision({ collisions }))
 }
 
@@ -258,6 +281,7 @@ const _renderChild = (input: RenderChildInput) =>
   Effect.gen(function*() {
     const { appsDirAbs, child, ctx, outDirAbs, path } = input
     const appDir = path.join(outDirAbs, child.name)
+
     const rendered = yield* Effect.forEach(
       child.manifests,
       (m) =>
@@ -266,11 +290,14 @@ const _renderChild = (input: RenderChildInput) =>
           : Effect.die(new NonManifestChild({ child: child.name })),
       { concurrency: "unbounded" }
     )
+
     const collected = yield* Effect.forEach(
       rendered,
       (value) => _collectOutputs({ value, appDir, pathJoin: path.join })
     )
+
     const out: OutputFile[] = collected.flat()
+
     if (child.argo !== undefined) {
       out.push({
         path: path.join(appsDirAbs, applicationCRFilename(child.argo.app)),
@@ -281,6 +308,7 @@ const _renderChild = (input: RenderChildInput) =>
         })
       })
     }
+
     return out
   })
 
@@ -289,6 +317,7 @@ export interface RenderEnvInput {
   readonly envName: string
   readonly ctx: RenderContext
 }
+
 const _renderEnvBody = (input: RenderEnvInput) =>
   Effect.gen(function*() {
     const { cfg, envName, ctx } = input
@@ -307,10 +336,12 @@ const _renderEnvBody = (input: RenderEnvInput) =>
       (child) => _renderChild({ appsDirAbs, child, ctx, outDirAbs, path }),
       { concurrency: 4 }
     )
+
     const files: OutputFile[] = perAppFiles.flat()
     yield* _failOnCollisions(files)
 
     const rendered: RenderedEnv = { appsDirAbs, outDirAbs, files }
+
     return rendered
   }).pipe(Effect.scoped)
 
@@ -328,10 +359,12 @@ export const renderEnv = (input: RenderEnvInput) =>
     // var override on top: it's tried first, only falling back to the
     // resolved value for the one KONFIG_HELM_CACHE key.
     const { cacheDir } = yield* resolveCliPaths(input.cfg)
+
     const helmConfigProvider = ConfigProvider.orElse(
       ConfigProvider.fromEnv(),
       ConfigProvider.fromUnknown({ [KONFIG_HELM_CACHE_ENV]: cacheDir })
     )
+
     return yield* _renderEnvBody(input).pipe(
       Effect.provideService(ConfigProvider.ConfigProvider, helmConfigProvider)
     )
@@ -361,6 +394,7 @@ export const writeFilesToDir = (
     const { rendered, targetDir } = input
 
     const written: string[] = []
+
     for (const file of rendered.files) {
       const rel = path.relative(rendered.outDirAbs, file.path)
       const targetPath = path.join(targetDir, rel)
@@ -372,6 +406,7 @@ export const writeFilesToDir = (
         .pipe(Effect.mapError((cause) => new WriteEnvError({ path: targetPath, cause })))
       written.push(targetPath)
     }
+
     return written
   })
 
@@ -379,6 +414,7 @@ const _removeIfExists = (target: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
+
     if (!exists) return
     yield* fs
       .remove(target, { recursive: true })
@@ -406,5 +442,6 @@ export const writeFiles = (
     yield* _removeIfExists(stagingDir)
     yield* writeFilesToDir({ rendered, targetDir: stagingDir })
     yield* _promoteStaging({ stagingDir, outDirAbs: rendered.outDirAbs })
+
     return rendered.files.map((file) => file.path)
   })

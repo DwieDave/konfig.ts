@@ -77,7 +77,7 @@ konfig set <env> <app> <imageRef> [--create]   # update one image tag in images.
 konfig crd extract|verify           # CRD TypeScript codegen from Helm charts
 konfig helm fetch --all             # pre-fetch chart tarballs into the cache
 konfig docker preview|write|diff <app>   # Dockerfile generation (@konfig.ts/docker)
-konfig graph [target] [--with-dev] [--full] [--width <n>]   # print the workspace dependency graph
+konfig graph [target] [--with-dev] [--full]   # print the workspace dependency graph
 ```
 
 `build` / `validate` / `diff` share `--cluster <name>`, `--k8s-version <ver>`,

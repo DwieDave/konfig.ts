@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import fc from "fast-check"
@@ -14,6 +14,7 @@ const _writeEnvFile = (root: string, entry: string, body: string) =>
     const full = path.join(root, entry)
     yield* fs.makeDirectory(path.dirname(full), { recursive: true })
     yield* fs.writeFileString(full, body)
+
     return full
   })
 
@@ -54,6 +55,7 @@ export default AppOfApps.fromModules({
 	modules: [svc] as const,
 });
 `
+
       yield* _writeEnvFile(root, "infra/env/test.ts", envBody)
 
       const cfg = _cfgFor(root)
@@ -86,6 +88,7 @@ const raw = Bundle.define({
 });
 export default Bundle.fromModules({ modules: [raw] as const });
 `
+
       yield* _writeEnvFile(root, "infra/env/test.ts", envBody)
 
       const cfg = _cfgFor(root)
@@ -117,6 +120,7 @@ const raw = Bundle.define({
 });
 export default Bundle.fromModules({ modules: [raw] as const });
 `
+
       yield* _writeEnvFile(root, "infra/env/test.ts", envBody)
 
       const cfg = _cfgFor(root)
@@ -137,8 +141,8 @@ describe("renderEnv: env-entry error paths", () => {
       const ctx = RenderContext.make("missing")
 
       const err = yield* renderEnv({ cfg, envName: "missing", ctx }).pipe(Effect.flip)
-      expect(err._tag).toBe("EnvEntryNotFound")
-      expect(err._tag === "EnvEntryNotFound" && err.env).toBe("missing")
+      expect(Predicate.isTagged(err, "EnvEntryNotFound")).toBe(true)
+      expect(err).toMatchObject({ env: "missing" })
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("EnvLoadError when the entry's default export is missing", () =>
@@ -166,7 +170,7 @@ describe("renderEnv: env-entry error paths", () => {
 
       const err = yield* renderEnv({ cfg, envName: "test", ctx }).pipe(Effect.flip)
       expect(err._tag).toBe("EnvLoadError")
-      expect(typeof err.cause).toBe("string")
+      expect(err.cause).toBeTypeOf("string")
       expect(String(err.cause)).toContain("not an Effect")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -174,15 +178,17 @@ describe("renderEnv: env-entry error paths", () => {
     Effect.gen(function*() {
       const fs = yield* FileSystem
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-explicit-entry-" })
+
       const cfg: ResolvedKonfigConfig = {
         ..._cfgFor(root),
         config: { ..._cfgFor(root).config, envs: { staging: { entry: "custom/staging-entry.ts" } } }
       }
+
       const ctx = RenderContext.make("staging")
 
       const err = yield* renderEnv({ cfg, envName: "staging", ctx }).pipe(Effect.flip)
-      expect(err._tag).toBe("EnvEntryNotFound")
-      expect(err._tag === "EnvEntryNotFound" && err.entry.endsWith("custom/staging-entry.ts")).toBe(true)
+      expect(Predicate.isTagged(err, "EnvEntryNotFound")).toBe(true)
+      expect(err).toMatchObject({ entry: expect.stringMatching(/custom\/staging-entry\.ts$/) })
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
 
@@ -198,6 +204,7 @@ const _renderFlipped = (body: string) =>
     const fs = yield* FileSystem
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "konfig-env-err-" })
     yield* _writeEnvFile(root, "infra/env/test.ts", body)
+
     return yield* renderEnv({ cfg: _cfgFor(root), envName: "test", ctx: RenderContext.make("test") }).pipe(Effect.flip)
   })
 
@@ -209,6 +216,7 @@ describe("renderEnv: output file safety", () => {
           `[ConfigMap.make({ name: "c", namespace: "a", data: { K: "1" } }), ConfigMap.make({ name: "c", namespace: "b", data: { K: "1" } })]`
         )
       )
+
       expect(err._tag).toBe("OutputFileCollision")
       expect(String(err.message)).toContain("ConfigMap a/c")
       expect(String(err.message)).toContain("ConfigMap b/c")
@@ -219,6 +227,7 @@ describe("renderEnv: output file safety", () => {
       const err = yield* _renderFlipped(
         _bundleEnv(`[Manifest.embedYaml({ literal: "apiVersion: v1\\nkind: ConfigMap\\nmetadata:\\n  name: ''\\n" })]`)
       )
+
       expect(err._tag).toBe("InvalidOutputObject")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
@@ -227,6 +236,7 @@ describe("renderEnv: output file safety", () => {
       const err = yield* _renderFlipped(
         `import { Effect } from "effect";\nexport default Effect.succeed({ name: 5 });\n`
       )
+
       expect(err._tag).toBe("EnvResultInvalid")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
@@ -247,11 +257,13 @@ describe("findOutputCollisions", () => {
     fc.assert(
       fc.property(_seg, _seg, _seg, (name, a, b) => {
         const path = `/o/${name}.yaml`
+
         const differing = findOutputCollisions([{ path, content: `${a}1`, object: "x" }, {
           path,
           content: `${a}2`,
           object: "y"
         }])
+
         expect(differing).toEqual([{ path, objects: ["x", "y"] }])
         expect(findOutputCollisions([{ path, content: b }, { path, content: b }])).toEqual([])
       })
