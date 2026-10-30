@@ -18,25 +18,19 @@ const _decodeRecipients = boundary({
   label: "SopsRecipients"
 })
 
-const _recipientArgs = (recipients: SopsRecipients): string[] => {
-  const out: string[] = []
-  if (recipients.age !== undefined && recipients.age.length > 0) {
-    out.push("--age", recipients.age.join(","))
-  }
-  if (recipients.kms !== undefined && recipients.kms.length > 0) {
-    out.push("--kms", recipients.kms.join(","))
-  }
-  if (recipients.gcpKms !== undefined && recipients.gcpKms.length > 0) {
-    out.push("--gcp-kms", recipients.gcpKms.join(","))
-  }
-  if (recipients.azureKv !== undefined && recipients.azureKv.length > 0) {
-    out.push("--azure-kv", recipients.azureKv.join(","))
-  }
-  if (recipients.pgp !== undefined && recipients.pgp.length > 0) {
-    out.push("--pgp", recipients.pgp.join(","))
-  }
-  return out
-}
+const _RECIPIENT_FLAGS: ReadonlyArray<readonly [keyof SopsRecipients, string]> = [
+  ["age", "--age"],
+  ["kms", "--kms"],
+  ["gcpKms", "--gcp-kms"],
+  ["azureKv", "--azure-kv"],
+  ["pgp", "--pgp"]
+]
+
+const _recipientArgs = (recipients: SopsRecipients): string[] =>
+  _RECIPIENT_FLAGS.flatMap(([field, flag]) => {
+    const values = recipients[field]
+    return values !== undefined && values.length > 0 ? [flag, values.join(",")] : []
+  })
 
 export interface SopsDecryptInput {
   readonly file: string

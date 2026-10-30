@@ -1,6 +1,5 @@
+import { objectMetaSchema, stringRecordSchema as _stringRecord } from "@konfig.ts/k8s"
 import { Schema } from "effect"
-
-const _stringRecord = Schema.Record(Schema.String, Schema.String)
 
 export const SealedSecretTemplateSchema = Schema.Struct({
   metadata: Schema.optionalKey(
@@ -23,11 +22,6 @@ export const SealedSecretSpecSchema = Schema.Struct({
 export const SealedSecretSchema = Schema.Struct({
   apiVersion: Schema.Literal("bitnami.com/v1alpha1"),
   kind: Schema.Literal("SealedSecret"),
-  metadata: Schema.Struct({
-    name: Schema.String,
-    namespace: Schema.String,
-    labels: Schema.optionalKey(_stringRecord),
-    annotations: Schema.optionalKey(_stringRecord)
-  }),
+  metadata: objectMetaSchema,
   spec: SealedSecretSpecSchema
 })

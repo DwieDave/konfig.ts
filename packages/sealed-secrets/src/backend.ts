@@ -1,7 +1,6 @@
 import { Manifest, RenderError, Yaml } from "@konfig.ts/core"
-import type { SecretSourceError } from "@konfig.ts/env"
-import { type BackendEmitInput, type SecretBackend } from "@konfig.ts/k8s"
-import { Effect, Redacted } from "effect"
+import { type BackendEmitInput, type EmitInput, resolvePlaintext, type SecretBackend } from "@konfig.ts/k8s"
+import { Effect } from "effect"
 import type { SealedSecret, SealedSecretScope } from "./crd"
 import { resolveCertPath, runKubeseal } from "./kubeseal"
 
@@ -10,16 +9,6 @@ export interface SealedSecretsBackendOptions {
   readonly certPath?: string
   readonly type?: string
 }
-
-interface _EmitInput<N extends string, K extends string> {
-  readonly base: BackendEmitInput<N, K, true>
-  readonly opts: SealedSecretsBackendOptions
-}
-
-const _toStringData = (
-  keys: ReadonlyArray<string>,
-  resolved: Record<string, Redacted.Redacted<string>>
-): Record<string, string> => Object.fromEntries(keys.map((key) => [key, Redacted.value(resolved[key])]))
 
 const _toRenderError = <C = unknown>(
   base: { readonly namespace: string; readonly name: string },
@@ -32,19 +21,17 @@ const _toRenderError = <C = unknown>(
   })
 
 const _emit = <N extends string, K extends string>(
-  input: _EmitInput<N, K>
+  input: EmitInput<N, K, SealedSecretsBackendOptions>
 ): Manifest.Manifest<SealedSecret> =>
   Manifest.make<SealedSecret>((_ctx) =>
     Effect.gen(function*() {
       const certPath = yield* resolveCertPath({ certPath: input.opts.certPath }).pipe(
         Effect.mapError(_toRenderError(input.base, "cert missing"))
       )
-      const resolved = yield* input.base.source.resolve.pipe(
-        Effect.mapError(
-          _toRenderError<SecretSourceError>(input.base, (cause) => `source failed for key "${cause.key}"`)
-        )
-      )
-      const stringData = _toStringData(input.base.keys, resolved)
+      const stringData = yield* resolvePlaintext({
+        base: input.base,
+        label: `SealedSecrets(${input.base.namespace}/${input.base.name})`
+      })
       const plainSecret = {
         apiVersion: "v1" as const,
         kind: "Secret" as const,

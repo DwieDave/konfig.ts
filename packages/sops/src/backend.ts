@@ -1,8 +1,13 @@
 import { boundary, type BoundaryDecodeError, Manifest, RenderError, Yaml } from "@konfig.ts/core"
-import { type BackendEmitInput, type SecretBackend } from "@konfig.ts/k8s"
-import { Data, Effect, Redacted } from "effect"
+import {
+  type BackendEmitInput,
+  type EmitInput,
+  parseYamlWith,
+  resolvePlaintext,
+  type SecretBackend
+} from "@konfig.ts/k8s"
+import { Data, Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
-import * as YAML from "yaml"
 import type { SopsRecipients, SopsSecret } from "./crd"
 import { compilePolicy, mustEncrypt } from "./encryption-policy"
 import { SopsEncryptedSecretSchema } from "./schema"
@@ -59,9 +64,9 @@ const _parseVerified = (
   label: string
 ): Effect.Effect<SopsSecret, RenderError | BoundaryDecodeError> =>
   Effect.gen(function*() {
-    const parsed = yield* Effect.try({
-      try: (): unknown => YAML.parse(yamlText),
-      catch: (cause) => new RenderError({ message: `${label}: output was not valid YAML`, cause })
+    const parsed = yield* parseYamlWith({
+      text: yamlText,
+      onError: (cause) => new RenderError({ message: `${label}: output was not valid YAML`, cause })
     })
     const decoded = yield* _decodeSopsSecret(parsed)
     yield* _assertEncrypted(decoded, label)
@@ -108,13 +113,8 @@ export interface SopsBackendOptions {
   readonly encryptedRegex?: string
 }
 
-interface _EmitInput<N extends string, K extends string> {
-  readonly base: BackendEmitInput<N, K, true>
-  readonly opts: SopsBackendOptions
-}
-
 const _plainCR = <N extends string, K extends string>(
-  input: _EmitInput<N, K>,
+  input: EmitInput<N, K, SopsBackendOptions>,
   stringData: Record<string, string>
 ) => ({
   apiVersion: "isindir.github.com/v1alpha3" as const,
@@ -137,24 +137,12 @@ const _plainCR = <N extends string, K extends string>(
 })
 
 const _emit = <N extends string, K extends string>(
-  input: _EmitInput<N, K>
+  input: EmitInput<N, K, SopsBackendOptions>
 ): Manifest.Manifest<SopsSecret> =>
   Manifest.make<SopsSecret>((_ctx) =>
     Effect.gen(function*() {
       const label = `Sops(${input.base.namespace}/${input.base.name})`
-      const resolved = yield* input.base.source.resolve.pipe(
-        Effect.mapError(
-          (cause) =>
-            new RenderError({
-              message: `${label}: source failed for key "${cause.key}"`,
-              cause
-            })
-        )
-      )
-      const stringData: Record<string, string> = {}
-      for (const key of input.base.keys) {
-        stringData[key] = Redacted.value(resolved[key])
-      }
+      const stringData = yield* resolvePlaintext({ base: input.base, label })
       const yaml = Yaml.serialize({ value: _plainCR(input, stringData) })
       const encryptedYaml = yield* sopsEncryptStdin({
         plaintextYaml: yaml,

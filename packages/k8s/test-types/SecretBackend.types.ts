@@ -13,9 +13,7 @@ type _Backend_NotAssignable = Expect<
   Equal<typeof reqTrue extends SecretBackend<"x", "k", false> ? true : false, false>
 >
 
-type _BackendTag = Expect<
-  Equal<BackendTag, "Sops" | "Sops.passthrough" | "SealedSecrets" | "ExternalSecrets" | "NativeSecret">
->
+type _BackendTag = Expect<Equal<BackendTag, string>>
 
 type _BackendEmitInputRequired = Expect<
   Equal<

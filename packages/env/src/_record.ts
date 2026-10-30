@@ -1,5 +1,5 @@
 import { unsafeCoerce } from "@konfig.ts/core"
-import { Config } from "effect"
+import { Config, Effect, Redacted } from "effect"
 
 type _ConfigSuccess<A> = [A] extends [Config.Config<infer T>] ? T : never
 
@@ -39,4 +39,20 @@ export const typedKeys = <D extends object>(d: D): Array<keyof D & string> =>
   unsafeCoerce<Array<keyof D & string>>(
     Object.keys(d),
     "Object.keys of D returns the string keys of D, i.e. Array<keyof D & string>"
+  )
+
+export const resolveByKey = <K extends string, E, R>(input: {
+  readonly keys: ReadonlyArray<K>
+  readonly resolve: (key: K) => Effect.Effect<Redacted.Redacted<string>, E, R>
+}): Effect.Effect<{ readonly [P in K]: Redacted.Redacted<string> }, E, R> =>
+  Effect.forEach(
+    input.keys,
+    (key) => Effect.map(input.resolve(key), (value): [K, Redacted.Redacted<string>] => [key, value])
+  ).pipe(
+    Effect.map((entries) =>
+      unsafeCoerce<{ readonly [P in K]: Redacted.Redacted<string> }>(
+        Object.fromEntries(entries),
+        "entries are one [key, value] pair per requested key"
+      )
+    )
   )

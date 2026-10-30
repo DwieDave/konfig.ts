@@ -1,5 +1,16 @@
 export * as K8s from "./.generated/k8s-types"
 export {
+  type BackendEmitInput,
+  type BackendTag,
+  type EmitInput,
+  objectMetaSchema,
+  parseYamlWith,
+  resolvePlaintext,
+  resolveSource,
+  type SecretBackend,
+  stringRecordSchema
+} from "./backend"
+export {
   Container,
   type ContainerInput,
   type ContainerSpec,
@@ -71,7 +82,6 @@ export const Environment = {
   bind: bindEnvironment,
   runtime: envRuntime
 }
-export { type BackendEmitInput, type BackendTag, type SecretBackend } from "./backend"
 export type {
   BindEnvironmentInput,
   DeclaredDownward,
@@ -141,6 +151,7 @@ export {
   type StatefulSetInput
 } from "./workload"
 
+export type { ClusterMetaInput, MetaLabels, NamespacedMetaInput, PodTemplateMetaInput } from "./meta"
 export { type DefinePodSetInput, PodSet } from "./podSet"
 export { Selector } from "./selector"
 export type { SelectorLabels } from "./selector"

@@ -1,7 +1,7 @@
 import { boundary, processDetail, type ProcessFailure, runProcessString } from "@konfig.ts/core"
+import { parseYamlWith } from "@konfig.ts/k8s"
 import { Config, Data, Effect, Option, Stream } from "effect"
 import { ChildProcess } from "effect/process"
-import * as YAML from "yaml"
 import type { SealedSecretScope } from "./crd"
 import { SealedSecretSchema } from "./schema"
 
@@ -63,9 +63,9 @@ export const runKubeseal = (input: RunKubesealInput) =>
     const stdout = yield* runProcessString(cmd).pipe(
       Effect.mapError((cause) => new KubesealInvocationError({ cause }))
     )
-    const parsed = yield* Effect.try({
-      try: (): unknown => YAML.parse(stdout),
-      catch: (cause) => new KubesealParseError({ output: stdout, cause })
+    const parsed = yield* parseYamlWith({
+      text: stdout,
+      onError: (cause) => new KubesealParseError({ output: stdout, cause })
     })
     return yield* _decodeSealedSecret(parsed)
   }).pipe(Effect.scoped)

@@ -1,7 +1,7 @@
-import { Manifest, RenderError } from "@konfig.ts/core"
-import { Effect, Redacted } from "effect"
+import { Manifest } from "@konfig.ts/core"
+import { Effect } from "effect"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
-import { type BackendEmitInput, type SecretBackend } from "./backend"
+import { type BackendEmitInput, type EmitInput, resolvePlaintext, type SecretBackend } from "./backend"
 
 export interface NativeSecretOptions {
   readonly type?: string
@@ -9,13 +9,8 @@ export interface NativeSecretOptions {
   readonly silenceWarning?: boolean
 }
 
-interface _EmitInput<N extends string, K extends string> {
-  readonly base: BackendEmitInput<N, K, true>
-  readonly opts: NativeSecretOptions
-}
-
 const _emit = <N extends string, K extends string>(
-  input: _EmitInput<N, K>
+  input: EmitInput<N, K, NativeSecretOptions>
 ): Manifest.Manifest<K8sSecret> =>
   Manifest.make<K8sSecret>((_ctx) =>
     Effect.gen(function*() {
@@ -24,19 +19,10 @@ const _emit = <N extends string, K extends string>(
           `NativeSecret backend emits a plaintext Secret with stringData on disk for "${input.base.namespace}/${input.base.name}". Pass { silenceWarning: true } to suppress, or switch to ExternalSecrets / SealedSecrets / Sops for production.`
         )
       }
-      const resolved = yield* input.base.source.resolve.pipe(
-        Effect.mapError(
-          (cause) =>
-            new RenderError({
-              message: `NativeSecret(${input.base.namespace}/${input.base.name}): source failed for key "${cause.key}"`,
-              cause
-            })
-        )
-      )
-      const stringData: Record<string, string> = {}
-      for (const key of input.base.keys) {
-        stringData[key] = Redacted.value(resolved[key])
-      }
+      const stringData = yield* resolvePlaintext({
+        base: input.base,
+        label: `NativeSecret(${input.base.namespace}/${input.base.name})`
+      })
       const out: K8sSecret = {
         apiVersion: "v1",
         kind: "Secret",

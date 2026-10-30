@@ -1,8 +1,9 @@
+import { isRecord } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
-import { collectByKey, SecretSourceError } from "@konfig.ts/env"
+import { resolveByKey, SecretSourceError } from "@konfig.ts/env"
+import { parseYamlWith } from "@konfig.ts/k8s"
 import { Effect, Redacted } from "effect"
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
-import * as YAML from "yaml"
 import { sopsDecrypt } from "./sops"
 
 export interface SopsSourceInput<K extends string> {
@@ -12,12 +13,14 @@ export interface SopsSourceInput<K extends string> {
   readonly extract?: (key: K, parsed: unknown) => unknown
 }
 
-const _hasKey = <K extends string>(obj: object, key: K): obj is { readonly [P in K]: unknown } => key in obj
+const _defaultExtract = (key: string, parsed: unknown): unknown => isRecord(parsed) ? parsed[key] : undefined
 
-const _defaultExtract = (key: string, parsed: unknown): unknown => {
-  if (parsed === null || typeof parsed !== "object") return undefined
-  return _hasKey(parsed, key) ? parsed[key] : undefined
-}
+const _asRedacted = (key: string, value: unknown) =>
+  typeof value === "string"
+    ? Effect.succeed(Redacted.make(value))
+    : Effect.fail(
+      new SecretSourceError({ source: "Sops", key, cause: `extracted value for "${key}" is not a string` })
+    )
 
 // Decrypts the file once; plucks every requested key from the in-memory plaintext.
 const _source = <const K extends string>(
@@ -30,23 +33,14 @@ const _source = <const K extends string>(
         (cause) => new SecretSourceError({ source: "Sops", key: input.file, cause })
       )
     )
-    const parsed = yield* Effect.try({
-      try: (): unknown => YAML.parse(decryptedYaml),
-      catch: (cause) => new SecretSourceError({ source: "Sops", key: input.file, cause })
+    const parsed = yield* parseYamlWith({
+      text: decryptedYaml,
+      onError: (cause) => new SecretSourceError({ source: "Sops", key: input.file, cause })
     })
-    const out: Record<string, Redacted.Redacted<string>> = {}
-    for (const key of input.keys) {
-      const value = extract(key, parsed)
-      if (typeof value !== "string") {
-        return yield* new SecretSourceError({
-          source: "Sops",
-          key,
-          cause: `extracted value for "${key}" is not a string`
-        })
-      }
-      out[key] = Redacted.make(value)
-    }
-    return collectByKey({ keys: input.keys, build: (key) => out[key] })
+    return yield* resolveByKey({
+      keys: input.keys,
+      resolve: (key) => _asRedacted(key, extract(key, parsed))
+    })
   })
   return { _tag: "SecretSource", keys: input.keys, resolve }
 }

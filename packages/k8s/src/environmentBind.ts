@@ -200,14 +200,13 @@ const _normalizeSecretMember = (
   raw: SecretMemberInput<string, string> | undefined
 ): SecretMemberOptions<string, string> | undefined => {
   if (raw === undefined || !("_tag" in raw)) return raw
-  return raw._tag === "SecretSource" ? { source: raw } : { backend: raw }
+  return "emit" in raw ? { backend: raw } : { source: raw }
 }
 
 // The typed options records (SecretMembersOpts / LiteralMembersOpts and their
 // nested sub-records) are walked with runtime string keys; this helper is the
 // single boundary where the typed view becomes Record<string, unknown>.
-const _asRecord = (value: unknown): Record<string, unknown> | undefined =>
-  Predicate.isObject(value) ? value : undefined
+const _asRecord = (value: unknown): Record<string, unknown> | undefined => Predicate.isObject(value) ? value : undefined
 
 const _handleSecret = (entry: AnySecretEntry, input: _DispatchInput): void => {
   const memberOpts = _normalizeSecretMember(

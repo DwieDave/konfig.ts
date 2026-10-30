@@ -1,7 +1,7 @@
 import { Dep, Manifest, RenderError, type SecretRef } from "@konfig.ts/core"
 import type { SecretEntry, SecretSource } from "@konfig.ts/env"
 import { type Context, Effect, type Layer, Layer as L } from "effect"
-import type { SecretBackend } from "./backend"
+import { resolveSource, type SecretBackend } from "./backend"
 import { EnvVar } from "./env"
 import { SecretRef as SecretRefValue } from "./refs"
 
@@ -56,15 +56,7 @@ const _buildValuesLayer = <N extends string, K extends string>(
   const values = Dep.SecretValues<N, K>(input.name)
   const layer = L.effect(
     values,
-    input.source.resolve.pipe(
-      Effect.mapError(
-        (cause) =>
-          new RenderError({
-            message: `SecretValues(${input.namespace}/${input.name}): source failed for key "${cause.key}"`,
-            cause
-          })
-      )
-    )
+    resolveSource({ source: input.source, label: `SecretValues(${input.namespace}/${input.name})` })
   )
   return { values, layer }
 }

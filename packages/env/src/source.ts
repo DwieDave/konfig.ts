@@ -2,7 +2,7 @@ import { runProcessString } from "@konfig.ts/core"
 import { Config, Data, Effect, Redacted } from "effect"
 import { ChildProcess } from "effect/process"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
-import { collectByKey, typedKeys } from "./_record"
+import { collectByKey, resolveByKey, typedKeys } from "./_record"
 
 export class SecretSourceError extends Data.TaggedError("SecretSourceError")<{
   readonly source: string
@@ -27,16 +27,12 @@ export interface FromConfigInput<K extends string> {
 
 const _fromConfig = <const K extends string>(input: FromConfigInput<K>): SecretSource<K> => {
   const envName = input.envName ?? ((k: K) => k)
-  const resolve = Effect.gen(function*() {
-    const out: Record<string, Redacted.Redacted<string>> = {}
-    for (const key of input.keys) {
-      out[key] = yield* Config.Redacted(envName(key)).pipe(
-        Effect.mapError(
-          (cause) => new SecretSourceError({ source: "fromConfig", key, cause })
-        )
+  const resolve = resolveByKey({
+    keys: input.keys,
+    resolve: (key) =>
+      Config.Redacted(envName(key)).pipe(
+        Effect.mapError((cause) => new SecretSourceError({ source: "fromConfig", key, cause }))
       )
-    }
-    return collectByKey({ keys: input.keys, build: (key) => out[key] })
   })
   return { _tag: "SecretSource", keys: input.keys, resolve }
 }
@@ -63,31 +59,21 @@ export interface FromCommandInput<K extends string> {
   readonly run: (key: K) => FromCommandSpec
 }
 
+const _runCommand = (spec: FromCommandSpec, key: string) =>
+  runProcessString(ChildProcess.make(spec.cmd, [...spec.args]), { allowEmptyStdout: true }).pipe(
+    Effect.mapError((cause) => new SecretSourceError({ source: "fromCommand", key, cause })),
+    Effect.map((stdout) => stdout.trim()),
+    Effect.filterOrFail(
+      (value) => value.length > 0,
+      () => new SecretSourceError({ source: "fromCommand", key, cause: "secret command produced empty output" })
+    ),
+    Effect.map((value) => Redacted.make(value))
+  )
+
 const _fromCommand = <const K extends string>(
   input: FromCommandInput<K>
 ): SecretSource<K, ChildProcessSpawner> => {
-  const resolve = Effect.gen(function*() {
-    const out: Record<string, Redacted.Redacted<string>> = {}
-    for (const key of input.keys) {
-      const spec = input.run(key)
-      const proc = ChildProcess.make(spec.cmd, [...spec.args])
-      const stdout = yield* runProcessString(proc, { allowEmptyStdout: true }).pipe(
-        Effect.mapError(
-          (cause) => new SecretSourceError({ source: "fromCommand", key, cause })
-        )
-      )
-      const value = stdout.trim()
-      if (value.length === 0) {
-        return yield* new SecretSourceError({
-          source: "fromCommand",
-          key,
-          cause: "secret command produced empty output"
-        })
-      }
-      out[key] = Redacted.make(value)
-    }
-    return collectByKey({ keys: input.keys, build: (key) => out[key] })
-  })
+  const resolve = resolveByKey({ keys: input.keys, resolve: (key) => _runCommand(input.run(key), key) })
   return { _tag: "SecretSource", keys: input.keys, resolve }
 }
 

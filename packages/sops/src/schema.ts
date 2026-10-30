@@ -1,6 +1,5 @@
+import { objectMetaSchema, stringRecordSchema as _stringRecord } from "@konfig.ts/k8s"
 import { Schema } from "effect"
-
-const _stringRecord = Schema.Record(Schema.String, Schema.String)
 
 // Recipients flow into `sops --<kind> a,b,c` argv; must contain no comma or shell metachar.
 const _AGE_RECIPIENT = /^age1[0-9a-z]{58}$/
@@ -57,12 +56,7 @@ const SopsMetadataSchema = Schema.StructWithRest(
 export const SopsEncryptedSecretSchema = Schema.Struct({
   apiVersion: Schema.Literal("isindir.github.com/v1alpha3"),
   kind: Schema.Literal("SopsSecret"),
-  metadata: Schema.Struct({
-    name: Schema.String,
-    namespace: Schema.String,
-    labels: Schema.optionalKey(_stringRecord),
-    annotations: Schema.optionalKey(_stringRecord)
-  }),
+  metadata: objectMetaSchema,
   spec: SopsSecretSpecSchema,
   sops: SopsMetadataSchema
 })
