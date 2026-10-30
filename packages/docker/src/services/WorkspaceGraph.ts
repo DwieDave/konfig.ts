@@ -10,7 +10,7 @@ import {
   UnsupportedPm,
   WorkspaceNotFound
 } from "../DockerError"
-import type { NodeModulesLayout } from "./PackageManager"
+import type { NodeModulesLayout, PmKind, YarnVariant } from "./PackageManager"
 import { hasWildcard, segmentMatches } from "./workspaceGlob"
 
 const ROOT_BRAND: unique symbol = Symbol.for("@konfig.ts/docker/RootDir")
@@ -46,11 +46,11 @@ export interface Workspace {
   readonly hasBuildScript: boolean
 }
 
-type DetectedPmKind = "Bun" | "Npm" | "Pnpm" | "Yarn"
-type YarnVariant = "classic" | "berry"
+export const existsOrFalse = (input: { readonly fs: FileSystem; readonly path: string }): Effect.Effect<boolean> =>
+  input.fs.exists(input.path).pipe(Effect.orElseSucceed(() => false))
 
 export interface DetectedPm {
-  readonly kind: DetectedPmKind
+  readonly kind: PmKind
   readonly version: string | undefined
   readonly pnpmLayout?: NodeModulesLayout
   readonly yarnVariant?: YarnVariant
@@ -76,7 +76,7 @@ const _readPkgJsonIfExists = (
 ): Effect.Effect<PackageJson | undefined, PackageJsonInvalid> =>
   Effect.gen(function*() {
     const pkgPath = p.join(cur, "package.json")
-    const exists = yield* fs.exists(pkgPath).pipe(Effect.orElseSucceed(() => false))
+    const exists = yield* existsOrFalse({ fs, path: pkgPath })
     if (!exists) return undefined
     const text = yield* fs.readFileString(pkgPath).pipe(Effect.option)
     if (text._tag === "None") return undefined
@@ -98,9 +98,7 @@ export const findRoot = (
     let cur = p.resolve(from)
     for (let i = 0; i < 64; i++) {
       const pkg = yield* _readPkgJsonIfExists(fs, p, cur)
-      const pnpmYamlExists = yield* fs
-        .exists(p.join(cur, "pnpm-workspace.yaml"))
-        .pipe(Effect.orElseSucceed(() => false))
+      const pnpmYamlExists = yield* existsOrFalse({ fs, path: p.join(cur, "pnpm-workspace.yaml") })
       if (_isMonorepoRoot(pkg, pnpmYamlExists)) return _brandRoot(cur)
       const parent = p.dirname(cur)
       if (parent === cur) break
@@ -176,7 +174,7 @@ const _expandWorkspaceGlob = (env: GlobEnv, pattern: string): Effect.Effect<Read
 const _withPackageJson = (env: GlobEnv, dirs: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
   Effect.filter(
     dirs,
-    (d) => env.fs.exists(env.p.join(env.root, d, "package.json")).pipe(Effect.orElseSucceed(() => false))
+    (d) => existsOrFalse({ fs: env.fs, path: env.p.join(env.root, d, "package.json") })
   )
 
 const _applyPattern = (env: GlobEnv, acc: ReadonlySet<string>, pattern: string): Effect.Effect<ReadonlySet<string>> =>
@@ -202,7 +200,7 @@ const _readWorkspacePatterns = (
 ): Effect.Effect<ReadonlyArray<string>, PackageJsonInvalid> =>
   Effect.gen(function*() {
     const pnpmPath = p.join(root, "pnpm-workspace.yaml")
-    const pnpmExists = yield* fs.exists(pnpmPath).pipe(Effect.orElseSucceed(() => false))
+    const pnpmExists = yield* existsOrFalse({ fs, path: pnpmPath })
     if (pnpmExists) {
       const text = yield* fs.readFileString(pnpmPath).pipe(Effect.orElseSucceed(() => ""))
       if (text === "") return []
@@ -252,7 +250,7 @@ export const allWorkspaces = (
 
 const _parseCorepackField = (
   pm: string
-): { kind: DetectedPmKind; version: string } | undefined => {
+): { kind: PmKind; version: string } | undefined => {
   const at = pm.lastIndexOf("@")
   if (at < 0) return undefined
   const name = pm.slice(0, at)
@@ -264,7 +262,7 @@ const _parseCorepackField = (
   return undefined
 }
 
-const PM_LOCKFILES: ReadonlyArray<{ kind: DetectedPmKind; file: string }> = [
+const PM_LOCKFILES: ReadonlyArray<{ kind: PmKind; file: string }> = [
   { kind: "Bun", file: "bun.lock" },
   { kind: "Bun", file: "bun.lockb" },
   { kind: "Pnpm", file: "pnpm-lock.yaml" },
@@ -280,9 +278,7 @@ const _detectYarnVariant = (
 ): Effect.Effect<YarnVariant, never> =>
   Effect.gen(function*() {
     if (corepackVersion && !corepackVersion.startsWith("1.")) return "berry"
-    const yarnrcExists = yield* fs
-      .exists(p.join(root, ".yarnrc.yml"))
-      .pipe(Effect.orElseSucceed(() => false))
+    const yarnrcExists = yield* existsOrFalse({ fs, path: p.join(root, ".yarnrc.yml") })
     if (yarnrcExists) return "berry"
     return "classic"
   })
@@ -304,6 +300,29 @@ const _detectPnpmLayout = (
     return "isolated"
   })
 
+interface FinalizePmInput {
+  readonly root: RootDir
+  readonly kind: PmKind
+  readonly version: string | undefined
+  readonly presentLockfiles: ReadonlyArray<{ kind: PmKind; file: string }>
+}
+
+const _finalizePm = (input: FinalizePmInput): Effect.Effect<DetectedPm, never, FileSystem | Path> =>
+  Effect.gen(function*() {
+    const { root, kind, version } = input
+    const fs = yield* FileSystem
+    const p = yield* Path
+    const layout = kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined
+    const yarnVariant = kind === "Yarn" ? yield* _detectYarnVariant(root, fs, p, version) : undefined
+    return {
+      kind,
+      version,
+      presentLockfiles: input.presentLockfiles.filter((l) => l.kind === kind).map((l) => l.file),
+      ...(layout ? { pnpmLayout: layout } : {}),
+      ...(yarnVariant ? { yarnVariant } : {})
+    }
+  })
+
 export const detectPm = (
   root: RootDir
 ): Effect.Effect<DetectedPm, UnsupportedPm | PackageJsonInvalid, FileSystem | Path> =>
@@ -312,28 +331,13 @@ export const detectPm = (
     const p = yield* Path
     const pkg = yield* _readPkgJsonIfExists(fs, p, root)
     const corepack = pkg?.packageManager ? _parseCorepackField(pkg.packageManager) : undefined
-    const presentLockfiles: Array<{ kind: DetectedPmKind; file: string }> = []
+    const presentLockfiles: Array<{ kind: PmKind; file: string }> = []
     for (const entry of PM_LOCKFILES) {
-      const ex = yield* fs
-        .exists(p.join(root, entry.file))
-        .pipe(Effect.orElseSucceed(() => false))
+      const ex = yield* existsOrFalse({ fs, path: p.join(root, entry.file) })
       if (ex) presentLockfiles.push(entry)
     }
     if (corepack) {
-      const layout = corepack.kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined
-      const yarnVariant = corepack.kind === "Yarn"
-        ? yield* _detectYarnVariant(root, fs, p, corepack.version)
-        : undefined
-      const present = presentLockfiles
-        .filter((l) => l.kind === corepack.kind)
-        .map((l) => l.file)
-      return {
-        kind: corepack.kind,
-        version: corepack.version,
-        presentLockfiles: present,
-        ...(layout ? { pnpmLayout: layout } : {}),
-        ...(yarnVariant ? { yarnVariant } : {})
-      }
+      return yield* _finalizePm({ root, kind: corepack.kind, version: corepack.version, presentLockfiles })
     }
     const kinds = new Set(presentLockfiles.map((l) => l.kind))
     if (kinds.size === 0) {
@@ -348,16 +352,7 @@ export const detectPm = (
       })
     }
     const kind = [...kinds][0]!
-    const layout = kind === "Pnpm" ? yield* _detectPnpmLayout(root, fs, p) : undefined
-    const yarnVariant = kind === "Yarn" ? yield* _detectYarnVariant(root, fs, p) : undefined
-    const present = presentLockfiles.filter((l) => l.kind === kind).map((l) => l.file)
-    return {
-      kind,
-      version: undefined,
-      presentLockfiles: present,
-      ...(layout ? { pnpmLayout: layout } : {}),
-      ...(yarnVariant ? { yarnVariant } : {})
-    }
+    return yield* _finalizePm({ root, kind, version: undefined, presentLockfiles })
   })
 
 const _depNames = (pkg: PackageJson, includeDev: boolean): ReadonlyArray<string> =>

@@ -1,6 +1,4 @@
-import type { PackageManager } from "../PackageManager"
-
-type YarnVariant = "classic" | "berry"
+import type { PackageManager, YarnVariant } from "../PackageManager"
 
 export interface YarnOptions {
   readonly variant: YarnVariant

@@ -8,10 +8,12 @@ export interface DepsImageInput {
   readonly pmVersion: string
 }
 
+export type PmKind = "Bun" | "Npm" | "Pnpm" | "Yarn"
+export type YarnVariant = "classic" | "berry"
 export type NodeModulesLayout = "isolated" | "hoisted"
 
 export interface PackageManager {
-  readonly _tag: "Bun" | "Npm" | "Pnpm" | "Yarn"
+  readonly _tag: PmKind
   readonly lockfileNames: ReadonlyArray<string>
   readonly auxFiles: ReadonlyArray<string>
   readonly installCommand: ReadonlyArray<string>

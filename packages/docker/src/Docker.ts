@@ -1,3 +1,5 @@
+import { isRecord } from "@konfig.ts/core"
+import type { YarnVariant } from "./services/PackageManager"
 import type {
   BuildAtom,
   CopyAtom,
@@ -28,7 +30,7 @@ export const makeDockerApp = (spec: DockerSpec): DockerApp => ({
   spec
 })
 
-export const isDockerApp = (u: unknown): u is DockerApp => typeof u === "object" && u !== null && DockerAppTypeId in u
+export const isDockerApp = (u: unknown): u is DockerApp => isRecord(u) && DockerAppTypeId in u
 
 const _omitUndef = <T extends object>(o: T): T => {
   const out = { ...o }
@@ -44,7 +46,7 @@ export const Docker = {
     bun: (): PackageManagerAtom => ({ _tag: "BunPm" }),
     npm: (): PackageManagerAtom => ({ _tag: "NpmPm" }),
     pnpm: (): PackageManagerAtom => ({ _tag: "PnpmPm" }),
-    yarn: (opts?: { variant?: "classic" | "berry" }): PackageManagerAtom =>
+    yarn: (opts?: { variant?: YarnVariant }): PackageManagerAtom =>
       _omitUndef({ _tag: "YarnPm", variant: opts?.variant })
   },
   runtime: {

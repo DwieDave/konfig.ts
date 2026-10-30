@@ -11,7 +11,7 @@ import {
   WorkspaceNotFound,
   WorkspaceSourceUnknown
 } from "../DockerError"
-import type { ImageRef, NodeModulesLayout, PackageManager } from "../services/PackageManager"
+import type { ImageRef, NodeModulesLayout, PackageManager, PmKind, YarnVariant } from "../services/PackageManager"
 import { bun as bunPm } from "../services/pm/bun"
 import { npm as npmPm } from "../services/pm/npm"
 import { pnpm as pnpmPm } from "../services/pm/pnpm"
@@ -24,6 +24,7 @@ import {
   closureOf,
   type DetectedPm,
   detectPm,
+  existsOrFalse,
   findRoot,
   type RootDir,
   type Workspace
@@ -70,13 +71,10 @@ export const prepareContext = (
     const detectedPm = yield* detectPm(root)
     const closure = yield* closureOf({ all, target: target.name })
     const buildClosure = yield* closureOf({ all, target: target.name, includeDev: true })
-    const hasPatchesDir = yield* fs
-      .exists(p.join(root, "patches"))
-      .pipe(Effect.orElseSucceed(() => false))
+    const hasPatchesDir = yield* existsOrFalse({ fs, path: p.join(root, "patches") })
     return { root, allWorkspaces: all, closure, buildClosure, target, detectedPm, hasPatchesDir }
   })
 
-type PmKind = "Bun" | "Npm" | "Pnpm" | "Yarn"
 type RuntimeKind = "Bun" | "Node"
 
 const _specPmKind = (s: DockerSpec): PmKind | undefined =>
@@ -99,7 +97,7 @@ const _defaultRuntimeFor = (pm: PmKind): RuntimeKind => (pm === "Bun" ? "Bun" : 
 
 interface PmImplOpts {
   readonly layout: NodeModulesLayout
-  readonly yarnVariant: "classic" | "berry"
+  readonly yarnVariant: YarnVariant
 }
 
 const _pmImpl = (kind: PmKind, opts: PmImplOpts): PackageManager => {
@@ -111,10 +109,20 @@ const _pmImpl = (kind: PmKind, opts: PmImplOpts): PackageManager => {
 
 const _runtimeImpl = (kind: RuntimeKind): Runtime => (kind === "Bun" ? bunRuntime : nodeRuntime)
 
-const _pmEngineKey = (kind: PmKind): string => kind.toLowerCase()
-const _runtimeEngineKey = (kind: RuntimeKind): string => kind.toLowerCase()
+const _engineKey = (kind: PmKind | RuntimeKind): string => kind.toLowerCase()
 
-const _readEngineVersion = (ws: Workspace, key: string): string | undefined => ws.pkg.engines?.[key]
+interface EngineInput {
+  readonly ws: Workspace
+  readonly kind: PmKind | RuntimeKind
+}
+
+const _requireEngineVersion = (input: EngineInput): Effect.Effect<string, EngineVersionMissing> => {
+  const key = _engineKey(input.kind)
+  const version = input.ws.pkg.engines?.[key]
+  return version
+    ? Effect.succeed(version)
+    : Effect.fail(new EngineVersionMissing({ target: input.ws.name, engineField: `engines.${key}` }))
+}
 
 interface ValidateSpecInput {
   readonly spec: DockerSpec
@@ -154,9 +162,7 @@ export const validateSpec = (
     }
 
     for (const path of spec.sharedRootFiles ?? []) {
-      const ok = yield* fs
-        .exists(p.join(ctx.root, path))
-        .pipe(Effect.orElseSucceed(() => false))
+      const ok = yield* existsOrFalse({ fs, path: p.join(ctx.root, path) })
       if (!ok) {
         return yield* new SharedRootFileMissing({ target: ctx.target.name, path })
       }
@@ -303,7 +309,7 @@ const _presentRootFiles = (
     const p = yield* Path
     return yield* Effect.filter(
       [...pm.lockfileNames, ...pm.auxFiles],
-      (f) => fs.exists(p.join(root, f)).pipe(Effect.orElseSucceed(() => false))
+      (f) => existsOrFalse({ fs, path: p.join(root, f) })
     )
   })
 
@@ -317,20 +323,8 @@ const _resolveDefaults = (
     const alpine = spec.runtime?._tag === "BunRuntime" || spec.runtime?._tag === "NodeRuntime"
       ? spec.runtime.alpine ?? true
       : true
-    const pmVersion = _readEngineVersion(ctx.target, _pmEngineKey(pmKind))
-    if (!pmVersion) {
-      return yield* new EngineVersionMissing({
-        target: ctx.target.name,
-        engineField: `engines.${_pmEngineKey(pmKind)}`
-      })
-    }
-    const runtimeVersion = _readEngineVersion(ctx.target, _runtimeEngineKey(runtimeKind))
-    if (!runtimeVersion) {
-      return yield* new EngineVersionMissing({
-        target: ctx.target.name,
-        engineField: `engines.${_runtimeEngineKey(runtimeKind)}`
-      })
-    }
+    const pmVersion = yield* _requireEngineVersion({ ws: ctx.target, kind: pmKind })
+    const runtimeVersion = yield* _requireEngineVersion({ ws: ctx.target, kind: runtimeKind })
     const pm = _pmImpl(pmKind, {
       layout: ctx.detectedPm.pnpmLayout ?? "isolated",
       yarnVariant: ctx.detectedPm.yarnVariant ?? "classic"
@@ -441,51 +435,59 @@ const _removePathInstructions = (paths: ReadonlyArray<string> | undefined): Inst
   (paths ?? []).map((path): Instruction => ({ _tag: "Run", cmd: `rm -rf ${shGlobQuote(path)}` }))
 
 const _prodDepsStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext): Stage => {
-  const instructions: Instruction[] = [
-    ..._rootCopyInstructions(ctx, pm),
-    ..._prodDepsInstallInstructions(ctx, pm),
-    ..._removePathInstructions(spec.runner.removePaths)
-  ]
-  return {
+  return _stage({
     name: "prod-deps",
-    from: { _tag: "FromStage", stage: "base" },
-    workdir: "/app",
-    instructions
-  }
+    instructions: [
+      ..._rootCopyInstructions(ctx, pm),
+      ..._prodDepsInstallInstructions(ctx, pm),
+      ..._removePathInstructions(spec.runner.removePaths)
+    ]
+  })
 }
 
-const _depsStage = (ctx: LowerContext, pm: PmContext): Stage => {
-  const instructions: Instruction[] = [
-    ..._rootCopyInstructions(ctx, pm),
-    ..._packageJsonCopyInstructions(ctx.allWorkspaces)
-  ]
-  for (const r of pm.pmImpl.prependDepsRuns(pm.pmVersion)) {
-    instructions.push({ _tag: "Run", cmd: r })
-  }
-  instructions.push({ _tag: "Run", cmd: pm.pmImpl.installCommand.join(" ") })
-  return {
-    name: "deps",
-    from: { _tag: "FromStage", stage: "base" },
-    workdir: "/app",
-    instructions
-  }
+interface StageInput {
+  readonly name: string
+  readonly instructions: ReadonlyArray<Instruction>
 }
+
+const _stage = (input: StageInput): Stage => ({
+  name: input.name,
+  from: { _tag: "FromStage", stage: "base" },
+  workdir: "/app",
+  instructions: input.instructions
+})
+
+const _depsStage = (ctx: LowerContext, pm: PmContext): Stage =>
+  _stage({
+    name: "deps",
+    instructions: [
+      ..._rootCopyInstructions(ctx, pm),
+      ..._packageJsonCopyInstructions(ctx.allWorkspaces),
+      ..._runs(pm.pmImpl.prependDepsRuns(pm.pmVersion)),
+      { _tag: "Run", cmd: pm.pmImpl.installCommand.join(" ") }
+    ]
+  })
+
+const _sharedRootCopies = (spec: DockerSpec): Instruction[] =>
+  (spec.sharedRootFiles ?? []).map((path): Instruction => ({ _tag: "Copy", src: [path], dst: `./${path}` }))
+
+const _closureSourceCopies = (ctx: LowerContext): Instruction[] =>
+  ctx.buildClosure.map((ws): Instruction => ({ _tag: "Copy", src: [ws.relDir], dst: `./${ws.relDir}` }))
+
+const _envWithDefault = (input: {
+  readonly env: Record<string, string> | undefined
+  readonly nodeEnv: string
+}): Instruction | undefined => _envToInstruction({ NODE_ENV: input.nodeEnv, ...input.env })
 
 const _builderStage = (
   spec: DockerSpec,
   ctx: LowerContext,
   pm: PmContext
 ): Stage => {
-  const instructions: Instruction[] = []
-  for (const path of spec.sharedRootFiles ?? []) {
-    instructions.push({ _tag: "Copy", src: [path], dst: `./${path}` })
-  }
-  instructions.push({
-    _tag: "Copy",
-    from: "deps",
-    src: ["/app/node_modules"],
-    dst: "/app/node_modules"
-  })
+  const instructions: Instruction[] = [
+    ..._sharedRootCopies(spec),
+    { _tag: "Copy", from: "deps", src: ["/app/node_modules"], dst: "/app/node_modules" }
+  ]
   if (pm.pmImpl.nodeModulesLayout !== "hoisted") {
     for (const ws of ctx.closure) {
       instructions.push({
@@ -496,9 +498,7 @@ const _builderStage = (
       })
     }
   }
-  for (const ws of ctx.buildClosure) {
-    instructions.push({ _tag: "Copy", src: [ws.relDir], dst: `./${ws.relDir}` })
-  }
+  instructions.push(..._closureSourceCopies(ctx))
   instructions.push({ _tag: "Workdir", path: `/app/${ctx.target.relDir}` })
   const build = spec.build ?? (ctx.target.hasBuildScript
     ? ({ _tag: "BuildScript", script: "build" } as const)
@@ -508,12 +508,7 @@ const _builderStage = (
   } else if (build._tag === "BuildCommand") {
     instructions.push({ _tag: "Run", cmd: shJoin(build.argv) })
   }
-  return {
-    name: "builder",
-    from: { _tag: "FromStage", stage: "base" },
-    workdir: "/app",
-    instructions
-  }
+  return _stage({ name: "builder", instructions })
 }
 
 const _platformAtomToIR = (
@@ -529,9 +524,7 @@ const _platformAtomToIR = (
 }
 
 const _runnerEnvAndExposeInstructions = (runner: RunnerSpec): ReadonlyArray<Instruction> => {
-  const env = { ...runner.env }
-  if (env["NODE_ENV"] === undefined) env["NODE_ENV"] = "production"
-  const envInstr = _envToInstruction(env)
+  const envInstr = _envWithDefault({ env: runner.env, nodeEnv: "production" })
   return [...(envInstr ? [envInstr] : []), ..._exposeToInstructions(runner.expose)]
 }
 
@@ -647,35 +640,24 @@ const _runnerStage = (
 }
 
 const _devStage = (spec: DockerSpec, ctx: LowerContext, pm: PmContext, dev: DevSpec): Stage => {
-  const instructions: Instruction[] = [
-    ..._rootCopyInstructions(ctx, pm),
-    ..._packageJsonCopyInstructions(ctx.allWorkspaces)
-  ]
-  for (const r of pm.pmImpl.prependDepsRuns(pm.pmVersion)) {
-    instructions.push({ _tag: "Run", cmd: r })
-  }
   // dev installs scripts (no --ignore-scripts) so binaries are usable
   const devInstall = pm.pmImpl.installCommand.filter((s) => s !== "--ignore-scripts")
-  instructions.push({ _tag: "Run", cmd: devInstall.join(" ") })
-  for (const path of spec.sharedRootFiles ?? []) {
-    instructions.push({ _tag: "Copy", src: [path], dst: `./${path}` })
-  }
-  for (const ws of ctx.buildClosure) {
-    instructions.push({ _tag: "Copy", src: [ws.relDir], dst: `./${ws.relDir}` })
-  }
-  instructions.push({ _tag: "Workdir", path: dev.workdir ?? `/app/${ctx.target.relDir}` })
-  const env = { ...dev.env }
-  if (env["NODE_ENV"] === undefined) env["NODE_ENV"] = "development"
-  const envInstr = _envToInstruction(env)
-  if (envInstr) instructions.push(envInstr)
-  instructions.push(..._exposeToInstructions(dev.expose))
-  instructions.push({ _tag: "Cmd", argv: dev.cmd })
-  return {
+  const envInstr = _envWithDefault({ env: dev.env, nodeEnv: "development" })
+  return _stage({
     name: "dev",
-    from: { _tag: "FromStage", stage: "base" },
-    workdir: "/app",
-    instructions
-  }
+    instructions: [
+      ..._rootCopyInstructions(ctx, pm),
+      ..._packageJsonCopyInstructions(ctx.allWorkspaces),
+      ..._runs(pm.pmImpl.prependDepsRuns(pm.pmVersion)),
+      { _tag: "Run", cmd: devInstall.join(" ") },
+      ..._sharedRootCopies(spec),
+      ..._closureSourceCopies(ctx),
+      { _tag: "Workdir", path: dev.workdir ?? `/app/${ctx.target.relDir}` },
+      ...(envInstr ? [envInstr] : []),
+      ..._exposeToInstructions(dev.expose),
+      { _tag: "Cmd", argv: dev.cmd }
+    ]
+  })
 }
 
 export interface BuildIRInput {
