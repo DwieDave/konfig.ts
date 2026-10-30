@@ -1,4 +1,9 @@
-import type { SopsEncryptedSecretSchema, SopsRecipientsSchema, SopsSecretSpecSchema, SopsSecretTemplateSchema } from "./schema"
+import type {
+  SopsEncryptedSecretSchema,
+  SopsRecipientsSchema,
+  SopsSecretSpecSchema,
+  SopsSecretTemplateSchema
+} from "./schema"
 
 export type SopsSecretTemplate = typeof SopsSecretTemplateSchema.Type
 export type SopsSecretSpec = typeof SopsSecretSpecSchema.Type

@@ -222,6 +222,7 @@
         "@types/bun": "catalog:",
         "@vitest/coverage-v8": "catalog:",
         "effect": "catalog:",
+        "fast-check": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -242,6 +243,7 @@
         "@types/bun": "catalog:",
         "@vitest/coverage-v8": "catalog:",
         "effect": "catalog:",
+        "fast-check": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -293,6 +295,7 @@
         "@types/bun": "catalog:",
         "@vitest/coverage-v8": "catalog:",
         "effect": "catalog:",
+        "fast-check": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
