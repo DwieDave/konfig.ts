@@ -33,6 +33,6 @@ export const ghcrPull = Secret.define({
   name: "ghcr-pull",
   namespace: "app",
   env: {
-    dockerconfigjson: ".dockerconfigjson"
+    ".dockerconfigjson": "GHCR_DOCKERCONFIGJSON"
   }
 })
