@@ -1,24 +1,28 @@
 import { describe, expect, it } from "vitest"
 import type { Dockerfile, Instruction, Stage } from "./DockerfileIR"
+import { FromOf, HealthOf, Instr } from "./irTesting"
 
 describe("DockerfileIR", () => {
   it("constructs a minimal Dockerfile with one stage and one instruction", () => {
-    const instr: Instruction = { _tag: "Run", cmd: "echo hello" }
+    const instr: Instruction = Instr.Run({ cmd: "echo hello" })
+
     const stage: Stage = {
       name: "base",
-      from: { _tag: "FromImage", image: "alpine", tag: "3.20" },
+      from: FromOf.FromImage({ image: "alpine", tag: "3.20" }),
       instructions: [instr]
     }
+
     const df: Dockerfile = { stages: [stage] }
 
     expect(df.stages).toHaveLength(1)
     expect(df.stages[0]?.name).toBe("base")
-    expect(df.stages[0]?.instructions[0]?._tag).toBe("Run")
+    expect(Instr.$is("Run")(df.stages[0]?.instructions[0])).toBe(true)
   })
 
   it("narrows Instruction union by _tag", () => {
-    const i: Instruction = { _tag: "Expose", port: 4000 }
-    if (i._tag === "Expose") {
+    const i: Instruction = Instr.Expose({ port: 4000 })
+
+    if (Instr.$is("Expose")(i)) {
       expect(i.port).toBe(4000)
     } else {
       throw new Error("expected Expose")
@@ -28,23 +32,23 @@ describe("DockerfileIR", () => {
   it("supports FromStage references", () => {
     const stage: Stage = {
       name: "runner",
-      from: { _tag: "FromStage", stage: "base" },
+      from: FromOf.FromStage({ stage: "base" }),
       instructions: []
     }
-    expect(stage.from._tag).toBe("FromStage")
+
+    expect(FromOf.$is("FromStage")(stage.from)).toBe(true)
   })
 
   it("supports Healthcheck nested IR", () => {
-    const i: Instruction = {
-      _tag: "Healthcheck",
-      check: {
-        _tag: "Cmd",
+    const i: Instruction = Instr.Healthcheck({
+      check: HealthOf.Cmd({
         argv: ["curl", "-f", "http://localhost:4000/health"],
         interval: "30s",
         retries: 3
-      }
-    }
-    if (i._tag === "Healthcheck" && i.check._tag === "Cmd") {
+      })
+    })
+
+    if (Instr.$is("Healthcheck")(i) && HealthOf.$is("Cmd")(i.check)) {
       expect(i.check.argv).toHaveLength(3)
     } else {
       throw new Error("expected Healthcheck.Cmd")

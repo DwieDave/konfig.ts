@@ -2,9 +2,11 @@ import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { describe, expect } from "vitest"
+import { BuildAtom, CopyAtom, PackageManagerAtom, RuntimeAtom } from "../spec"
 import type { DockerSpec } from "../spec"
 import { pkgJson, rootPkgJson, writeTree } from "../testing/tree"
-import type { Instruction, Stage } from "./DockerfileIR"
+import type { DockerfileBundle, Stage } from "./DockerfileIR"
+import { copiesOf, Instr, requireStage, runsOf } from "./irTesting"
 import { lower } from "./lower"
 
 const engines = { engines: { node: "22.0.0", npm: "10.5.0", pnpm: "9.0.0", bun: "1.3.5" } }
@@ -26,17 +28,15 @@ const baseFiles = {
 
 const specFor = (dir: string, over: Partial<DockerSpec> = {}): DockerSpec => ({
   target: `${dir}/packages/app`,
-  runner: { workdir: "/app/packages/app", copy: [{ _tag: "WorkspaceSourceAll" }], cmd: ["node", "x.js"] },
+  runner: { workdir: "/app/packages/app", copy: [CopyAtom.cases.WorkspaceSourceAll.make({})], cmd: ["node", "x.js"] },
   ...over
 })
 
-const stage = (b: { prod: { stages: ReadonlyArray<Stage> } }, name: string): Stage =>
-  b.prod.stages.find((s) => s.name === name)!
+const stage = (b: DockerfileBundle, name: string): Stage => requireStage({ bundle: b, name })
 
-const copySrcs = (s: Stage): ReadonlyArray<string> =>
-  s.instructions.flatMap((i: Instruction) => (i._tag === "Copy" ? i.src : []))
+const copySrcs = (s: Stage): ReadonlyArray<string> => copiesOf(s).flatMap((i) => i.src)
 
-const runCmds = (s: Stage): ReadonlyArray<string> => s.instructions.flatMap((i) => (i._tag === "Run" ? [i.cmd] : []))
+const runCmds = (s: Stage): ReadonlyArray<string> => runsOf(s).map((i) => i.cmd)
 
 describe("lower fixes", () => {
   it.effect("copies only aux files that exist, and npm closure follows semver deps", () =>
@@ -44,7 +44,7 @@ describe("lower fixes", () => {
       const dir = yield* writeTree({ ...baseFiles, ".npmrc": "x" })
       const b = yield* lower(specFor(dir))
       const deps = stage(b, "deps")
-      expect(deps.instructions.find((i) => i._tag === "Copy")).toMatchObject({
+      expect(deps.instructions.find(Instr.$is("Copy"))).toMatchObject({
         src: ["package.json", "package-lock.json", ".npmrc"]
       })
       expect(copySrcs(stage(b, "runner"))).toContain("/app/packages/util")
@@ -54,7 +54,7 @@ describe("lower fixes", () => {
     Effect.gen(function*() {
       const dir = yield* writeTree(baseFiles)
       const b = yield* lower(specFor(dir))
-      expect(stage(b, "deps").instructions.find((i) => i._tag === "Copy")).toMatchObject({
+      expect(stage(b, "deps").instructions.find(Instr.$is("Copy"))).toMatchObject({
         src: ["package.json", "package-lock.json"]
       })
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
@@ -74,10 +74,11 @@ describe("lower fixes", () => {
         "package.json": rootPkgJson({ workspaces: ["packages/*"], extra: { packageManager: "bun@1.3.5" } }),
         "bun.lock": "{}"
       })
+
       const b = yield* lower(specFor(dir))
-      const fromDeps = stage(b, "builder").instructions.flatMap((i) =>
-        i._tag === "Copy" && i.from === "deps" ? i.src : []
-      )
+
+      const fromDeps = copiesOf(stage(b, "builder")).filter((i) => i.from === "deps").flatMap((i) => i.src)
+
       expect(fromDeps).toContain("/app/packages/util/node_modules")
       expect(fromDeps).not.toContain("/app/packages/tsconfig/node_modules")
       expect(copySrcs(stage(b, "builder"))).toContain("packages/tsconfig")
@@ -86,7 +87,7 @@ describe("lower fixes", () => {
   it.effect("uses Debian user commands for non-alpine runtime", () =>
     Effect.gen(function*() {
       const dir = yield* writeTree(baseFiles)
-      const b = yield* lower(specFor(dir, { runtime: { _tag: "NodeRuntime", alpine: false } }))
+      const b = yield* lower(specFor(dir, { runtime: RuntimeAtom.cases.NodeRuntime.make({ alpine: false }) }))
       const cmd = runCmds(stage(b, "runner"))[0]!
       expect(cmd).toContain("useradd")
       expect(cmd).not.toContain("adduser -S")
@@ -96,18 +97,20 @@ describe("lower fixes", () => {
     Effect.gen(function*() {
       const dir = yield* writeTree(baseFiles)
       const spec = specFor(dir)
+
       const b = yield* lower({
         ...spec,
         runner: { ...spec.runner, baseImage: { image: "debian", tag: "12-slim" } }
       })
+
       expect(runCmds(stage(b, "runner"))[0]).toContain("useradd")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 
   it.effect("picks lockfile of the overriding package manager", () =>
     Effect.gen(function*() {
       const dir = yield* writeTree({ ...baseFiles, "pnpm-lock.yaml": "x" })
-      const b = yield* lower(specFor(dir, { packageManager: { _tag: "PnpmPm" } }))
-      expect(stage(b, "deps").instructions.find((i) => i._tag === "Copy")).toMatchObject({
+      const b = yield* lower(specFor(dir, { packageManager: PackageManagerAtom.cases.PnpmPm.make({}) }))
+      expect(stage(b, "deps").instructions.find(Instr.$is("Copy"))).toMatchObject({
         src: ["package.json", "pnpm-lock.yaml"]
       })
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
@@ -115,7 +118,10 @@ describe("lower fixes", () => {
   it.effect("BuildCommand argv keeps quoting", () =>
     Effect.gen(function*() {
       const dir = yield* writeTree(baseFiles)
-      const b = yield* lower(specFor(dir, { build: { _tag: "BuildCommand", argv: ["sh", "-c", "echo $HOME && ls"] } }))
+
+      const build = BuildAtom.cases.BuildCommand.make({ argv: ["sh", "-c", "echo $HOME && ls"] })
+      const b = yield* lower(specFor(dir, { build }))
+
       expect(runCmds(stage(b, "builder")).at(-1)).toBe("sh -c 'echo $HOME && ls'")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
 })
