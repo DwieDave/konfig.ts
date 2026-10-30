@@ -9,6 +9,11 @@ interface PackageTestConfig {
 const _aliasEntry = (name: string) =>
   [`@konfig.ts/${name}`, fileURLToPath(new URL(`./packages/${name}/src/index.ts`, import.meta.url))] as const
 
+const _testingAlias = (names: ReadonlyArray<string>) =>
+  names.includes("core")
+    ? [["@konfig.ts/core/testing", fileURLToPath(new URL("./packages/core/src/testing.ts", import.meta.url))] as const]
+    : []
+
 const _coverageFor = (lines: number) => ({
   provider: "v8" as const,
   include: ["src/**/*.ts"],
@@ -25,6 +30,6 @@ const _testFor = (lines: number | undefined) => {
 
 export const packageVitestConfig = (input: PackageTestConfig = {}) =>
   defineConfig({
-    resolve: { alias: Object.fromEntries((input.aliases ?? []).map(_aliasEntry)) },
+    resolve: { alias: Object.fromEntries([..._testingAlias(input.aliases ?? []), ...(input.aliases ?? []).map(_aliasEntry)]) },
     test: _testFor(input.lines)
   })

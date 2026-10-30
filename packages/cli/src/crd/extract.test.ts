@@ -1,6 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
 import { Helm } from "@konfig.ts/core"
+import { fakeHandle, plainArgs } from "@konfig.ts/core/testing"
 import { Effect, Exit, Layer, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -8,7 +9,6 @@ import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
 import * as crypto from "node:crypto"
-import { fakeHandle, plainArgs } from "../fakeProcess.testing"
 import {
   _crdNameToIdentifier,
   _dedupeCrdDocuments,

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "@effect/vitest"
+import { fakeHandle, type FakeProc, plainArgs } from "@konfig.ts/core/testing"
 import { Cause, Effect, Exit, Layer, Option } from "effect"
 import * as PlatformError from "effect/PlatformError"
 import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import fc from "fast-check"
-import { fakeHandle, type FakeProc, plainArgs } from "./fakeProcess.testing"
 import {
   _checkDnsName,
   KubeconformNotFound,

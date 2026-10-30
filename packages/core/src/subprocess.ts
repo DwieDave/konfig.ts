@@ -72,31 +72,29 @@ export interface ProcessOptions {
 interface _CollectedProcess {
   readonly exitCode: number
   readonly stdout: string
-  readonly stderr: string
+  readonly stderrTail: string
 }
 
 const _collect = (
   stream: Stream.Stream<Uint8Array, PlatformError>
 ): Effect.Effect<string, PlatformError> => Stream.mkString(Stream.decodeText(stream))
 
+const _appendTail = (input: { readonly tailRef: { current: string }; readonly line: string }): Effect.Effect<void> =>
+  Effect.sync(() => {
+    input.tailRef.current = _tail(`${input.tailRef.current}${input.line}\n`)
+  })
+
 // Streams stderr line by line to the debug log as it arrives (so a slow `helm pull`
-// is visible under --log-level debug) while still accumulating the tail for errors.
-const _collectStderr = (
-  stream: Stream.Stream<Uint8Array, PlatformError>,
-  tailRef: { current: string }
-): Effect.Effect<string, PlatformError> =>
-  Stream.decodeText(stream).pipe(
+// is visible under --log-level debug) while keeping only the bounded tail for errors.
+const _drainStderr = (input: {
+  readonly stream: Stream.Stream<Uint8Array, PlatformError>
+  readonly tailRef: { current: string }
+}): Effect.Effect<void, PlatformError> =>
+  Stream.decodeText(input.stream).pipe(
     Stream.splitLines,
-    Stream.tap((line) => Effect.logDebug(line)),
-    // splitLines strips the terminators; put them back so the collected
-    // stderr (and the ProcessError tail built from it) keeps its line breaks.
-    Stream.map((line) => `${line}\n`),
-    Stream.tap((line) =>
-      Effect.sync(() => {
-        tailRef.current = _tail(`${tailRef.current}${line}`)
-      })
-    ),
-    Stream.mkString
+    Stream.runForEach((line) =>
+      Effect.logDebug(line).pipe(Effect.andThen(_appendTail({ tailRef: input.tailRef, line })))
+    )
   )
 
 // Subprocesses never get an interactive stdin: a pipe nobody writes to (the effect
@@ -116,12 +114,16 @@ const _spawnAndDrain = (input: {
       const spawner = yield* ChildProcessSpawner
       const handle = yield* spawner.spawn(_withClosedStdin(input.command))
 
-      const [exitCode, stdout, stderr] = yield* Effect.all(
-        [handle.exitCode, _collect(handle.stdout), _collectStderr(handle.stderr, input.stderrTail)],
+      const [exitCode, stdout] = yield* Effect.all(
+        [
+          handle.exitCode,
+          _collect(handle.stdout),
+          _drainStderr({ stream: handle.stderr, tailRef: input.stderrTail })
+        ],
         { concurrency: "unbounded" }
       )
 
-      return { exitCode, stdout, stderr }
+      return { exitCode, stdout, stderrTail: input.stderrTail.current }
     })
   )
 
@@ -174,17 +176,17 @@ export interface RunProcessStringOptions extends ProcessOptions {
   readonly allowEmptyStdout?: boolean
 }
 
-const _failOnNonZero = (
-  command: ChildProcess.Command,
-  result: { readonly exitCode: number; readonly stderr: string }
-): Effect.Effect<void, ProcessError> =>
-  result.exitCode === 0
+const _failOnNonZero = (input: {
+  readonly command: ChildProcess.Command
+  readonly result: _CollectedProcess
+}): Effect.Effect<void, ProcessError> =>
+  input.result.exitCode === 0
     ? Effect.void
     : Effect.fail(
       new ProcessError({
-        command: _commandLabel(command),
-        exitCode: result.exitCode,
-        stderrTail: _tail(result.stderr)
+        command: _commandLabel(input.command),
+        exitCode: input.result.exitCode,
+        stderrTail: input.result.stderrTail
       })
     )
 
@@ -195,13 +197,13 @@ export const runProcessString = (
 ): Effect.Effect<string, ProcessFailure, ChildProcessSpawner> =>
   Effect.gen(function*() {
     const result = yield* _spawnCollect({ command, options })
-    yield* _failOnNonZero(command, result)
+    yield* _failOnNonZero({ command, result })
 
     if (options?.allowEmptyStdout !== true && result.stdout.trim().length === 0) {
       return yield* new ProcessError({
         command: _commandLabel(command),
         exitCode: result.exitCode,
-        stderrTail: _tail(result.stderr),
+        stderrTail: result.stderrTail,
         emptyStdout: true
       })
     }
@@ -216,5 +218,50 @@ export const runProcessExit = (
 ): Effect.Effect<void, ProcessFailure, ChildProcessSpawner> =>
   Effect.gen(function*() {
     const result = yield* _spawnCollect({ command, options })
-    yield* _failOnNonZero(command, result)
+    yield* _failOnNonZero({ command, result })
   })
+
+// Unlike runProcessString this does not fail on a non-zero exit: the caller inspects exitCode.
+export const runProcessCollect = (input: {
+  readonly command: ChildProcess.Command
+  readonly timeout?: Duration.Input
+}): Effect.Effect<
+  { readonly exitCode: number; readonly stdout: string; readonly stderr: string },
+  ProcessFailure,
+  ChildProcessSpawner
+> =>
+  _spawnCollect({ command: input.command, options: { timeout: input.timeout } }).pipe(
+    Effect.map(({ exitCode, stderrTail, stdout }) => ({ exitCode, stdout, stderr: stderrTail }))
+  )
+
+export class ProcessInvocationError extends Data.TaggedError("ProcessInvocationError")<{
+  readonly label: string
+  readonly cause: unknown
+}> {
+  get message(): string {
+    return `${this.label} failed${processDetail(this.cause)}`
+  }
+}
+
+const DEFAULT_STDIN_TIMEOUT = Duration.minutes(2)
+
+const _withStdin = (input: {
+  readonly command: ChildProcess.StandardCommand
+  readonly stdin: string
+}): ChildProcess.Command =>
+  ChildProcess.make(input.command.command, [...input.command.args], {
+    ...input.command.options,
+    stdin: Stream.succeed<Uint8Array>(new TextEncoder().encode(input.stdin))
+  })
+
+export const runProcessWithStdin = (input: {
+  readonly command: ChildProcess.StandardCommand
+  readonly stdin: string
+  readonly label?: string
+  readonly timeout?: Duration.Input
+}): Effect.Effect<string, ProcessInvocationError, ChildProcessSpawner> =>
+  runProcessString(_withStdin(input), { timeout: input.timeout ?? DEFAULT_STDIN_TIMEOUT }).pipe(
+    Effect.mapError((cause) =>
+      new ProcessInvocationError({ label: input.label ?? _commandLabel(input.command), cause })
+    )
+  )

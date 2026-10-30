@@ -29,6 +29,10 @@
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
+    },
+    "./testing": {
+      "bun": "./src/testing.ts",
+      "source": "./src/testing.ts"
     }
   },
   "files": [
@@ -60,7 +64,7 @@
     "test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile=./coverage/test-results.json"
   },
   "dependencies": {
-    "@effect/platform-node": "catalog:",
+    "@effect/platform-node": "^4.0.0",
     "yaml": "catalog:"
   },
   "peerDependencies": {

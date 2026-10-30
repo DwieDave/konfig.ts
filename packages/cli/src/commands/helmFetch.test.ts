@@ -1,6 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Helm } from "@konfig.ts/core"
+import { fakeHandle, type FakeProc, plainArgs } from "@konfig.ts/core/testing"
 import { ConfigProvider, Effect, Exit, Layer, Predicate } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
@@ -9,7 +10,6 @@ import type { Command } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
 import * as crypto from "node:crypto"
 import { ChartRegistryEntryDecodeError } from "../chartRegistry"
-import { fakeHandle, type FakeProc, plainArgs } from "../fakeProcess.testing"
 import { _fetchOne, helmFetchEffect, MissingAllFlag } from "./helmFetch"
 
 const _sha256Hex = (buf: Buffer): string => crypto.createHash("sha256").update(buf).digest("hex")

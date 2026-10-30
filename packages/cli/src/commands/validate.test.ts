@@ -1,12 +1,12 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
 import { RenderContext, type ResolvedKonfigConfig } from "@konfig.ts/core"
+import { fakeHandle, plainArgs } from "@konfig.ts/core/testing"
 import { Effect, Layer } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { type Command, isStandardCommand } from "effect/process/ChildProcess"
 import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
-import { fakeHandle, plainArgs } from "../fakeProcess.testing"
 import { runValidate, StructuralValidationFailed } from "./validate"
 
 interface _CapturedKubeconform {
