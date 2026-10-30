@@ -97,5 +97,4 @@ describe("resolveConfig", () => {
       expect(failure).toBeInstanceOf(ConfigParseError)
       expect(failure._tag).toBe("ConfigParseError")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
-
 })
