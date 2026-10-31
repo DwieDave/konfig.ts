@@ -20,6 +20,29 @@ describe("parseExports", () => {
     expect([...parsed.names].sort()).toEqual(["B", "D", "I", "K", "T", "a", "f", "v", "w"])
     expect(parsed.stars).toEqual([{ from: "./ns", alias: "Ns" }, { from: "./all", alias: undefined }])
   })
+
+  it("collects the type members of an exported declare namespace", () => {
+    const code = "export declare namespace Backend {\n  type A<N> = N\n  interface B {}\n  export type C = 1\n}"
+
+    expect([...parseExports({ file: "api.ts", code }).names].sort()).toEqual([
+      "Backend",
+      "Backend.A",
+      "Backend.B",
+      "Backend.C"
+    ])
+  })
+
+  it("records named re-exports from relative files so their members can be followed", () => {
+    const parsed = parseExports({
+      file: "index.ts",
+      code: `export { Backend as Kit, Other } from "./api"\nexport { X } from "pkg"`
+    })
+
+    expect(parsed.named).toEqual([
+      { from: "./api", local: "Backend", exported: "Kit" },
+      { from: "./api", local: "Other", exported: "Other" }
+    ])
+  })
 })
 
 describe("diffSurface", () => {

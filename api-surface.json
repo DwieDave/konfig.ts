@@ -437,6 +437,10 @@
   ],
   "@konfig.ts/k8s": [
     "Backend",
+    "Backend.BaseInput",
+    "Backend.CliOptions",
+    "Backend.DefineInput",
+    "Backend.EmitInput",
     "Backend.define",
     "Backend.encrypting",
     "Backend.plainSecret",

@@ -1,5 +1,5 @@
 import { isRecord } from "@konfig.ts/core"
-import { Effect, type Schema } from "effect"
+import { Effect, Match, type Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { Path } from "effect/Path"
 import { type Declaration, type ExportAllDeclaration, type ExportNamedDeclaration, parseSync } from "oxc-parser"
@@ -12,18 +12,53 @@ interface ReExport {
   readonly alias: string | undefined
 }
 
+interface NamedReExport {
+  readonly from: string
+  readonly local: string
+  readonly exported: string
+}
+
 export interface FileExports {
   readonly names: ReadonlyArray<string>
   readonly stars: ReadonlyArray<ReExport>
+  readonly named: ReadonlyArray<NamedReExport>
 }
 
 const _identifierName = (node: { readonly type: string; readonly name?: string } | null | undefined) =>
   node?.type === "Identifier" && node.name !== undefined ? [node.name] : []
 
+const _DECLARATION_TYPES: ReadonlySet<string> = new Set([
+  "VariableDeclaration",
+  "FunctionDeclaration",
+  "ClassDeclaration",
+  "TSTypeAliasDeclaration",
+  "TSInterfaceDeclaration",
+  "TSEnumDeclaration",
+  "TSModuleDeclaration"
+])
+
+const _isDeclaration = (node: _Statement): node is Declaration & _Statement => _DECLARATION_TYPES.has(node.type)
+
+const _statementNames = (node: _Statement): ReadonlyArray<string> =>
+  node.type === "ExportNamedDeclaration"
+    ? node.declaration === null ? [] : _declarationNames(node.declaration)
+    : _isDeclaration(node)
+    ? _declarationNames(node)
+    : []
+
+const _namespaceNames = (decl: Declaration & { readonly type: "TSModuleDeclaration" }): ReadonlyArray<string> => {
+  const name = _identifierName(decl.id)[0]
+  const members = decl.body?.type === "TSModuleBlock" ? decl.body.body.flatMap(_statementNames) : []
+
+  return name === undefined ? [] : [name, ...members.map((m) => `${name}.${m}`)]
+}
+
 const _declarationNames = (decl: Declaration): ReadonlyArray<string> =>
-  decl.type === "VariableDeclaration"
-    ? decl.declarations.flatMap((d) => _identifierName(d.id))
-    : _identifierName("id" in decl ? decl.id : null)
+  Match.value(decl).pipe(
+    Match.when({ type: "TSModuleDeclaration" }, _namespaceNames),
+    Match.when({ type: "VariableDeclaration" }, (v) => v.declarations.flatMap((d) => _identifierName(d.id))),
+    Match.orElse((other) => _identifierName("id" in other ? other.id : null))
+  )
 
 const _specifierNames = (node: ExportNamedDeclaration): ReadonlyArray<string> =>
   node.specifiers.map((s) => (s.exported.type === "Literal" ? String(s.exported.value) : s.exported.name))
@@ -40,12 +75,23 @@ const _isNamed = (node: _Statement): node is ExportNamedDeclaration => node.type
 
 const _isStar = (node: _Statement): node is ExportAllDeclaration => node.type === "ExportAllDeclaration"
 
+const _relativeSpecifiers = (node: ExportNamedDeclaration): ReadonlyArray<NamedReExport> =>
+  node.source !== null && node.source.value.startsWith(".")
+    ? node.specifiers.map((s) => ({
+      from: node.source?.value ?? "",
+      local: s.local.type === "Literal" ? String(s.local.value) : s.local.name,
+      exported: s.exported.type === "Literal" ? String(s.exported.value) : s.exported.name
+    }))
+    : []
+
 export const parseExports = (input: { readonly file: string; readonly code: string }): FileExports => {
   const body = parseSync(input.file, input.code).program.body
+  const named = body.filter(_isNamed)
 
   return {
-    names: body.filter(_isNamed).flatMap(_namedExports),
-    stars: body.filter(_isStar).map(_star)
+    names: named.flatMap(_namedExports),
+    stars: body.filter(_isStar).map(_star),
+    named: named.flatMap(_relativeSpecifiers)
   }
 }
 
@@ -74,14 +120,28 @@ const _starNames = (input: { readonly fromFile: string; readonly star: ReExport 
     return _prefixed({ alias: input.star.alias, names })
   })
 
+const _memberRenames = (input: { readonly names: ReadonlyArray<string>; readonly ref: NamedReExport }) =>
+  input.names
+    .filter((n) => n.startsWith(`${input.ref.local}.`))
+    .map((n) => `${input.ref.exported}${n.slice(input.ref.local.length)}`)
+
+const _namedMembers = (input: { readonly fromFile: string; readonly ref: NamedReExport }) =>
+  Effect.gen(function*() {
+    const target = yield* _resolveRelative({ fromFile: input.fromFile, spec: input.ref.from })
+    const names = target === undefined ? [] : yield* _fileSurface(target)
+
+    return _memberRenames({ names, ref: input.ref })
+  })
+
 const _fileSurface = (file: string): Effect.Effect<ReadonlyArray<string>, RepoScriptError, FileSystem | Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const code = yield* fs.readFileString(file).pipe(mapRepoError(`cannot read ${file}`))
     const parsed = parseExports({ file, code })
     const fromStars = yield* Effect.forEach(parsed.stars, (star) => _starNames({ fromFile: file, star }))
+    const fromNamed = yield* Effect.forEach(parsed.named, (ref) => _namedMembers({ fromFile: file, ref }))
 
-    return [...parsed.names, ...fromStars.flat()]
+    return [...parsed.names, ...fromStars.flat(), ...fromNamed.flat()]
   })
 
 const _isNamespaceLike = (value: unknown): value is { readonly [key: string]: Schema.Json } =>
