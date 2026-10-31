@@ -63,9 +63,18 @@ console.log(`listening on :${config.http.port}`)
 | `Environment.define` | a bundle of the above — nestable; the single source of truth for both sides                          |
 | `SecretSource`       | plaintext sources for backends: `.fromConfig`, `.literal`, `.fromCommand`                            |
 
+`environmentLayer({ tag, env })` decodes an environment once and provides the
+record as a `Layer<Self, ConfigError>`, so services read one resolved value
+instead of repeating the `Config` reads. `typedKeys` and `collectByKey` are the
+record helpers the package is built on.
+
 Two members claiming the same `envName` is a compile-time error
 (`_konfig_error` hint) for top-level members; `Environment.define` also throws
-`EnvNameCollision` synchronously at module load, which covers nested environments. The class is not exported; match it by `_tag`.
+`EnvNameCollision` synchronously at module load, which covers nested environments.
+
+The metadata and input types are exported too: `EnvClaim`, `HasEnvClaims`,
+`EntryKind`, `EntryMarker`, `MemberValue`, `EnvironmentShape`, and the
+`Define*Input` / `SecretSource` input types.
 
 ## Internals
 

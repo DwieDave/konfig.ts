@@ -22,7 +22,7 @@ const BUILDERS: ReadonlyArray<readonly [string, object, ReadonlyArray<string>]> 
   ["Service", K8s.Service, ["fromContainer", "fromPodSet", "make"]],
   ["Ingress", K8s.Ingress, ["make", "tls"]],
   ["PodSet", K8s.PodSet, ["define"]],
-  ["SecretRef", K8s.SecretRef, ["of"]],
+  ["SecretRef", K8s.SecretRef, ["of", "unsafeReNamespace"]],
   ["ConfigMapRef", K8s.ConfigMapRef, ["of"]],
   ["ServiceAccountRef", K8s.ServiceAccountRef, ["of"]],
   ["PvcRef", K8s.PvcRef, ["of"]],
@@ -37,13 +37,16 @@ it.each(BUILDERS)("%s exposes exactly its documented builders", (_name, builder,
   expect(Object.keys(builder).sort()).toEqual(members)
 })
 
-it("EnvVar exposes raw and not the removed fromSecretForPod duplicate", () => {
-  expect(Object.keys(K8s.EnvVar)).toContain("raw")
-  expect(Object.keys(K8s.EnvVar)).not.toContain("fromSecretForPod")
-})
-
-it("SecretRef does not expose the removed unsafeReNamespace escape hatch", () => {
-  expect(Object.keys(K8s.SecretRef)).not.toContain("unsafeReNamespace")
+it("EnvVar exposes every 0.4.0 constructor plus raw", () => {
+  expect(Object.keys(K8s.EnvVar).sort()).toEqual([
+    "configMapEnv",
+    "fromConfigMap",
+    "fromSecret",
+    "fromSecretForPod",
+    "raw",
+    "secretEnv",
+    "value"
+  ])
 })
 
 it("Backend exposes exactly the members the backend packages use", () => {

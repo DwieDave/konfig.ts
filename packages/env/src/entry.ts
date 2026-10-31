@@ -1,7 +1,7 @@
 import type { Config } from "effect"
 import { Data } from "effect"
 
-type EntryKind = "Secret" | "Literal" | "Downward" | "Environment"
+export type EntryKind = "Secret" | "Literal" | "Downward" | "Environment"
 
 export interface EntryMarker<K extends EntryKind> {
   readonly _kind: K

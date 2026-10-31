@@ -50,9 +50,9 @@ A pod declares its volumes once; each container mounts them by name. A Persisten
 
 <Diagnostics case="volume-mismatch" />
 
-Why it fails: `Pod.define` compares the mount names of every container against the pod's declared volume names, and `Volume.fromPvc` only accepts a `PvcRef`. A branded reference comes from `PvcRef.of(name)` when the claim is managed elsewhere.
+Why it fails: `Pod.define` compares the mount names of every container against the pod's declared volume names, and `Volume.fromPvc` only accepts a `PvcRef`. A branded reference comes from `PvcRef.of(name)` when the claim is managed elsewhere, or from a `Dep.Pvc` provider when another module creates it, so the graph knows the claim exists.
 
-Fix: mount `Volume.mountRef("data")`, and pass `PvcRef.of("postgres-data")` as the claim.
+Fix: mount `Volume.mountRef("data")`, and pass `PvcRef.of("postgres-data")` (or a provided reference) as the claim.
 
 ## widened-name.ts: an Application name that is not a literal
 
@@ -66,7 +66,7 @@ Fix: keep names literal at the call site and pass them in from the env entry rat
 
 ## envname-collision.ts: two members claim one env var
 
-Every member of an environment contract (secret, literal, or downward) ends up as one env var in the pod. `Environment.define` computes the set of env var names across its top-level members and rejects a duplicate at the type level. Nested environments are covered by a runtime check in the same call, which throws `EnvNameCollision` synchronously when the module is loaded. The class is not exported; match it by `_tag`.
+Every member of an environment contract (secret, literal, or downward) ends up as one env var in the pod. `Environment.define` computes the set of env var names across its top-level members and rejects a duplicate at the type level. Nested environments are covered by a runtime check in the same call, which throws `EnvNameCollision` (exported from `@konfig.ts/env`) synchronously when the module is loaded.
 
 <Diagnostics case="envname-collision" />
 

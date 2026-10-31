@@ -1,8 +1,50 @@
+import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import { strictDecoderOf } from "./decode"
-import { KonfigConfig } from "./konfigConfig"
+import { makeStrictDecoder, strictDecoderOf } from "./decode"
+import {
+  ClusterSpec,
+  CrdConfig,
+  decodeKonfigConfigEffect,
+  decodeKonfigConfigSync,
+  DiffConfig,
+  EnvEntry,
+  HelmConfig,
+  KonfigConfig,
+  OutDir,
+  ServicesConfig
+} from "./konfigConfig"
 
-const decode = strictDecoderOf(KonfigConfig).sync
+const decode = decodeKonfigConfigSync
+
+describe("konfig.json decoders", () => {
+  const minimal = { root: "r", envs: { prod: { entry: "env/prod.ts" } }, outDir: { manifests: "m" } }
+
+  it("decodeKonfigConfigEffect agrees with decodeKonfigConfigSync", () => {
+    expect(Effect.runSync(decodeKonfigConfigEffect(minimal))).toEqual(decodeKonfigConfigSync(minimal))
+  })
+
+  it("makeStrictDecoder builds the strict decoder pair the config decoders use", () => {
+    expect(makeStrictDecoder(KonfigConfig).sync(minimal)).toEqual(decodeKonfigConfigSync(minimal))
+  })
+
+  it("rejects unknown keys", () => {
+    expect(() => decodeKonfigConfigSync({ ...minimal, typo: true })).toThrow()
+  })
+})
+
+describe("konfig.json sub-schemas", () => {
+  const strict = <S extends Parameters<typeof strictDecoderOf>[0]>(schema: S) => strictDecoderOf(schema).sync
+
+  it("decode each section on its own with the same defaults as KonfigConfig", () => {
+    expect(strict(EnvEntry)({ entry: "env/prod.ts" })).toEqual({ entry: "env/prod.ts" })
+    expect(strict(OutDir)({ manifests: "m" })).toEqual({ manifests: "m" })
+    expect(strict(CrdConfig)({})).toEqual({ outDir: ".generated/crd" })
+    expect(strict(HelmConfig)({})).toEqual({ cacheDir: ".konfig/helm-cache", minVersion: "3.16.0" })
+    expect(strict(ClusterSpec)({ registry: "ghcr.io/acme" })).toEqual({ registry: "ghcr.io/acme" })
+    expect(strict(DiffConfig)({ baseline: "base" })).toEqual({ baseline: "base" })
+    expect(strict(ServicesConfig)({})).toEqual({ globalPaths: [] })
+  })
+})
 
 describe("konfig.json schema (T4.1)", () => {
   it("decodes a minimal config with defaults filled in", () => {

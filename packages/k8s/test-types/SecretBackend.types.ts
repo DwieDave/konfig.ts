@@ -1,10 +1,9 @@
 import { Manifest } from "@konfig.ts/core"
 import type { SecretSource } from "@konfig.ts/env"
+import type { BackendEmitInput, BackendTag, SecretBackend } from "@konfig.ts/k8s"
 import { Backend, Environment, Secret } from "@konfig.ts/k8s"
 import { Effect } from "effect"
-import type { SecretBackend } from "../src/backendKit"
-
-type BackendEmitInput<N extends string, K extends string, RS extends boolean> = Backend.BaseInput<N, K, RS>
+import type { SecretBackend as KitSecretBackend } from "../src/backendKit"
 
 type _BarrelHelpers = [typeof Backend.plainSecret, typeof Backend.secretMeta, typeof Backend.define]
 
@@ -27,8 +26,18 @@ type _DefineInfersNameAndKeys = Expect<
 
 void inferred
 
-// @ts-expect-error SecretBackend is not exported from the barrel
-type _NoBarrelSecretBackend = import("../src/index").SecretBackend<"n", "k">
+type _BarrelSecretBackend = Expect<Equal<SecretBackend<"n", "k">, KitSecretBackend<"n", "k">>>
+
+type _BaseInputAlias = Expect<Equal<BackendEmitInput<"n", "k", true>, Backend.BaseInput<"n", "k", true>>>
+
+type _BackendTag = Expect<
+  Equal<BackendTag, "Sops" | "Sops.passthrough" | "SealedSecrets" | "ExternalSecrets" | "NativeSecret">
+>
+
+// Every built-in tag still fits the kit's open `_tag: string`.
+const _builtInTag: SecretBackend<"n", "k">["_tag"] = "Sops" satisfies BackendTag
+
+void _builtInTag
 
 // @ts-expect-error Backend.Contract was removed
 type _NoContract = Backend.Contract<"n", "k">
@@ -97,7 +106,10 @@ export type _Tests = readonly [
   _BackendEmitInputRequired,
   _BackendEmitInputOptional,
   _Defaulted,
-  _DefineInfersNameAndKeys
+  _DefineInfersNameAndKeys,
+  _BarrelSecretBackend,
+  _BaseInputAlias,
+  _BackendTag
 ]
 
 void reqFalse

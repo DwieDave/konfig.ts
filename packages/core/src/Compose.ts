@@ -36,7 +36,7 @@ export type ResidualIn<T extends ReadonlyArray<AnyHandle>> = FoldResidualIn<T, n
 
 // Namespace and Application excluded: shared namespaces are normal, and Application is
 // emitted pairwise with App (would double-report every collision).
-type UniqueKinds = "App" | "Secret" | "SecretValues" | "Image"
+type UniqueKinds = "App" | "Secret" | "SecretValues" | "ConfigMap" | "ServiceAccount" | "Pvc" | "Image"
 
 type UniqueOut<H> = Extract<OutOfHandle<H>, Need<UniqueKinds, string>>
 

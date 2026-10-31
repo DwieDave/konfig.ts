@@ -44,6 +44,24 @@ type _dupSecret = _Expect<
   >
 >
 
+type _Provider<K extends string, N extends string> = ComposeHandle<Provide<K, N>, never>
+
+// two providers of the same ConfigMap / ServiceAccount / Pvc → duplicate
+type _dupConfigMap = _Expect<
+  _Eq<DuplicateProvides<[_Provider<"ConfigMap", "cfg">, _Provider<"ConfigMap", "cfg">]>, Need<"ConfigMap", "cfg">>
+>
+
+type _dupServiceAccount = _Expect<
+  _Eq<
+    DuplicateProvides<[_Provider<"ServiceAccount", "sa">, _Provider<"ServiceAccount", "sa">]>,
+    Need<"ServiceAccount", "sa">
+  >
+>
+
+type _dupPvc = _Expect<
+  _Eq<DuplicateProvides<[_Provider<"Pvc", "data">, _Provider<"Pvc", "data">]>, Need<"Pvc", "data">>
+>
+
 // "Application" is excluded — the paired App Need alone reports the collision
 type _noDouble = _Expect<
   _Eq<Extract<DuplicateProvides<[_Api, _ApiClone]>, Need<"Application", string>>, never>

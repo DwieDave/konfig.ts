@@ -18,19 +18,19 @@ import type { EnvVar } from "./env"
 import type { StringMap } from "./meta"
 import { bindSecret, type DeclaredSecret } from "./secretBind"
 
-interface DeclaredLiteral<EnvName extends string, T> {
+export interface DeclaredLiteral<EnvName extends string, T> {
   readonly envName: EnvName
   readonly value: T
   readonly envVar: EnvVar
 }
 
-interface DeclaredDownward<EnvName extends string> {
+export interface DeclaredDownward<EnvName extends string> {
   readonly envName: EnvName
   readonly fieldPath: string
   readonly envVar: EnvVar
 }
 
-type DeclaredMember<
+export type DeclaredMember<
   A extends EnvMember,
   Ns extends string = string
 > = A extends SecretEntry<infer N, infer K, infer _E> ? [N, K] extends [string, string] ? DeclaredSecret<N, K, Ns>
@@ -86,7 +86,7 @@ interface _SecretMemberSourceOnly<_N extends string, K extends string> extends _
   readonly source: SecretSource<K, Manifest.RenderServices>
 }
 
-type SecretMemberOptions<N extends string, K extends string> =
+export type SecretMemberOptions<N extends string, K extends string> =
   | _SecretMemberBackendRequiresSource<N, K>
   | _SecretMemberBackendOptionalSource<N, K>
   | _SecretMemberSourceOnly<N, K>
@@ -98,24 +98,29 @@ type SecretMemberOptions<N extends string, K extends string> =
  * require a source (`SecretBackend<N, K, false>`), so `NativeSecret.backend()`
  * still has to be paired with a `source` via the object form.
  */
-type SecretMemberInput<N extends string, K extends string> =
+export type SecretMemberInput<N extends string, K extends string> =
   | SecretMemberOptions<N, K>
   | SecretBackend<N, K, false>
   | SecretSource<K, Manifest.RenderServices>
 
-type SecretMemberInputFor<A> = A extends SecretEntry<infer N, infer K, infer _E>
+export type SecretMemberOptionsFor<A> = A extends SecretEntry<infer N, infer K, infer _E>
+  ? [N, K] extends [string, string] ? SecretMemberOptions<N, K>
+  : never
+  : never
+
+export type SecretMemberInputFor<A> = A extends SecretEntry<infer N, infer K, infer _E>
   ? [N, K] extends [string, string] ? SecretMemberInput<N, K>
   : never
   : never
 
-type HasSecrets<M extends Readonly<Record<string, EnvMember>>> = true extends {
+export type HasSecrets<M extends Readonly<Record<string, EnvMember>>> = true extends {
   readonly [K in keyof M]: M[K] extends SecretEntry<infer _N, infer _K, infer _E> ? true
     : M[K] extends Environment<infer Sub> ? HasSecrets<Sub>
     : false
 }[keyof M] ? true
   : false
 
-type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
+export type SecretMembersOpts<M extends Readonly<Record<string, EnvMember>>> = {
   readonly [
     K in keyof M as M[K] extends SecretEntry<infer _N, infer _K, infer _E> ? K
       : M[K] extends Environment<infer SubM> ? HasSecrets<SubM> extends true ? K

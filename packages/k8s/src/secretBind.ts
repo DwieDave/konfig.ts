@@ -29,7 +29,7 @@ export type DeclaredSecret<N extends string, K extends string, Ns extends string
   & _DeclaredSecretBase<N, K, Ns>
   & _SecretValuesFields<N, K>
 
-interface BindSecretInput<
+export interface BindSecretInput<
   N extends string,
   K extends string,
   E extends Readonly<Record<K, string>>,

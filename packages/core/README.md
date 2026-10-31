@@ -3,7 +3,8 @@
 The Kubernetes-agnostic primitives every other konfig.ts package builds on: the
 `Manifest<A>` carrier, the `Dep.*` kinds that drive compile-time dependency
 tracking, the `Module` factories, stable YAML, structural diff, a Helm
-integration with digest verification, and the `renderAllYaml` helpers.
+integration with digest verification, the `render` entrypoint, and the
+`renderAllYaml` helpers.
 
 Most projects reach for the higher-level packages ([k8s](../k8s), [env](../env),
 [argocd](../argocd)) and touch core directly only for `Helm.release`, `Dep.*`,
@@ -56,22 +57,22 @@ commands install a `ConfigProvider` around the whole render (env var >
 `konfig.json`'s `helm.cacheDir` > `.konfig/helm-cache`), so every
 `Helm.release()` call across a project's chart definitions shares one
 resolved cache directory. Outside the CLI (a bare Effect program calling
-`renderManifest` directly), it falls back to the environment /
+`render`/`renderManifest` directly), it falls back to the environment /
 `.konfig/helm-cache` default like any other `Effect.Config` read.
 
 ## Surface
 
-| Area        | Exports                                                                                                                                                                                                                                                                                                  |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Manifest    | `Manifest` (`.make` / `.concat` / `.embedYaml`), `renderAllYaml`, `renderAllYamlEffect`, `renderManifest`, `RenderContext`                                                                                                                                                                               |
-| Deps        | `Dep.*` kinds + `Dep.provide*` helpers; plain branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `BuiltImageRef`                                                                                                                                                                                          |
-| Modules     | `Module.fixedNs`, `Module.dynamicNs`                                                                                                                                                                                                                                                                     |
-| Helm        | `Helm.release` — chart pull + SHA-256 digest verification; `Helm.cacheFileName`, `Helm.ensureChartTarball`, the shared cache-naming/verification building blocks it's built on                                                                                                                           |
-| Subprocess  | `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin`, `runCliWithStdin`                                                                                                                                                                                                      |
-| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYamlAll`, `parseYamlWith`, `decodeYamlOutput`                                                                                                                                                                                    |
-| Config      | `KonfigConfig`, `ImagesConfig`, and the `decodeImages*` decoders; `konfigDefaults.ts`'s `DEFAULT_*`/`KONFIG_*_ENV` constants                                                                                                                                                                             |
-| Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `brand` / `unsafeCoerce` escape hatches                                                                                                                                                                                                              |
-| Errors      | the tagged union `AnyRenderError` (`RenderError`, `BoundaryDecodeError`, `CrdExtractError`, plus `EmbedYamlReadError`, `YamlParseError`, `HelmVersionTooLow`, `HelmMinVersionInvalid`, `HelmRenderError`, `HelmDigestMismatch`, which are not exported and are matched by `_tag` with `Effect.catchTag`) |
+| Area        | Exports                                                                                                                                                                                                                                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manifest    | `Manifest` (`.make` / `.combine` / `.concat` / `.whenever` / `.embedYaml` / `.ManifestTypeId`), `render`, `renderAllYaml`, `renderAllYamlEffect`, `renderManifest`, `RenderContext`                                                                                                                                    |
+| Deps        | `Dep.*` kinds (`Secret`, `SecretValues`, `ConfigMap`, `Namespace`, `ServiceAccount`, `Pvc`, `Image`, `Application`, `App`) + `Dep.provide*` helpers; branded `SecretRef` / `ConfigMapRef` / `PvcRef` / `ServiceAccountRef` / `BuiltImageRef`                                                                           |
+| Modules     | `Module.fixedNs`, `Module.dynamicNs`, `Module.asLiteralName`; `Bundle.define` / `Bundle.fromModules` / `Bundle.make` / `Bundle.makeSet`; `Compose.composeLayers` / `Compose.makeResidualEntrypoint`                                                                                                                    |
+| Helm        | `Helm.release` — chart pull + SHA-256 digest verification; `Helm.cacheFileName`, `Helm.ensureChartTarball`, `Helm.verifyChartDigest`, `Helm.timeout`, `Helm.versionTimeout`, the shared cache-naming/verification building blocks it's built on                                                                        |
+| Subprocess  | `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin`, `runCliWithStdin`, `processDetail`                                                                                                                                                                                                   |
+| YAML & diff | `Yaml.serialize` / `Yaml.filenameFor`; `diffFiles`, `formatDiff`, `parseYaml`, `parseYamlAll`, `parseYamlWith`, `decodeYamlOutput`, `deepEqual`, `redact`, `redactedEqual`                                                                                                                                             |
+| Config      | `KonfigConfig` and its section schemas (`EnvEntry`, `OutDir`, `CrdConfig`, `HelmConfig`, `DiffConfig`, `ServicesConfig`, `ClusterSpec`), `decodeKonfigConfig*`; `ImagesConfig`, `EnvImages`, `decodeImages*`, `lookupEnv*`, `requireImage*`; `konfigDefaults.ts`'s `DEFAULT_*`/`KONFIG_*_ENV` constants                |
+| Boundaries  | `boundary` (Schema decode → `BoundaryDecodeError`); `makeStrictDecoder`; `brand` / `unsafeCoerce` escape hatches                                                                                                                                                                                                       |
+| Errors      | the tagged union `AnyRenderError` (`RenderError`, `BoundaryDecodeError`, `CrdExtractError`, `EmbedYamlReadError`, `HelmVersionTooLow`, `HelmRenderError`, `HelmDigestMismatch`, plus `YamlParseError` and `HelmMinVersionInvalid`, which are not exported and are matched by `_tag`); `ProcessError`, `ProcessTimeout` |
 
 ## Internals
 

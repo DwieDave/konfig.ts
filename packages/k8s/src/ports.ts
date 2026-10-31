@@ -8,7 +8,7 @@ export type PortName<N extends string> = string & {
 
 const _portName = <const N extends string>(name: N): PortName<N> => brand<PortName<N>>(name)
 
-type ContainerProtocol = "TCP" | "UDP" | "SCTP"
+export type ContainerProtocol = "TCP" | "UDP" | "SCTP"
 
 export interface ContainerPort<N extends string = string> {
   readonly containerPort: number
@@ -37,12 +37,12 @@ export const Port = {
   ref: <const N extends string>(name: N): PortName<N> => _portName(name)
 }
 
-interface HttpHeader {
+export interface HttpHeader {
   readonly name: string
   readonly value: string
 }
 
-interface HttpGetAction<Ports extends string> {
+export interface HttpGetAction<Ports extends string> {
   readonly path?: string
   readonly port: number | PortName<Ports>
   readonly host?: string
@@ -50,18 +50,18 @@ interface HttpGetAction<Ports extends string> {
   readonly httpHeaders?: ReadonlyArray<HttpHeader>
 }
 
-interface TcpSocketAction<Ports extends string> {
+export interface TcpSocketAction<Ports extends string> {
   readonly port: number | PortName<Ports>
   readonly host?: string
 }
 
 // kube-apiserver rejects non-numeric gRPC probe ports, so no named-port option here.
-interface GrpcAction<_Ports extends string> {
+export interface GrpcAction<_Ports extends string> {
   readonly port: number
   readonly service?: string
 }
 
-interface ExecAction {
+export interface ExecAction {
   readonly command: ReadonlyArray<string>
 }
 

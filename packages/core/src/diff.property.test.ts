@@ -9,7 +9,8 @@ import {
   hasDifferences,
   type Json,
   redact,
-  redactedEqual
+  redactedEqual,
+  type RedactOptions
 } from "./diff"
 
 const diffFiles = (input: Parameters<typeof diffFilesEffect>[0]) => Effect.runSync(diffFilesEffect(input))
@@ -70,16 +71,20 @@ const arbValue: fc.Arbitrary<Json> = fc.letrec<{ value: Json }>((tie) => ({
 })).value
 
 describe("redactedEqual mirrors deepEqual over redact", () => {
-  it("agrees on arbitrary value pairs", () => {
+  const check = (options: RedactOptions): void => {
     fc.assert(
       fc.property(arbValue, arbValue, (a, b) => {
-        const expected = deepEqual({ a: redact({ value: a }), b: redact({ value: b }) })
-        expect(redactedEqual({ a, b })).toBe(expected)
-        expect(redactedEqual({ a, b: a })).toBe(true)
+        const expected = deepEqual({ a: redact({ value: a, options }), b: redact({ value: b, options }) })
+        expect(redactedEqual({ a, b, options })).toBe(expected)
+        expect(redactedEqual({ a, b: a, options })).toBe(true)
       }),
       { numRuns: 2000 }
     )
-  })
+  }
+
+  it("without numeric normalization", () => check({}))
+
+  it("with numeric normalization", () => check({ normalizeNumerics: true }))
 })
 
 describe("diff.ts — property tests", () => {
@@ -139,11 +144,11 @@ describe("diff.ts — property tests", () => {
 })
 
 describe("redact", () => {
-  it("is idempotent", () => {
+  it.each([{}, { normalizeNumerics: true }])("is idempotent with options %o", (options: RedactOptions) => {
     fc.assert(
       fc.property(arbValue, (value) => {
-        const once = redact({ value })
-        expect(redact({ value: once })).toEqual(once)
+        const once = redact({ value, options })
+        expect(redact({ value: once, options })).toEqual(once)
       }),
       { numRuns: 1000 }
     )

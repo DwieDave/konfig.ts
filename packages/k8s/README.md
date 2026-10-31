@@ -52,10 +52,16 @@ Identity constructors (`Secret.make`, `ConfigMap.make`, `ServiceAccount.make`, �
 expose a typed `.ref`; the enforcement points (env `secretKeyRef`, volumes,
 `imagePullSecrets`, Ingress TLS, reloader lists) take the brand and reject raw
 strings. `SecretRef.of`, `ConfigMapRef.of`, `ServiceAccountRef.of` and
-`PvcRef.of` mint a ref for an object managed outside konfig.ts.
+`PvcRef.of` mint a ref for an object managed outside konfig.ts, and
+`SecretRef.unsafeReNamespace` widens a ref's namespace for a deliberate
+cross-namespace read. The ref types are core's brands, so a builder's `.ref`
+can back a `Dep.ConfigMap` / `Dep.ServiceAccount` provider, and the value a
+module gets from `yield* Dep.ConfigMap(name)`, `Dep.ServiceAccount(name)` or
+`Dep.Pvc(name)` plugs straight into volumes, env vars and `serviceAccountName`.
 
 **Env vars** — `EnvVar.value`, `EnvVar.secretEnv` / `EnvVar.configMapEnv` (many vars from one ref),
-`EnvVar.fromSecret`, `EnvVar.fromConfigMap`, and `EnvVar.raw` (unbranded passthrough, e.g. a `fieldRef`).
+`EnvVar.fromSecret`, `EnvVar.fromSecretForPod` (one var, `podNamespace` must match the ref's namespace),
+`EnvVar.fromConfigMap`, and `EnvVar.raw` (unbranded passthrough, e.g. a `fieldRef`).
 Duplicate names in one container's `env` are caught at compile time.
 
 **Volumes** — `Volume.empty`, `Volume.fromSecret({ ref })`, `Volume.fromConfigMap({ ref })`,
@@ -88,7 +94,10 @@ change); `hashSecretValues` stamps a pod-spec hash that rolls on re-render.
 declaration into a backend factory `(opts) => backend`; `emit` receives `{ base, opts, label }`.
 `Backend.encrypting({ tag, precheck, toPlain, bin, args, schema, schemaLabel, verify? })`
 adds the shared plaintext, CLI, decode and verify pipeline. `Backend.plainSecret` and
-`Backend.secretMeta` build the plain Secret and metadata.
+`Backend.secretMeta` build the plain Secret and metadata. The contract types
+`SecretBackend`, `BackendEmitInput` (the same type as `Backend.BaseInput`) and
+`BackendTag` (the built-in tags) are exported alongside the kit, as are the
+input types of every builder.
 
 ## Internals
 

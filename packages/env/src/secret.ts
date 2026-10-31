@@ -14,7 +14,7 @@ export interface SecretEntry<
   readonly fields: { readonly [P in K]: Config.Config<Redacted.Redacted<string>> }
 }
 
-interface DefineSecretInput<
+export interface DefineSecretInput<
   N extends string,
   E extends Readonly<Record<string, string>>
 > {

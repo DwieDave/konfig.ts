@@ -11,7 +11,9 @@ import { type AnyRenderError, EmbedYamlReadError } from "./RenderError"
 
 export type RenderServices = FileSystem | Path | ChildProcessSpawner | Scope.Scope
 
-const ManifestTypeId: unique symbol = Symbol.for("@konfig.ts/core/Manifest")
+export const ManifestTypeId: unique symbol = Symbol.for("@konfig.ts/core/Manifest")
+
+export type ManifestTypeId = typeof ManifestTypeId
 
 interface Variance<out A> {
   readonly _A: (_: never) => A
@@ -42,6 +44,14 @@ export const make = <A>(run: MakeRun<A>): Manifest<A> => ({
 
 export const RENDER_CONCURRENCY = 4
 
+export interface CombineInput<A1, A2> {
+  readonly a: Manifest<A1>
+  readonly b: Manifest<A2>
+}
+
+export const combine = <A1, A2>(input: CombineInput<A1, A2>): Manifest<readonly [A1, A2]> =>
+  make((ctx) => Effect.all([input.a.render(ctx), input.b.render(ctx)], { concurrency: RENDER_CONCURRENCY }))
+
 // `concat` tells apart a Manifest<A> from a Manifest<A[]> at render time with
 // `Array.isArray`, so A must not itself be an array type — Manifest<string[]>
 // would be indistinguishable from Manifest<string[][]>'s per-element A. The
@@ -57,6 +67,15 @@ export const concat = <A>(
       Effect.map((results) => results.flatMap((r) => (Array.isArray(r) ? r : [r])))
     )
   )
+
+export interface WheneverInput<A> {
+  readonly cond: boolean
+  readonly thunk: () => Manifest<A>
+}
+
+// The thunk runs only when cond holds, so a disabled branch is never built.
+export const whenever = <A>(input: WheneverInput<A>): Manifest<A | undefined> =>
+  make((ctx) => input.cond ? input.thunk().render(ctx) : Effect.undefined)
 
 export type EmbedYamlSource = { readonly path: string } | { readonly literal: string }
 

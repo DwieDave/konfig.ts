@@ -14,7 +14,7 @@ type _Primitive = string | number | boolean | bigint
 
 // serialize is optional only for primitive T (default String(v) is meaningful);
 // for objects/arrays it's required so values don't silently become "[object Object]".
-type DefineLiteralInput<EnvName extends string, T> =
+export type DefineLiteralInput<EnvName extends string, T> =
   & {
     readonly envName: EnvName
     readonly value: T

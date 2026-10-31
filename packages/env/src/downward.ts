@@ -8,7 +8,7 @@ export interface DownwardEntry<EnvName extends string>
   readonly fieldPath: string
 }
 
-interface DefineDownwardInput<EnvName extends string> {
+export interface DefineDownwardInput<EnvName extends string> {
   readonly envName: EnvName
   readonly fieldPath: string
 }

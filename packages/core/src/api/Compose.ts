@@ -1,3 +1,10 @@
-export { moduleLayer, sealModules } from "../Compose"
+export { composeLayers, makeResidualEntrypoint, moduleLayer, sealModules } from "../Compose"
 
-export type { NoDuplicateProvides, ResidualCheck, ResidualIn } from "../Compose"
+export type {
+  ComposeHandle,
+  ComposeLayersInput,
+  DuplicateProvides,
+  NoDuplicateProvides,
+  ResidualCheck,
+  ResidualIn
+} from "../Compose"

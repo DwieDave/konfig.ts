@@ -73,9 +73,22 @@ const _ruleFor = (
   return _Rule.Recurse()
 }
 
+export interface RedactOptions {
+  // Normalize numeric strings only ("1.0" == 1); "true" stays a string.
+  readonly normalizeNumerics?: boolean
+}
+
+const _isNumericString = (s: string): boolean => /^-?\d+(\.\d+)?(e[-+]?\d+)?$/i.test(s)
+
+const _normalizeNumeric = (v: Json): Json => Predicate.isString(v) && _isNumericString(v) ? Number(v) : v
+
+const _leaf = (input: { readonly value: Json; readonly options: RedactOptions }): Json =>
+  input.options.normalizeNumerics === true ? _normalizeNumeric(input.value) : input.value
+
 export interface RedactInput {
   readonly value: Json
   readonly parentKey?: string | null
+  readonly options?: RedactOptions
 }
 
 const _isPresent = (v: Json): boolean => v !== null && v !== undefined
@@ -85,11 +98,12 @@ interface RedactEntryInput {
   readonly key: string
   readonly value: Json
   readonly parentKey: string | null
+  readonly options: RedactOptions
 }
 
 const _redactEntry = (input: RedactEntryInput): Json => {
-  const { key, parent, parentKey, value } = input
-  const recurse = () => redact({ value, parentKey: key })
+  const { key, options, parent, parentKey, value } = input
+  const recurse = () => redact({ value, parentKey: key, options })
 
   if (!isRecord(value)) return recurse()
 
@@ -101,7 +115,9 @@ const _redactEntry = (input: RedactEntryInput): Json => {
   })
 }
 
-const _redactRecord = (input: { readonly parent: JsonRecord; readonly parentKey: string | null }) =>
+const _redactRecord = (
+  input: { readonly parent: JsonRecord; readonly parentKey: string | null; readonly options: RedactOptions }
+) =>
   Object.fromEntries(
     Object.entries(input.parent)
       .filter(([, v]) => _isPresent(v))
@@ -112,12 +128,13 @@ const _redactRecord = (input: { readonly parent: JsonRecord; readonly parentKey:
 // equal to an absent field, so "set to null" vs "removed" is intentionally invisible here.
 export const redact = (input: RedactInput): Json => {
   const { value } = input
+  const options = input.options ?? {}
 
-  if (_isArray(value)) return value.map((v) => redact({ value: v, parentKey: null }))
+  if (_isArray(value)) return value.map((v) => redact({ value: v, parentKey: null, options }))
 
-  if (isRecord(value)) return _redactRecord({ parent: value, parentKey: input.parentKey ?? null })
+  if (isRecord(value)) return _redactRecord({ parent: value, parentKey: input.parentKey ?? null, options })
 
-  return value
+  return _leaf({ value, options })
 }
 
 export interface DeepEqualInput {
@@ -179,6 +196,7 @@ interface EqualInput {
   readonly a: Json
   readonly b: Json
   readonly parentKey: string | null
+  readonly options: RedactOptions
 }
 
 interface FieldEqualInput extends EqualInput {
@@ -187,8 +205,8 @@ interface FieldEqualInput extends EqualInput {
 }
 
 const _fieldEqual = (input: FieldEqualInput): boolean => {
-  const { a, b, key, parentKey, secret } = input
-  const recurse = () => _redactedEqual({ a, b, parentKey: key })
+  const { a, b, key, options, parentKey, secret } = input
+  const recurse = () => _redactedEqual({ a, b, parentKey: key, options })
 
   if (!isRecord(a)) return recurse()
 
@@ -201,9 +219,14 @@ const _fieldEqual = (input: FieldEqualInput): boolean => {
 }
 
 const _recordRedactedEqual = (
-  input: { readonly a: JsonRecord; readonly b: JsonRecord; readonly parentKey: string | null }
+  input: {
+    readonly a: JsonRecord
+    readonly b: JsonRecord
+    readonly parentKey: string | null
+    readonly options: RedactOptions
+  }
 ): boolean => {
-  const { a, b, parentKey } = input
+  const { a, b, options, parentKey } = input
   const secret = a.kind === "Secret"
 
   if (secret !== (b.kind === "Secret")) return false
@@ -211,18 +234,18 @@ const _recordRedactedEqual = (
 
   const sameFields = present.every(([key, v]) =>
     Object.hasOwn(b, key) && _isPresent(b[key]) &&
-    _fieldEqual({ key, a: v, b: b[key], parentKey, secret })
+    _fieldEqual({ key, a: v, b: b[key], parentKey, secret, options })
   )
 
   return sameFields && present.length === Object.values(b).filter(_isPresent).length
 }
 
 const _redactedEqual = (input: EqualInput): boolean => {
-  const { a, b } = input
+  const { a, b, options } = input
 
   if (_isArray(a)) {
     return _isArray(b) && a.length === b.length &&
-      a.every((x, i) => _redactedEqual({ a: x, b: b[i], parentKey: null }))
+      a.every((x, i) => _redactedEqual({ a: x, b: b[i], parentKey: null, options }))
   }
 
   if (_isArray(b)) return false
@@ -231,17 +254,18 @@ const _redactedEqual = (input: EqualInput): boolean => {
 
   if (isRecord(b)) return false
 
-  return deepEqual({ a, b })
+  return deepEqual({ a: _leaf({ value: a, options }), b: _leaf({ value: b, options }) })
 }
 
 export interface RedactedEqualInput {
   readonly a: Json
   readonly b: Json
+  readonly options?: RedactOptions
 }
 
-/** Equivalent to `deepEqual({ a: redact({ value: a }), b: redact({ value: b }) })` without cloning. */
+/** Equivalent to `deepEqual({ a: redact({ value: a, options }), b: redact({ value: b, options }) })` without cloning. */
 export const redactedEqual = (input: RedactedEqualInput): boolean =>
-  _redactedEqual({ a: input.a, b: input.b, parentKey: null })
+  _redactedEqual({ a: input.a, b: input.b, parentKey: null, options: input.options ?? {} })
 
 export const parseYaml = (text: string): Json => YAML.parse(text)
 
@@ -294,14 +318,14 @@ const _keyedDocs = (docs: ReadonlyArray<Json>): ReadonlyArray<readonly [string, 
   })
 }
 
-type DocDiff = Data.TaggedEnum<{
+export type DocDiff = Data.TaggedEnum<{
   Same: { readonly key: string }
   MissingLeft: { readonly key: string; readonly right: Json }
   MissingRight: { readonly key: string; readonly left: Json }
   Changed: { readonly key: string; readonly left: Json; readonly right: Json }
 }>
 
-type FileDiff = Data.TaggedEnum<{
+export type FileDiff = Data.TaggedEnum<{
   Same: { readonly file: string }
   MissingLeft: { readonly file: string }
   MissingRight: { readonly file: string }
@@ -323,12 +347,14 @@ export interface DiffResult {
 export interface DiffFilesInput {
   readonly left: Readonly<Record<string, string>>
   readonly right: Readonly<Record<string, string>>
+  readonly options?: RedactOptions
 }
 
 interface DiffOneInput {
   readonly file: string
   readonly leftText: string
   readonly rightText: string
+  readonly options: RedactOptions
 }
 
 type KeyedDocs = ReadonlyArray<readonly [string, Json]>
@@ -337,6 +363,7 @@ interface DocsInput {
   readonly file: string
   readonly lDocs: KeyedDocs
   readonly rDocs: KeyedDocs
+  readonly options: RedactOptions
 }
 
 const _absentSideDocs = (input: { readonly left: Json; readonly right: Json }): ReadonlyArray<DocDiff> | undefined => {
@@ -348,42 +375,42 @@ const _absentSideDocs = (input: { readonly left: Json; readonly right: Json }): 
 }
 
 const _diffSingle = (input: DocsInput): FileDiff => {
-  const { file } = input
+  const { file, options } = input
   const l = input.lDocs[0]?.[1]
   const r = input.rDocs[0]?.[1]
 
-  if (_redactedEqual({ a: l, b: r, parentKey: null })) return FileDiff.Same({ file })
+  if (_redactedEqual({ a: l, b: r, parentKey: null, options })) return FileDiff.Same({ file })
 
-  const left = redact({ value: l })
-  const right = redact({ value: r })
+  const left = redact({ value: l, options })
+  const right = redact({ value: r, options })
 
   return FileDiff.Changed({ file, left, right, docs: _absentSideDocs({ left, right }) })
 }
 
 const _diffDoc = (
-  input: { readonly key: string; readonly l: Json; readonly r: Json }
+  input: { readonly key: string; readonly l: Json; readonly r: Json; readonly options: RedactOptions }
 ): DocDiff => {
-  const { key, l, r } = input
-  const clean = (value: Json): Json => redact({ value })
+  const { key, l, options, r } = input
+  const clean = (value: Json): Json => redact({ value, options })
 
   if (l === undefined) return DocDiff.MissingLeft({ key, right: clean(r) })
 
   if (r === undefined) return DocDiff.MissingRight({ key, left: clean(l) })
 
-  if (_redactedEqual({ a: l, b: r, parentKey: null })) return DocDiff.Same({ key })
+  if (_redactedEqual({ a: l, b: r, parentKey: null, options })) return DocDiff.Same({ key })
 
   return DocDiff.Changed({ key, left: clean(l), right: clean(r) })
 }
 
 const _diffMulti = (input: DocsInput): FileDiff => {
-  const { file, lDocs, rDocs } = input
+  const { file, lDocs, options, rDocs } = input
   const lByKey = new Map(lDocs)
   const rByKey = new Map(rDocs)
   const keys = Array.from(new Set([...lByKey.keys(), ...rByKey.keys()])).sort()
-  const docs = keys.map((key) => _diffDoc({ key, l: lByKey.get(key), r: rByKey.get(key) }))
+  const docs = keys.map((key) => _diffDoc({ key, l: lByKey.get(key), r: rByKey.get(key), options }))
 
   if (docs.every(DocDiff.$is("Same"))) return FileDiff.Same({ file })
-  const clean = (d: readonly [string, Json]): Json => redact({ value: d[1] })
+  const clean = (d: readonly [string, Json]): Json => redact({ value: d[1], options })
 
   return FileDiff.Changed({ file, left: lDocs.map(clean), right: rDocs.map(clean), docs })
 }
@@ -393,7 +420,8 @@ const _diffMulti = (input: DocsInput): FileDiff => {
 const _diffOne = (input: DiffOneInput): Effect.Effect<FileDiff, YamlParseError> =>
   Effect.gen(function*() {
     const [left, right] = yield* Effect.all([parseYamlAll(input.leftText), parseYamlAll(input.rightText)])
-    const docs: DocsInput = { file: input.file, lDocs: _keyedDocs(left), rDocs: _keyedDocs(right) }
+    const { file, options } = input
+    const docs: DocsInput = { file, lDocs: _keyedDocs(left), rDocs: _keyedDocs(right), options }
 
     return docs.lDocs.length <= 1 && docs.rDocs.length <= 1 ? _diffSingle(docs) : _diffMulti(docs)
   })
@@ -403,22 +431,26 @@ const _diffFile = (
     readonly file: string
     readonly left: Readonly<Record<string, string>>
     readonly right: Readonly<Record<string, string>>
+    readonly options: RedactOptions
   }
 ): Effect.Effect<FileDiff, YamlParseError> => {
-  const { file, left, right } = input
+  const { file, left, options, right } = input
 
   if (!Object.hasOwn(left, file)) return Effect.succeed(FileDiff.MissingLeft({ file }))
 
   if (!Object.hasOwn(right, file)) return Effect.succeed(FileDiff.MissingRight({ file }))
 
-  return _diffOne({ file, leftText: left[file] ?? "", rightText: right[file] ?? "" })
+  return _diffOne({ file, leftText: left[file] ?? "", rightText: right[file] ?? "", options })
 }
 
 export const diffFiles = (input: DiffFilesInput): Effect.Effect<DiffResult, YamlParseError> => {
   const { left, right } = input
+  const options = input.options ?? {}
   const files = Array.from(new Set([...Object.keys(left), ...Object.keys(right)])).sort()
 
-  return Effect.forEach(files, (file) => _diffFile({ file, left, right })).pipe(Effect.map((entries) => ({ entries })))
+  return Effect.forEach(files, (file) => _diffFile({ file, left, right, options })).pipe(
+    Effect.map((entries) => ({ entries }))
+  )
 }
 
 export const hasDifferences = (result: DiffResult): boolean => result.entries.some((e) => !FileDiff.$is("Same")(e))

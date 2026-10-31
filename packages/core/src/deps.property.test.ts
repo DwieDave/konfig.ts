@@ -18,8 +18,11 @@ describe("provide/need round-trip", () => {
       fc.property(arbName, (name) => {
         const resolved = [
           _provided({ need: Dep.Secret(name), layer: Dep.provideSecret(name) }),
+          _provided({ need: Dep.ConfigMap(name), layer: Dep.provideConfigMap(name) }),
           _provided({ need: Dep.Namespace(name), layer: Dep.provideNamespace(name) }),
-          _provided({ need: Dep.Application(name), layer: Dep.provideApplication(name) })
+          _provided({ need: Dep.ServiceAccount(name), layer: Dep.provideServiceAccount(name) }),
+          _provided({ need: Dep.Application(name), layer: Dep.provideApplication(name) }),
+          _provided({ need: Dep.Pvc(name), layer: Dep.providePvc(name) })
         ]
 
         expect(resolved.every((v) => v === name)).toBe(true)
@@ -35,6 +38,7 @@ describe("provide/need round-trip", () => {
         expect(Context.getOption(context, Dep.Secret(a))._tag).toBe("Some")
         expect(Context.getOption(context, Dep.Secret(b))._tag).toBe("None")
         expect(Context.getOption(context, Dep.Namespace(a))._tag).toBe("None")
+        expect(Context.getOption(context, Dep.ConfigMap(a))._tag).toBe("None")
       })
     )
   })

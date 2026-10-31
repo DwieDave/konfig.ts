@@ -35,6 +35,52 @@ describe("branded refs (FR-4.4 — raw strings rejected at type level)", () => {
       expect(env.valueFrom?.secretKeyRef?.key).toBe("password")
     }))
 
+  it.effect("EnvVar.fromSecretForPod accepts refs from the matching pod namespace", () =>
+    Effect.gen(function*() {
+      const { EnvVar } = yield* Effect.promise(() => import("./env"))
+      const { Secret } = yield* Effect.promise(() => import("./identity"))
+
+      const dbCreds = Secret.make({ name: "db-creds", namespace: "app", stringData: { url: "u" } })
+
+      const env = EnvVar.fromSecretForPod({ name: "DATABASE_URL", ref: dbCreds.ref, key: "url", podNamespace: "app" })
+
+      expect(env).toEqual({ name: "DATABASE_URL", valueFrom: { secretKeyRef: { name: "db-creds", key: "url" } } })
+    }))
+
+  it.effect("EnvVar.fromSecretForPod rejects refs from a different namespace at compile time", () =>
+    Effect.gen(function*() {
+      const { EnvVar } = yield* Effect.promise(() => import("./env"))
+      const { Secret } = yield* Effect.promise(() => import("./identity"))
+
+      const monCreds = Secret.make({ name: "grafana", namespace: "monitoring", stringData: { token: "t" } })
+
+      EnvVar.fromSecretForPod({
+        name: "GRAFANA",
+        // @ts-expect-error — SecretRef<*, *, "monitoring"> is not assignable to SecretRef<*, *, "app">.
+        ref: monCreds.ref,
+        key: "token",
+        podNamespace: "app"
+      })
+
+      const escaped = SecretRef.unsafeReNamespace(monCreds.ref)
+      const env = EnvVar.fromSecretForPod({ name: "GRAFANA", ref: escaped, key: "token", podNamespace: "app" })
+
+      expect(escaped).toBe(monCreds.ref)
+      expect(env.valueFrom?.secretKeyRef?.name).toBe("grafana")
+    }))
+
+  it.effect("EnvVar.fromSecretForPod rejects keys not in the ref's key union", () =>
+    Effect.gen(function*() {
+      const { EnvVar } = yield* Effect.promise(() => import("./env"))
+      const ref = SecretRef.of<"db", "url", "app">("db")
+      // @ts-expect-error — "pass" is not a key of the ref.
+      EnvVar.fromSecretForPod({ name: "X", ref, key: "pass", podNamespace: "app" })
+      expect(EnvVar.fromSecretForPod({ name: "X", ref, key: "url", podNamespace: "app", optional: true })).toEqual({
+        name: "X",
+        valueFrom: { secretKeyRef: { name: "db", key: "url", optional: true } }
+      })
+    }))
+
   it.effect("EnvVar.secretEnv accepts refs from the matching pod namespace", () =>
     Effect.gen(function*() {
       const { EnvVar } = yield* Effect.promise(() => import("./env"))

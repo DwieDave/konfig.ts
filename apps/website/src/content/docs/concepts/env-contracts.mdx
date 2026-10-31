@@ -29,7 +29,7 @@ An env contract is a TypeScript value that describes every environment variable 
 
 ### Env name collisions
 
-Two members claiming the same variable would let one silently overwrite the other in the pod. `Environment.define` rejects that at two levels. For direct leaf members it is a type error (a `_konfig_error: 'Environment: envName "X" is claimed by multiple members'` hint). The authoritative check, which also covers nested environments, throws `EnvNameCollision { envName, claims }` synchronously when the defining module is evaluated. The class is not exported, so match it by `_tag`; it cannot be imported.
+Two members claiming the same variable would let one silently overwrite the other in the pod. `Environment.define` rejects that at two levels. For direct leaf members it is a type error (a `_konfig_error: 'Environment: envName "X" is claimed by multiple members'` hint). The authoritative check, which also covers nested environments, throws `EnvNameCollision { envName, claims }` synchronously when the defining module is evaluated. The class is exported from `@konfig.ts/env`, so you can catch it with `instanceof` or by `_tag`.
 
 <Diagnostics case="envname-collision" />
 

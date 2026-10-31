@@ -102,6 +102,15 @@ export const EnvVar = {
   fromSecret: <const EnvName extends string, N extends string, K extends string = string>(
     input: SecretEnvInput<EnvName, N, K>
   ): EnvVar<EnvName> => _secretEnvVar(input),
+  // kube-apiserver only resolves secretKeyRef within the pod's own namespace; Ns must match podNamespace.
+  fromSecretForPod: <
+    const EnvName extends string,
+    N extends string,
+    K extends string,
+    const Ns extends string
+  >(
+    input: SecretEnvForPodInput<EnvName, N, K, Ns>
+  ): EnvVar<EnvName> => _secretEnvVar(input),
   // Batch form: many env vars from one secret ref; podNamespace is checked against the ref's namespace.
   secretEnv: <
     R extends SecretRef<string, string, string>,

@@ -20,7 +20,7 @@ import {
 import { runProcessString } from "./subprocess"
 import type { YamlRecord } from "./yaml/record"
 
-interface HelmReleaseOptions {
+export interface HelmReleaseOptions {
   readonly repo: string
   readonly chart: string
   readonly releaseName?: string

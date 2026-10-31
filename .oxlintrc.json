@@ -43,7 +43,12 @@
     "app/no-bare-error": "error",
     "app/no-comments": "error",
     "app/no-effect-asvoid": "error",
-    "app/no-multiple-function-params": ["error", { "scope": "all" }],
+    "app/no-multiple-function-params": [
+      "error",
+      {
+        "scope": "all"
+      }
+    ],
     "app/no-node-child-process": "error",
     "app/no-parse-coercion": "error",
     "app/no-record-string-undefined": "error",
@@ -139,6 +144,16 @@
         "effecttsgo/node-builtin-import": "off",
         "app/no-try-catch": "off",
         "app/no-type-assertion": "error"
+      }
+    },
+    {
+      "files": [
+        "packages/env/src/index.ts",
+        "packages/env/src/layer.ts",
+        "packages/env/src/*.test.ts"
+      ],
+      "rules": {
+        "anti-slop/no-shape-in-symbol-names": "off"
       }
     }
   ]

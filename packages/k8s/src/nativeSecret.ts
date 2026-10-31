@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import type { Secret as K8sSecret } from "./.generated/k8s-types"
 import { type EmitInput, plainSecret, resolvePlaintext, SecretBackend } from "./backendKit"
 
-interface NativeSecretOptions {
+export interface NativeSecretOptions {
   readonly type?: string
   readonly immutable?: boolean
   readonly silenceWarning?: boolean

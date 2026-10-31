@@ -16,3 +16,6 @@ export const strictDecoderOf = <S extends Schema.Codec<unknown, unknown, never>>
     effect: <I>(input: I) => decodeEff(input, strictParseOptions)
   }
 }
+
+/** The 0.4.0 public name for `strictDecoderOf`. */
+export const makeStrictDecoder = <S extends Schema.Codec<unknown, unknown, never>>(schema: S) => strictDecoderOf(schema)

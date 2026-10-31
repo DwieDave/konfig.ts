@@ -1,8 +1,41 @@
 import { NodeServices } from "@effect/platform-node"
 import { describe, expect, it, layer } from "@effect/vitest"
 import { Effect, Layer } from "effect"
-import { define, fromModules } from "./Bundle"
+import { define, fromModules, make, makeSet } from "./Bundle"
 import * as Dep from "./deps"
+import { asLiteralName } from "./Module"
+
+describe("Bundle.make", () => {
+  it("constructs a Bundle with the given fields", () => {
+    const b = make({
+      name: "api",
+      namespace: "app",
+      manifests: [{ kind: "ConfigMap", metadata: { name: "api-conf" } }]
+    })
+
+    expect(b).toEqual({
+      name: "api",
+      namespace: "app",
+      manifests: [{ kind: "ConfigMap", metadata: { name: "api-conf" } }]
+    })
+  })
+
+  it("omits namespace when not provided", () => {
+    const b = make({ name: "cluster-scoped", manifests: [] })
+    expect("namespace" in b).toBe(false)
+  })
+})
+
+describe("Bundle.makeSet", () => {
+  it("defaults the set name to bundles", () => {
+    const bundles = [make({ name: "a", manifests: [] })]
+    expect(makeSet({ bundles })).toEqual({ name: "bundles", bundles })
+  })
+
+  it("keeps a given set name", () => {
+    expect(makeSet({ name: "platform", bundles: [] }).name).toBe("platform")
+  })
+})
 
 describe("Bundle.define", () => {
   it.effect("omits namespace on the built Bundle when none is given", () =>
@@ -111,6 +144,55 @@ layer(NodeServices.layer)("Bundle.fromModules", (it) => {
         metadata: { name: "shared" }
       })
     }))
+
+  it.effect("resolves ConfigMap, ServiceAccount and Pvc needs from earlier providers", () =>
+    Effect.gen(function*() {
+      const provider = define({
+        name: "provider",
+        namespace: "infra",
+        build: () => [],
+        provides: Layer.mergeAll(
+          Dep.provideConfigMap("settings"),
+          Dep.provideServiceAccount("worker"),
+          Dep.providePvc("data")
+        )
+      })
+
+      const consumer = define({
+        name: "consumer",
+        namespace: "app",
+        build: Effect.gen(function*() {
+          const cm = yield* Dep.ConfigMap("settings")
+          const sa = yield* Dep.ServiceAccount("worker")
+          const pvc = yield* Dep.Pvc("data")
+
+          return [{ cm, sa, pvc }]
+        })
+      })
+
+      const result = yield* fromModules({ modules: [provider, consumer] as const })
+      const consumerBundle = result.bundles.find((x) => x.name === "consumer")
+      expect(consumerBundle?.manifests[0]).toEqual({ cm: "settings", sa: "worker", pvc: "data" })
+    }))
+
+  it("rejects two modules providing the same ConfigMap, ServiceAccount or Pvc", () => {
+    const provider = <const N extends string, P>(name: N, provides: Layer.Layer<P>) =>
+      define({ name: asLiteralName(name), namespace: "ns", build: () => [], provides })
+
+    const cm = [provider("a", Dep.provideConfigMap("c")), provider("b", Dep.provideConfigMap("c"))] as const
+    const sa = [provider("a", Dep.provideServiceAccount("s")), provider("b", Dep.provideServiceAccount("s"))] as const
+    const pvc = [provider("a", Dep.providePvc("p")), provider("b", Dep.providePvc("p"))] as const
+
+    // @ts-expect-error duplicate ConfigMap "c"
+    fromModules({ modules: cm })
+    // @ts-expect-error duplicate ServiceAccount "s"
+    fromModules({ modules: sa })
+    // @ts-expect-error duplicate Pvc "p"
+    fromModules({ modules: pvc })
+    // distinct names are fine
+    fromModules({ modules: [provider("a", Dep.provideConfigMap("c")), provider("b", Dep.provideConfigMap("d"))] })
+    expect(cm).toHaveLength(2)
+  })
 
   it.effect("honors a custom result name", () =>
     Effect.gen(function*() {

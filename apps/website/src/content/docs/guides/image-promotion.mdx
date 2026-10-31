@@ -40,7 +40,10 @@ To read the file yourself, `@konfig.ts/core` exports these helpers:
 | --- | --- |
 | `decodeImagesSync(u)` / `decodeImagesEffect(u)` | Strict decode of the parsed JSON |
 | `imagesFor({ cfg, env })` | Env record, throws `ImagesEnvMissing` |
+| `lookupEnvEffect({ cfg, env })` | Same, as an Effect failing with `ImagesEnvMissing` |
 | `requireImage({ e, app, envName })` | One value, throws `ImagesAppMissing` |
+| `requireImageEffect(...)` | Same, as an Effect failing with `ImagesAppMissing` |
+| `lookupEnv({ cfg, env })` | Env record or `undefined` |
 
 The two errors are named, so a missing environment or app fails the build with a clear message instead of rendering a workload with `image: undefined`. `ImagesEnvMissing` carries the environment name; `ImagesAppMissing` carries the environment and the app name.
 

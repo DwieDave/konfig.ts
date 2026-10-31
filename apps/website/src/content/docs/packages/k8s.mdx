@@ -22,7 +22,7 @@ The API module of the full-stack example. It binds the env contract, defines a c
 
 <Snippet file="infra/modules/api.ts" startAt="const apiContainer = Container.define" endBefore="return [...bound.manifests" title="infra/modules/api.ts" />
 
-Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNamespace` requires `podNamespace` to match the Secret's namespace, so a pod cannot read a Secret from another namespace. `Port.ref("http")` only accepts a name that was declared in `ports`, so a probe or Service cannot point at a port that does not exist.
+Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNamespace` (or `EnvVar.fromSecretForPod` for a single var) requires `podNamespace` to match the Secret's namespace, so a pod cannot read a Secret from another namespace. `Port.ref("http")` only accepts a name that was declared in `ports`, so a probe or Service cannot point at a port that does not exist.
 
 ## Surface
 
@@ -30,8 +30,8 @@ Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNames
 | --- | --- |
 | `Container`, `Pod`, `PodSet` | `Container.define`; `Pod.define` (mounts must name a declared volume) and `Pod.imagePullSecret(ref)`; `PodSet.define` (a Deployment plus optional Service and NetworkPolicy, all selected by one `Selector`) |
 | `Port` | `Port.make({ name, containerPort })`, `Port.ref(name)` for probes and Services |
-| `EnvVar` | `value`, `secretEnv`, `configMapEnv`, `fromSecret`, `fromConfigMap`, `raw` (unbranded passthrough, e.g. a `fieldRef`); duplicate names in one container are a compile error at `Container.define` |
-| `Secret`, `ConfigMap`, `Namespace`, `ServiceAccount` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind` |
+| `EnvVar` | `value`, `secretEnv`, `configMapEnv`, `fromSecret`, `fromSecretForPod`, `fromConfigMap`, `raw` (unbranded passthrough, e.g. a `fieldRef`); duplicate names in one container are a compile error at `Container.define` |
+| `Secret`, `ConfigMap`, `Namespace`, `ServiceAccount` | Identity constructors exposing a typed `.ref`; `Secret` also carries `Secret.define` and `Secret.bind`. The `ConfigMap` and `ServiceAccount` refs are the same brands `Dep.ConfigMap` / `Dep.ServiceAccount` carry, so one module can provide them and another `yield*` them |
 | `Environment` | `Environment.define` re-exported with `bind` (manifest side) and `runtime` (process side) |
 | `NativeSecret` | `NativeSecret.backend({ type?, immutable?, silenceWarning? })`: built-in backend that emits a plain `Secret` from a source |
 | `Workload` | `Workload.web` (Deployment + Service + optional Ingress, `reloader: "stakater"`), `Workload.cron` (ServiceAccount + CronJob that runs as it) |
@@ -39,16 +39,25 @@ Two of the type-level checks are visible here. `EnvVar.secretEnv` with `podNames
 | `Service`, `Ingress`, `NetworkPolicy` | `Service.make`, `Service.fromContainer`, `Service.fromPodSet`; `Ingress.make`, `Ingress.tls`; `NetworkPolicy.make`, `NetworkPolicy.fromPodSet` |
 | `Role`, `RoleBinding`, `ClusterRole`, `ClusterRoleBinding`, `PersistentVolume`, `PersistentVolumeClaim` | RBAC and storage constructors (`.make`) |
 | `Volume`, `Selector` | `Volume.empty`, `Volume.fromSecret`, `Volume.fromConfigMap`, `Volume.fromPvc`, `Volume.mountRef`; label selectors shared between workloads and NetworkPolicy peers |
-| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef` | `.of(name)` brand constructors for objects managed outside konfig.ts |
+| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef` | `.of(name)` brand constructors for objects managed outside konfig.ts; `SecretRef.unsafeReNamespace` widens a ref's namespace for a deliberate cross-namespace use; `SecretRefName`, `ConfigMapRefName`, `PvcRefName` type helpers |
 | `hashSecretValues` | Stamp a pod-spec hash so pods roll on re-render |
 | `Backend` | Kit for backend authors: `Backend.define` (one declaration per backend), `Backend.encrypting` (shared render-time encrypt pipeline), `Backend.plainSecret`, `Backend.secretMeta`; types `Backend.BaseInput`, `Backend.EmitInput`, `Backend.CliOptions` |
+| `SecretBackend`, `BackendEmitInput`, `BackendTag` | Types of the backend contract: `SecretBackend<N, K, RequiresSource, Out>` is what `Backend.define` returns, `BackendEmitInput` is `Backend.BaseInput`, and `BackendTag` lists the built-in tags |
 | `K8s` | Type-only namespace of the raw Kubernetes types (`kubernetes-types@~1.30.0`) |
 
-The input types of the builders above are exported as types: `StatefulSetInput`, `JobInput`, `CronJobInput`, `ServiceInput`, `ServiceFromPodSetInput`, `IngressInput`, `IngressTLSInput`, `NetworkPolicyInput`, `RoleInput`, `RoleBindingInput`, `ClusterRoleInput`, `ClusterRoleBindingInput`, `PersistentVolumeInput`, `PersistentVolumeClaimInput`, `ServiceAccountInput`, `ServiceAccountManifest`, `DefinePodSetInput`, `EmptyVolumeInput`, `VolumeFromSecretInput`, `VolumeFromConfigMapInput`, and `RawEnvInput`.
+The input and result types of the builders above are exported as types:
+
+- Containers and pods: `ContainerInput`, `ContainerSpec`, `DefineContainerInput`, `DefinePodInput`, `DefinedPod`, `PodSpecInput`, `DefinePodSetInput`.
+- Ports and probes: `PortInput`, `ContainerPort`, `ContainerProtocol`, `PortName`, `NamesOf`, `ServicePortSpec`, `ProbeTarget`, `HttpGetAction`, `HttpHeader`, `TcpSocketAction`, `GrpcAction`, `ExecAction`.
+- Env vars: `ValueEnvInput`, `SecretEnvInput`, `SecretEnvForPodInput`, `ConfigMapEnvInput`, `EnvVarSource`, `RawEnvInput`.
+- Identity: `NamespaceInput`, `NamespaceManifest`, `ConfigMapInput`, `ConfigMapManifest`, `SecretInput`, `SecretManifest`, `ServiceAccountInput`, `ServiceAccountManifest`.
+- Workloads and network: `DeploymentInput`, `DeploymentFromPodSetInput`, `StatefulSetInput`, `JobInput`, `CronJobInput`, `ServiceInput`, `ServiceFromContainerInput`, `ServiceFromPodSetInput`, `IngressInput`, `IngressTLSInput`, `NetworkPolicyInput`, `NetworkPolicyFromPodSetInput`, `NetworkPolicyPeer`, `NetworkPolicyIngressRule`, `NetworkPolicyEgressRule`.
+- RBAC and storage: `RoleInput`, `RoleBindingInput`, `ClusterRoleInput`, `ClusterRoleBindingInput`, `PersistentVolumeInput`, `PersistentVolumeClaimInput`, `EmptyVolumeInput`, `VolumeFromSecretInput`, `VolumeFromConfigMapInput`, `VolumeFromPvcInput`, `VolumeMount`, `VolumeName`, `VolumeNamesOf`, `SelectorLabels`.
+- Binding: `BindEnvironmentInput`, `DeclaredEnvironment`, `DeclaredMember`, `DeclaredLiteral`, `DeclaredDownward`, `BindSecretInput`, `DeclaredSecret`, `HasSecrets`, `SecretMemberInput`, `SecretMemberInputFor`, `SecretMemberOptions`, `SecretMemberOptionsFor`, `SecretMembersOpts`, `NativeSecretOptions`, `HashSecretValuesInput`.
 
 ## Errors
 
-This package exports no tagged error classes of its own. When a bind or render fails, the error comes from one of two places: the secret backend in use (`@konfig.ts/sops`, `@konfig.ts/sealed-secrets`), or `@konfig.ts/env`, which raises `SecretSourceError` when a plaintext source cannot be resolved and an `EnvNameCollision` (not exported; thrown synchronously at module load, matched by `_tag`) when two entries claim the same env var name.
+This package exports no tagged error classes of its own. When a bind or render fails, the error comes from one of two places: the secret backend in use (`@konfig.ts/sops`, `@konfig.ts/sealed-secrets`), or `@konfig.ts/env`, which raises `SecretSourceError` when a plaintext source cannot be resolved and `EnvNameCollision` (thrown synchronously at module load) when two entries claim the same env var name.
 
 <Aside type="tip">
 `Selector.make({ app: "api" })` mirrors the `{ app: <name> }` labels `Workload.web` applies, so a `NetworkPolicy` peer and the workload it targets share one definition.

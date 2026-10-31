@@ -1,6 +1,6 @@
 import { Effect, Predicate } from "effect"
 import { describe, expect, it } from "vitest"
-import { diffFiles as diffFilesEffect, hasDifferences, parseYamlAll } from "./diff"
+import { diffFiles as diffFilesEffect, hasDifferences, parseYamlAll, redact } from "./diff"
 
 const diffFiles = (input: Parameters<typeof diffFilesEffect>[0]) => Effect.runSync(diffFilesEffect(input))
 
@@ -127,6 +127,29 @@ describe("diffFiles multi-doc handling", () => {
         expect(missingRight.left).toMatchObject({ kind: "Namespace" })
       }
     }
+  })
+})
+
+describe("redact numeric normalization", () => {
+  it("treats '1.0' (string) and 1 (number) as equal when normalizeNumerics is on", () => {
+    const left = { "x.yaml": "value: '1.0'\n" }
+    const right = { "x.yaml": "value: 1\n" }
+    expect(hasDifferences(diffFiles({ left, right }))).toBe(true)
+    expect(hasDifferences(diffFiles({ left, right, options: { normalizeNumerics: true } }))).toBe(false)
+  })
+
+  it("leaves numeric strings alone by default", () => {
+    expect(redact({ value: { x: "1.0" } })).toEqual({ x: "1.0" })
+  })
+
+  it("normalizes a numeric string deep inside a map", () => {
+    expect(redact({ value: { spec: { replicas: "3" } }, options: { normalizeNumerics: true } })).toEqual({
+      spec: { replicas: 3 }
+    })
+  })
+
+  it("keeps non-numeric strings such as 'true' as strings", () => {
+    expect(redact({ value: { flag: "true" }, options: { normalizeNumerics: true } })).toEqual({ flag: "true" })
   })
 })
 

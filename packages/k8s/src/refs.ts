@@ -1,4 +1,10 @@
-import { brand, type ConfigMapRef as CMRef, type PvcRef as PRef, type SecretRef as SRef } from "@konfig.ts/core"
+import {
+  brand,
+  type ConfigMapRef as CMRef,
+  type PvcRef as PRef,
+  type SecretRef as SRef,
+  type ServiceAccountRef as SARef
+} from "@konfig.ts/core"
 
 export type SecretRef<
   N extends string = string,
@@ -10,16 +16,21 @@ export type ConfigMapRef<N extends string = string, K extends string = string> =
 
 export type PvcRef<N extends string = string> = PRef<N>
 
-declare const ServiceAccountRefBrand: unique symbol
+export type ServiceAccountRef<N extends string = string> = SARef<N>
 
-export type ServiceAccountRef<N extends string = string> = string & {
-  readonly [ServiceAccountRefBrand]: N
-}
+export type { ConfigMapRefName, PvcRefName, SecretRefName } from "@konfig.ts/core"
+
+// konfig: WHY `any` in the namespace slot is assignable to every pod namespace; only a type alias may spell it.
+type AnyNamespaceSecretRef<N extends string, K extends string> = SecretRef<N, K, any>
 
 export const SecretRef = {
   of: <N extends string, K extends string = string, Ns extends string = string>(
     name: N
-  ): SecretRef<N, K, Ns> => brand<SecretRef<N, K, Ns>>(name)
+  ): SecretRef<N, K, Ns> => brand<SecretRef<N, K, Ns>>(name),
+  // Escape hatch for a legitimate cross-namespace ref: widens the namespace slot so any pod namespace accepts it.
+  unsafeReNamespace: <N extends string, K extends string>(
+    ref: AnyNamespaceSecretRef<N, K>
+  ): AnyNamespaceSecretRef<N, K> => ref
 }
 
 export const ConfigMapRef = {

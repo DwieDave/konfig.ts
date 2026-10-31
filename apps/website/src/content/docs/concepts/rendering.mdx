@@ -20,7 +20,7 @@ import { Aside } from "@/components/docs"
 
 `validate` and `diff` run steps 1 to 4 in memory and skip the write.
 
-For scripts outside the CLI, `@konfig.ts/core` exports `renderAllYaml({ env?, manifests })`, which returns a `Promise<string>` of the multi-document YAML. It builds a context for `env` (default `"prod"`), provides the Node services, scopes the Effect and runs it. `renderAllYamlEffect({ ctx?, manifests })` returns the same string as an `Effect` that still requires the render services, for callers that supply their own layers.
+For scripts outside the CLI, `@konfig.ts/core` exports `render({ program, options? })`, where `options` is `{ env?, layers?, runMain? }`. You pass a function from the render context to an Effect; it builds a context for `env` (default `"prod"`), provides the Node services (merged with any `layers` you pass), scopes the Effect, and runs it with Effect's Node runtime (or `runMain`, if given). To get the YAML back instead, use `renderAllYaml({ env?, manifests })`, which returns a `Promise<string>` of the multi-document YAML. It builds a context for `env` (default `"prod"`), provides the Node services, scopes the Effect and runs it. `renderAllYamlEffect({ ctx?, manifests })` returns the same string as an `Effect` that still requires the render services, for callers that supply their own layers.
 
 ## Stable YAML
 
@@ -84,7 +84,7 @@ Every manifest's `render` fails with `AnyRenderError`, a tagged union you can `E
 | `HelmDigestMismatch` | Chart tarball hash differs from `digest`; carries `chart`, `version`, `expected`, `actual`. Surfaced directly, not wrapped in a `HelmRenderError`. |
 | `CrdExtractError` | `konfig crd extract` / `verify` failures for one chart; carries `chart` and `cause`. |
 
-`EmbedYamlReadError` and `HelmRenderError` are members of the union and are matched by tag; core does not export their classes.
+All of these classes are exported from `@konfig.ts/core`, so you can match them by tag or with `instanceof`.
 
 ## Logging flags
 

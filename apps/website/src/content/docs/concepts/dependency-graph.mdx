@@ -17,7 +17,10 @@ A need is identified by a kind (Secret, Image, Namespace, and so on) and a liter
 | --- | --- | --- | --- |
 | Secret | `Dep.Secret(name)` | `Dep.provideSecret(name)` | a branded secret reference |
 | SecretValues | `Dep.SecretValues(name)` | the values layer from `Secret.bind` / `Environment.bind` | the decrypted values, one `Redacted<string>` per key |
+| ConfigMap | `Dep.ConfigMap(name)` | `Dep.provideConfigMap(name)` | a branded ConfigMap reference |
 | Namespace | `Dep.Namespace(name)` | `Dep.provideNamespace(name)` | the name |
+| ServiceAccount | `Dep.ServiceAccount(name)` | `Dep.provideServiceAccount(name)` | a branded ServiceAccount reference |
+| Pvc | `Dep.Pvc(name)` | `Dep.providePvc(name)` | a branded PVC reference |
 | Image | `Dep.Image(name)` | `Dep.provideImage({ app, registry, tag })` | the full `registry/app:tag` image string |
 | Application | `Dep.Application(name)` | `Dep.provideApplication(name)` | the name |
 | App | `Dep.App(name)` | emitted by every `Application.define` | the built Argo CD Application |
@@ -30,7 +33,7 @@ A provider attaches a layer through the wrapper's `provides` field. `image-pulls
 
 <Snippet file="infra/modules/image-pulls.ts" startAt="export const defineImagePulls" />
 
-What the provider hands out is a branded reference to the secret, not the manifest itself. Nothing checks that the module also emitted a Secret named `ghcr-pull`; the provide is a promise you make. Keep provider and manifest in the same module so they cannot drift.
+What the provider hands out is a branded reference to the secret, not the manifest itself. The same holds for ConfigMaps, ServiceAccounts and PVCs: the `.ref` of `ConfigMap.make` and `ServiceAccount.make` from `@konfig.ts/k8s` has exactly the type the matching need carries, so a module that builds one can provide it with `Layer.succeed(Dep.ConfigMap(name))(configMap.ref)` (or `Dep.provideConfigMap(name)`), and the consumer passes what it yields to `Volume.fromConfigMap`, `EnvVar.configMapEnv`, `Volume.fromPvc` or a pod's `serviceAccountName`. Nothing checks that the module also emitted a Secret named `ghcr-pull`; the provide is a promise you make. Keep provider and manifest in the same module so they cannot drift.
 
 Binding a secret also produces the layers that satisfy the graph. `Secret.bind` returns a declared secret whose `refLayer` provides the Secret need for that name; if you passed a `source`, it also carries a `values` layer for the decrypted values. `Environment.bind` does the same for every member (under `members`) and merges the value layers into one `valuesLayer`.
 
@@ -79,6 +82,8 @@ The names behind the checks above, for when you read the types or a compiler mes
 | `Dep.Need<K, N>` / `Dep.Provide<K, N>` | The type-only marker for a need or provide of kind `K` and literal name `N`. Both are the same type. |
 | `Compose.ResidualIn<Ms>` | The type-level walk that filters each module's input against every earlier module's output. |
 | `Compose.NoDuplicateProvides` | The second fold that collects names provided twice. |
+| `Compose.composeLayers` | The runtime fold: reduces the handles with `Layer.provideMerge` into one layer. |
+| `Compose.makeResidualEntrypoint` | Wraps an Effect so the call fails to compile while it still has unmet needs, with the same `_konfig_unsatisfied` hint. |
 | `Layer.provideMerge` | The Effect combinator both folds are built on. |
 
 Next: [Branded refs](/konfig.ts/docs/concepts/branded-refs/).

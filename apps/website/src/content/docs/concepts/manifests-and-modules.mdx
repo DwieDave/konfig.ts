@@ -34,11 +34,13 @@ const ns = Manifest.make((ctx) => ({
 }))
 ```
 
-Two more constructors flatten or wrap manifests:
+A few more constructors combine, gate, or wrap manifests:
 
 | Constructor | What it does |
 | --- | --- |
+| `Manifest.combine({ a, b })` | Renders two manifests concurrently and returns a manifest of the pair. |
 | `Manifest.concat(...manifests)` | Flattens manifests of single values or arrays into one manifest of an array. The element type itself must not be an array; the signature rejects that at the call site because one level of nesting could not be told apart from two at runtime. |
+| `Manifest.whenever({ cond, thunk })` | Produces the manifest only when the condition is true, otherwise `undefined`. The thunk is not evaluated when the condition is false, and `renderAllYaml` skips the `undefined`. |
 | `Manifest.embedYaml({ path })` / `Manifest.embedYaml({ literal })` | Wraps existing YAML you already have (a file or a string) as a raw YAML blob. The blob records where it came from; a file that cannot be read fails with `EmbedYamlReadError`. |
 
 ## RenderContext

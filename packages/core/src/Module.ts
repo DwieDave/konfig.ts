@@ -19,7 +19,7 @@ export type LiteralName<T extends string> = string extends T ? T & {
 // literal T the conditional collapses to T, but inside a generic body TS keeps the
 // conditional deferred and cannot verify it. (LiteralName<T> -> T needs no witness:
 // both branches are assignable to T.)
-const _asLiteralName = <T extends string>(value: T): LiteralName<T> =>
+export const asLiteralName = <T extends string>(value: T): LiteralName<T> =>
   unsafeCoerce<LiteralName<T>>({
     value: value,
     reason:
@@ -173,7 +173,7 @@ export const fixedNs = <
       & ExtraCallArgs
       & Opts
       & _NoReserved<Opts, _ReservedKeys<ExtraConfig, ExtraCallArgs>>
-  ): ApplyHandle<Kind, Name, Ns, R, Extra> => wrapper<Name, Ns>({ ...args, namespace: _asLiteralName(namespace) })
+  ): ApplyHandle<Kind, Name, Ns, R, Extra> => wrapper<Name, Ns>({ ...args, namespace: asLiteralName(namespace) })
 }
 
 export interface DynamicNsConfig<

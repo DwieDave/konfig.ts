@@ -31,7 +31,7 @@ class _Source<K extends string, R> extends Data.TaggedClass("SecretSource")<_Sou
 
 const _source = <K extends string, R>(input: _SourceFields<K, R>): SecretSource<K, R> => new _Source(input)
 
-interface FromConfigInput<K extends string> {
+export interface FromConfigInput<K extends string> {
   readonly keys: ReadonlyArray<K>
   readonly envName?: (key: K) => string
 }
@@ -50,7 +50,7 @@ const _fromConfig = <const K extends string>(input: FromConfigInput<K>): SecretS
   return _source({ keys: input.keys, resolve })
 }
 
-interface LiteralInput<D extends Readonly<Record<string, string>>> {
+export interface LiteralInput<D extends Readonly<Record<string, string>>> {
   readonly data: D
 }
 
@@ -63,12 +63,12 @@ const _literal = <const D extends Readonly<Record<string, string>>>(
   return _source({ keys, resolve })
 }
 
-interface FromCommandSpec {
+export interface FromCommandSpec {
   readonly cmd: string
   readonly args: ReadonlyArray<string>
 }
 
-interface FromCommandInput<K extends string> {
+export interface FromCommandInput<K extends string> {
   readonly keys: ReadonlyArray<K>
   readonly run: (key: K) => FromCommandSpec
 }

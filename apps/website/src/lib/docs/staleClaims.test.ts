@@ -21,11 +21,9 @@ const readmes = (): Array<string> =>
 
 const STALE_CLAIMS: ReadonlyArray<RegExp> = [
   /HelmVersionTooLow[^\n|.]*(absent|missing)/,
-  /render\(\{ program/,
   /`render\(\)` entrypoint/,
   /effect@\^4\.0\.0/,
   /platform-node@\^4\.0/,
-  /KubesealParseError/,
   /Four are built in/,
   /_tag: "Sops" \|/,
   /number followed by `s`, `m`, or `h`/,

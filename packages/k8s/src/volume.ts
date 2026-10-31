@@ -52,7 +52,7 @@ export interface VolumeFromConfigMapInput<N extends string> {
   readonly items?: ReadonlyArray<{ readonly key: string; readonly path: string }>
 }
 
-interface VolumeFromPvcInput<N extends string, PvcN extends string> {
+export interface VolumeFromPvcInput<N extends string, PvcN extends string> {
   readonly name: N
   readonly claim: PvcRef<PvcN>
   readonly readOnly?: boolean

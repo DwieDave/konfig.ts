@@ -1,6 +1,6 @@
 ---
 title: "@konfig.ts/core"
-description: Kubernetes-agnostic primitives every konfig.ts package builds on, including Manifest, Dep, Module, Helm, stable YAML, diff, and rendering helpers.
+description: Kubernetes-agnostic primitives every konfig.ts package builds on, including Manifest, Dep, Module, Helm, stable YAML, diff, and render.
 sidebar:
   order: 0
   label: core
@@ -15,7 +15,7 @@ import { Aside, Snippet } from "@/components/docs"
 - the module factories that give a build a namespace and a target (`Module`),
 - Helm chart rendering with digest verification (`Helm.release`),
 - deterministic YAML serialization and a structural diff,
-- and the `renderAllYaml` helpers.
+- and the `render` entrypoint plus the `renderAllYaml` helpers.
 
 Most projects work with the higher-level packages (`@konfig.ts/k8s`, `@konfig.ts/env`, `@konfig.ts/argocd`) and reach into core directly only for `Module.*`, `Dep.*`, and `Helm.release`.
 
@@ -37,19 +37,19 @@ Dependencies between modules are declared inside the build. Writing `yield* Dep.
 
 | Export | Purpose |
 | --- | --- |
-| `Manifest` | `make`, `concat`, `embedYaml`: the `Manifest<A>` carrier and its combinators |
-| `renderAllYaml`, `renderAllYamlEffect`, `renderManifest`, `RenderContext` | Render manifests against a `RenderContext` (env, cluster, k8s version, `flags`) into multi-document YAML |
-| `Dep` | Needs (`Secret`, `SecretValues`, `Namespace`, `Image`, `Application`, `App`) and `provide*` layers |
-| `SecretRef`, `ConfigMapRef`, `PvcRef`, `BuiltImageRef` | Branded reference types (`@konfig.ts/k8s` mints them with `SecretRef.of`, `ConfigMapRef.of`, `PvcRef.of` and its builders' `.ref`; `BuiltImageRef` is also a value with `of`); `*RefName`, `*RefKeys` helpers extract the brand parameters |
-| `Module` | `fixedNs`, `dynamicNs` factories; `Target`, `BuildContext`, `LiteralName` types |
-| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`) and the type-level tracking of unmet needs behind every `fromModules` (`Compose.ResidualCheck`, `Compose.NoDuplicateProvides`) |
-| `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template`; `cacheFileName`, `ensureChartTarball`, `assertMinVersion`, `timeout` for the CLI's shared cache |
+| `Manifest` | `make`, `combine`, `concat`, `whenever`, `embedYaml`: the `Manifest<A>` carrier and its combinators; `ManifestTypeId` and `isManifest` identify one |
+| `render`, `renderAllYaml`, `renderAllYamlEffect`, `renderManifest`, `RenderContext` | Run a script-style program against a `RenderContext` (env, cluster, k8s version, `flags`), or render manifests into multi-document YAML |
+| `Dep` | Needs (`Secret`, `SecretValues`, `ConfigMap`, `Namespace`, `ServiceAccount`, `Pvc`, `Image`, `Application`, `App`) and `provide*` layers |
+| `SecretRef`, `ConfigMapRef`, `PvcRef`, `ServiceAccountRef`, `BuiltImageRef` | Branded reference types carried by the needs (`@konfig.ts/k8s` mints them with `SecretRef.of`, `ConfigMapRef.of`, `PvcRef.of`, `ServiceAccountRef.of` and its builders' `.ref`; `BuiltImageRef` is also a value with `of`); `*RefName`, `*RefKeys` helpers extract the brand parameters |
+| `Module` | `fixedNs`, `dynamicNs` factories; `asLiteralName`; `Target`, `BuildContext`, `LiteralName` types |
+| `Bundle`, `Compose` | Non-Argo module composition (`Bundle.define`, `Bundle.target`, `Bundle.fromModules`, `Bundle.make`, `Bundle.makeSet`) and the dependency tracking behind every `fromModules` (`Compose.composeLayers`, `Compose.makeResidualEntrypoint`, `Compose.ResidualCheck`, `Compose.NoDuplicateProvides`) |
+| `Helm` | `Helm.release({ repo, chart, version, digest, values, releaseName?, namespace?, extraOpts?, minVersion? })`: chart pull, SHA-256 digest verification, `helm template`; `cacheFileName`, `ensureChartTarball`, `verifyChartDigest`, `assertMinVersion`, `timeout`, `versionTimeout` for the CLI's shared cache |
 | `Yaml` | `serialize` (stable key order) and `filenameFor` |
-| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYamlAll`, `parseYamlWith`, `decodeYamlOutput` | Structural YAML diff |
-| `KonfigConfig` | Schema for `konfig.json`; `ResolvedKonfigConfig` pairs the decoded config with its directory |
-| `ImagesConfig`, `decodeImagesSync`, `decodeImagesEffect`, `imagesFor`, `requireImage` | Schema and lookups for `images.json` |
-| `boundary`, `brand`, `unsafeCoerce` | Schema decode at boundaries; annotated escape hatches |
-| `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin`, `runCliWithStdin` | Subprocess helpers used by Helm and the secret backends |
+| `diffFiles`, `formatDiff`, `hasDifferences`, `parseYaml`, `parseYamlAll`, `parseYamlWith`, `decodeYamlOutput`, `deepEqual`, `redact`, `redactedEqual` | Structural YAML diff with `Secret` data redaction; `RedactOptions.normalizeNumerics` treats numeric strings as numbers |
+| `KonfigConfig`, `EnvEntry`, `OutDir`, `CrdConfig`, `HelmConfig`, `DiffConfig`, `ServicesConfig`, `ClusterSpec`, `decodeKonfigConfigSync`, `decodeKonfigConfigEffect` | Schemas and decoders for `konfig.json`; `ResolvedKonfigConfig` pairs the decoded config with its directory |
+| `ImagesConfig`, `EnvImages`, `decodeImagesSync`, `decodeImagesEffect`, `imagesFor`, `lookupEnv`, `lookupEnvEffect`, `requireImage`, `requireImageEffect` | Schema and lookups for `images.json` |
+| `boundary`, `makeStrictDecoder`, `brand`, `unsafeCoerce` | Schema decode at boundaries; annotated escape hatches |
+| `runProcessString`, `runProcessExit`, `runProcessCollect`, `runProcessWithStdin`, `runCliWithStdin`, `processDetail` | Subprocess helpers used by Helm and the secret backends |
 
 ## Errors
 
@@ -66,10 +66,12 @@ Core exports tagged error classes from `src/index.ts`. The render-time ones are 
 | `HelmMinVersionInvalid` | A Helm `minVersion` is not `major.minor[.patch]` | yes |
 | `HelmRenderError` | A Helm step (version-check, pull, template, parse) failed | yes |
 | `HelmDigestMismatch` | A pulled chart's digest differs from the pinned one | yes |
+| `ProcessError` | A subprocess exited non-zero; carries the command, exit code, and stderr tail | no |
+| `ProcessTimeout` | A subprocess ran past its `timeout` and was killed | no |
 | `ImagesEnvMissing` | `images.json` has no entry for the requested env | no |
 | `ImagesAppMissing` | `images.json` has no image for the requested app in that env | no |
 
-The six classes after `CrdExtractError` are not exported; match them by `_tag` with `Effect.catchTag`.
+`YamlParseError` and `HelmMinVersionInvalid` are not exported; match them by `_tag` with `Effect.catchTag`.
 
 <Aside type="note">
 `Manifest<A>` does not carry dependencies in its own type. Per-kind tracking lives one level up, in the Effect `Layer`s that `Module` and `Application.define` compose.

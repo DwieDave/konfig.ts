@@ -11,6 +11,58 @@ import { EmbedYamlReadError } from "./RenderError"
 layer(NodeServices.layer)("Manifest combinators", (it) => {
   const ctx = RenderContext.make("test")
 
+  it.effect("combine pairs two manifests' rendered values into a tuple", () =>
+    Effect.gen(function*() {
+      const a = Manifest.make<number>(() => 1)
+      const b = Manifest.make<string>(() => "x")
+      const result = yield* Manifest.combine({ a, b }).render(ctx)
+      expect(result).toEqual([1, "x"])
+    }))
+
+  it.effect("whenever runs the thunk and its manifest when cond is true", () =>
+    Effect.gen(function*() {
+      const calls = { count: 0 }
+
+      const m = Manifest.whenever({
+        cond: true,
+        thunk: () =>
+          Manifest.make<string>(() => {
+            calls.count += 1
+
+            return "made"
+          })
+      })
+
+      const result = yield* m.render(ctx)
+      expect(calls.count).toBe(1)
+      expect(result).toBe("made")
+    }))
+
+  it.effect("whenever skips the thunk and yields undefined when cond is false", () =>
+    Effect.gen(function*() {
+      const calls = { count: 0 }
+
+      const m = Manifest.whenever<string>({
+        cond: false,
+        thunk: () => {
+          calls.count += 1
+
+          return Manifest.make<string>(() => "made")
+        }
+      })
+
+      const result = yield* m.render(ctx)
+      expect(calls.count).toBe(0)
+      expect(result).toBeUndefined()
+    }))
+
+  it("isManifest recognises values carrying the exported ManifestTypeId", () => {
+    const m = Manifest.make(() => 1)
+    expect(Manifest.ManifestTypeId in m).toBe(true)
+    expect(Manifest.isManifest({ [Manifest.ManifestTypeId]: {} })).toBe(true)
+    expect(Manifest.ManifestTypeId).toBe(Symbol.for("@konfig.ts/core/Manifest"))
+  })
+
   it.effect("concat flattens array-returning and scalar-returning manifests together", () =>
     Effect.gen(function*() {
       const arrayManifest = Manifest.make<number[]>(() => [1, 2])
@@ -70,6 +122,26 @@ layer(NodeServices.layer)("Manifest combinators", (it) => {
 
 layer(NodeServices.layer)("Manifest concurrency bound", (it) => {
   const ctx = RenderContext.make("test")
+
+  it.effect("combine never runs more than RENDER_CONCURRENCY manifests at once", () =>
+    Effect.gen(function*() {
+      const state = { active: 0, peak: 0 }
+
+      const tracked = Manifest.make<number>(() =>
+        Effect.gen(function*() {
+          state.active += 1
+          state.peak = Math.max(state.peak, state.active)
+          yield* Effect.yieldNow
+          state.active -= 1
+
+          return 1
+        })
+      )
+
+      const result = yield* Manifest.combine({ a: tracked, b: tracked }).render(ctx)
+      expect(result).toEqual([1, 1])
+      expect(state.peak).toBeLessThanOrEqual(Manifest.RENDER_CONCURRENCY)
+    }))
 
   it.effect("concat never runs more than RENDER_CONCURRENCY manifests at once", () =>
     Effect.gen(function*() {

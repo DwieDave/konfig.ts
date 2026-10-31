@@ -9,7 +9,7 @@ import { type ProcessFailure, runProcessString } from "../subprocess"
 import { timeout } from "./timeout"
 
 // The `helm version` preflight is local; capped at the smaller of 30s and the configured timeout.
-const versionTimeout: Config.Config<Duration.Duration> = Config.map(
+export const versionTimeout: Config.Config<Duration.Duration> = Config.map(
   timeout,
   (t) => Duration.min(t, Duration.seconds(DEFAULT_HELM_VERSION_TIMEOUT_SECONDS))
 )

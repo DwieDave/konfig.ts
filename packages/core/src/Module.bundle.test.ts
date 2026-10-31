@@ -112,3 +112,16 @@ describe("Module Opts that collide with the define contract", () => {
     expect(seen).toEqual([["build", "name", "namespace"]])
   })
 })
+
+describe("Module.asLiteralName", () => {
+  it("returns the value unchanged and keeps a literal type", () => {
+    const name = Module.asLiteralName("api")
+    expectTypeOf(name).toEqualTypeOf<"api">()
+    expect(name).toBe("api")
+  })
+
+  it("lets a generic wrapper forward a literal into LiteralName", () => {
+    const forward = <const N extends string>(n: N): Module.LiteralName<N> => Module.asLiteralName(n)
+    expect(forward("web")).toBe("web")
+  })
+})

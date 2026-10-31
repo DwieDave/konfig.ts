@@ -5,6 +5,7 @@ import * as Dep from "./deps"
 import { attachLayerToTag } from "./lift"
 import type * as CoreManifest from "./Manifest"
 import type * as Module from "./Module"
+import { omitUndefined } from "./omitUndefined"
 import type { AnyRenderError } from "./RenderError"
 
 export const Bundle = Schema.Struct({
@@ -15,11 +16,17 @@ export const Bundle = Schema.Struct({
 
 export type Bundle = typeof Bundle.Type
 
-const _make = (opts: Bundle): Bundle => {
-  const bundle = { name: opts.name, manifests: opts.manifests }
-
-  return opts.namespace === undefined ? bundle : { ...bundle, namespace: opts.namespace }
+export interface BundleMakeOptions {
+  readonly name: string
+  readonly namespace?: string | undefined
+  readonly manifests: ReadonlyArray<unknown>
 }
+
+export const make = (opts: BundleMakeOptions): Bundle => ({
+  name: opts.name,
+  ...omitUndefined({ namespace: opts.namespace }),
+  manifests: opts.manifests
+})
 
 export interface BundleHandle<Name extends string, Out, In> extends Context.Service<Dep.Need<"App", Name>, Bundle> {
   readonly layer: Layer.Layer<Out, AnyRenderError, In>
@@ -39,7 +46,7 @@ export interface HandleKind extends Module.HandleKind {
   >
 }
 
-type LiteralName<T extends string> = Module.LiteralName<T>
+export type LiteralName<T extends string> = Module.LiteralName<T>
 
 export interface BundleDefineOptions<
   Name extends string,
@@ -79,7 +86,7 @@ interface DefineLayerInput<Name extends string, R, Extra> {
 const _bundleOf = (input: { readonly name: string; readonly namespace: string | undefined }) =>
 (
   manifests: ReadonlyArray<unknown>
-): Bundle => _make({ name: input.name, namespace: input.namespace, manifests })
+): Bundle => make({ name: input.name, namespace: input.namespace, manifests })
 
 const _defineLayer = <Name extends string, R, Extra>(input: DefineLayerInput<Name, R, Extra>) =>
   Compose.moduleLayer({
@@ -133,12 +140,12 @@ export const BundleSetResult = Schema.Struct({
 
 export type BundleSetResult = typeof BundleSetResult.Type
 
-interface BundleSetMakeOptions {
+export interface BundleSetMakeOptions {
   readonly name?: string
   readonly bundles: ReadonlyArray<Bundle>
 }
 
-const _makeSet = (opts: BundleSetMakeOptions): BundleSetResult => ({
+export const makeSet = (opts: BundleSetMakeOptions): BundleSetResult => ({
   name: opts.name ?? "bundles",
   bundles: opts.bundles
 })
@@ -168,5 +175,5 @@ export const fromModules = <const Ms extends ReadonlyArray<AnyHandle>, Extra = n
   Compose.sealModules({
     modules: opts.modules,
     provides: opts.provides,
-    build: (bundles) => _makeSet({ name: opts.name, bundles })
+    build: (bundles) => makeSet({ name: opts.name, bundles })
   })

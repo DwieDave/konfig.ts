@@ -19,6 +19,14 @@ export interface BackendEmitInput<
     : SecretSource<K, Manifest.RenderServices> | undefined
 }
 
+// The tags of the backends konfig.ts ships; `SecretBackend._tag` stays open for custom `Backend.define` tags.
+export type BackendTag =
+  | "Sops"
+  | "Sops.passthrough"
+  | "SealedSecrets"
+  | "ExternalSecrets"
+  | "NativeSecret"
+
 export interface EmitInput<N extends string, K extends string, Opts, RS extends boolean = true> {
   readonly base: BackendEmitInput<N, K, RS>
   readonly opts: Opts

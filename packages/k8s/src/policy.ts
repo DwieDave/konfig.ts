@@ -25,18 +25,18 @@ export interface NetworkPolicyInput extends NamespacedMetaInput {
   readonly spec: K8sNetworkPolicy["spec"]
 }
 
-interface NetworkPolicyPeer {
+export interface NetworkPolicyPeer {
   readonly podSet?: Selector<StringMap>
   readonly namespaceSelector?: { readonly matchLabels?: StringMap }
   readonly ipBlock?: { readonly cidr: string; readonly except?: ReadonlyArray<string> }
 }
 
-interface NetworkPolicyIngressRule {
+export interface NetworkPolicyIngressRule {
   readonly from?: ReadonlyArray<NetworkPolicyPeer>
   readonly ports?: K8sNetworkPolicyIngressRule["ports"]
 }
 
-interface NetworkPolicyEgressRule {
+export interface NetworkPolicyEgressRule {
   readonly to?: ReadonlyArray<NetworkPolicyPeer>
   readonly ports?: K8sNetworkPolicyEgressRule["ports"]
 }
