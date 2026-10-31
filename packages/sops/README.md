@@ -19,11 +19,12 @@ credentials come from each file's own `sops:` metadata block.
 ## Usage
 
 Bind a secret contract (`Secret.define`, from `@konfig.ts/env`) to a Sops
-backend. `Sops` offers two modes — pick by how you want plaintext to flow.
+backend. `Sops` offers three modes — pick by how you want plaintext to flow.
 
 ```ts
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
+import { SealedSecrets } from "@konfig.ts/sealed-secrets"
 import { Sops } from "@konfig.ts/sops"
 
 // dbCreds = Secret.define({ name, namespace, env: { url, password } })
@@ -40,6 +41,13 @@ Secret.bind({
   backend: Sops.backend({ recipients: { age: ["age1..."] } }),
   source: SecretSource.fromConfig({ keys: ["url", "password"], envName: (k) => `DB_${k.toUpperCase()}` })
 })
+
+// source — decrypt a sops file once and feed its values to any backend
+Secret.bind({
+  secret: dbCreds,
+  backend: SealedSecrets.backend({ scope: "strict" }),
+  source: Sops.source({ file: "infra/secrets/db-creds.enc.yaml", keys: ["url", "password"] })
+})
 ```
 
 `Secret.bind(...)` returns a handle whose `.manifest` is the emitted CR. For a
@@ -48,12 +56,16 @@ whole env bundle, plug the same backend into
 
 ## Modes
 
-| Mode               | Signature                                            | Source | Emits                                                              |
-| ------------------ | ---------------------------------------------------- | ------ | ------------------------------------------------------------------ |
-| `Sops.passthrough` | `({ file })`                                         | no     | the encrypted file's `SopsSecret`, restamped to the bound identity |
-| `Sops.backend`     | `({ recipients, type?, encryptedRegex?, timeout? })` | yes    | a `SopsSecret` re-encrypted to `recipients`                        |
+| Mode               | Signature                                            | Source | Emits                                                                   |
+| ------------------ | ---------------------------------------------------- | ------ | ----------------------------------------------------------------------- |
+| `Sops.passthrough` | `({ file })`                                         | no     | the encrypted file's `SopsSecret`, restamped to the bound identity      |
+| `Sops.backend`     | `({ recipients, type?, encryptedRegex?, timeout? })` | yes    | a `SopsSecret` re-encrypted to `recipients`                             |
+| `Sops.source`      | `({ file, keys, extract? })`                         | —      | a `SecretSource` that decrypts a file once and yields `Redacted` values |
 
 `recipients` accepts `age` / `kms` / `gcpKms` / `azureKv` / `pgp` arrays.
+`Sops.source` composes with any backend (e.g. decrypt with SOPS, seal with
+`SealedSecrets.backend`); `extract(key, parsed)` picks nested values and
+defaults to a flat `{ key: value }` lookup.
 Every emitted value selected by the file's encryption rules is checked for the
 `ENC[...]` marker first — konfig fails closed rather than emit plaintext
 dressed as a secret.
@@ -62,6 +74,12 @@ dressed as a secret.
 contains every key of the bound contract. Bound labels, annotations and a
 different name or namespace are merged into `metadata` only when the file was
 encrypted with `mac_only_encrypted: true`; otherwise the render fails.
+
+The low-level `sopsDecrypt({ file })` and
+`sopsEncryptStdin({ plaintextYaml, recipients, encryptedRegex?, timeout? })`
+wrap the CLI. A failing `sops` process is a `SopsInvocationError` carrying `op`
+(`"decrypt"` or `"encrypt"`); inside `Sops.backend` it is the `cause` of the
+`RenderError`, inside `Sops.source` the `cause` of the `SecretSourceError`.
 
 ## Internals
 

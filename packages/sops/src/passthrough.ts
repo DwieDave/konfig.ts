@@ -139,7 +139,7 @@ export const passthroughManifest = <N extends string, K extends string>(input: {
       const { base, label } = input
 
       const decoded = yield* _readFile({ file: input.file, label }).pipe(
-        Effect.flatMap((yamlText) => parseVerified({ yamlText, label }))
+        Effect.flatMap((yamlText) => parseVerified({ yamlText, label, subject: "file" }))
       )
 
       yield* _assertSingleTemplate({ decoded, label })

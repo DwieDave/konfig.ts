@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Yaml } from "@konfig.ts/core"
+import { RenderError, Yaml } from "@konfig.ts/core"
 import { plainArgs, stdinAsString, stubSpawner } from "@konfig.ts/core/testing"
 import { SecretSource } from "@konfig.ts/env"
 import { Secret } from "@konfig.ts/k8s"
@@ -10,7 +10,7 @@ import { TestClock } from "effect/testing"
 import * as fc from "fast-check"
 import { describe, expect, it as plainIt } from "vitest"
 import { SealedSecrets } from "./backend"
-import { _kubesealArgs } from "./kubeseal"
+import { _kubesealArgs, KubesealCertMissing, KubesealParseError } from "./kubeseal"
 import { SealedSecretSchema } from "./schema"
 
 const _asSealedSecret = Schema.decodeUnknownEffect(SealedSecretSchema)
@@ -176,6 +176,12 @@ describe("SealedSecrets.backend", () => {
       )
 
       expect(Exit.isFailure(exit)).toBe(true)
+      const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+      expect(error).toBeInstanceOf(RenderError)
+      expect(error instanceof RenderError ? error.message : "").toBe(
+        "SealedSecrets(prod/db-creds): cert missing — pass opts.certPath or set $KUBESEAL_CERT"
+      )
+      expect(error instanceof RenderError ? error.cause : undefined).toBeInstanceOf(KubesealCertMissing)
     }).pipe(Effect.provide(NodeServices.layer)))
 
   it.effect("fails at render time (not bind time) when source is omitted", () =>
@@ -234,6 +240,8 @@ describe("SealedSecrets.backend", () => {
         const text = Cause.pretty(exit.cause)
         expect(text).toContain("not valid YAML")
         expect(text).toContain("kubeseal failed")
+        const error = Cause.squash(exit.cause)
+        expect(error instanceof RenderError ? error.cause : undefined).toBeInstanceOf(KubesealParseError)
       }
     }).pipe(Effect.provide(NodeServices.layer)))
 

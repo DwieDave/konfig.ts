@@ -6,6 +6,7 @@ import { Effect, Layer } from "effect"
 import * as fc from "fast-check"
 import { expect, it } from "vitest"
 import { SealedSecrets } from "./backend"
+import { KubesealInvocationError } from "./kubeseal"
 
 const word = fc.stringMatching(/^[a-z]{1,6}$/)
 
@@ -27,6 +28,7 @@ it("SealedSecrets labels emit failures with tag(namespace/name)", () =>
       )
 
       expect(error.message).toBe(`SealedSecrets(${namespace}/${name}): kubeseal failed`)
+      expect(error instanceof RenderError ? error.cause : undefined).toBeInstanceOf(KubesealInvocationError)
     })
   ))
 

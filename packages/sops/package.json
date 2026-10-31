@@ -61,6 +61,7 @@
   },
   "dependencies": {
     "@konfig.ts/core": "workspace:*",
+    "@konfig.ts/env": "workspace:*",
     "@konfig.ts/k8s": "workspace:*"
   },
   "peerDependencies": {
@@ -69,7 +70,6 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
-    "@konfig.ts/env": "workspace:*",
     "@types/bun": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",

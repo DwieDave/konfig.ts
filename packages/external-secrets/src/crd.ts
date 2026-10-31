@@ -1,4 +1,4 @@
-type SecretStoreKind = "SecretStore" | "ClusterSecretStore"
+export type SecretStoreKind = "SecretStore" | "ClusterSecretStore"
 
 export interface SecretStoreRef {
   readonly name: string
@@ -18,9 +18,9 @@ export interface ExternalSecretDataEntry {
   readonly remoteRef: ExternalSecretRemoteRef
 }
 
-type ExternalSecretCreationPolicy = "Owner" | "Orphan" | "Merge" | "None"
+export type ExternalSecretCreationPolicy = "Owner" | "Orphan" | "Merge" | "None"
 
-type ExternalSecretDeletionPolicy = "Delete" | "Merge" | "Retain"
+export type ExternalSecretDeletionPolicy = "Delete" | "Merge" | "Retain"
 
 export interface ExternalSecretTarget {
   readonly name?: string

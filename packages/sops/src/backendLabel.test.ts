@@ -9,6 +9,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { expect, it } from "vitest"
 import { Sops } from "./backend"
+import { SopsInvocationError } from "./sops"
 
 const word = fc.stringMatching(/^[a-z]{1,6}$/)
 
@@ -36,6 +37,15 @@ it("Sops labels emit failures with tag(namespace/name)", () =>
       expect(error.message).toBe(`Sops(${namespace}/${name}): sops failed`)
     })
   ))
+
+it("Sops.backend keeps the RenderError and carries SopsInvocationError(op: encrypt) as its cause", async () => {
+  const error = await Effect.runPromise(_failure({ name: "n", namespace: "ns" }))
+
+  expect(error).toBeInstanceOf(RenderError)
+  const cause = error instanceof RenderError ? error.cause : undefined
+  expect(cause).toBeInstanceOf(SopsInvocationError)
+  expect(cause instanceof SopsInvocationError ? cause.op : undefined).toBe("encrypt")
+})
 
 it("Sops.passthrough labels emit failures with tag(namespace/name)", () =>
   fc.assert(

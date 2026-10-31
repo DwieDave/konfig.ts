@@ -50,6 +50,12 @@ const bound = Secret.bind({
 | `remoteRef`           | identity (`key → { key }`) | map each contract key to its path in the store                                                                 |
 | `target`              | `name` only                | `creationPolicy` / `deletionPolicy` / `immutable`; `name` is always the secret name; `template` is not covered |
 
+The options type is `ExternalSecretsBackendOptions<K>`; the CR types are
+`ExternalSecret`, `ExternalSecretSpec`, `ExternalSecretDataEntry`,
+`ExternalSecretRemoteRef`, `ExternalSecretTarget`,
+`ExternalSecretCreationPolicy`, `ExternalSecretDeletionPolicy`,
+`SecretStoreRef` and `SecretStoreKind`.
+
 ## Internals
 
 Backends are declared with `Backend.define` (or `Backend.encrypting` for the

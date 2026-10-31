@@ -13,7 +13,8 @@ bun add @konfig.ts/sealed-secrets
 
 Needs the `kubeseal` CLI on the machine that runs `konfig build`, plus the
 controller's public cert — resolved from `certPath`, else `$KUBESEAL_CERT`.
-A missing cert fails the render with a `RenderError`.
+A missing cert fails the render with a `RenderError` whose `cause` is
+`KubesealCertMissing`.
 
 ## Usage
 
@@ -55,6 +56,13 @@ disk.
 | `certPath` | `$KUBESEAL_CERT` | path to the sealed-secrets controller's public cert                                            |
 | `type`     | `"Opaque"`       | Secret `type` of the plain Secret, e.g. `kubernetes.io/dockerconfigjson`                       |
 | `timeout`  | 2 minutes        | how long `kubeseal` may run before the render fails                                            |
+
+The low-level `runKubeseal({ plainSecretYaml, certPath, scope, timeout? })` and
+`resolveCertPath({ certPath? })` are exported too. They fail with
+`KubesealCertMissing`, `KubesealInvocationError` (kubeseal exited non-zero,
+timed out or was not found), `KubesealParseError` (output was not YAML) or
+`BoundaryDecodeError` (output was not a `SealedSecret`); inside the backend each
+is the `cause` of a `RenderError`.
 
 ## Internals
 

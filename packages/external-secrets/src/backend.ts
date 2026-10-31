@@ -11,7 +11,7 @@ import type {
 } from "./crd"
 import { type GoDuration, InvalidRefreshIntervalError, isGoDuration } from "./duration"
 
-interface ExternalSecretsBackendOptions<K extends string = string> {
+export interface ExternalSecretsBackendOptions<K extends string = string> {
   readonly secretStoreRef: SecretStoreRef
   readonly refreshInterval?: GoDuration
   readonly remoteRef?: (key: K) => ExternalSecretRemoteRef

@@ -8,12 +8,13 @@ sidebar:
 
 import { Snippet } from "@/components/docs"
 
-`@konfig.ts/sops` is the secret backend for [SOPS](https://github.com/getsops/sops). You keep encrypted secret files in git, and at render time the package turns them into `SopsSecret` custom resources for the in-cluster [sops-secrets-operator](https://github.com/isindir/sops-secrets-operator) to reconcile. It offers two ways to get there:
+`@konfig.ts/sops` is the secret backend for [SOPS](https://github.com/getsops/sops). You keep encrypted secret files in git, and at render time the package turns them into `SopsSecret` custom resources for the in-cluster [sops-secrets-operator](https://github.com/isindir/sops-secrets-operator) to reconcile. It offers two ways to get there, plus a secret source:
 
 | Export | What it does |
 | --- | --- |
 | `Sops.passthrough` | Emits an already-encrypted `SopsSecret` file verbatim. Works offline; nothing is decrypted |
 | `Sops.backend` | Takes resolved plaintext values and re-encrypts them to the recipients you name |
+| `Sops.source` | Decrypts a sops file once and yields its values as a `SecretSource` for any backend |
 
 ## Install
 
@@ -21,7 +22,7 @@ import { Snippet } from "@/components/docs"
 bun add @konfig.ts/sops
 ```
 
-`Sops.backend` needs the `sops` CLI on the machine that runs `konfig build`; it uses it to encrypt to the `recipients` you pass. `Sops.passthrough` copies the file as-is and needs no CLI.
+`Sops.backend` needs the `sops` CLI on the machine that runs `konfig build`; it uses it to encrypt to the `recipients` you pass. `Sops.source` needs it too, plus the private key, to decrypt. `Sops.passthrough` copies the file as-is and needs no CLI.
 
 ## Usage
 
@@ -44,25 +45,43 @@ const bound = Secret.bind({
 })
 ```
 
+Source mode, for when the values already live in a sops file encrypted for developers. `Sops.source` decrypts it once per render and hands the values to any backend, here `SealedSecrets.backend`:
+
+```ts title="infra/modules/db.ts"
+import { dbCreds } from "@example/env-contracts"
+import { Secret } from "@konfig.ts/k8s"
+import { SealedSecrets } from "@konfig.ts/sealed-secrets"
+import { Sops } from "@konfig.ts/sops"
+
+const bound = Secret.bind({
+  secret: dbCreds,
+  backend: SealedSecrets.backend({ scope: "strict" }),
+  source: Sops.source({ file: "infra/secrets/db-creds.enc.yaml", keys: ["url", "password"] })
+})
+```
+
 ## Surface
 
 | Export | Purpose |
 | --- | --- |
 | `Sops.passthrough` | `({ file })`: read and verify the file's `SopsSecret` and emit it; `requiresSource: false`. The file must hold exactly one `secretTemplates` entry covering every contract key. Name, namespace, labels and annotations are restamped or merged only when the file was encrypted with `mac_only_encrypted: true`; otherwise a mismatch fails the render |
 | `Sops.backend` | `({ recipients, type?, encryptedRegex?, timeout? })`: re-encrypt to `age` / `kms` / `gcpKms` / `azureKv` / `pgp` recipients; `encryptedRegex` defaults to `^(data|stringData)$` so only secret values are encrypted; `requiresSource: true`. `encryptedRegex` accepts RE2 syntax limited to a leading `(?flags)` plus `\A` / `\z`; other RE2-only constructs are rejected when the backend is constructed |
+| `Sops.source` | `({ file, keys, extract? })`: a `SecretSource` that runs `sops --decrypt` once per resolve and yields `Redacted` values. `extract(key, parsed)` picks a key's value from the decrypted document and defaults to a flat `{ key: value }` lookup; a value that is not a string fails with `SecretSourceError` |
+| `sopsDecrypt({ file })`, `sopsEncryptStdin({ plaintextYaml, recipients, encryptedRegex?, timeout? })` | Low-level CLI wrappers (`SopsDecryptInput`, `SopsEncryptStdinInput`). `sopsEncryptStdin` validates `recipients` itself and applies the same `encryptedRegex` default as `Sops.backend` |
+| `SopsBackendOptions`, `SopsSourceInput`, `SopsRecipients`, `SopsSecret`, `SopsSecretSpec`, `SopsSecretTemplate` | Option and CR types |
 
 ## Errors
 
 | Error | When it is raised |
 | --- | --- |
-| `RenderError` (cause: the subprocess failure) | The `sops` process failed, timed out or was not found while `Sops.backend` encrypted |
+| `SopsInvocationError` | The `sops` process failed, timed out or was not found. Carries `op` (`"decrypt"` or `"encrypt"`) and the subprocess failure as `cause`. `sopsDecrypt` and `sopsEncryptStdin` fail with it directly; inside `Sops.backend` it is the `cause` of a `RenderError` (`Sops(ns/name): sops failed`); inside `Sops.source` it is the `cause` of a `SecretSourceError` |
 | `RenderError` | A passthrough file has more than one `secretTemplates` entry, lacks a contract key, or needs restamping while fully MAC'd |
 | `RenderError` (cause: `SopsUnencryptedValueError`) | A value about to be emitted was still plaintext. Every emitted value is checked for the `ENC[` marker (honouring `sops.encrypted_regex`); rather than emit plaintext dressed as a secret, the render fails with a `RenderError` whose cause is the internal `SopsUnencryptedValueError` |
 
 ## Requirements
 
 - `effect@^4.1.0` as a peer dependency (Effect 4).
-- Depends on `@konfig.ts/core`, `@konfig.ts/k8s`, and `yaml`.
+- Depends on `@konfig.ts/core`, `@konfig.ts/env` and `@konfig.ts/k8s`.
 - Runtime: Bun recommended; Node >= 23.6 works; Node 22.6 to 23.5 with `--experimental-strip-types`; `tsx` works.
 
 Source and README: [packages/sops](https://github.com/DwieDave/konfig.ts/tree/main/packages/sops).

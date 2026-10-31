@@ -58,13 +58,18 @@ export const _assertEncrypted = (
 export const parseVerified = (input: {
   readonly yamlText: string
   readonly label: string
+  readonly subject: "file" | "sops output"
+  readonly what?: string
 }): Effect.Effect<SopsSecret, RenderError> =>
   decodeYamlOutput({
     text: input.yamlText,
     label: input.label,
+    what: input.what,
     decode: (parsed) =>
       _decodeSopsSecret(parsed).pipe(
-        Effect.mapError((cause) => new RenderError({ message: `${input.label}: file did not match SopsSecret`, cause }))
+        Effect.mapError((cause) =>
+          new RenderError({ message: `${input.label}: ${input.subject} did not match SopsSecret`, cause })
+        )
       )
   })
     .pipe(
