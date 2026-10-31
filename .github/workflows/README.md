@@ -10,7 +10,9 @@ from `package.json`) and `bun install --frozen-lockfile`. Run
 
 The `check` job runs `bun run check`, `bun run build`,
 `bun run test:coverage` (coverage thresholds enforced), `bun run lint`
-(warnings fail), `bun run fmt:check` (dprint) and `bun run knip`. The `peer-floor` job pins `effect@4.1.0` and
+(warnings fail), `bun run fmt:check` (dprint), `bun run knip` and
+`bun run api:check`, which fails when the published packages' public API differs from
+`api-surface.json`. The `peer-floor` job pins `effect@4.1.0` and
 `@effect/platform-node@~4.1.0`, asserts they were installed, then runs
 check and test for every package with an `effect` peer. The `docker-e2e`
 job runs `docker build` on the generated Dockerfile of every e2e fixture

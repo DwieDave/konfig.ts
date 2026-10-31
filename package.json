@@ -33,7 +33,8 @@
     "prepare": "effect-tsgo patch --no-typescript --oxlint",
     "test:coverage": "bun scripts/cli.ts coverage && bun scripts/cli.ts badges",
     "repo": "bun scripts/cli.ts",
-    "fmt:check": "bunx dprint check"
+    "fmt:check": "bunx dprint check",
+    "api:check": "bun scripts/cli.ts api-surface"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
@@ -43,6 +44,7 @@
     "effect": "catalog:",
     "fast-check": "catalog:",
     "knip": "^6.32.0",
+    "oxc-parser": "0.147.0",
     "oxlint": "1.88.0",
     "oxlint-tsgolint": "^7.0.2004",
     "tsdown": "^0.22.14",

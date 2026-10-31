@@ -154,6 +154,7 @@ The whole 0.4.0 public API is still exported, with these exceptions: `Bundle.ent
   - checks formatting (`bun run fmt:check`)
   - runs `docker build` on every generated fixture Dockerfile (`docker-e2e`)
   - runs the peer-floor job at effect 4.1.0
+  - fails when a published package's public API (runtime exports, types, namespace members) differs from the committed `api-surface.json` (`bun run api:check`; update it with `bun scripts/cli.ts api-surface --write`)
 - The `konfig.ts` example (`examples/full-stack`) builds again, and its images build and start.
 
 ## Migrating from 0.4

@@ -3,6 +3,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Console, Effect } from "effect"
 import { Command } from "effect/cli"
 import { join } from "node:path"
+import { apiSurfaceCommand } from "./commands/apiSurface"
 import { badgesCommand } from "./commands/badges"
 import { bumpVersionCommand } from "./commands/bumpVersion"
 import { buildCommand, checkCommand, coverageCommand, packagesCommand } from "./commands/packageScript"
@@ -18,6 +19,7 @@ const root = Command.make(
   () => Console.log("repo — konfig.ts maintenance scripts. Run with --help for available commands.")
 ).pipe(
   Command.withSubcommands([
+    apiSurfaceCommand,
     bumpVersionCommand,
     prepackExportsCommand,
     rewriteWorkspaceDepsCommand,
