@@ -28,13 +28,16 @@ The check in practice: if the `api` module needs the `ghcr-pull` secret (it yiel
 
 | Export | Purpose |
 | --- | --- |
-| `Application.define` | Build a module handle: a Context tag that also carries a `Layer<Out, _, In>` |
+| `Application.define` | Build an `ApplicationHandle<Name, Out, In>`: a Context tag that also carries a `Layer<Out, _, In>` |
+| `Application.make` | Plain `Application` value constructor, no dependency graph |
 | `Application.target` | Adapter passed as `target` to `Module.fixedNs` / `Module.dynamicNs` |
-| `Application.LiteralName<T>` | Type: rejects a `string`-widened `name` at the call site |
+| `Application.LiteralName<T>`, `Application.ApplicationHandle`, `Application.HandleKind` | Types: reject a `string`-widened `name` at the call site; the handle and kind produced by `define` |
 | `AppOfApps.fromModules` | Compose handles into a sealed, directly renderable app-of-apps; the compile-time check fires here. `provides?: Layer` satisfies group-level needs |
+| `AppOfApps.make` | Plain `AppOfAppsResult` from already-built `Application`s |
 | `Sync.wave(n)`, `Sync.hook(phase)`, `Sync.options([...])` | `argocd.argoproj.io/*` annotation helpers to spread into `annotations`. `wave` accepts integers only; `options([])` returns `{}` |
-| `serializeApplicationCR`, `applicationCRFilename` | Emit an Application CR as a YAML string or a filename |
-| `AppOfAppsResult` | Result type of `AppOfApps.fromModules` |
+| `buildCR`, `serializeApplicationCR`, `applicationCRFilename`, `emitApplicationCR` | Emit an Application CR as an object, YAML string, filename, or `Manifest<string>` |
+| `ArgoSource`, `SyncPolicy`, `HookPhase`, `AppOfAppsTarget`, `AppOfAppsDefaults` | Option types |
+| `AppOfAppsResult` | Schema and type of the `AppOfApps.fromModules` result |
 
 ## Sync policy merge
 

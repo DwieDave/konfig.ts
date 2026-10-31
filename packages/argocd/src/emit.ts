@@ -1,5 +1,5 @@
-import { Yaml } from "@konfig.ts/core"
-import type { Types } from "effect"
+import { Manifest, Yaml } from "@konfig.ts/core"
+import { Effect, type Types } from "effect"
 import type { Any as AnyApp } from "./Application"
 import type { AppOfAppsDefaults, AppOfAppsTarget } from "./AppOfApps"
 import { mergeSyncPolicy } from "./syncPolicy"
@@ -68,14 +68,20 @@ const _spec = (input: BuildCRInput): ApplicationCR["spec"] => {
   return spec
 }
 
-const _buildCR = (input: BuildCRInput): ApplicationCR => ({
+export const buildCR = (input: BuildCRInput): ApplicationCR => ({
   apiVersion: "argoproj.io/v1alpha1",
   kind: "Application",
   metadata: _metadata({ app: input.app, controllerNamespace: input.target.controllerNamespace ?? "argocd" }),
   spec: _spec(input)
 })
 
-export const serializeApplicationCR = (input: BuildCRInput): string => Yaml.serialize({ value: _buildCR(input) })
+export const serializeApplicationCR = (input: BuildCRInput): string => Yaml.serialize({ value: buildCR(input) })
+
+export const emitApplicationCR = (input: BuildCRInput): Manifest.Manifest<string> => {
+  const yaml = serializeApplicationCR(input)
+
+  return Manifest.make<string>(() => Effect.succeed(yaml))
+}
 
 export const applicationCRFilename = (app: AnyApp): string =>
   Yaml.filenameFor({ kind: "Application", metadata: { name: app.name } })

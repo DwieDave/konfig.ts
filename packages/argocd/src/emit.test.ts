@@ -1,10 +1,26 @@
+import { NodeServices } from "@effect/platform-node"
+import { layer } from "@effect/vitest"
+import { RenderContext, renderManifest } from "@konfig.ts/core"
+import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import * as Application from "./Application"
-import type { AppOfAppsDefaults, AppOfAppsTarget } from "./AppOfApps"
-import { applicationCRFilename, serializeApplicationCR } from "./emit"
-import { Sync } from "./sync"
+import {
+  Application,
+  applicationCRFilename,
+  type AppOfAppsDefaults,
+  type AppOfAppsTarget,
+  buildCR,
+  emitApplicationCR,
+  serializeApplicationCR,
+  Sync
+} from "./index"
 
-const target: AppOfAppsTarget = {}
+const ctx = RenderContext.make("test")
+
+const target: AppOfAppsTarget = {
+  repoURL: "ssh://git@github.com/example/infra.git",
+  branch: "main",
+  rootPath: "./infra/k8s/manifests/prod"
+}
 
 const defaults: AppOfAppsDefaults = {
   destination: { server: "https://kubernetes.default.svc" }
@@ -215,6 +231,59 @@ describe("syncPolicy merge (defaults + app both defined)", () => {
 
     expect(yaml).toContain("CreateNamespace=true")
     expect(yaml).not.toContain("Validate=false")
+  })
+})
+
+describe("buildCR", () => {
+  const app = Application.make({
+    name: "web",
+    namespace: "prod",
+    manifests: [],
+    source: { repoURL: "ssh://git@github.com/example/infra.git", targetRevision: "main", path: "./web" },
+    annotations: Sync.wave(2)
+  })
+
+  it("builds the Application CR object with defaults filled in", () => {
+    expect(buildCR({ app, target, defaults })).toEqual({
+      apiVersion: "argoproj.io/v1alpha1",
+      kind: "Application",
+      metadata: { annotations: { "argocd.argoproj.io/sync-wave": "2" }, name: "web", namespace: "argocd" },
+      spec: {
+        destination: { namespace: "prod", server: "https://kubernetes.default.svc" },
+        project: "default",
+        source: { path: "./web", repoURL: "ssh://git@github.com/example/infra.git", targetRevision: "main" }
+      }
+    })
+  })
+
+  it("places the CR in target.controllerNamespace", () => {
+    expect(buildCR({ app, target: { controllerNamespace: "ops" }, defaults }).metadata.namespace).toBe("ops")
+  })
+})
+
+describe("emitApplicationCR", () => {
+  layer(NodeServices.layer)("rendering", (it) => {
+    it.effect("renders the same YAML as serializeApplicationCR", () =>
+      Effect.gen(function*() {
+        const app = Application.make({
+          name: "sops-secrets-operator",
+          namespace: "argocd",
+          manifests: [],
+          source: {
+            repoURL: "ssh://git@github.com/example/infra.git",
+            targetRevision: "main",
+            path: "./infra/k8s/manifests/prod/sops-secrets-operator"
+          },
+          syncPolicy: { automated: { prune: false, selfHeal: false } }
+        })
+
+        const manifest = emitApplicationCR({ app, target, defaults })
+        const out = yield* renderManifest({ manifest, ctx })
+
+        expect(out).toBe(serializeApplicationCR({ app, target, defaults }))
+        expect(out).toContain("kind: Application")
+        expect(out).toContain("name: sops-secrets-operator")
+      }))
   })
 })
 

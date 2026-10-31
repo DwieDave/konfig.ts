@@ -1,7 +1,6 @@
 import type { Dep, Manifest } from "@konfig.ts/core"
 import type { Effect } from "effect"
-import type * as ApplicationNS from "../src/Application"
-import * as AppOfAppsNS from "../src/AppOfApps"
+import { type Application as ApplicationNS, AppOfApps as AppOfAppsNS } from "../src/index"
 
 type Expect<T extends true> = T
 
@@ -90,8 +89,8 @@ void _okCall
 
 void _badCall
 
+// The 0.4.0 target fields are still accepted.
 const _legacyCall = AppOfAppsNS.fromModules({
-  // @ts-expect-error excess property on target
   target: { repoURL: "x", branch: "main", rootPath: "p" },
   defaults: {},
   modules: [provider] as const

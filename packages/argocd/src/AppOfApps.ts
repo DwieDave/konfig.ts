@@ -2,7 +2,12 @@ import { type AnyRenderError, Compose, type Manifest as CoreManifest } from "@ko
 import { type Effect, type Layer, Schema } from "effect"
 import { type Application, Application as ApplicationSchema, type ApplicationHandle, SyncPolicy } from "./Application"
 
+// repoURL/branch/rootPath are carried through from 0.4.0; nothing in the
+// emitter reads them, CRs take their source from each app's `source`.
 export const AppOfAppsTarget = Schema.Struct({
+  repoURL: Schema.optionalKey(Schema.String),
+  branch: Schema.optionalKey(Schema.String),
+  rootPath: Schema.optionalKey(Schema.String),
   controllerNamespace: Schema.optionalKey(Schema.String)
 })
 

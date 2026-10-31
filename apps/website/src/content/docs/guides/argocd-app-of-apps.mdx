@@ -29,13 +29,18 @@ The options of `Application.define`:
 
 ## Two shapes: target and source
 
-The target only configures the controller namespace; it is used once, when building the child Application CRs:
+The target configures the controller namespace; it is used once, when building the child Application CRs:
 
 ```ts
 interface AppOfAppsTarget {
   readonly controllerNamespace?: string // metadata.namespace of the CRs, default "argocd"
+  readonly repoURL?: string // accepted for 0.4.0 configs, not read
+  readonly branch?: string // accepted for 0.4.0 configs, not read
+  readonly rootPath?: string // accepted for 0.4.0 configs, not read
 }
 ```
+
+`repoURL`, `branch` and `rootPath` are carried into the result but don't affect the CRs; each CR's `spec.source` comes from its module's source.
 
 The source is set per module and becomes the `spec.source` of that module's Application, so Argo CD knows which directory to sync for it:
 
@@ -89,7 +94,7 @@ The controller namespace from the target sets `metadata.namespace` of every CR a
 
 A build writes two kinds of output. Each Application's manifests go into `<root>/<outDir.manifests>/<env>/<app name>/`. One Application CR per module goes into `<root>/<outDir.manifests>/<env>/<result name>/`, which is `apps/` unless you named the app-of-apps. The whole environment directory is replaced on every build, so removing a module from the list removes its files from the output.
 
-Each CR file is named `Application-<name>.yaml`, with `.` and `/` in the name replaced by `-`. If you generate CRs yourself, `applicationCRFilename` gives that name, `serializeApplicationCR` gives the YAML.
+Each CR file is named `Application-<name>.yaml`, with `.` and `/` in the name replaced by `-`. If you generate CRs yourself, `applicationCRFilename` gives that name, `serializeApplicationCR` gives the YAML, `buildCR` gives the CR as a plain object, and `emitApplicationCR` wraps the YAML in a `Manifest<string>`. `Application.make` and `AppOfApps.make` build the plain values these take, without the dependency graph.
 
 For the example above the tree looks like this:
 

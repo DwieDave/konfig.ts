@@ -1,18 +1,22 @@
+import { it as effectIt } from "@effect/vitest"
+import { Effect, Schema } from "effect"
 import { describe, expect, it } from "vitest"
-import * as Application from "./Application"
-import * as AppOfApps from "./AppOfApps"
-import { Sync } from "./sync"
+import { Application, AppOfApps, AppOfAppsResult, Sync } from "./index"
 
-const target: AppOfApps.AppOfAppsTarget = {}
+const target: AppOfApps.AppOfAppsTarget = {
+  repoURL: "ssh://git@github.com/example/infra.git",
+  branch: "main",
+  rootPath: "./infra/k8s/manifests/prod"
+}
 
 const defaults: AppOfApps.AppOfAppsDefaults = {
   destination: { server: "https://kubernetes.default.svc" }
 }
 
 const _appSource = (name: string): Application.ArgoSource => ({
-  repoURL: "ssh://git@github.com/example/infra.git",
-  targetRevision: "main",
-  path: `./infra/k8s/manifests/prod/${name}`
+  repoURL: target.repoURL ?? "",
+  targetRevision: target.branch ?? "",
+  path: `${target.rootPath ?? ""}/${name}`
 })
 
 describe("Application.make", () => {
@@ -63,7 +67,25 @@ describe("AppOfApps.make", () => {
 
     const aoa = AppOfApps.make({ target, defaults, apps: [certManager, web] })
     expect(aoa.apps).toHaveLength(2)
-    expect(aoa.target).toEqual({})
+    expect(aoa.target.branch).toBe("main")
     expect(aoa.defaults.destination?.server).toBe("https://kubernetes.default.svc")
   })
+})
+
+describe("AppOfAppsResult schema", () => {
+  const decode = Schema.decodeUnknownEffect(AppOfAppsResult)
+
+  effectIt.effect("keeps the 0.4.0 target fields when present", () =>
+    Effect.gen(function*() {
+      const result = yield* decode({ name: "apps", target, defaults, apps: [] })
+
+      expect(result.target).toEqual(target)
+    }))
+
+  effectIt.effect("accepts a target without the 0.4.0 fields", () =>
+    Effect.gen(function*() {
+      const result = yield* decode({ name: "apps", target: { controllerNamespace: "ops" }, defaults, apps: [] })
+
+      expect(result.target).toEqual({ controllerNamespace: "ops" })
+    }))
 })

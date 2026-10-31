@@ -56,7 +56,17 @@ export type Any = Application
 // that into a compile error instead.
 export type LiteralName<T extends string> = Module.LiteralName<T>
 
-export const make = (opts: Application): Application => ({
+export interface ApplicationMakeOptions {
+  readonly name: string
+  readonly namespace: string
+  readonly manifests: ReadonlyArray<unknown>
+  readonly source: ArgoSource
+  readonly project?: string
+  readonly syncPolicy?: SyncPolicy
+  readonly annotations?: Readonly<Record<string, string>>
+}
+
+export const make = (opts: ApplicationMakeOptions): Application => ({
   name: opts.name,
   namespace: opts.namespace,
   manifests: opts.manifests,
@@ -96,7 +106,7 @@ export interface ExtraCallArgs {
   readonly source: ArgoSource
 }
 
-interface ApplicationDefineOptions<Name extends string, Ns extends string, R, Extra>
+export interface ApplicationDefineOptions<Name extends string, Ns extends string, R, Extra>
   extends Module.DefineBaseArgs<Name, Ns, R, Extra>, ExtraConfig, ExtraCallArgs
 {}
 

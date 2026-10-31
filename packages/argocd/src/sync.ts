@@ -1,4 +1,4 @@
-type HookPhase = "PreSync" | "Sync" | "PostSync" | "SyncFail" | "PostDelete"
+export type HookPhase = "PreSync" | "Sync" | "PostSync" | "SyncFail" | "PostDelete"
 
 type IntegerLiteral<N extends number> = `${N}` extends `${string}.${string}` | `${string}e${string}` ? never : N
 

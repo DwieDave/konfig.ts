@@ -49,14 +49,24 @@ provides it, `fromModules` refuses to compile:
 
 ## Surface
 
-| Export                                             | Purpose                                                                                                                                                    |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Application.define`                               | build a module handle — an Effect Context tag that also carries a `Layer<Out, _, In>`                                                                      |
-| `Application.target`                               | adapter passed to `Module.fixedNs` / `Module.dynamicNs`                                                                                                    |
-| `Application.LiteralName<T>`                       | rejects a `string`-widened `name` at the call site                                                                                                         |
-| `AppOfApps.fromModules`                            | compose module handles into a sealed, renderable app-of-apps; the compile-time dep check fires here (group-level `provides?: Layer` fills remaining needs) |
-| `Sync.wave` / `Sync.hook` / `Sync.options`         | ArgoCD annotation helpers — spread into `annotations`                                                                                                      |
-| `serializeApplicationCR` / `applicationCRFilename` | emit an Application CR as a YAML string or a filename                                                                                                      |
+| Export                                                                          | Purpose                                                                                                                                                    |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Application.define`                                                            | build an `ApplicationHandle<Name, Out, In>` — an Effect Context tag that also carries a `Layer<Out, _, In>`                                                |
+| `Application.make`                                                              | plain `Application` value constructor (no dep graph)                                                                                                       |
+| `Application.target`                                                            | adapter passed to `Module.fixedNs` / `Module.dynamicNs`                                                                                                    |
+| `Application.module`                                                            | `Module.fixedNs` with `target: Application.target` pre-applied                                                                                             |
+| `Application.LiteralName<T>`                                                    | rejects a `string`-widened `name` at the call site                                                                                                         |
+| `AppOfApps.fromModules`                                                         | compose module handles into a sealed, renderable app-of-apps; the compile-time dep check fires here (group-level `provides?: Layer` fills remaining needs) |
+| `AppOfApps.make`                                                                | plain `AppOfAppsResult` constructor from already-built `Application`s                                                                                      |
+| `Sync.wave` / `Sync.hook` / `Sync.options`                                      | ArgoCD annotation helpers — spread into `annotations`                                                                                                      |
+| `serializeApplicationCR` / `applicationCRFilename` / `emitApplicationCR`        | emit an Application CR as a YAML string, a filename, or a `Manifest<string>`                                                                               |
+| `buildCR`                                                                       | the Application CR as a plain object, before serialization                                                                                                 |
+| `AppOfAppsResult`                                                               | schema and type of the `fromModules` result                                                                                                                |
+| `ArgoSource`, `SyncPolicy`, `HookPhase`, `AppOfAppsTarget`, `AppOfAppsDefaults` | types for an app's `source`, its `syncPolicy`, `Sync.hook`'s phase, and `fromModules`' `target` and `defaults`                                             |
+
+`AppOfAppsTarget` accepts `controllerNamespace` (the CRs' `metadata.namespace`, default `"argocd"`)
+and, as in 0.4.0, optional `repoURL`, `branch` and `rootPath`. The emitter doesn't read the last
+three; each CR's `spec.source` comes from its app's `source`.
 
 ## Internals
 
