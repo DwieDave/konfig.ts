@@ -1,3 +1,3 @@
 import { packageVitestConfig } from "../../vitest.shared.mts"
 
-export default packageVitestConfig()
+export default packageVitestConfig({ aliases: ["core"] })
