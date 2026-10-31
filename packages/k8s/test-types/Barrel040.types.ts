@@ -70,6 +70,7 @@ import type {
   VolumeNamesOf
 } from "@konfig.ts/k8s"
 import type { ConfigMap, Namespace, SecretRef, Volume } from "@konfig.ts/k8s"
+import type { Workload as _WorkloadNs } from "../src/index"
 
 type Expect<T extends true> = T
 
@@ -265,3 +266,5 @@ export type _Tests = readonly [
   _Declared,
   _SecretMembers
 ]
+
+export type _ReloaderOption040 = Expect<Has<{ readonly opt: _WorkloadNs.ReloaderOption }, "opt">>

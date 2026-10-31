@@ -17,6 +17,8 @@ import { _reloaderAnnotations, type ReloaderOption } from "./reloader"
 import type { Volume } from "./volume"
 import { CronJob, Deployment } from "./workload"
 
+export type { ReloaderOption }
+
 type _PortNamesOfContainers<Cs extends ReadonlyArray<ContainerInput>> = {
   readonly [K in keyof Cs]: Cs[K] extends ContainerSpec<infer P, string> ? P : never
 }[number]

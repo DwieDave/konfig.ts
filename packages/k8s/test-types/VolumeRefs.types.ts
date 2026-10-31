@@ -24,7 +24,4 @@ const _reloaderOk = Workload.web({ ...base, reloader: { secrets: [secret.ref], c
 // @ts-expect-error - raw strings are not SecretRefs.
 const _rawReloader = Workload.web({ ...base, reloader: { secrets: ["s1"] } })
 
-// @ts-expect-error - ReloaderOption is internal.
-type _Hidden = Workload.ReloaderOption
-
 void [_secretVol, _cmVol, _rawSecretVol, _rawCmVol, _reloaderOk, _rawReloader]
