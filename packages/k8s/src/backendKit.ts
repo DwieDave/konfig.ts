@@ -94,7 +94,7 @@ export const encryptVia = <N extends string, K extends string, P extends object,
     Effect.flatMap(input.verify)
   )
 
-interface DefineInput<Opts, RS extends boolean, Out> {
+export interface DefineInput<Opts, RS extends boolean, Out> {
   readonly tag: string
   readonly requiresSource: RS
   readonly emit: <N extends string, K extends string>(

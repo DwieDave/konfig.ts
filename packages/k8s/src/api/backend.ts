@@ -18,4 +18,6 @@ export declare namespace Backend {
   type EmitInput<N extends string, K extends string, Opts, RS extends boolean = true> = Kit.EmitInput<N, K, Opts, RS>
 
   type CliOptions = Kit.CliBackendOptions
+
+  type DefineInput<Opts, RS extends boolean, Out> = Kit.DefineInput<Opts, RS, Out>
 }
