@@ -1,6 +1,6 @@
 import type { ImageRef } from "./PackageManager"
 
-interface RuntimeImageInput {
+export interface RuntimeImageInput {
   readonly version: string
   readonly alpine: boolean
 }

@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 const BASE64_CHARSET_RE = /^[A-Za-z0-9+/]{40,}={0,2}$/
 const HEX_RE = /^[0-9a-fA-F]+$/
@@ -170,3 +170,5 @@ export type DockerSpec = typeof DockerSpec.Type
 export const EngineVersion = Schema.String.check(Schema.isPattern(/^\d+(\.\d+){0,2}$/))
 
 export const decodeDockerSpec = Schema.decodeUnknownEffect(DockerSpec)
+
+export const decodeDockerSpecSync = <I>(input: I): DockerSpec => Effect.runSync(decodeDockerSpec(input))

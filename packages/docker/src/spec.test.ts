@@ -5,6 +5,7 @@ import {
   BuildAtom,
   CopyAtom,
   decodeDockerSpec,
+  decodeDockerSpecSync,
   type DockerSpec,
   EngineVersion,
   HealthcheckAtom,
@@ -291,5 +292,28 @@ describe("DockerSpec numeric and name strictness", () => {
     ]
 
     expect(good.map(decodes)).toEqual(good.map(() => true))
+  })
+})
+
+describe("decodeDockerSpecSync", () => {
+  it("returns the decoded spec", () => {
+    expect(decodeDockerSpecSync(fullValid)).toEqual(fullValid)
+  })
+
+  it("throws on an invalid spec", () => {
+    expect(() => decodeDockerSpecSync({ runner: { workdir: "/x", copy: [] } })).toThrow()
+  })
+
+  it("agrees with decodeDockerSpec (property)", () => {
+    const port = fc.oneof(fc.integer({ min: -10, max: 70000 }), fc.double({ noNaN: true }))
+
+    const syncDecodes = (expose: number): boolean => {
+      const input = { ...minimalValid, runner: { ...minimalValid.runner, expose } }
+
+      return Exit.isSuccess(Effect.runSyncExit(Effect.try(() => decodeDockerSpecSync(input)))) ===
+        Exit.isSuccess(Effect.runSyncExit(decodeDockerSpec(input)))
+    }
+
+    fc.assert(fc.property(port, syncDecodes))
   })
 })

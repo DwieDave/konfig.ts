@@ -23,7 +23,7 @@ export type From =
 
 export type PlatformIR = { readonly _tag: "Single"; readonly value: PlatformValue }
 
-type PlatformValue = "linux/amd64" | "linux/arm64"
+export type PlatformValue = "linux/amd64" | "linux/arm64"
 
 export type Instruction =
   | {

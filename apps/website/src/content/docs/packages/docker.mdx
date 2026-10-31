@@ -43,18 +43,22 @@ docker build -f apps/api/Dockerfile .
 | `Docker.pm` | `bun()`, `npm()`, `pnpm()`, `yarn({ variant? })`; auto-detected from the root lockfile when omitted |
 | `Docker.build` | `script(name)`, `command(argv)`, `none()`; when omitted, `script("build")` if the app has a `build` script, else `none()` |
 | `Docker.healthcheck`, `Docker.user`, `Docker.platform` | `httpGet({ path, port, ... })` / `command({ argv, ... })`; `nonRoot({ uid?, gid?, name? })` / `root()`; `linuxAmd64()` / `linuxArm64()` |
-| `findRoot`, `allWorkspaces`, `Workspace` | Workspace graph helpers |
-| `emit`, `extractHeader`, `HEADER_MARKER` | Render the Dockerfiles for a spec and read the konfig-managed header back |
-| `isDockerApp`, `DockerApp` | Spec identification helpers |
+| `DockerSpec`, `RunnerSpec`, `DevSpec`, `decodeDockerSpec`, `decodeDockerSpecSync` | Schemas and decoders for the spec; the atom schemas (`CopyAtom`, `RuntimeAtom`, `PackageManagerAtom`, `BuildAtom`, `HealthcheckAtom`, `UserAtom`, `PlatformAtom`) are exported too |
+| `findRoot`, `allWorkspaces`, `closureOf`, `lookupWorkspace`, `workspaceDeps`, `detectPm`, `Workspace` | Workspace graph services |
+| `lower({ spec, target })`, `prepareContext({ spec, target })`, `validateSpec({ spec, ctx })`, `buildIR({ spec, ctx, pm })`, `emit({ spec, target, specPath })` | Resolve the workspace context, validate the spec, and build the intermediate representation; `emit` runs the whole pipeline |
+| `render`, `renderFile`, `renderHeader`, `extractHeader`, `HEADER_MARKER`, `sha256Hex` | Dockerfile rendering with a hashed header, and reading that header back; `sha256Hex` is the one from `@konfig.ts/core` |
+| `bunPm`, `npmPm`, `pnpmPm`, `bunRuntime`, `nodeRuntime` | Package manager and runtime implementations |
+| `isDockerApp`, `makeDockerApp`, `DockerAppTypeId`, `DockerApp`, `PACKAGE_NAME` | Spec identification helpers |
 
 ## Errors
 
-Every failure the package can produce is a tagged error, and `AnyDockerError` is the union of all of them.
+Every failure the package can produce is a tagged error class exported from the package, and `AnyDockerError` is the union of the failures `emit` can raise. `SpecDecodeError`, `DockerWriteRefused`, and `DockerWriteError` are exported as well but are not part of that union.
 
 | Error | When it is raised |
 | --- | --- |
 | `MonorepoRootNotFound` | No monorepo root could be found walking up from the starting directory |
 | `WorkspaceNotFound` | The target app is not a workspace of the monorepo |
+| `PackageJsonInvalid` | A workspace `package.json` is not valid JSON or does not match the expected shape |
 | `UnsupportedYarnLinker` | Yarn Berry resolves to Plug'n'Play (`nodeLinker` absent or `pnp`); only `node-modules` and `pnpm` linkers are supported. A `yarnPath` release file is copied before `yarn install` |
 | `PmRuntimeIncompatible` | The package manager and runtime image cannot work together: Bun needs `BunRuntime`; npm, pnpm and Yarn need `NodeRuntime` |
 | `UnsupportedPm` | The package manager could not be determined: no `packageManager` field and either no recognized lockfile or several conflicting ones |
@@ -65,7 +69,11 @@ Every failure the package can produce is a tagged error, and `AnyDockerError` is
 | `BuildScriptMissing` | The spec names a build script the app's `package.json` does not define |
 | `WorkspaceSourceUnknown` | A `workspaceSource(name)` copy names a workspace outside the app's closure |
 | `SharedRootFileMissing` | A file listed in `sharedRootFiles` does not exist at the monorepo root |
+| `BunVersionUnsupported` | `runner.production` is set with Bun older than 1.2, which lacks `bun install --filter` |
 | `SpecInvalid` | `emit` validates the spec first and fails with this when it is invalid: an env secret pattern, a port outside the valid range, or a health-check path that is not acceptable. Carries the validation `cause` |
+| `SpecDecodeError` | Nothing in the package raises it; invalid specs fail with `SpecInvalid`. Kept for 0.4 compatibility |
+| `DockerWriteRefused` | `konfig docker write` would overwrite a file that lacks the konfig header and `--force` was not given |
+| `DockerWriteError` | `konfig docker write` failed to write a Dockerfile to disk |
 
 <Aside type="caution">
 Workspace `COPY` instructions only resolve from the monorepo root, so always pass the root as the Docker build context.

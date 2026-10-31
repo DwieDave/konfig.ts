@@ -1,21 +1,25 @@
 import { sha256Hex } from "@konfig.ts/core"
 
-export const HEADER_MARKER = "# konfig-managed: @konfig.ts/docker"
+export const PACKAGE_NAME = "@konfig.ts/docker"
+
+export const HEADER_MARKER = `# konfig-managed: ${PACKAGE_NAME}`
 
 const HASH_PREFIX = "# hash: sha256:"
 
-interface HeaderInput {
+export interface RenderHeaderInput {
   readonly specPath: string
   readonly body: string
 }
 
-export const renderHeader = (input: HeaderInput): string => {
+export type RenderFileInput = RenderHeaderInput
+
+export const renderHeader = (input: RenderHeaderInput): string => {
   const hash = sha256Hex(input.body)
 
   return [HEADER_MARKER, `# spec: ${input.specPath}`, `${HASH_PREFIX}${hash}`].join("\n")
 }
 
-export const renderFile = (input: HeaderInput): string => {
+export const renderFile = (input: RenderFileInput): string => {
   const header = renderHeader(input)
 
   return `${header}\n${input.body}`

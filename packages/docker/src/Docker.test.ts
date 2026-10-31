@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { Docker, isDockerApp } from "./Docker"
+import { Docker, DockerAppTypeId, isDockerApp, makeDockerApp } from "./Docker"
 import {
   BuildAtom,
   CopyAtom,
@@ -20,9 +20,19 @@ const sampleSpec: DockerSpec = {
 }
 
 describe("Docker brand", () => {
+  it("makeDockerApp produces an object carrying the brand symbol", () => {
+    const app = makeDockerApp(sampleSpec)
+    expect(DockerAppTypeId in app).toBe(true)
+    expect(app.spec).toBe(sampleSpec)
+  })
+
   it("isDockerApp accepts a branded value", () => {
-    const app = Docker.app(sampleSpec)
+    const app = makeDockerApp(sampleSpec)
     expect(isDockerApp(app)).toBe(true)
+  })
+
+  it("Docker.app is makeDockerApp", () => {
+    expect(Docker.app(sampleSpec)).toEqual(makeDockerApp(sampleSpec))
   })
 
   it("isDockerApp rejects a plain spec object", () => {

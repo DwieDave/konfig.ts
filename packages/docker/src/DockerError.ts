@@ -67,6 +67,21 @@ export class SpecInvalid extends Data.TaggedError("SpecInvalid")<{
   readonly cause: unknown
 }> {}
 
+export class SpecDecodeError extends Data.TaggedError("SpecDecodeError")<{
+  readonly specPath: string
+  readonly cause: unknown
+}> {}
+
+export class DockerWriteRefused extends Data.TaggedError("DockerWriteRefused")<{
+  readonly path: string
+  readonly reason: string
+}> {}
+
+export class DockerWriteError extends Data.TaggedError("DockerWriteError")<{
+  readonly path: string
+  readonly cause: unknown
+}> {}
+
 export class UnsupportedYarnLinker extends Data.TaggedError("UnsupportedYarnLinker")<{
   readonly linker: string
 }> {}

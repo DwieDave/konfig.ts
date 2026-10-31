@@ -85,6 +85,19 @@ for the target and copy the artifact explicitly with
 `Docker.copy.builderArtifact()` instead. A relative `dst` is resolved under the
 target directory; an absolute `dst` is used as-is.
 
+## Surface
+
+| Export                                                                                   | Purpose                                                                                       |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `Docker`                                                                                 | the spec atoms above                                                                          |
+| `DockerSpec`, `RunnerSpec`, `DevSpec`, `decodeDockerSpec`, `decodeDockerSpecSync`        | spec schemas and decoders; the `*Atom` schemas are exported too                               |
+| `findRoot`, `allWorkspaces`, `closureOf`, `lookupWorkspace`, `workspaceDeps`, `detectPm` | workspace graph services                                                                      |
+| `lower`, `prepareContext`, `validateSpec`, `buildIR`, `emit`                             | resolve the context, validate the spec, build the IR; `emit` runs the whole pipeline          |
+| `render`, `renderFile`, `renderHeader`, `extractHeader`, `HEADER_MARKER`, `sha256Hex`    | render the IR with a hashed header and read the header back (`sha256Hex` is core's)           |
+| `bunPm`, `npmPm`, `pnpmPm`, `bunRuntime`, `nodeRuntime`                                  | package-manager and runtime implementations                                                   |
+| `isDockerApp`, `makeDockerApp`, `DockerAppTypeId`, `PACKAGE_NAME`                        | spec identification                                                                           |
+| `AnyDockerError` and every error class                                                   | `SpecDecodeError`, `DockerWriteRefused` and `DockerWriteError` are exported outside the union |
+
 ## Scope
 
 Emits Dockerfiles only — no image building, pushing, tagging, or signing, and no

@@ -11,7 +11,7 @@ Writing a Dockerfile for one app inside a monorepo is tedious because the image 
 
 ## The spec
 
-The spec is a typed object you pass to `Docker.app`. The type checker validates it as you write it. If you need to validate untyped input, for example a spec loaded from JSON, the schemas do the same check at runtime. The `konfig docker` commands import the default export of `docker.ts` and reject anything that is not a Docker app with `SpecNotADockerApp`. The example's API service:
+The spec is a typed object you pass to `Docker.app`. The type checker validates it as you write it. If you need to validate untyped input, for example a spec loaded from JSON, `decodeDockerSpec` (an Effect) and `decodeDockerSpecSync` (throws a `SchemaError`) do the same check at runtime. The `konfig docker` commands import the default export of `docker.ts` and reject anything that is not a Docker app with `SpecNotADockerApp`. The example's API service:
 
 <Snippet file="apps/api/docker.ts" startAt="export default Docker.app" title="apps/api/docker.ts" lang="ts" />
 

@@ -56,7 +56,7 @@ import {
 } from "./DockerfileIR"
 import { shGlobQuote, shJoin } from "./shell"
 
-interface LowerContext {
+export interface LowerContext {
   readonly root: RootDir
   readonly allWorkspaces: ReadonlyArray<Workspace>
   readonly closure: ReadonlyArray<Workspace>
@@ -71,7 +71,7 @@ export interface LowerInput {
   readonly target: string
 }
 
-const _prepareContext = (
+export const prepareContext = (
   input: LowerInput
 ): Effect.Effect<LowerContext, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
@@ -197,7 +197,7 @@ const _checkSharedRootFiles = (
     )
   })
 
-const _validateSpec = (
+export const validateSpec = (
   input: ValidateSpecInput
 ): Effect.Effect<void, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
@@ -461,7 +461,7 @@ const _prodDepsWorkspaceRewriteInstruction = (ctx: LowerContext): Instruction =>
   return Instr.Run({ cmd: `node -e '${rewriteScript}'` })
 }
 
-interface BuildIRInput {
+export interface BuildIRInput {
   readonly spec: DockerSpec
   readonly ctx: LowerContext
   readonly pm: PmContext
@@ -795,7 +795,7 @@ const _devStage = (input: BuildIRInput & { readonly dev: DevSpec }): Stage => {
   })
 }
 
-const _buildIR = (input: BuildIRInput): DockerfileBundle => {
+export const buildIR = (input: BuildIRInput): DockerfileBundle => {
   const base = _baseStage(input.pm.runtimeImage)
 
   const prod: Dockerfile = {
@@ -818,11 +818,11 @@ export const lower = (
   input: LowerInput
 ): Effect.Effect<DockerfileBundle, AnyDockerError, FileSystem | Path> =>
   Effect.gen(function*() {
-    const ctx = yield* _prepareContext(input)
+    const ctx = yield* prepareContext(input)
     const { spec } = input
-    yield* _validateSpec({ spec, ctx })
+    yield* validateSpec({ spec, ctx })
     const pm = yield* _resolveDefaults({ spec, ctx })
     yield* _checkBunFilterSupport({ spec, ctx, pm })
 
-    return _buildIR({ spec, ctx, pm })
+    return buildIR({ spec, ctx, pm })
   })

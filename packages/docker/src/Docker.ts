@@ -3,17 +3,21 @@ import type { YarnVariant } from "./services/PackageManager"
 import { BuildAtom, CopyAtom, HealthcheckAtom, PackageManagerAtom, PlatformAtom, RuntimeAtom, UserAtom } from "./spec"
 import type { DockerSpec } from "./spec"
 
-const DockerAppTypeId: unique symbol = Symbol.for("@konfig.ts/docker/DockerApp")
+export const DockerAppTypeId: unique symbol = Symbol.for("@konfig.ts/docker/DockerApp")
+
+export type DockerAppTypeId = typeof DockerAppTypeId
 
 export interface DockerApp {
   readonly [DockerAppTypeId]: true
   readonly spec: DockerSpec
 }
 
+export const makeDockerApp = (spec: DockerSpec): DockerApp => ({ [DockerAppTypeId]: true, spec })
+
 export const isDockerApp = (u: unknown): u is DockerApp => isRecord(u) && DockerAppTypeId in u
 
 export const Docker = {
-  app: (spec: DockerSpec): DockerApp => ({ [DockerAppTypeId]: true, spec }),
+  app: makeDockerApp,
   pm: {
     bun: (): PackageManagerAtom => PackageManagerAtom.cases.BunPm.make({}),
     npm: (): PackageManagerAtom => PackageManagerAtom.cases.NpmPm.make({}),

@@ -2,6 +2,8 @@ import { type DiffFormat, orElseIfNotFound, readOrEmpty } from "@konfig.ts/core"
 import {
   type AnyDockerError,
   type DockerApp,
+  DockerWriteError,
+  DockerWriteRefused,
   emit,
   extractHeader,
   findRoot,
@@ -23,16 +25,6 @@ export class SpecImportError extends Data.TaggedError("SpecImportError")<{
 
 export class SpecNotADockerApp extends Data.TaggedError("SpecNotADockerApp")<{
   readonly specPath: string
-}> {}
-
-export class DockerWriteRefused extends Data.TaggedError("DockerWriteRefused")<{
-  readonly path: string
-  readonly reason: string
-}> {}
-
-export class DockerWriteError extends Data.TaggedError("DockerWriteError")<{
-  readonly path: string
-  readonly cause: unknown
 }> {}
 
 export class DiffDrift extends Data.TaggedError("DiffDrift")<{

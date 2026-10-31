@@ -4,10 +4,13 @@ import {
   BuildScriptMissing,
   BunVersionUnsupported,
   CircularWorkspaceDep,
+  DockerWriteError,
+  DockerWriteRefused,
   EngineVersionMissing,
   MonorepoRootNotFound,
   PmRuntimeIncompatible,
   SharedRootFileMissing,
+  SpecDecodeError,
   UnsupportedPm,
   UnsupportedYarnLinker,
   WorkspaceNotFound,
@@ -54,6 +57,18 @@ describe("DockerError", () => {
     expect(all).toHaveLength(11)
 
     for (const [err, tag] of all) {
+      expect(err._tag).toBe(tag)
+    }
+  })
+
+  it("constructs the errors outside AnyDockerError with their expected _tag", () => {
+    const outside: ReadonlyArray<readonly [{ readonly _tag: string }, string]> = [
+      [new SpecDecodeError({ specPath: "apps/x/docker.ts", cause: new Error("x") }), "SpecDecodeError"],
+      [new DockerWriteRefused({ path: "Dockerfile", reason: "no marker" }), "DockerWriteRefused"],
+      [new DockerWriteError({ path: "Dockerfile", cause: new Error("perm") }), "DockerWriteError"]
+    ]
+
+    for (const [err, tag] of outside) {
       expect(err._tag).toBe(tag)
     }
   })
