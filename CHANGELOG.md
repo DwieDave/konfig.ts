@@ -36,58 +36,66 @@ All `@konfig.ts/*` packages are versioned in lockstep. The format follows [Keep 
 
 ### Breaking: API changes
 
+The whole 0.4.0 public API is still exported, with these exceptions: `Bundle.entrypoint` and `AppOfApps.entrypoint` (deprecated no-op wrappers), `Docker.platform.multi` (it always failed at render), and the docker IR types `Arg` and `DepsImageInput` (their fields no longer exist). The remaining breaks are changed signatures and shapes:
+
 **@konfig.ts/core**
 
-- **Signatures:** `unsafeCoerce({ value, reason })`, `runProcessString({ command, ... })` and `runProcessExit({ command, ... })` take one object.
-- **Removed, rendering:** `render` (use `konfig build`, `renderAllYaml`/`renderAllYamlEffect` or `renderManifest`), `Manifest.combine`, `Manifest.whenever`, `Manifest.ManifestTypeId`.
-- **Removed, composition:** `Bundle.make`, `Bundle.makeSet`, `Bundle.entrypoint`, `Compose.composeLayers`, `Compose.makeResidualEntrypoint`, `Module.asLiteralName`.
-- **Removed, dependency needs:** `Dep.ConfigMap`, `Dep.Pvc`, `Dep.ServiceAccount`, `Dep.provideConfigMap`, `Dep.providePvc`, `Dep.provideServiceAccount`, and the `ServiceAccountRef` type (now in `@konfig.ts/k8s`).
-- **Removed, config:** `decodeKonfigConfigSync`/`decodeKonfigConfigEffect`, `makeStrictDecoder`, and the sub-schemas `ClusterSpec`, `CrdConfig`, `DiffConfig`, `EnvEntry`, `HelmConfig`, `OutDir`, `ServicesConfig` (`KonfigConfig` remains).
-- **Removed, YAML, diff and images:** `parseYaml` (use `parseYamlAll`/`parseYamlWith`), `deepEqual`, `redact`, `redactedEqual`, `lookupEnv`, `lookupEnvEffect`, `requireImageEffect`, `EnvImages`.
-- **Removed, Helm:** `Helm.verifyChartDigest`, `Helm.versionTimeout` (`Helm.ensureChartTarball` and `Helm.assertMinVersion` are new), `DEFAULT_HELM_TIMEOUT_SECONDS`, `DEFAULT_HELM_VERSION_TIMEOUT_SECONDS`, `KONFIG_HELM_TIMEOUT_ENV`.
-- **Removed, error classes and subprocess:**
-  - `HelmRenderError`, `HelmVersionTooLow`, `HelmDigestMismatch` and `EmbedYamlReadError` are no longer exported. Match them by `_tag`; they still appear in `AnyRenderError`.
-  - `ProcessError`, `ProcessTimeout`, `processDetail`.
+- `render({ program, options? })`, `unsafeCoerce({ value, reason })`, `runProcessString({ command, options? })` and `runProcessExit({ command, options? })` take one object (they were positional).
 
 **@konfig.ts/env**
 
-- `Literal.define({ schema })` takes a string codec (`Schema.Codec<T, string>`), decoded from `envName`; it used to take a `Config`.
-- **Removed:** `environmentLayer`, `typedKeys`, `collectByKey`, `EnvNameCollision` (still thrown; match by `_tag`).
+- `Literal.define({ schema })` takes a string codec (`Schema.Codec<T, string>`) decoded from `envName`; it used to take a `Config`.
+- `environmentLayer` keeps `ConfigError` in the layer's error channel (`Layer<Self, ConfigError>`); it used to turn a decode failure into a defect.
 
 **@konfig.ts/k8s**
 
 - `EnvVar.secretEnv({ ref, map, optional? })` and `EnvVar.configMapEnv({ ref, map, optional? })` take one object; they used to take `(ref, map, opts)`.
-- **Removed:** `EnvVar.fromSecretForPod` (use `EnvVar.fromSecret`), `SecretRef.unsafeReNamespace`, `reloader: "stakater-strict"` (it behaved like `"stakater"`).
-- **Backend authors:** the `SecretBackend`/`BackendEmitInput`/`BackendTag` contract is replaced by the `Backend` kit (`Backend.define`, `Backend.encrypting`, `Backend.plainSecret`, `Backend.secretMeta`).
+- `reloader: "stakater-strict"` is removed (it behaved like `"stakater"`).
 - `Workload.cron` returns `Manifest<Array<ServiceAccount | CronJob>>` (was a tuple).
+- `SecretBackend["_tag"]` is `string`, so custom backends can use their own tags. `BackendTag` is still the union of the built-in tags. The new `Backend` kit is the recommended way to write a backend.
 
 **@konfig.ts/argocd**
 
-- **Removed:**
-  - `Application.make`, `AppOfApps.make` and `AppOfApps.entrypoint` (export `AppOfApps.fromModules` directly).
-  - `buildCR` and `emitApplicationCR` (use `serializeApplicationCR`/`applicationCRFilename`).
-  - The `repoURL`/`branch`/`rootPath` fields of `AppOfAppsTarget`, which nothing read.
+- `AppOfApps.entrypoint` is removed; export `AppOfApps.fromModules` directly.
+- `AppOfAppsTarget.repoURL`/`branch`/`rootPath` are optional (were required).
 
-**@konfig.ts/docker**
+**@konfig.ts/docker** (pipeline-level exports changed shape with the generator rewrite)
 
-- The barrel is reduced to `Docker`, `DockerApp`, `isDockerApp`, `emit`, `extractHeader`, `HEADER_MARKER`, `findRoot`, `allWorkspaces`, `closureOf`, `lookupWorkspace`, `workspaceDeps`, `Workspace`, `AnyDockerError` and `CircularWorkspaceDep`. All other docker errors are matched by `_tag`.
-- **Removed:**
-  - The spec and atom schemas (`DockerSpec`, `RunnerSpec`, `DevSpec`, `*Atom`), `decodeDockerSpec`/`decodeDockerSpecSync`.
-  - The pipeline internals (`lower`, `buildIR`, `prepareContext`, `validateSpec`, `render`, `renderFile`, `renderHeader`, `sha256Hex`).
-  - The package-manager and runtime implementations (`bunPm`, `npmPm`, `pnpmPm`, `bunRuntime`, `nodeRuntime`), `detectPm`, `makeDockerApp`, `DockerAppTypeId`, `PACKAGE_NAME`.
-  - `Docker.platform.multi`.
+- **Spec:**
+  - `DockerSpec` has no `target` field; the target is passed to `emit`/`lower`.
+  - `PlatformAtom` has no multi case.
+  - `DockerApp[DockerAppTypeId]` is `true`.
+- **Pipeline signatures:** `lower({ spec, target })`, `prepareContext({ spec, target })` and `decodeDockerSpecSync(input)` (the `options` argument is gone).
+- **Types:**
+  - `LowerContext` adds `buildClosure`; `EmitInput` adds `target`.
+  - `PackageManager`: `_tag` becomes `kind`; `prodInstallCommand`/`productionFlag` become `prodInstall`; `depsImage` is removed; `supportFiles` is added.
+  - `Runtime`: `_tag` becomes `kind`.
+  - `DetectedPm` drops `presentLockfiles` and adds `yarnLayout`/`yarnPath`.
+  - `closureOf({ target })` takes a `Workspace` and gains `includeDev?`.
+  - IR: `Dockerfile` has no `args`, `PlatformIR` no `Multi`, `Expose` no `protocol`, and `HealthcheckIR` no `None` case.
+  - `AnyDockerError` gains the new errors, and drops `SpecDecodeError`, `PlatformMultiUnsupported`, `DockerWriteRefused` and `DockerWriteError` (the last three are still exported classes).
+- **Values:** `bunPm.installCommand` adds `--frozen-lockfile`, and `npmPm.nodeModulesLayout` is `"hoisted"`.
 
 **@konfig.ts/sops**
 
-- **Removed:** `Sops.source`, `sopsDecrypt`, `sopsEncryptStdin`, `SopsInvocationError`. Failures surface as `RenderError` with the subprocess failure as `cause`.
+- `SopsSourceInput.extract` is typed `(key, parsed: Schema.Json) => Schema.Json | undefined`.
+- `sopsEncryptStdin` encrypts only `data`/`stringData` by default and accepts `encryptedRegex?`/`timeout?`.
 
 **@konfig.ts/sealed-secrets**
 
-- **Removed:** `runKubeseal`, `resolveCertPath`, `KubesealCertMissing`, `KubesealInvocationError`, `KubesealParseError`. Failures surface as `RenderError`.
+- `KubesealInvocationError.cause` is typed `unknown` (it still holds the process failure).
+
+**@konfig.ts/external-secrets**
+
+- `ExternalSecretsBackendOptions.target` has no `name`, and `refreshInterval` is a `GoDuration`.
+
+**Errors**
+
+- Backend failures are `RenderError`s whose `cause` is the tagged error: `SopsInvocationError`, `KubesealCertMissing`, `KubesealInvocationError`, `KubesealParseError` or `BoundaryDecodeError`. Match on `cause._tag` or the exported classes.
 
 **CLI**
 
-- **Removed:** `build --verbose` (use the global `--log-level debug` for the full cause), `graph --width`.
+- `build --verbose` is removed; use the global `--log-level debug` for the full cause. `graph --width` is removed.
 - `docker` replaces `--prod-only`/`--dev-only` with `--only prod|dev`.
 
 ### Added
@@ -160,32 +168,31 @@ All `@konfig.ts/*` packages are versioned in lockstep. The format follows [Keep 
    // 0.5
    Literal.define({ envName: "HTTP_PORT", value: 8080, schema: Schema.FiniteFromString })
    ```
-5. **Batch env vars:**
+5. **Object parameters:**
    ```ts
    // 0.4
    EnvVar.secretEnv(db.ref, { DATABASE_URL: "url" }, { optional: true })
+   render(program, { env: "prod" })
+   unsafeCoerce<T>(value, "reason")
    // 0.5
    EnvVar.secretEnv({ ref: db.ref, map: { DATABASE_URL: "url" }, optional: true })
+   render({ program, options: { env: "prod" } })
+   unsafeCoerce<T>({ value, reason: "reason" })
    ```
-   `EnvVar.fromSecretForPod(...)` becomes `EnvVar.fromSecret(...)`.
-6. **Removed core helpers:**
-   - Replace `render(...)` with `konfig build`, or `renderAllYaml`/`renderManifest` in scripts.
-   - Replace `Manifest.combine` with `Manifest.concat`.
-   - Inline `Manifest.whenever` as a conditional.
+6. **`environmentLayer`:** handle or `orDie` the `ConfigError` the layer can now fail with.
 7. **sops:**
    - If your sops files rely on encrypting more than `data`/`stringData`, pass `encryptedRegex`.
    - Split passthrough files with several `secretTemplates` into one file per secret.
-   - Replace `Sops.source` with `Sops.backend` or `Sops.passthrough`.
 8. **ExternalSecrets:** drop `target.name`.
 9. **Argo CD:**
    - Replace `AppOfApps.entrypoint(x)` with `x`.
-   - Replace `Application.make`/`AppOfApps.make` with `Application.define`/`AppOfApps.fromModules`.
-   - Remove `repoURL`/`branch`/`rootPath` from `AppOfAppsTarget`.
    - Make `Sync.wave` arguments integers.
-10. **Docker:**
+   - If you relied on `automated` defaults being replaced wholesale, use `automated: { enabled: false }`.
+10. **Bundle:** replace `Bundle.entrypoint(x)` with `x`.
+11. **Docker:**
     - Replace `--prod-only`/`--dev-only` with `--only prod|dev`.
     - Pin `engines.*` to exact or `major(.minor)` versions.
     - Switch Yarn Berry repos on Plug'n'Play to `nodeLinker: node-modules`.
     - Drop `Docker.platform.multi`.
-11. **Error handling:** errors that are no longer exported (`HelmRenderError`, `HelmVersionTooLow`, `HelmDigestMismatch`, `EnvNameCollision`, the docker errors other than `CircularWorkspaceDep`, and the `Kubeseal*` and `Sops*` errors) are matched by `_tag`. Backend subprocess failures arrive as `RenderError` with the original failure as `cause`.
-12. **Custom secret backends:** port them to `Backend.define` (see `@konfig.ts/k8s` → Backend kit).
+    - If you call the pipeline directly (`lower`, `prepareContext`, the pm/runtime objects), apply the shape changes above.
+12. **Error handling:** backend subprocess failures arrive as `RenderError` with the tagged error as `cause`.
